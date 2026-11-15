@@ -15,7 +15,7 @@ import {
     hashCanonicalSecretValue,
     listOpenSecretProjectionRepairs,
     replaceCanonicalSecretRecords,
-} from './endpoints/canonical-secrets-store.js';
+} from './endpoints/canonical-secrets-store.ts';
 import { uuidv4 } from './util.js';
 
 export const CANONICAL_SECRETS_AUDIT_SCOPE = 'secrets';

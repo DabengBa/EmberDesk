@@ -13,7 +13,7 @@ import {
     listOpenSecretProjectionRepairs,
     recordSecretProjectionRepair,
     writeCanonicalSecret,
-} from '../src/endpoints/canonical-secrets-store.js';
+} from '../src/endpoints/canonical-secrets-store.ts';
 import {
     CANONICAL_SECRETS_AUDIT_SCOPE,
     auditCanonicalSecretsShadowImport,

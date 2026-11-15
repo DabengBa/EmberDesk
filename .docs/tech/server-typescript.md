@@ -92,6 +92,13 @@ run without a production loader or emitted graph.
 
 ## Migrated slices
 
+`src/endpoints/canonical-secrets-store.ts` is the sole canonical secrets store
+implementation. Existing callers use its real `.ts` path; the SecretManager
+access boundary and the synchronous SQLite transactions, active-record
+selection, migration markers and projection-repair behavior remain unchanged.
+Focused SQLite integration and existing native Node caller tests cover this
+internal migration; no user-visible semantic documentation changes are needed.
+
 `src/endpoints/world-info-store.ts` is the sole implementation of the
 canonical World Info store. Its JavaScript callers use the real `.ts` path,
 including projection and shadow import. SQLite remains authoritative;

@@ -21,7 +21,7 @@ import { recordWorldProjectionIntent } from '../src/canonical-world-info-project
 import {
     recordSecretProjectionRepair,
     writeCanonicalSecret,
-} from '../src/endpoints/canonical-secrets-store.js';
+} from '../src/endpoints/canonical-secrets-store.ts';
 import { buildCharacterFileSnapshotRow } from '../src/endpoints/character-file-snapshot.js';
 import { writeCanonicalChatPayload } from '../src/endpoints/canonical-chat-write-service.js';
 

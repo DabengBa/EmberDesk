@@ -21,7 +21,7 @@ import { decideCanonicalBackendInitAction } from './canonical-backend.js';
 import {
     listOpenSecretProjectionRepairs,
     recordSecretProjectionRepair,
-} from './endpoints/canonical-secrets-store.js';
+} from './endpoints/canonical-secrets-store.ts';
 
 const initializedBackends = new Map();
 

@@ -48,7 +48,7 @@ import {
 import {
     listOpenSecretProjectionRepairs,
     resolveSecretProjectionRepair,
-} from './endpoints/canonical-secrets-store.js';
+} from './endpoints/canonical-secrets-store.ts';
 import { listOpenCanonicalManagedMediaRepairs } from './endpoints/canonical-managed-media-store.js';
 import {
     calculateCanonicalCharacterChatStats,
