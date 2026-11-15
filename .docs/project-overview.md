@@ -54,7 +54,7 @@ Key module structure:
 - `users.js` — barrel re-export plus middleware, routes, backup, security verification. Delegates to:
   - `user-storage.ts` — `node-persist` CRUD, lazy `getEnableAccounts()` config read
   - `user-directories.ts` — per-user filesystem layout under `DATA_ROOT/<handle>/`
-  - `user-migrations.js` — three self-contained idempotent migration functions
+  - `user-migrations.ts` — startup user-data and public-override migrations
   - `user-auth.js` — credential verification, SSO (Authelia/Authentik/basic), session crypto
 - `plugin-loader.js` — orchestrator: discovery, validation, initialization, cleanup collection. Delegates to:
   - `plugin-updater.js` — standalone git auto-update for repo-backed plugins

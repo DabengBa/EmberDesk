@@ -5,6 +5,9 @@ import fs from 'node:fs';
 import crypto from 'node:crypto';
 import { setConfigFilePath } from '../src/util.js';
 
+const overrideServerDir = fs.mkdtempSync(path.join(os.tmpdir(), 'emberdesk-mig-server-'));
+jest.unstable_mockModule('../src/server-directory.js', () => ({ serverDirectory: overrideServerDir }));
+
 // The migration countdown delay is real seconds; stub the util surface the
 // migration chain touches. isPathUnderParent/uuidv4 get faithful stand-ins
 // because canonical helpers (resolveCanonicalDatabasePath, upsert) use them.
@@ -27,10 +30,11 @@ const tmpConfig = path.join(configTmpDir, 'config.yaml');
 fs.writeFileSync(tmpConfig, 'port: 8000\n', 'utf8');
 setConfigFilePath(tmpConfig);
 
-const { migratePublicOverrides, migrateUserData } = await import('../src/user-migrations.js');
+const { migratePublicOverrides, migrateUserData } = await import('../src/user-migrations.ts');
 
 afterAll(() => {
     fs.rmSync(configTmpDir, { recursive: true, force: true });
+    fs.rmSync(overrideServerDir, { recursive: true, force: true });
 });
 
 describe('migratePublicOverrides', () => {
@@ -87,8 +91,98 @@ describe('migratePublicOverrides', () => {
     });
 
     test('idempotent: calling twice does not error', async () => {
+        const source = path.join(overrideServerDir, 'public', 'css', 'user.css');
+        const target = path.join(dataTmpDir, '_css', 'user.css');
+        fs.mkdirSync(path.dirname(source), { recursive: true });
+        fs.writeFileSync(source, 'legacy');
         await migratePublicOverrides();
+        expect(fs.readFileSync(target, 'utf8')).toBe('legacy');
+        expect(fs.existsSync(source)).toBe(false);
+        fs.writeFileSync(source, 'new-source');
         await migratePublicOverrides();
+        expect(fs.readFileSync(target, 'utf8')).toBe('legacy');
+        expect(fs.readFileSync(source, 'utf8')).toBe('new-source');
+    });
+
+    test('keeps existing canonical settings when legacy settings are imported', async () => {
+        const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), 'emberdesk-mig-existing-'));
+        const publicDir = path.join(sandbox, 'public');
+        fs.mkdirSync(path.join(publicDir, 'characters'), { recursive: true });
+        fs.writeFileSync(path.join(publicDir, 'settings.json'), JSON.stringify({ marker: 'should-not-overwrite' }));
+        const previousCwd = process.cwd();
+        try {
+            const { DatabaseSync } = await import('node:sqlite');
+            const { runCanonicalMigrations } = await import('../src/canonical-sqlite-migrations.js');
+            const { getCanonicalSettingsDocument, upsertCanonicalSettingsDocument } = await import('../src/endpoints/settings-store.ts');
+            const dbPath = path.join(dataTmpDir, 'default-user', 'storage', 'emberdesk.sqlite');
+            fs.mkdirSync(path.dirname(dbPath), { recursive: true });
+            const initial = new DatabaseSync(dbPath);
+            let revision;
+            try {
+                expect(runCanonicalMigrations(initial).ok).toBe(true);
+                const previous = getCanonicalSettingsDocument(initial, { userId: 'default-user' });
+                const result = upsertCanonicalSettingsDocument(initial, { userId: 'default-user', payload: { marker: 'existing' }, expectedRevision: previous?.revision ?? 0 });
+                expect(result.ok).toBe(true);
+                revision = result.revision;
+                expect(getCanonicalSettingsDocument(initial, { userId: 'default-user' }).revision).toBe(result.revision);
+            } finally {
+                initial.close();
+            }
+            process.chdir(sandbox);
+            await migrateUserData();
+            const db = new DatabaseSync(dbPath);
+            try {
+                const document = getCanonicalSettingsDocument(db, { userId: 'default-user' });
+                expect(document.payload).toEqual({ marker: 'existing' });
+                expect(document.revision).toBe(revision);
+            } finally {
+                db.close();
+            }
+        } finally {
+            process.chdir(previousCwd);
+            fs.rmSync(sandbox, { recursive: true, force: true });
+        }
+    });
+
+    test('leaves invalid legacy settings in place after migration failure', async () => {
+        const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), 'emberdesk-mig-invalid-'));
+        const publicDir = path.join(sandbox, 'public');
+        fs.mkdirSync(path.join(publicDir, 'characters'), { recursive: true });
+        const source = path.join(publicDir, 'settings.json');
+        fs.writeFileSync(source, 'not-json');
+        const previousCwd = process.cwd();
+        try {
+            process.chdir(sandbox);
+            await migrateUserData();
+            expect(fs.readFileSync(source, 'utf8')).toBe('not-json');
+        } finally {
+            process.chdir(previousCwd);
+            fs.rmSync(sandbox, { recursive: true, force: true });
+        }
+    });
+
+    test('leaves settings source in place when its backup fails', async () => {
+        const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), 'emberdesk-mig-backup-'));
+        const publicDir = path.join(sandbox, 'public');
+        fs.mkdirSync(path.join(publicDir, 'characters'), { recursive: true });
+        const source = path.join(publicDir, 'settings.json');
+        fs.writeFileSync(source, JSON.stringify({ marker: 'source' }));
+        const previousCwd = process.cwd();
+        const copy = fs.cpSync;
+        const spy = jest.spyOn(fs, 'cpSync').mockImplementation((from, to, options) => {
+            if (from === source) throw new Error('backup failed');
+            return copy(from, to, options);
+        });
+        try {
+            process.chdir(sandbox);
+            await migrateUserData();
+            expect(spy.mock.calls.some(([from]) => from === source)).toBe(true);
+            expect(JSON.parse(fs.readFileSync(source, 'utf8'))).toEqual({ marker: 'source' });
+        } finally {
+            spy.mockRestore();
+            process.chdir(previousCwd);
+            fs.rmSync(sandbox, { recursive: true, force: true });
+        }
     });
 
     test('blocks startup with an offline recovery procedure even on already upgraded installations', async () => {

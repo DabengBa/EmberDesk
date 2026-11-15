@@ -17,6 +17,11 @@ function commandsFor(inputs) {
 }
 
 describe('validation gate selector', () => {
+    test('selects user validation for the TypeScript migration module', () => {
+        expect(selectValidationGates(['src/user-migrations.ts']).commands.map(command => command.id))
+            .toEqual(['user-auth-storage']);
+    });
+
     test.each(['js', 'ts'])('keeps user storage validation after a .%s migration', extension => {
         expect(selectValidationGates([`src/user-storage.${extension}`]).commands.map(command => command.id))
             .toEqual(['user-auth-storage']);
