@@ -211,6 +211,20 @@ it does not enable checking for all legacy JavaScript.
 This is internal execution and type-checking work. It changes no user-facing
 page, feature, or term, so no semantic documentation database update is needed.
 
+## External content import
+
+`src/endpoints/external-content-import-service.ts` is the sole implementation;
+the content and asset routers import its actual `.ts` path. Discriminated
+results describe classification, fetch, artifact and asset outcomes, including
+non-2xx responses that remain successful when `requireOk` is false. Local
+views of thrown values retain JavaScript's existing unchecked property access;
+they are not runtime validation. Host allowlisting and private-address filtering
+are unchanged. Focused tests cover the existing behavior and a native Node
+subprocess imports both production callers without a loader or network access.
+A strict consumer fixture checks result narrowing and descriptor combinations;
+it does not type-check the legacy JavaScript downloader implementations. This
+internal migration changes no user-visible semantic contract.
+
 ## User storage and configuration leaves
 
 `src/user-directories.ts` is the sole implementation of directory lookup,

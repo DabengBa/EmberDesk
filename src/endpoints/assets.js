@@ -9,7 +9,7 @@ import sanitize from 'sanitize-filename';
 import { UNSAFE_EXTENSIONS } from '../constants.js';
 import { clientRelativePath, isValidUrl } from '../util.js';
 import { getImportDomainAllowlist } from './content-manager.js';
-import { downloadExternalAsset, validateExternalAssetUrl } from './external-content-import-service.js';
+import { downloadExternalAsset, validateExternalAssetUrl } from './external-content-import-service.ts';
 import {
     getCanonicalManagedMediaReadState,
     listCanonicalAssetPayload,

@@ -1,12 +1,44 @@
 import fetch from 'node-fetch';
+import type { RequestInit, Response } from 'node-fetch';
 
-function getUuidFromUrl(url) {
+export type ExternalContentSource = 'pygmalion_character' | 'janitor_character' | 'aicc_character' | 'chub_character' | 'chub_lorebook' | 'risu_character' | 'perchance_character' | 'generic_png';
+export type ExternalContentDescriptor = {
+    id: string;
+    url?: string;
+    host?: string;
+} & ({ source: 'chub_lorebook'; type: 'lorebook' } | { source: Exclude<ExternalContentSource, 'chub_lorebook'>; type: 'character' });
+export type UrlFailure = { kind: 'invalid_url'; url: string | undefined } | { kind: 'unsupported_host'; host: string; url: string | undefined };
+export type UrlClassification = { ok: true; descriptor: ExternalContentDescriptor & { url: string; host: string } } | { ok: false; failure: UrlFailure };
+export type IdClassification = { ok: true; descriptor: ExternalContentDescriptor } | { ok: false; failure: { kind: 'invalid_artifact'; source: 'aicc_character' } };
+export type FetchRequest = { url?: string; options?: RequestInit; source?: string; stage?: string; requireOk?: boolean };
+export type FetchImplementation = typeof fetch;
+export type ProviderFailure = { kind: 'provider_non_2xx'; source: string; stage: string; url: string | undefined; status: number | undefined; statusText: string | undefined };
+export type NetworkFailure = { kind: 'network_error'; source: string; stage: string; url: string | undefined; message: string };
+export type FetchResult =
+    | { ok: true; response: Response; failure: ProviderFailure | null }
+    | { ok: false; response: Response; failure: ProviderFailure }
+    | { ok: false; response: null; failure: NetworkFailure };
+export type FetchResource = (request: FetchRequest) => Promise<FetchResult>;
+export type DownloadedArtifact = { buffer: Buffer; fileName: string; fileType?: string | null };
+export type Downloader = (descriptor: ExternalContentDescriptor, dependencies: { fetchExternalResource: FetchResource }) => Promise<DownloadedArtifact | null | undefined>;
+export type DownloadTrace = { source: string; stage: string; url: string | undefined; ok: boolean };
+export type ArtifactResult =
+    | { ok: true; artifact: DownloadedArtifact & { fileType: string | null | undefined; provider: ExternalContentSource; source: ExternalContentSource; type: ExternalContentDescriptor['type'] }; trace: DownloadTrace[] }
+    | { ok: false; failure: { kind: 'unsupported_source'; source: ExternalContentSource | undefined } | { kind: 'invalid_artifact'; source: ExternalContentSource } | { kind: unknown; source: ExternalContentSource; message: string }; trace: DownloadTrace[] };
+export type AssetValidation = { ok: true; host: string } | { ok: false; failure: UrlFailure };
+export type AssetResult = { ok: true; host: string; response: Response } | { ok: false; failure: UrlFailure | ProviderFailure | NetworkFailure | { kind: 'invalid_artifact'; source: 'asset_download'; stage: 'asset'; url: string | undefined } };
+
+// These are unchecked views, not validation: JS can throw primitives or values
+// whose message/failure.kind are not strings. Optional property access is retained.
+type ThrownValue = { message?: unknown; failure?: { kind?: unknown } } | null | undefined;
+
+function getUuidFromUrl(url: string | undefined) {
     const uuidRegex = /[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}/;
     const matches = String(url ?? '').match(uuidRegex);
     return matches ? matches[0] : null;
 }
 
-function parseChubUrl(url) {
+function parseChubUrl(url: string | undefined): { id: string; type: 'character' | 'lorebook' } | null {
     const splitUrl = String(url ?? '').split('/');
     const length = splitUrl.length;
 
@@ -40,9 +72,9 @@ function parseChubUrl(url) {
     return null;
 }
 
-function parseAICC(url) {
+function parseAICC(url: string | undefined) {
     try {
-        const urlObject = new URL(url);
+        const urlObject = new URL(url as string);
         const parts = urlObject.pathname.split('/').filter(Boolean);
         if (parts.length >= 2) {
             return `${parts[parts.length - 2]}/${parts[parts.length - 1]}`;
@@ -57,13 +89,13 @@ function parseAICC(url) {
     return null;
 }
 
-function parseRisuUrl(url) {
+function parseRisuUrl(url: string | undefined) {
     const pattern = /^https?:\/\/realm\.risuai\.net\/character\/([a-f0-9-]+)\/?$/i;
     const match = String(url ?? '').match(pattern);
     return match ? match[1] : null;
 }
 
-function isPerchanceUUID(uuid) {
+function isPerchanceUUID(uuid: string) {
     if (!uuid) {
         return false;
     }
@@ -71,24 +103,24 @@ function isPerchanceUUID(uuid) {
     return /^\w+~[a-f0-9]{32}\.gz$/.test(uuid);
 }
 
-function parsePerchanceSlug(url) {
+function parsePerchanceSlug(url: string | undefined) {
     return String(url ?? '').split('~')[1] || '';
 }
 
-function okDescriptor(descriptor) {
+function okDescriptor<T extends ExternalContentDescriptor>(descriptor: T): { ok: true; descriptor: T } {
     return { ok: true, descriptor };
 }
 
-function normalizeHost(host) {
+function normalizeHost(host: string | undefined) {
     return String(host ?? '').trim().toLowerCase().replace(/\.$/, '');
 }
 
-function isExactHost(host, allowedHosts) {
+function isExactHost(host: string | undefined, allowedHosts: readonly string[]) {
     const normalizedHost = normalizeHost(host);
     return allowedHosts.some(allowedHost => normalizedHost === normalizeHost(allowedHost));
 }
 
-function unsupportedHost(url, host) {
+function unsupportedHost(url: string | undefined, host: string): { ok: false; failure: Extract<UrlFailure, { kind: 'unsupported_host' }> } {
     return {
         ok: false,
         failure: {
@@ -99,19 +131,19 @@ function unsupportedHost(url, host) {
     };
 }
 
-export function getHostFromUrl(url) {
+export function getHostFromUrl(url: string | undefined) {
     try {
-        return normalizeHost(new URL(url).hostname);
+        return normalizeHost(new URL(url as string).hostname);
     } catch {
         return '';
     }
 }
 
-export function isHostWhitelisted(host, allowlist = []) {
+export function isHostWhitelisted(host: string | undefined, allowlist: readonly string[] = []) {
     return isExactHost(host, allowlist);
 }
 
-export function classifyExternalContentUrl(url, allowlist = []) {
+export function classifyExternalContentUrl(url: string, allowlist: readonly string[] = []): UrlClassification {
     const host = getHostFromUrl(url);
 
     if (!host) {
@@ -177,7 +209,7 @@ export function classifyExternalContentUrl(url, allowlist = []) {
     return unsupportedHost(url, host);
 }
 
-export function classifyExternalContentId(id) {
+export function classifyExternalContentId(id: string | undefined): IdClassification {
     const value = String(id ?? '');
     const isJanitor = value.includes('_character');
     const isPygmalion = !isJanitor && value.length === 36;
@@ -218,9 +250,9 @@ export async function fetchExternalResource({
     stage = 'artifact',
     requireOk = false,
     fetchImpl = fetch,
-} = {}) {
+}: FetchRequest & { fetchImpl?: FetchImplementation } = {}): Promise<FetchResult> {
     try {
-        const response = await fetchImpl(url, options);
+        const response = await fetchImpl(url as string, options);
         if (requireOk && !response?.ok) {
             return {
                 ok: false,
@@ -249,6 +281,7 @@ export async function fetchExternalResource({
             },
         };
     } catch (error) {
+        const thrown = error as ThrownValue;
         return {
             ok: false,
             response: null,
@@ -257,7 +290,7 @@ export async function fetchExternalResource({
                 source,
                 stage,
                 url,
-                message: String(error?.message ?? error),
+                message: String(thrown?.message ?? error),
             },
         };
     }
@@ -267,9 +300,11 @@ export async function downloadExternalContentArtifact({
     descriptor,
     downloaders,
     fetchImpl = fetch,
-} = {}) {
-    const trace = [];
-    const source = descriptor?.source;
+}: { descriptor?: ExternalContentDescriptor; downloaders?: Partial<Record<ExternalContentSource, Downloader>>; fetchImpl?: FetchImplementation } = {}): Promise<ArtifactResult> {
+    const trace: DownloadTrace[] = [];
+    // The descriptor's typed source is present after the guard; preserve the
+    // original optional read for callers passing missing or unchecked values.
+    const source = descriptor?.source as ExternalContentSource;
     const downloader = downloaders?.[source];
 
     if (!descriptor || typeof downloader !== 'function') {
@@ -283,7 +318,7 @@ export async function downloadExternalContentArtifact({
         };
     }
 
-    const fetchResource = async (request) => {
+    const fetchResource: FetchResource = async (request) => {
         const result = await fetchExternalResource({
             ...request,
             source: request.source ?? source,
@@ -325,12 +360,13 @@ export async function downloadExternalContentArtifact({
             trace,
         };
     } catch (error) {
+        const thrown = error as ThrownValue;
         return {
             ok: false,
             failure: {
-                kind: error?.failure?.kind ?? 'unexpected_error',
+                kind: thrown?.failure?.kind ?? 'unexpected_error',
                 source,
-                message: String(error?.message ?? error),
+                message: String(thrown?.message ?? error),
             },
             trace,
         };
@@ -341,7 +377,7 @@ export async function downloadExternalAsset({
     url,
     allowlist = [],
     fetchImpl = fetch,
-} = {}) {
+}: { url?: string; allowlist?: readonly string[]; fetchImpl?: FetchImplementation } = {}): Promise<AssetResult> {
     const validation = validateExternalAssetUrl({ url, allowlist });
 
     if (!validation.ok) {
@@ -385,7 +421,7 @@ export async function downloadExternalAsset({
 export function validateExternalAssetUrl({
     url,
     allowlist = [],
-} = {}) {
+}: { url?: string; allowlist?: readonly string[] } = {}): AssetValidation {
     const host = getHostFromUrl(url);
 
     if (!host) {

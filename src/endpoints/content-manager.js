@@ -29,7 +29,7 @@ import {
     fetchExternalResource,
     getHostFromUrl as getExternalHostFromUrl,
     isHostWhitelisted as isExternalHostWhitelisted,
-} from './external-content-import-service.js';
+} from './external-content-import-service.ts';
 
 const contentDirectory = path.join(serverDirectory, 'default/content');
 const templatesDirectory = path.join(serverDirectory, 'default/templates');

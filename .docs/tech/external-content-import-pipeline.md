@@ -23,7 +23,7 @@ It does not change import UI feedback, canonical file writes, asset category rul
 
 ## Architecture And Constraints
 
-`src/endpoints/external-content-import-service.js` is the shared service. `src/endpoints/content-manager.js` and `src/endpoints/assets.js` delegate source classification, allowlist checks, and external fetch behavior to that service while keeping their route-owned validation, headers, temp-file handling, stream copying, and legacy response shapes.
+`src/endpoints/external-content-import-service.ts` is the shared service. `src/endpoints/content-manager.js` and `src/endpoints/assets.js` delegate source classification, allowlist checks, and external fetch behavior to that service while keeping their route-owned validation, headers, temp-file handling, stream copying, and legacy response shapes.
 
 Important constraints:
 
@@ -35,7 +35,7 @@ Important constraints:
 
 ## Core Implementation
 
-`external-content-import-service.js` exports:
+`src/endpoints/external-content-import-service.ts` exports:
 
 - `classifyExternalContentUrl()`
 - `classifyExternalContentId()`
@@ -55,7 +55,8 @@ Focused proof:
 
 ```bash
 pnpm --dir tests run test:unit -- external-content-import-service.test.js private-request-filter.test.js express5-route-compatibility.test.js --runInBand
-rg -n "\bfetch\(" src\endpoints\content-manager.js src\endpoints\assets.js src\endpoints\external-content-import-service.js
+pnpm --dir tests run test:integration -- external-content-import-native.test.js --runInBand
+rg -n "\bfetch\(" src/endpoints/content-manager.js src/endpoints/assets.js src/endpoints/external-content-import-service.ts
 ```
 
 The `rg` command should return no matches. Provider secondary-download proof lives in `tests/external-content-import-service.test.js`.
@@ -75,7 +76,7 @@ Stable binding points:
 - `POST /api/assets/download`
 - `whitelistImportDomains`
 - `src/private-request-filter.js`
-- `src/endpoints/external-content-import-service.js`
+- `src/endpoints/external-content-import-service.ts`
 - `EXTERNAL_CONTENT_DOWNLOADERS` in `src/endpoints/content-manager.js`
 
 Related docs:
