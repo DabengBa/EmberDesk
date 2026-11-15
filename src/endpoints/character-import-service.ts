@@ -1,20 +1,45 @@
-/**
- * @typedef {object} CharacterImportResult
- * @property {boolean} ok
- * @property {string} [fileName]
- * @property {string} [avatarName]
- * @property {string} [reason]
- * @property {string} [message]
- * @property {boolean} [refreshHandled]
- *
- * @typedef {(uploadPath: string, context: { request: import('express').Request, response: import('express').Response }, preservedFileName?: string) => Promise<string | CharacterImportResult | null | undefined>} CharacterImportHandler
- */
+import type { Request, Response } from 'express';
 
-function getAvatarName(fileName) {
+export type CharacterImportResult = {
+    ok: boolean;
+    fileName?: string;
+    avatarName?: string;
+    reason?: string;
+    message?: string;
+    refreshHandled?: boolean;
+};
+
+export type CharacterImportHandler = (
+    uploadPath: string,
+    context: { request: Request; response: Response },
+    preservedFileName?: string,
+) => Promise<string | CharacterImportResult | null | undefined>;
+
+export type CharacterImporters = {
+    importFromYaml: CharacterImportHandler;
+    importFromJson: CharacterImportHandler;
+    importFromPng: CharacterImportHandler;
+    importFromCharX: CharacterImportHandler;
+    importFromByaf: CharacterImportHandler;
+};
+
+export type CharacterImportOptions = {
+    uploadPath: string;
+    format: string;
+    preservedFileName?: string;
+    request: Request;
+    response: Response;
+};
+
+type NormalizedImportResult =
+    | { ok: true; fileName: string }
+    | { ok: false; reason: string; message?: string };
+
+function getAvatarName(fileName: string): string {
     return fileName.endsWith('.png') ? fileName : `${fileName}.png`;
 }
 
-function normalizeImportResult(importResult) {
+function normalizeImportResult(importResult: string | CharacterImportResult | null | undefined): NormalizedImportResult {
     if (typeof importResult === 'string') {
         return importResult
             ? { ok: true, fileName: importResult }
@@ -44,9 +69,9 @@ function normalizeImportResult(importResult) {
     };
 }
 
-function resolveCharacterImportHandler(format, importers) {
+function resolveCharacterImportHandler(format: string, importers: CharacterImporters): CharacterImportHandler | null {
     const normalizedFormat = String(format ?? '').toLowerCase();
-    const importerKeyByFormat = {
+    const importerKeyByFormat: Record<string, keyof CharacterImporters> = {
         yaml: 'importFromYaml',
         yml: 'importFromYaml',
         json: 'importFromJson',
@@ -59,16 +84,13 @@ function resolveCharacterImportHandler(format, importers) {
     return importerKey ? importers[importerKey] : null;
 }
 
-/**
- * @param {{ importFromYaml: CharacterImportHandler, importFromJson: CharacterImportHandler, importFromPng: CharacterImportHandler, importFromCharX: CharacterImportHandler, importFromByaf: CharacterImportHandler }} importers
- */
 export function createCharacterImportCoordinator({
     importFromYaml,
     importFromJson,
     importFromPng,
     importFromCharX,
     importFromByaf,
-}) {
+}: CharacterImporters): (options: CharacterImportOptions) => Promise<CharacterImportResult> {
     const importers = {
         importFromYaml,
         importFromJson,
@@ -77,17 +99,13 @@ export function createCharacterImportCoordinator({
         importFromByaf,
     };
 
-    /**
-     * @param {{ uploadPath: string, format: string, preservedFileName?: string, request: import('express').Request, response: import('express').Response }} options
-     * @returns {Promise<CharacterImportResult>}
-     */
     return async function importCharacterUpload({
         uploadPath,
         format,
         preservedFileName,
         request,
         response,
-    }) {
+    }: CharacterImportOptions): Promise<CharacterImportResult> {
         const importCharacter = resolveCharacterImportHandler(format, importers);
 
         if (!importCharacter) {

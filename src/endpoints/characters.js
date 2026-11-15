@@ -78,7 +78,7 @@ import {
     writeCanonicalChatPayload,
 } from './canonical-chat-write-service.ts';
 import { writeCanonicalManagedMedia } from './canonical-managed-media-write-service.js';
-import { createCharacterImportCoordinator } from './character-import-service.js';
+import { createCharacterImportCoordinator } from './character-import-service.ts';
 import { runCharacterTextReplace } from './character-text-replace-service.js';
 import { coordinateWorkspaceWrite } from './coordinate-workspace-write.js';
 import { coordinateReplaceIntent } from './coordinate-workspace-write.js';
@@ -2184,7 +2184,7 @@ function getPreservedName(request) {
  * @param {string} options.characterData
  * @param {string|Buffer|ArrayBuffer|ArrayBufferView} [options.sourceImage]
  * @param {import('./character-write-service.ts').CreateCharacterOptions['file']} [options.file]
- * @returns {Promise<import('./character-import-service.js').CharacterImportResult>}
+ * @returns {Promise<import('./character-import-service.ts').CharacterImportResult>}
  */
 async function persistImportedCharacter({ request, fileName, characterData, sourceImage = undefined, file = undefined }) {
     const normalizedSourceImage = Buffer.isBuffer(sourceImage)
