@@ -1,10 +1,18 @@
 import crypto from 'node:crypto';
 import path from 'node:path';
 
+import type { DatabaseSync, SQLOutputValue } from 'node:sqlite';
+
 import { withCanonicalTransaction } from '../canonical-sqlite.js';
 import { uuidv4 } from '../util.js';
 
-function parseJson(value) {
+type Row = Record<string, SQLOutputValue>;
+type MediaRecord = { compatibilityPath: string; contentHash: unknown; sizeBytes: unknown; mediaType?: unknown; managedRelativePath?: unknown; ownerType: unknown; ownerId?: unknown; role?: unknown; displayName?: unknown; metadata?: unknown; nowMs?: unknown };
+type RepairOptions = { repairKey?: unknown; blobId?: unknown; mediaReferenceId?: unknown; operation?: unknown; reason?: unknown; details?: unknown; nowMs?: number };
+type Reference = ReturnType<typeof normalizeReference>;
+type PersistResult = { status: string; reference: Reference | null };
+
+function parseJson(value: unknown): unknown {
     try {
         return JSON.parse(String(value ?? '{}'));
     } catch {
@@ -12,11 +20,11 @@ function parseJson(value) {
     }
 }
 
-function normalizePath(value) {
+function normalizePath(value: unknown) {
     return String(value ?? '').split(path.sep).join(path.posix.sep);
 }
 
-function normalizeReference(row) {
+function normalizeReference(row: Row) {
     return {
         id: String(row.reference_id),
         blobId: String(row.blob_id),
@@ -37,7 +45,7 @@ function normalizeReference(row) {
     };
 }
 
-function getReferenceRow(db, compatibilityPath) {
+function getReferenceRow(db: DatabaseSync, compatibilityPath: string) {
     return db.prepare(`
         SELECT
             media_references.id AS reference_id,
@@ -62,7 +70,7 @@ function getReferenceRow(db, compatibilityPath) {
     `).get(compatibilityPath);
 }
 
-function getBlobByHash(db, contentHash) {
+function getBlobByHash(db: DatabaseSync, contentHash: string) {
     return db.prepare(`
         SELECT id, content_hash, size_bytes, media_type, relative_path, lifecycle_state
         FROM managed_blobs
@@ -70,7 +78,7 @@ function getBlobByHash(db, contentHash) {
     `).get(contentHash);
 }
 
-function isSameReference(existing, record) {
+function isSameReference(existing: Reference | null, record: { contentHash: string; sizeBytes: number; mediaType: string; managedRelativePath: string; ownerType: string; ownerId: string; role: string; displayName: string; metadata: unknown }) {
     return existing
         && existing.contentHash === record.contentHash
         && Number(existing.sizeBytes) === Number(record.sizeBytes)
@@ -83,11 +91,11 @@ function isSameReference(existing, record) {
         && JSON.stringify(existing.metadata) === JSON.stringify(record.metadata ?? {});
 }
 
-export function hashCanonicalManagedMediaBuffer(contents) {
+export function hashCanonicalManagedMediaBuffer(contents: string | NodeJS.ArrayBufferView) {
     return crypto.createHash('sha256').update(contents).digest('hex');
 }
 
-export function listCanonicalManagedMediaReferences(db, { includeDeleted = false } = {}) {
+export function listCanonicalManagedMediaReferences(db: DatabaseSync, { includeDeleted = false } = {}) {
     const rows = db.prepare(`
         SELECT
             media_references.id AS reference_id,
@@ -114,7 +122,7 @@ export function listCanonicalManagedMediaReferences(db, { includeDeleted = false
     return rows.map(normalizeReference);
 }
 
-export function getCanonicalManagedMediaReference(db, compatibilityPath) {
+export function getCanonicalManagedMediaReference(db: DatabaseSync, compatibilityPath: unknown) {
     const row = getReferenceRow(db, normalizePath(compatibilityPath));
     return row ? normalizeReference(row) : null;
 }
@@ -124,7 +132,7 @@ export function getCanonicalManagedMediaReference(db, compatibilityPath) {
  * relative path intentionally remains that compatibility path until write
  * cutover establishes the managed content root.
  */
-export function upsertCanonicalManagedMediaReference(db, record, { onPersist = null } = {}) {
+export function upsertCanonicalManagedMediaReference(db: DatabaseSync, record: MediaRecord, { onPersist = null }: { onPersist?: ((db: DatabaseSync, result: PersistResult) => void) | null } = {}) {
     const normalized = {
         compatibilityPath: normalizePath(record.compatibilityPath),
         contentHash: String(record.contentHash),
@@ -138,9 +146,9 @@ export function upsertCanonicalManagedMediaReference(db, record, { onPersist = n
         metadata: record.metadata && typeof record.metadata === 'object' ? record.metadata : {},
         nowMs: Number(record.nowMs ?? Date.now()),
     };
-    return withCanonicalTransaction(db, txnDb => {
+    return withCanonicalTransaction(db, (txnDb: DatabaseSync) => {
         const existing = getCanonicalManagedMediaReference(txnDb, normalized.compatibilityPath);
-        if (isSameReference(existing, normalized) && existing.deletedAtMs == null) {
+        if (existing && isSameReference(existing, normalized) && existing.deletedAtMs == null) {
             const result = { status: 'unchanged', reference: existing };
             onPersist?.(txnDb, result);
             return result;
@@ -203,7 +211,7 @@ export function upsertCanonicalManagedMediaReference(db, record, { onPersist = n
     });
 }
 
-export function listOpenCanonicalManagedMediaRepairs(db) {
+export function listOpenCanonicalManagedMediaRepairs(db: DatabaseSync) {
     try {
         return db.prepare(`
             SELECT repair_key, blob_id, media_reference_id, operation, reason, details_json,
@@ -224,14 +232,14 @@ export function listOpenCanonicalManagedMediaRepairs(db) {
             resolvedAtMs: row.resolved_at_ms == null ? null : Number(row.resolved_at_ms),
         }));
     } catch (error) {
-        if (String(error?.message ?? '').includes('no such table: managed_media_repairs')) {
+        if (String((error as { message?: unknown } | null)?.message ?? '').includes('no such table: managed_media_repairs')) {
             return [];
         }
         throw error;
     }
 }
 
-export function recordCanonicalManagedMediaRepair(db, {
+export function recordCanonicalManagedMediaRepair(db: DatabaseSync, {
     repairKey,
     blobId = null,
     mediaReferenceId = null,
@@ -239,7 +247,7 @@ export function recordCanonicalManagedMediaRepair(db, {
     reason,
     details = {},
     nowMs = Date.now(),
-} = {}) {
+}: RepairOptions = {}) {
     db.prepare(`
         INSERT INTO managed_media_repairs (
             repair_key, blob_id, media_reference_id, operation, reason, details_json,
@@ -265,10 +273,10 @@ export function recordCanonicalManagedMediaRepair(db, {
     );
 }
 
-export function resolveCanonicalManagedMediaRepair(db, {
+export function resolveCanonicalManagedMediaRepair(db: DatabaseSync, {
     repairKey,
     resolvedAtMs = Date.now(),
-} = {}) {
+}: { repairKey?: unknown; resolvedAtMs?: number } = {}) {
     return db.prepare(`
         UPDATE managed_media_repairs
         SET resolved_at_ms = ?,
@@ -279,10 +287,10 @@ export function resolveCanonicalManagedMediaRepair(db, {
     `).run(Number(resolvedAtMs), Number(resolvedAtMs), Number(resolvedAtMs), String(repairKey));
 }
 
-export function markCanonicalManagedMediaRepairAttempt(db, {
+export function markCanonicalManagedMediaRepairAttempt(db: DatabaseSync, {
     repairKey,
     attemptedAtMs = Date.now(),
-} = {}) {
+}: { repairKey?: unknown; attemptedAtMs?: number } = {}) {
     return db.prepare(`
         UPDATE managed_media_repairs
         SET last_attempt_at_ms = ?,

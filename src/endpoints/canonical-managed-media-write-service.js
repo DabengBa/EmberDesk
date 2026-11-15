@@ -20,7 +20,7 @@ import {
     recordCanonicalManagedMediaRepair,
     resolveCanonicalManagedMediaRepair,
     upsertCanonicalManagedMediaReference,
-} from './canonical-managed-media-store.js';
+} from './canonical-managed-media-store.ts';
 
 const MANAGED_MEDIA_ROOT = 'managed-media';
 

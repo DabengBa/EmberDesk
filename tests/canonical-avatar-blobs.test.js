@@ -27,7 +27,7 @@ import {
 } from '../src/canonical-managed-media-shadow-import.js';
 import {
     listCanonicalManagedMediaReferences,
-} from '../src/endpoints/canonical-managed-media-store.js';
+} from '../src/endpoints/canonical-managed-media-store.ts';
 import { readManagedMediaContent } from '../src/endpoints/canonical-managed-media-read-service.js';
 import { extractImageData, write } from '../src/character-card-parser.js';
 import encode from '../src/png/encode.js';

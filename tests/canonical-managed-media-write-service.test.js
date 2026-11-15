@@ -19,7 +19,7 @@ import {
     listCanonicalManagedMediaReferences,
     listOpenCanonicalManagedMediaRepairs,
     upsertCanonicalManagedMediaReference,
-} from '../src/endpoints/canonical-managed-media-store.js';
+} from '../src/endpoints/canonical-managed-media-store.ts';
 
 const tempRoots = [];
 const managers = [];
@@ -144,7 +144,7 @@ describe('canonical managed media write service', () => {
             compatibilityPath: 'assets/sky.png', ownerType: 'asset', ownerId: 'sky',
             role: 'asset', displayName: 'sky.png', contents,
         })).rejects.toThrow('injected reference failure');
-        const { hashCanonicalManagedMediaBuffer } = await import('../src/endpoints/canonical-managed-media-store.js');
+        const { hashCanonicalManagedMediaBuffer } = await import('../src/endpoints/canonical-managed-media-store.ts');
         const managedPath = path.join(directories.storage, 'managed-media', hashCanonicalManagedMediaBuffer(contents));
         expect(fs.readFileSync(managedPath)).toEqual(contents);
         expect(listCanonicalManagedMediaReferences(db)).toHaveLength(0);

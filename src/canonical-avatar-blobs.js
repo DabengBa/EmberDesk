@@ -1,4 +1,4 @@
-import { getCanonicalManagedMediaReference } from './endpoints/canonical-managed-media-store.js';
+import { getCanonicalManagedMediaReference } from './endpoints/canonical-managed-media-store.ts';
 
 export const CHARACTER_AVATAR_OWNER_TYPE = 'character';
 export const CHARACTER_AVATAR_ROLE = 'avatar';

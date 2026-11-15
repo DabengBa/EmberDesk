@@ -27,7 +27,7 @@ import { writeCanonicalSecret } from '../src/endpoints/canonical-secrets-store.t
 import { upsertCanonicalSettingsDocument } from '../src/endpoints/settings-store.ts';
 import { listCanonicalWorldInfoBookRows, upsertCanonicalWorldInfoBook } from '../src/endpoints/world-info-store.ts';
 import { commitWorldBookWithProjectionIntent, replayWorldProjection } from '../src/canonical-world-info-projection.js';
-import { upsertCanonicalManagedMediaReference } from '../src/endpoints/canonical-managed-media-store.js';
+import { upsertCanonicalManagedMediaReference } from '../src/endpoints/canonical-managed-media-store.ts';
 import { parse as parseCharacterCard } from '../src/character-card-parser.js';
 
 const __filename = fileURLToPath(import.meta.url);
