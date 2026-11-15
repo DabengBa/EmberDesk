@@ -363,7 +363,7 @@ describe('/api/wire-logs/config', () => {
                 method: 'POST', headers: { 'content-type': 'application/json' },
                 body: JSON.stringify({ enabled: false, unknown: 'discard', retentionDays: -1 }),
             })).json();
-            const { getCanonicalSettingsDocument } = await import('../src/endpoints/settings-store.js');
+            const { getCanonicalSettingsDocument } = await import('../src/endpoints/settings-store.ts');
             const db = canonicalSqliteManager.open({ handle: HANDLE, directories, featureFlags: { enabled: true } });
             expect(getCanonicalSettingsDocument(db, { userId: HANDLE }).payload.feature_settings.wire_log).toEqual(saved);
         });

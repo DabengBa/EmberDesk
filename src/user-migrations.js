@@ -7,7 +7,7 @@ import { serverDirectory } from './server-directory.js';
 import { getUserDirectories } from './user-directories.js';
 import { applyCanonicalPragmas, resolveCanonicalDatabasePath } from './canonical-sqlite.js';
 import { runCanonicalMigrations } from './canonical-sqlite-migrations.js';
-import { upsertCanonicalSettingsDocument } from './endpoints/settings-store.js';
+import { upsertCanonicalSettingsDocument } from './endpoints/settings-store.ts';
 
 /**
  * Perform migration from the old user data format to the new one.

@@ -44,7 +44,7 @@ import {
 import {
     listOpenSettingsProjectionRepairs,
     resolveSettingsProjectionRepair,
-} from './endpoints/settings-store.js';
+} from './endpoints/settings-store.ts';
 import {
     listOpenSecretProjectionRepairs,
     resolveSecretProjectionRepair,

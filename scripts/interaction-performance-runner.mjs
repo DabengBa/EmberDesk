@@ -14,7 +14,7 @@ import { chromium } from '../tests/node_modules/playwright/index.mjs';
 import { applyCanonicalPragmas } from '../src/canonical-sqlite.js';
 import { runCanonicalMigrations } from '../src/canonical-sqlite-migrations.js';
 import { DEFAULT_USER } from '../src/constants.js';
-import { upsertCanonicalSettingsDocument } from '../src/endpoints/settings-store.js';
+import { upsertCanonicalSettingsDocument } from '../src/endpoints/settings-store.ts';
 import {
     buildDerivedCacheObservabilitySummary,
     buildVariantComparison,

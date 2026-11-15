@@ -24,7 +24,7 @@ import {
 import { exportCanonicalStorageToFiles } from '../src/canonical-sqlite-export.js';
 import { buildCharacterFileSnapshotRow } from '../src/endpoints/character-file-snapshot.js';
 import { writeCanonicalSecret } from '../src/endpoints/canonical-secrets-store.js';
-import { upsertCanonicalSettingsDocument } from '../src/endpoints/settings-store.js';
+import { upsertCanonicalSettingsDocument } from '../src/endpoints/settings-store.ts';
 import { listCanonicalWorldInfoBookRows, upsertCanonicalWorldInfoBook } from '../src/endpoints/world-info-store.ts';
 import { commitWorldBookWithProjectionIntent, replayWorldProjection } from '../src/canonical-world-info-projection.js';
 import { upsertCanonicalManagedMediaReference } from '../src/endpoints/canonical-managed-media-store.js';

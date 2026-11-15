@@ -17,7 +17,7 @@ import {
     upsertCanonicalChatSession,
 } from '../src/endpoints/canonical-chat-store.js';
 import { recordCharacterAvatarBlob } from '../src/canonical-avatar-blob-service.js';
-import { getCanonicalSettingsDocument, upsertCanonicalSettingsDocument } from '../src/endpoints/settings-store.js';
+import { getCanonicalSettingsDocument, upsertCanonicalSettingsDocument } from '../src/endpoints/settings-store.ts';
 import { read } from '../src/character-card-parser.js';
 
 const __filename = fileURLToPath(import.meta.url);

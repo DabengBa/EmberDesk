@@ -92,6 +92,17 @@ run without a production loader or emitted graph.
 
 ## Migrated slices
 
+`src/endpoints/settings-store.ts` and `src/endpoints/presets-store.ts` are the
+sole implementations of their canonical stores. Presets continue to import
+`stableSettingsPayloadJson` and `hashSettingsPayload` from settings. Settings
+revision checks, snapshot recovery, media authorization transactions and repair
+records retain their existing behavior; SQLite remains authoritative and this
+migration does not restore settings.json runtime writes. Preset revisions,
+one-time imports and exports remain unchanged. Local TypeScript views describe
+existing unchecked JSON access; they do not claim to validate nested inputs.
+Focused SQLite integration tests and `tests/settings-store-native.test.js`
+exercise the real router/store graph and native Node resolution without a loader.
+
 `src/endpoints/world-info-store.ts` is the sole implementation of the
 canonical World Info store. Its JavaScript callers use the real `.ts` path,
 including projection and shadow import. SQLite remains authoritative;

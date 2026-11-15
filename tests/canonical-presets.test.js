@@ -28,7 +28,7 @@ const {
     importPresetFile,
     listCanonicalPresets,
     upsertCanonicalPreset,
-} = await import('../src/endpoints/presets-store.js');
+} = await import('../src/endpoints/presets-store.ts');
 const {
     PRESETS_AUDIT_SCOPE,
     auditCanonicalPresetsShadowImport,

@@ -23,7 +23,7 @@ import {
     upsertCanonicalSettingsDocument,
     mutateCharacterMediaAuthorizationInTransaction,
 
-} from './settings-store.js';
+} from './settings-store.ts';
 
 
 const ENABLE_ACCOUNTS = !!getConfigValue('enableUserAccounts', false, 'boolean');

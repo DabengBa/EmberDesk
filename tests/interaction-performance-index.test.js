@@ -37,7 +37,7 @@ import {
 } from '../src/endpoints/world-info-store.ts';
 import encodePngChunks from '../src/png/encode.js';
 import { setConfigFilePath } from '../src/util.js';
-import { getCanonicalSettingsDocument, upsertCanonicalSettingsDocument } from '../src/endpoints/settings-store.js';
+import { getCanonicalSettingsDocument, upsertCanonicalSettingsDocument } from '../src/endpoints/settings-store.ts';
 import { buildCharacterFileSnapshotRow } from '../src/endpoints/character-file-snapshot.js';
 // These state helpers are exercised in Node; loading the browser i18n shell
 // would initialize window-dependent UI dependencies before the tests run.

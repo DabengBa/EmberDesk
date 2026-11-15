@@ -5,7 +5,7 @@ import path from 'node:path';
 import { getCanonicalMigrationStatus, runCanonicalMigrations } from './canonical-sqlite-migrations.js';
 import { persistCanonicalAuditStatus } from './canonical-sqlite-shadow-import.js';
 import { recordImportLedgerEntry } from './canonical-import-ledger.js';
-import { importPresetFile, PRESETS_OPENAI_API_ID } from './endpoints/presets-store.js';
+import { importPresetFile, PRESETS_OPENAI_API_ID } from './endpoints/presets-store.ts';
 
 export const PRESETS_AUDIT_SCOPE = 'presets';
 

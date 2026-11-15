@@ -21,7 +21,7 @@ import {
 } from '../canonical-sqlite.js';
 import { runCanonicalMigrations } from '../canonical-sqlite-migrations.js';
 import { getCanonicalStorageSlice } from '../canonical-storage-slice-registry.js';
-import { ensureCanonicalPreset, PRESETS_OPENAI_API_ID } from './presets-store.js';
+import { ensureCanonicalPreset, PRESETS_OPENAI_API_ID } from './presets-store.ts';
 import {
     classifyExternalContentId,
     classifyExternalContentUrl,
