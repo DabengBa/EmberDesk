@@ -170,6 +170,13 @@ page, feature, or term, so no semantic documentation database update is needed.
 
 ## User storage and configuration leaves
 
+`src/user-directories.ts` is the sole implementation of directory lookup,
+per-handle caching, public and user directory creation, upload cleanup and
+avatar lookup. Existing consumers, maintenance scripts and `src/users.js`
+use the actual `.ts` path; the barrel retains its existing exports and
+`UserDirectoryList` type. Native Node tests run the real module graph against
+isolated temporary data roots without changing directory or cleanup semantics.
+
 `src/user-storage.ts` and `src/config-init.ts` are the sole implementations of
 their existing modules. Their JavaScript callers use explicit `.ts` imports;
 `src/users.js` retains its compatibility exports and exposes the storage

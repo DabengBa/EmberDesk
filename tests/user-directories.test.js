@@ -1,6 +1,6 @@
 import { describe, test, expect, beforeAll, afterAll } from '@jest/globals';
 import path from 'node:path';
-import { getUserDirectories } from '../src/user-directories.js';
+import { getUserDirectories } from '../src/user-directories.ts';
 
 const ORIGINAL_DATA_ROOT = globalThis.DATA_ROOT;
 

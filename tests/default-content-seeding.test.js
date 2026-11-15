@@ -53,7 +53,7 @@ describe('default content seeding', () => {
         setConfigFilePath(configPath);
 
         const contentManager = await import('../src/endpoints/content-manager.js');
-        const userDirectories = await import('../src/user-directories.js');
+        const userDirectories = await import('../src/user-directories.ts');
         checkForNewContent = contentManager.checkForNewContent;
         getUserDirectories = userDirectories.getUserDirectories;
     });

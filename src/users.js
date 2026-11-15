@@ -18,7 +18,7 @@ export {
     ensurePublicDirectoriesExist,
     cleanUploads,
     getUserAvatar,
-} from './user-directories.js';
+} from './user-directories.ts';
 
 export {
     migrateUserData,
@@ -49,7 +49,7 @@ import { DEFAULT_USER } from './constants.js';
 import { getConfigValue, color, generateTimestamp, isPathUnderParent, invalidateFirefoxCache } from './util.js';
 import { allowKeysExposure, SECRETS_FILE } from './endpoints/secrets.js';
 import { getEnableAccounts, toKey, getAccountVersion, getAllEnabledUsers, needsSetup } from './user-storage.ts';
-import { getUserDirectories } from './user-directories.js';
+import { getUserDirectories } from './user-directories.ts';
 import { shouldRedirectToLogin, tryAutoLogin } from './user-auth.ts';
 import { hasReactLoginBuild, sendReactLoginIndex } from './middleware/react-login-serve.js';
 
