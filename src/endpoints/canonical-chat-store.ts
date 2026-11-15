@@ -1,9 +1,24 @@
+import type { DatabaseSync, SQLInputValue } from 'node:sqlite';
+import type { CanonicalChatLocator } from './canonical-chat-read-service.ts';
+
+// SQLite rows and opaque payload views describe existing data, not validation.
+type ChatSessionRow = { id: string; owner_type: string; owner_id: string; source_key: string; source_path: string; source_jsonl: string; header_payload_json: string; concurrency_token: string | null; created_at_ms: number };
+type MessageView = { id?: unknown; mesid?: unknown; extra?: { id?: unknown }; name?: unknown; send_date?: unknown };
+type Attachment = { blobId: string; role: string; compatibility: { path: string; fieldPath: (string | number)[] } };
+type ChatRecord = CanonicalChatLocator & { id: string; sourceKey: string; displayName: string; headerPayloadJson: string; sourceJsonl: string; sourceMtimeMs: number; sourceSizeBytes: number; createdAtMs: number; updatedAtMs: number; messages: { id: string; order: number; identityKey: string; payloadJson: string; createdAtMs: number | null; attachments: Attachment[] }[] };
+type Operation = { id: string; fingerprint: string };
+type WriteResult = { id: string; status?: string; sourceJsonl?: string; version?: string | null };
+type ReplayResult = (WriteResult & { replayed: true }) | { status: 'operation_mismatch' };
+type PersistResult = WriteResult | ReplayResult | { status: 'conflict' | 'suppressed' };
+type PersistOptions = { onPersist?: ((db: DatabaseSync, result: WriteResult) => void) | null; operation?: Operation | null };
+type Condition = { projection?: boolean; create?: boolean; version?: string };
+
 import crypto from 'node:crypto';
 import path from 'node:path';
 
 import { withCanonicalTransaction } from '../canonical-sqlite.js';
 
-function hashIdentity(...parts) {
+function hashIdentity(...parts: unknown[]) {
     const hash = crypto.createHash('sha256');
     for (const part of parts) {
         hash.update(String(part));
@@ -12,21 +27,21 @@ function hashIdentity(...parts) {
     return hash.digest('hex');
 }
 
-function parsePayloadObject(payload, fieldName) {
+function parsePayloadObject(payload: unknown, fieldName: string): MessageView {
     if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
         throw new Error(`Canonical chat ${fieldName} must be an object.`);
     }
-    return payload;
+    return payload as MessageView;
 }
 
-function getMessageIdentityBase(message, payloadJson) {
+function getMessageIdentityBase(message: MessageView, payloadJson: string) {
     return message.id
         ?? message.mesid
         ?? message?.extra?.id
         ?? hashIdentity(message.name ?? '', message.send_date ?? '', payloadJson);
 }
 
-function listStringLeaves(value, fieldPath = []) {
+function listStringLeaves(value: unknown, fieldPath: (string | number)[] = []): { value: string; fieldPath: (string | number)[] }[] {
     if (typeof value === 'string') {
         return [{ value, fieldPath }];
     }
@@ -39,55 +54,55 @@ function listStringLeaves(value, fieldPath = []) {
     return Object.entries(value).flatMap(([key, entry]) => listStringLeaves(entry, [...fieldPath, key]));
 }
 
-function getManagedMediaByCompatibilityPath(db) {
+function getManagedMediaByCompatibilityPath(db: DatabaseSync): Map<string, string> {
     try {
         return new Map(db.prepare(`
             SELECT compatibility_path, blob_id
             FROM media_references
             WHERE deleted_at_ms IS NULL
-        `).all().map(row => [row.compatibility_path, row.blob_id]));
+        `).all().map(row => [row.compatibility_path as string, row.blob_id as string]));
     } catch (error) {
-        if (String(error?.message ?? '').includes('no such table: media_references')) {
+        if (String((error as { message?: unknown } | null | undefined)?.message ?? '').includes('no such table: media_references')) {
             return new Map();
         }
         throw error;
     }
 }
 
-function getSessionBySourceKey(db, { ownerType, ownerId, sourceKey }) {
+function getSessionBySourceKey(db: DatabaseSync, { ownerType, ownerId, sourceKey }: Pick<ChatRecord, 'ownerType' | 'ownerId' | 'sourceKey'>): ChatSessionRow | null {
     return db.prepare(`
         SELECT *
         FROM chat_sessions
         WHERE owner_type = ? AND owner_id = ? AND source_key = ?
-    `).get(ownerType, ownerId, sourceKey) ?? null;
+    `).get(ownerType, ownerId, sourceKey) as ChatSessionRow | undefined ?? null;
 }
 
-function getGroupSessionBySourceJsonl(db, { sourceJsonl }) {
+function getGroupSessionBySourceJsonl(db: DatabaseSync, { sourceJsonl }: Pick<ChatRecord, 'sourceJsonl'>): ChatSessionRow | null {
     const matches = db.prepare(`
         SELECT *
         FROM chat_sessions
         WHERE owner_type = 'group' AND source_jsonl = ?
     `).all(sourceJsonl);
-    return matches.length === 1 ? matches[0] : null;
+    return matches.length === 1 ? matches[0] as ChatSessionRow : null;
 }
 
-export function getCanonicalChatSession(db, { ownerType, ownerId, sourcePath }) {
+export function getCanonicalChatSession(db: DatabaseSync, { ownerType, ownerId, sourcePath }: CanonicalChatLocator): ChatSessionRow | null {
     return db.prepare(`
         SELECT *
         FROM chat_sessions
         WHERE owner_type = ? AND owner_id = ? AND source_path = ?
-    `).get(ownerType, ownerId, sourcePath) ?? null;
+    `).get(ownerType, ownerId, sourcePath) as ChatSessionRow | undefined ?? null;
 }
 
 /**
  * Converts a route-visible full chat payload into an opaque canonical session record.
  * Unknown header/message fields remain in payload JSON unchanged.
  */
-export function createCanonicalChatSessionRecord(db, {
+export function createCanonicalChatSessionRecord(db: DatabaseSync, {
     locator,
     payload,
     nowMs = Date.now(),
-}) {
+}: { locator: CanonicalChatLocator; payload: unknown; nowMs?: number }): ChatRecord {
     if (!locator || !['character', 'group'].includes(locator.ownerType)
         || !locator.ownerId || !locator.sourcePath) {
         throw new Error('Canonical chat locator is invalid.');
@@ -104,7 +119,7 @@ export function createCanonicalChatSessionRecord(db, {
         locator.sourcePath,
     );
     const mediaByPath = getManagedMediaByCompatibilityPath(db);
-    const occurrences = new Map();
+    const occurrences = new Map<string, number>();
     const headerPayloadJson = JSON.stringify(header);
     const messages = payload.slice(1).map((value, order) => {
         const message = parsePayloadObject(value, 'message');
@@ -116,7 +131,7 @@ export function createCanonicalChatSessionRecord(db, {
         const attachments = listStringLeaves(message)
             .filter(leaf => mediaByPath.has(leaf.value))
             .map(leaf => ({
-                blobId: mediaByPath.get(leaf.value),
+                blobId: mediaByPath.get(leaf.value) as string,
                 role: 'attachment',
                 compatibility: {
                     path: leaf.value,
@@ -153,13 +168,13 @@ export function createCanonicalChatSessionRecord(db, {
     };
 }
 
-function getExistingSession(db, record) {
+function getExistingSession(db: DatabaseSync, record: ChatRecord) {
     return getSessionBySourceKey(db, record)
         ?? getCanonicalChatSession(db, record)
         ?? (record.ownerType === 'group' ? getGroupSessionBySourceJsonl(db, record) : null);
 }
 
-export function listCanonicalChatSessions(db) {
+export function listCanonicalChatSessions(db: DatabaseSync) {
     return db.prepare('SELECT * FROM chat_sessions ORDER BY owner_type ASC, owner_id ASC, source_path ASC').all();
 }
 
@@ -167,7 +182,7 @@ export function listCanonicalChatSessions(db) {
  * Derives character chat stats from canonical sessions. Source of truth once
  * chats projection is 'off' and no JSONL files are written.
  */
-export function calculateCanonicalCharacterChatStats(db, ownerId) {
+export function calculateCanonicalCharacterChatStats(db: DatabaseSync, ownerId: string) {
     const row = db.prepare(`
         SELECT COUNT(*) AS chat_count,
             COALESCE(SUM(source_size_bytes), 0) AS chat_size_bytes,
@@ -183,7 +198,7 @@ export function calculateCanonicalCharacterChatStats(db, ownerId) {
 }
 
 /** Updates existing active characters inside the caller's session transaction. */
-export function syncCanonicalCharacterChatStats(db, locator, nowMs) {
+export function syncCanonicalCharacterChatStats(db: DatabaseSync, locator: CanonicalChatLocator, nowMs: number) {
     if (locator.ownerType !== 'character') return;
     const stats = calculateCanonicalCharacterChatStats(db, locator.ownerId);
     db.prepare(`
@@ -200,20 +215,20 @@ export function syncCanonicalCharacterChatStats(db, locator, nowMs) {
     `).run(stats.chatCount, stats.chatSize, stats.dateLastChat, nowMs, `${locator.ownerId}.png`);
 }
 
-export function serializeCanonicalChatSession(db, sessionId) {
+export function serializeCanonicalChatSession(db: DatabaseSync, sessionId: SQLInputValue) {
     const session = db.prepare('SELECT source_jsonl FROM chat_sessions WHERE id = ?').get(sessionId);
     return session?.source_jsonl ?? null;
 }
 
-function getExistingMessageIds(db, sessionId) {
+function getExistingMessageIds(db: DatabaseSync, sessionId: string) {
     return new Map(db.prepare(`
         SELECT id, identity_key
         FROM chat_messages
         WHERE session_id = ?
-    `).all(sessionId).map(message => [message.identity_key, message.id]));
+    `).all(sessionId).map(message => [message.identity_key as string, message.id as string]));
 }
 
-function getAttachmentSnapshot(db, sessionId) {
+function getAttachmentSnapshot(db: DatabaseSync, sessionId: string) {
     return db.prepare(`
         SELECT message.identity_key, reference.blob_id, reference.role, reference.compatibility_json
         FROM chat_attachment_refs AS reference
@@ -223,7 +238,7 @@ function getAttachmentSnapshot(db, sessionId) {
     `).all(sessionId);
 }
 
-function getExpectedAttachmentSnapshot(record) {
+function getExpectedAttachmentSnapshot(record: ChatRecord) {
     return record.messages.flatMap(message => message.attachments.map(attachment => ({
         identity_key: message.identityKey,
         blob_id: attachment.blobId,
@@ -237,38 +252,39 @@ function getExpectedAttachmentSnapshot(record) {
     ));
 }
 
-function hasMatchingAttachmentSnapshot(db, sessionId, record) {
+function hasMatchingAttachmentSnapshot(db: DatabaseSync, sessionId: string, record: ChatRecord) {
     return JSON.stringify(getAttachmentSnapshot(db, sessionId))
         === JSON.stringify(getExpectedAttachmentSnapshot(record));
 }
 
-function requireChatVersion(version) {
+function requireChatVersion(version: unknown): asserts version is string {
     if (typeof version !== 'string' || version.length === 0) {
         throw new TypeError('Canonical chat version must be a non-empty string.');
     }
 }
 
-export function hasCanonicalChatProjectionTombstone(db, { ownerType, ownerId, sourcePath }) {
+export function hasCanonicalChatProjectionTombstone(db: DatabaseSync, { ownerType, ownerId, sourcePath }: CanonicalChatLocator) {
     return Boolean(db.prepare(`
         SELECT 1 FROM chat_projection_tombstones
         WHERE owner_type = ? AND owner_id = ? AND source_path = ?
     `).get(ownerType, ownerId, sourcePath));
 }
 
-export function getCanonicalChatOperation(db, operation) {
+export function getCanonicalChatOperation(db: DatabaseSync, operation: Operation): ReplayResult | null {
     const row = db.prepare('SELECT fingerprint, result_json FROM chat_operation_results WHERE operation_id = ?').get(operation.id);
     if (!row) return null;
     if (row.fingerprint !== operation.fingerprint) return { status: 'operation_mismatch' };
-    return { ...JSON.parse(row.result_json), replayed: true };
+    // The operation table contains results previously serialized by this module.
+    return { ...JSON.parse(row.result_json as string) as WriteResult, replayed: true };
 }
 
-function recordCanonicalChatOperation(db, operation, result) {
+function recordCanonicalChatOperation(db: DatabaseSync, operation: Operation | null, result: WriteResult) {
     if (operation) db.prepare('INSERT INTO chat_operation_results (operation_id, fingerprint, result_json) VALUES (?, ?, ?)')
         .run(operation.id, operation.fingerprint, JSON.stringify(result));
 }
 
-function persistCanonicalChatSession(db, record, { onPersist = null, condition = null, operation = null } = {}) {
-    return withCanonicalTransaction(db, txnDb => {
+function persistCanonicalChatSession(db: DatabaseSync, record: ChatRecord, { onPersist = null, condition = null, operation = null }: PersistOptions & { condition?: Condition | null } = {}): PersistResult {
+    return withCanonicalTransaction(db, (txnDb: DatabaseSync) => {
         const replay = operation && getCanonicalChatOperation(txnDb, operation);
         if (replay) return replay;
         if (condition?.projection && hasCanonicalChatProjectionTombstone(txnDb, record)) {
@@ -304,9 +320,10 @@ function persistCanonicalChatSession(db, record, { onPersist = null, condition =
             ? hasMatchingAttachmentSnapshot(txnDb, existing.id, record)
             : false;
         const id = existing?.id ?? record.id;
-        if (sourceUnchanged && existing.source_path === record.sourcePath && attachmentSnapshotMatches) {
-            const result = { id, status: 'unchanged' };
-            if (condition && !condition.projection) result.version = existing.concurrency_token;
+        // A matching source JSONL implies an existing row: the record value is a string.
+        if (sourceUnchanged && (existing as ChatSessionRow).source_path === record.sourcePath && attachmentSnapshotMatches) {
+            const result: WriteResult = { id, status: 'unchanged' };
+            if (condition && !condition.projection) result.version = (existing as ChatSessionRow).concurrency_token;
             onPersist?.(txnDb, result);
             recordCanonicalChatOperation(txnDb, operation, result);
             return result;
@@ -371,8 +388,9 @@ function persistCanonicalChatSession(db, record, { onPersist = null, condition =
         }
 
         if (sourceUnchanged && attachmentSnapshotMatches) {
-            const result = { id, status: existing ? 'updated' : 'imported' };
-            if (condition && !condition.projection) result.version = getCanonicalChatSession(txnDb, record).concurrency_token;
+            const result: WriteResult = { id, status: existing ? 'updated' : 'imported' };
+            // This transaction has just inserted or updated the row at this locator.
+            if (condition && !condition.projection) result.version = (getCanonicalChatSession(txnDb, record) as ChatSessionRow).concurrency_token;
             onPersist?.(txnDb, result);
             recordCanonicalChatOperation(txnDb, operation, result);
             return result;
@@ -413,43 +431,43 @@ function persistCanonicalChatSession(db, record, { onPersist = null, condition =
                 );
             }
         }
-        const result = { id, status: existing ? 'updated' : 'imported' };
-        if (condition && !condition.projection) result.version = getCanonicalChatSession(txnDb, record).concurrency_token;
+        const result: WriteResult = { id, status: existing ? 'updated' : 'imported' };
+        if (condition && !condition.projection) result.version = (getCanonicalChatSession(txnDb, record) as ChatSessionRow).concurrency_token;
         onPersist?.(txnDb, result);
         recordCanonicalChatOperation(txnDb, operation, result);
         return result;
     });
 }
 
-export function upsertCanonicalChatSession(db, record, { onPersist = null } = {}) {
+export function upsertCanonicalChatSession(db: DatabaseSync, record: ChatRecord, { onPersist = null }: PersistOptions = {}): PersistResult {
     return persistCanonicalChatSession(db, record, { onPersist });
 }
 
 /** Passive projection import must never recreate a deleted or moved session. */
-export function importCanonicalChatProjection(db, record) {
+export function importCanonicalChatProjection(db: DatabaseSync, record: ChatRecord): PersistResult {
     return persistCanonicalChatSession(db, record, { condition: { projection: true } });
 }
 
 /** Create only if no matching session exists. Does not expose an HTTP API. */
-export function createCanonicalChatSession(db, record, { onPersist = null, operation = null } = {}) {
+export function createCanonicalChatSession(db: DatabaseSync, record: ChatRecord, { onPersist = null, operation = null }: PersistOptions = {}): PersistResult {
     return persistCanonicalChatSession(db, record, { onPersist, operation, condition: { create: true } });
 }
 
 /** Compare the version at the exact locator and write in one SQLite transaction. */
-export function saveCanonicalChatSessionIfCurrent(db, record, version, { onPersist = null, operation = null } = {}) {
+export function saveCanonicalChatSessionIfCurrent(db: DatabaseSync, record: ChatRecord, version: unknown, { onPersist = null, operation = null }: PersistOptions = {}): PersistResult {
     requireChatVersion(version);
     return persistCanonicalChatSession(db, record, { onPersist, operation, condition: { version } });
 }
 
-export function renameCanonicalChatSession(db, {
+export function renameCanonicalChatSession(db: DatabaseSync, {
     locator,
     nextLocator,
     nowMs = Date.now(),
     onPersist = null,
     version = null,
     operation = null,
-}) {
-    return withCanonicalTransaction(db, txnDb => {
+}: PersistOptions & { locator: CanonicalChatLocator; nextLocator: CanonicalChatLocator; nowMs?: number; version?: string | null }): WriteResult | ReplayResult | { status: 'conflict' } | null {
+    return withCanonicalTransaction(db, (txnDb: DatabaseSync) => {
         const replay = operation && getCanonicalChatOperation(txnDb, operation);
         if (replay) return replay;
         const session = getCanonicalChatSession(txnDb, locator);
@@ -474,16 +492,16 @@ export function renameCanonicalChatSession(db, {
             Number(nowMs),
             session.id,
         );
-        const result = { id: session.id, sourceJsonl: session.source_jsonl };
-        if (version !== null) result.version = getCanonicalChatSession(txnDb, nextLocator).concurrency_token;
+        const result: WriteResult = { id: session.id, sourceJsonl: session.source_jsonl };
+        if (version !== null) result.version = (getCanonicalChatSession(txnDb, nextLocator) as ChatSessionRow).concurrency_token;
         onPersist?.(txnDb, result);
         recordCanonicalChatOperation(txnDb, operation, result);
         return result;
     });
 }
 
-function removeCanonicalChatSession(db, locator, { onPersist = null, version = null, operation = null } = {}) {
-    return withCanonicalTransaction(db, txnDb => {
+function removeCanonicalChatSession(db: DatabaseSync, locator: CanonicalChatLocator, { onPersist = null, version = null, operation = null }: PersistOptions & { version?: string | null } = {}): WriteResult | ReplayResult | { status: 'conflict' } | null {
+    return withCanonicalTransaction(db, (txnDb: DatabaseSync) => {
         const replay = operation && getCanonicalChatOperation(txnDb, operation);
         if (replay) return replay;
         const session = getCanonicalChatSession(txnDb, locator);
@@ -492,7 +510,7 @@ function removeCanonicalChatSession(db, locator, { onPersist = null, version = n
         }
         if (!session) return null;
         txnDb.prepare('DELETE FROM chat_sessions WHERE id = ?').run(session.id);
-        const result = { id: session.id, sourceJsonl: session.source_jsonl };
+        const result: WriteResult = { id: session.id, sourceJsonl: session.source_jsonl };
         if (version !== null) result.status = 'deleted';
         onPersist?.(txnDb, result);
         recordCanonicalChatOperation(txnDb, operation, result);
@@ -500,12 +518,12 @@ function removeCanonicalChatSession(db, locator, { onPersist = null, version = n
     });
 }
 
-export function deleteCanonicalChatSession(db, locator, { onPersist = null } = {}) {
+export function deleteCanonicalChatSession(db: DatabaseSync, locator: CanonicalChatLocator, { onPersist = null }: PersistOptions = {}): WriteResult | ReplayResult | { status: 'conflict' } | null {
     return removeCanonicalChatSession(db, locator, { onPersist });
 }
 
 /** Compare the version at the exact locator and delete in one SQLite transaction. */
-export function deleteCanonicalChatSessionIfCurrent(db, locator, version, { onPersist = null, operation = null } = {}) {
+export function deleteCanonicalChatSessionIfCurrent(db: DatabaseSync, locator: CanonicalChatLocator, version: unknown, { onPersist = null, operation = null }: PersistOptions = {}): WriteResult | ReplayResult | { status: 'conflict' } | null {
     requireChatVersion(version);
     return removeCanonicalChatSession(db, locator, { onPersist, version, operation });
 }
@@ -521,7 +539,7 @@ export function deleteCanonicalChatSessionIfCurrent(db, locator, version, { onPe
  * @param {number} options.nowMs Update timestamp
  * @returns {number} Number of retargeted sessions
  */
-export function retargetCanonicalChatSessionsOwner(db, { oldOwnerId, newOwnerId, nowMs = Date.now() }) {
+export function retargetCanonicalChatSessionsOwner(db: DatabaseSync, { oldOwnerId, newOwnerId, nowMs = Date.now() }: { oldOwnerId: string; newOwnerId: string; nowMs?: number }) {
     const sessions = db.prepare(`
         SELECT id, source_path
         FROM chat_sessions
@@ -554,14 +572,14 @@ export function retargetCanonicalChatSessionsOwner(db, { oldOwnerId, newOwnerId,
  * @param {string} ownerId Character internal name
  * @returns {number} Number of deleted sessions
  */
-export function deleteCanonicalChatSessionsForOwner(db, ownerId) {
+export function deleteCanonicalChatSessionsForOwner(db: DatabaseSync, ownerId: string) {
     return Number(db.prepare(`
         DELETE FROM chat_sessions
         WHERE owner_type = 'character' AND owner_id = ?
     `).run(String(ownerId ?? '')).changes ?? 0);
 }
 
-export function getCanonicalChatMessagePayloads(db, sessionId) {
+export function getCanonicalChatMessagePayloads(db: DatabaseSync, sessionId: string) {
     return db.prepare(`
         SELECT id, message_order, payload_json
         FROM chat_messages
@@ -574,7 +592,7 @@ export function getCanonicalChatMessagePayloads(db, sessionId) {
     }));
 }
 
-export function recordCanonicalChatProjectionRepair(db, {
+export function recordCanonicalChatProjectionRepair(db: DatabaseSync, {
     repairKey,
     sessionId = null,
     locator,
@@ -582,7 +600,7 @@ export function recordCanonicalChatProjectionRepair(db, {
     reason,
     details = {},
     nowMs = Date.now(),
-}) {
+}: { repairKey: string; sessionId?: SQLInputValue; locator: CanonicalChatLocator; operation: string; reason: string; details?: unknown; nowMs?: number }) {
     db.prepare(`
         INSERT INTO chat_projection_repairs (
             repair_key,
@@ -622,7 +640,7 @@ export function recordCanonicalChatProjectionRepair(db, {
     );
 }
 
-export function listOpenCanonicalChatProjectionRepairs(db) {
+export function listOpenCanonicalChatProjectionRepairs(db: DatabaseSync) {
     try {
         return db.prepare(`
             SELECT
@@ -664,17 +682,17 @@ export function listOpenCanonicalChatProjectionRepairs(db) {
             };
         });
     } catch (error) {
-        if (String(error?.message ?? '').includes('no such table: chat_projection_repairs')) {
+        if (String((error as { message?: unknown } | null | undefined)?.message ?? '').includes('no such table: chat_projection_repairs')) {
             return [];
         }
         throw error;
     }
 }
 
-export function resolveCanonicalChatProjectionRepair(db, {
+export function resolveCanonicalChatProjectionRepair(db: DatabaseSync, {
     repairKey,
     resolvedAtMs = Date.now(),
-}) {
+}: { repairKey: string; resolvedAtMs?: number }) {
     return db.prepare(`
         UPDATE chat_projection_repairs
         SET resolved_at_ms = ?,

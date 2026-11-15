@@ -14,6 +14,8 @@ const queries = new URL('../src/endpoints/canonical-chat-query-service.ts', impo
 const reads = new URL('../src/endpoints/canonical-chat-read-service.ts', import.meta.url).href;
 const textReplace = new URL('../src/endpoints/character-text-replace-service.js', import.meta.url).href;
 const util = new URL('../src/util.js', import.meta.url).href;
+const migrations = new URL('../src/canonical-sqlite-migrations.js', import.meta.url).href;
+const writes = new URL('../src/endpoints/canonical-chat-write-service.js', import.meta.url).href;
 
 function runNode(source, ...args) {
     return spawnSync(process.execPath, ['--input-type=module', '--eval', source, ...args], { encoding: 'utf8' });
@@ -124,4 +126,30 @@ test('Node executes canonical TypeScript reads and imports both production calle
     } finally {
         fs.rmSync(root, { recursive: true, force: true });
     }
+});
+
+test('Node executes a canonical write through the real production consumer without a loader', () => {
+    const source = `
+        import assert from 'node:assert/strict';
+        import { DatabaseSync } from 'node:sqlite';
+        const { runCanonicalMigrations } = await import(process.argv[1]);
+        const { writeCanonicalChatPayload } = await import(process.argv[2]);
+        const { readCanonicalChatVersionedPayload } = await import(process.argv[3]);
+        const db = new DatabaseSync(':memory:');
+        try {
+            db.exec('PRAGMA foreign_keys = ON');
+            assert.equal(runCanonicalMigrations(db).ok, true);
+            const locator = { ownerType: 'character', ownerId: 'alice', sourcePath: 'chats/alice/one.jsonl' };
+            const payload = [{ chat_metadata: { opaque: true } }, { mes: 'native write' }];
+            const result = writeCanonicalChatPayload({ db, locator, payload, projection: 'off', condition: { create: true }, projectJsonl() { throw new Error('unexpected projection'); } });
+            assert.equal(result.ok, true);
+            assert.equal(result.status, 'imported');
+            assert.equal(typeof result.version, 'string');
+            assert.deepEqual(readCanonicalChatVersionedPayload(db, locator), { version: result.version, payload });
+            console.log('canonical-write:ok');
+        } finally { db.close(); }
+    `;
+    const result = runNode(source, migrations, writes, reads);
+    expect({ status: result.status, stderr: result.status === 0 ? '' : result.stderr }).toEqual({ status: 0, stderr: '' });
+    expect(result.stdout.trim()).toBe('canonical-write:ok');
 });

@@ -8,7 +8,7 @@ import { afterEach, describe, expect, test } from '@jest/globals';
 import { createCanonicalSqliteManager } from '../src/canonical-sqlite.js';
 import { runCanonicalMigrations } from '../src/canonical-sqlite-migrations.js';
 import { runCanonicalChatShadowImport } from '../src/canonical-chat-shadow-import.js';
-import { createCanonicalChatSession, createCanonicalChatSessionRecord } from '../src/endpoints/canonical-chat-store.js';
+import { createCanonicalChatSession, createCanonicalChatSessionRecord } from '../src/endpoints/canonical-chat-store.ts';
 import {
     readCanonicalChatPayload,
     readCanonicalChatVersionedPayload,

@@ -92,6 +92,13 @@ run without a production loader or emitted graph.
 
 ## Migrated slices
 
+`src/endpoints/canonical-chat-store.ts` is the sole canonical chat store
+implementation. Its callers use the actual `.ts` extension. Existing SQLite
+transactions, conditional versions and operation replay, projection tombstones,
+opaque chat payloads, attachments, repair records and character statistics
+retain their prior behavior. Focused SQLite tests cover these contracts; a
+native Node subprocess exercises the real write consumer and migrated store.
+
 `src/endpoints/world-info-store.ts` is the sole implementation of the
 canonical World Info store. Its JavaScript callers use the real `.ts` path,
 including projection and shadow import. SQLite remains authoritative;

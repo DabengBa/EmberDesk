@@ -55,7 +55,7 @@ import {
     listOpenCanonicalChatProjectionRepairs,
     resolveCanonicalChatProjectionRepair,
 
-} from './endpoints/canonical-chat-store.js';
+} from './endpoints/canonical-chat-store.ts';
 import { resolveCanonicalChatProjectionPath } from './endpoints/canonical-chat-projection-path.js';
 import {
     buildCharacterFileSnapshotRow,

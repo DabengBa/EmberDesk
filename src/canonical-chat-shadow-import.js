@@ -16,7 +16,7 @@ import {
     importCanonicalChatProjection,
     listCanonicalChatSessions,
     listOpenCanonicalChatProjectionRepairs,
-} from './endpoints/canonical-chat-store.js';
+} from './endpoints/canonical-chat-store.ts';
 
 export const CANONICAL_CHAT_AUDIT_SCOPE = 'chats';
 
