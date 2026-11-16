@@ -16,8 +16,8 @@ import {
     MANAGED_MEDIA_AUDIT_SCOPE,
     auditCanonicalManagedMediaShadowImport,
     runCanonicalManagedMediaShadowImport,
-} from '../src/canonical-managed-media-shadow-import.js';
-import { getPersistedCanonicalAuditStatus } from '../src/canonical-sqlite-shadow-import.js';
+} from '../src/canonical-managed-media-shadow-import.ts';
+import { getPersistedCanonicalAuditStatus } from '../src/canonical-sqlite-shadow-import.ts';
 
 const tempRoots = [];
 const managers = [];

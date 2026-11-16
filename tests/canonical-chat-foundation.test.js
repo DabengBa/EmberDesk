@@ -10,7 +10,7 @@ import {
     auditCanonicalChatShadowImport,
     CANONICAL_CHAT_AUDIT_SCOPE,
     runCanonicalChatShadowImport,
-} from '../src/canonical-chat-shadow-import.js';
+} from '../src/canonical-chat-shadow-import.ts';
 import {
     getCanonicalChatSession,
     serializeCanonicalChatSession,

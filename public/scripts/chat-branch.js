@@ -57,24 +57,35 @@ function getMainChatName() {
     return null;
 }
 
+const branchButtonDisplays = new WeakMap();
+
 /**
  * Toggles the "Back to parent chat" option based on whether the current chat is a branch.
  */
 export function showBranchChatButtons() {
+    let show = false;
     try {
-        const show = Boolean(chat_metadata.main_chat);
-        // React projects the state; keep the jQuery write as a fallback for
-        // environments where the React menu is not mounted.
+        show = Boolean(chat_metadata.main_chat);
+        // React projects the state; only update the DOM when it is unavailable.
         if (setOptionsMenuBranchVisibility(show)) {
             return;
         }
-        if (show) {
-            $('#option_back_to_main').show();
-        } else {
-            $('#option_back_to_main').hide();
-        }
     } catch {
-        $('#option_back_to_main').hide();
+        show = false;
+    }
+    const button = document.getElementById('option_back_to_main');
+    if (!button) return;
+    if (!show) {
+        if (button.style.display !== 'none') branchButtonDisplays.set(button, button.style.display);
+        button.style.display = 'none';
+        return;
+    }
+    if (button.style.display === 'none') button.style.display = branchButtonDisplays.get(button) ?? '';
+    if (getComputedStyle(button).display === 'none') {
+        const probe = document.createElement(button.tagName);
+        document.body.appendChild(probe);
+        button.style.display = getComputedStyle(probe).display === 'none' ? 'block' : getComputedStyle(probe).display;
+        probe.remove();
     }
 }
 
@@ -169,9 +180,12 @@ export async function branchChat(mesId) {
 }
 
 export function initBranchUI() {
-    $(document).on('click', '.mes_create_branch', async function () {
-        const mesId = $(this).closest('.mes').attr('mesid');
-        if (mesId !== undefined) {
+    document.addEventListener('click', async event => {
+        const target = event.target?.nodeType === 3 ? event.target.parentElement : event.target;
+        const button = target?.closest?.('.mes_create_branch');
+        if (!button) return;
+        const mesId = button.closest('.mes')?.getAttribute('mesid');
+        if (mesId != null) {
             await branchChat(Number(mesId));
         }
     });

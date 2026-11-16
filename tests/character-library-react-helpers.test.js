@@ -99,7 +99,9 @@ describe('character library React panel scaffold', () => {
         expect(scriptSource).toContain('mountReactCharacterLibraryToolbar');
         expect(scriptSource).toContain('renderCharacterListPageReact');
         expect(scriptSource).not.toContain('openGroupById');
-        expect(scriptSource).toContain("chooseBogusFolder($('#rm_print_characters_block'), 'back');");
+        expect(scriptSource).toContain('chooseBogusFolder(null, String(id));');
+        expect(scriptSource).toContain("chooseBogusFolder(null, 'back');");
+        expect(scriptSource).not.toContain("chooseBogusFolder($('#rm_print_characters_block'), 'back');");
         expect(scriptSource).not.toContain("document.getElementById('BogusFolderBack')?.click()");
         expect(scriptSource).not.toContain('createEntityElement(entity)');
     });

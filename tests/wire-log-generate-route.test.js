@@ -212,7 +212,7 @@ describe('POST /api/backends/chat-completions/generate wire logging', () => {
         await fetch(`${url}/api/wire-logs/config`);
         const db = canonicalSqliteManager.open({ handle: HANDLE, directories, featureFlags: { enabled: true } });
         if (blocker === 'audit') {
-            const { persistCanonicalAuditStatus } = await import('../src/canonical-sqlite-shadow-import.js');
+            const { persistCanonicalAuditStatus } = await import('../src/canonical-sqlite-shadow-import.ts');
             const { getCanonicalStorageSlice } = await import('../src/canonical-storage-slice-registry.js');
             persistCanonicalAuditStatus(db, { blocking: true, reason: 'audit_drift_blocked' }, {
                 scope: getCanonicalStorageSlice('settings').auditScope,

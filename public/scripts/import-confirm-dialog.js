@@ -250,10 +250,13 @@ export async function applyImportChoices(character, choices) {
         if (choices.importWorldBook) {
             const chid = characters.indexOf(character);
             if (chid !== -1) {
-                const prevChid = $('#import_character_info').data('chid');
-                $('#import_character_info').data('chid', chid);
+                const importControl = document.querySelector('#import_character_info');
+                const prevChid = importControl?.worldInfoChid;
+                if (importControl) importControl.worldInfoChid = chid;
                 await importEmbeddedWorldInfo(true);
-                $('#import_character_info').data('chid', prevChid);
+                // jQuery's data(key, undefined) is a getter, not a clearing setter.
+                const currentImportControl = document.querySelector('#import_character_info');
+                if (currentImportControl && prevChid !== undefined) currentImportControl.worldInfoChid = prevChid;
             }
         }
     }

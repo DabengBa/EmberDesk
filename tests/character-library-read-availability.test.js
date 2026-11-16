@@ -8,7 +8,7 @@ import { setConfigFilePath, keyToEnv } from '../src/util.js';
 import { canonicalSqliteManager } from '../src/canonical-sqlite.js';
 import { runCanonicalMigrations } from '../src/canonical-sqlite-migrations.js';
 import { upsertCanonicalCharacter } from '../src/endpoints/character-store.ts';
-import { getPersistedCanonicalAuditStatus, persistCanonicalAuditStatus } from '../src/canonical-sqlite-shadow-import.js';
+import { getPersistedCanonicalAuditStatus, persistCanonicalAuditStatus } from '../src/canonical-sqlite-shadow-import.ts';
 import { readCharacterFullPayload } from '../src/endpoints/character-read-service.ts';
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'character-read-http-'));

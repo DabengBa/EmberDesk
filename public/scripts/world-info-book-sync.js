@@ -56,9 +56,11 @@ export function createWorldInfoBookSync({ getRequestHeaders, getSelectedWorldInf
             await hideWorldEditor();
         }
 
-        const charWorld = $('#character_world').val();
+        const characterWorld = typeof document === 'undefined' ? null : document.getElementById('character_world');
+        const charWorld = characterWorld?.value.replace(/\r/g, '');
         if (names.has(charWorld)) {
-            $('#character_world').val('').trigger('change');
+            characterWorld.value = '';
+            characterWorld.dispatchEvent(new Event('change', { bubbles: true }));
             setWorldInfoButtonClass(undefined, false);
             if (getCurrentShellMenuType() !== 'create') {
                 saveCharacterDebounced();

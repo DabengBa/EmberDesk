@@ -82,6 +82,12 @@ const timestampToMoment = (...args) => shell().timestampToMoment(...args);
 const unshallowCharacter = (...args) => shell().unshallowCharacter(...args);
 const updateFavButtonState = (...args) => shell().updateFavButtonState(...args);
 
+function clearCharacterAvatarFileInput() {
+    const input = /** @type {HTMLInputElement|null} */ (document.getElementById('add_avatar_button'));
+    // Clearing in place keeps both native and jQuery change handlers attached.
+    if (input) input.value = '';
+}
+
 export async function selectCharacterById(id, { switchMenu = true } = {}) {
     if (state.characters[id] === undefined) {
         return;
@@ -142,7 +148,8 @@ export async function duplicateCharacter({ avatar = null, silent = false } = {})
 
     // Show confirmation unless silent
     if (!silent) {
-        const confirmMessage = $(await renderTemplateAsync('duplicateConfirm'));
+        const confirmMessage = document.createElement('div');
+        confirmMessage.innerHTML = await renderTemplateAsync('duplicateConfirm');
         const confirm = await callGenericPopup(confirmMessage, POPUP_TYPE.CONFIRM);
 
         if (!confirm) {
@@ -253,11 +260,11 @@ export async function saveCharacterAuthoringFromPayload(saveModel = {}) {
         const formData = buildCharacterAuthoringFormData(saveModel, {
             mode,
             existingAvatar: sourceCharacter?.avatar || saveModel?.fields?.avatar || '',
-            chat: sourceCharacter?.chat || String($('#selected_chat_pole').val() || ''),
+            chat: sourceCharacter?.chat || String(document.getElementById('selected_chat_pole')?.value || ''),
             createDate: sourceCharacter?.create_date
                 ? timestampToMoment(sourceCharacter.create_date).toISOString()
-                : String($('#create_date_pole').val() || ''),
-            jsonData: sourceCharacter?.json_data || String($('#character_json_data').val() || ''),
+                : String(document.getElementById('create_date_pole')?.value || ''),
+            jsonData: sourceCharacter?.json_data || String(document.getElementById('character_json_data')?.value || ''),
             avatarFile: preparedAvatarFile,
         });
 
@@ -331,7 +338,7 @@ export async function saveCharacterAuthoringFromPayload(saveModel = {}) {
         // The file input keeps the just-uploaded File; without clearing it every
         // later autosave would re-attach and re-embed the same image.
         if (avatarFile) {
-            $('#add_avatar_button').replaceWith($('#add_avatar_button').val('').clone(true));
+            clearCharacterAvatarFileInput();
             state.create_save.avatar = null;
         }
         if (shouldRefreshCharacterAfterEdit(state.characters, editedAvatar)) {
@@ -610,6 +617,44 @@ export async function renameCharacter(name = null, { silent = false, renameChats
 }
 
 
+const characterControlDisplay = new WeakMap();
+const characterControlDefaultDisplay = new Map();
+
+/** Preserve the paired create/edit controls' previous inline display. */
+export function setCharacterSelectionVisibility(selector, visible) {
+    const elements = Array.from(document.querySelectorAll(selector));
+    const values = [];
+    for (let index = 0; index < elements.length; index++) {
+        const element = elements[index];
+        const display = element.style.display;
+        if (!visible) {
+            if (display !== 'none') {
+                characterControlDisplay.set(element, display);
+                values[index] = 'none';
+            }
+            continue;
+        }
+        if (display === 'none') {
+            values[index] = characterControlDisplay.get(element) || null;
+            if (!values[index]) element.style.display = '';
+        }
+        if (element.style.display === '' && element.isConnected && element.ownerDocument.defaultView.getComputedStyle(element).display === 'none') {
+            const name = element.nodeName;
+            if (!characterControlDefaultDisplay.has(name)) {
+                const body = element.ownerDocument.body;
+                const sample = body.appendChild(element.ownerDocument.createElement(name));
+                const defaultDisplay = element.ownerDocument.defaultView.getComputedStyle(sample).display;
+                body.removeChild(sample);
+                characterControlDefaultDisplay.set(name, defaultDisplay === 'none' ? 'block' : defaultDisplay);
+            }
+            values[index] = characterControlDefaultDisplay.get(name);
+        }
+    }
+    elements.forEach((element, index) => {
+        if (values[index] != null) element.style.display = values[index];
+    });
+}
+
 /**
  * Selects the right menu for displaying the character editor.
  * @param {string} chid Character array index
@@ -628,72 +673,105 @@ export function select_selected_character(chid, { switchMenu = true } = {}) {
     }
 
     setTemporaryChatStatus(false);
-    $('#rm_print_characters_block .character_select').removeClass('is_active');
-    $(`#CharID${chid}`).addClass('is_active');
+    if (document.getElementById('rm_print_characters_block')?.dataset.reactCharacterLibraryOwner === 'react') {
+        // The existing panel snapshot derives its active row from this_chid.
+        // Refresh that projection rather than mutating React-owned rows.
+        void shell().syncReactCharacterLibraryToolbarState();
+    } else {
+        document.getElementById('rm_print_characters_block')?.querySelectorAll('.character_select').forEach(row => row.classList.remove('is_active'));
+        document.getElementById(`CharID${chid}`)?.classList.add('is_active');
+    }
 
     select_rm_create({ switchMenu });
     if (switchMenu) setMenuType('character_edit');
     // Selecting a character switches the right nav to rm_ch_create_block, which
     // hosts the sole-owner React authoring panel; mount it on this path too.
     if (switchMenu) queueReactCharacterAuthoringRemount();
-    $('#delete_button').css('display', 'flex');
-    $('#export_button').css('display', 'flex');
-    $('#world_button').css('display', 'flex');
+    for (const id of ['delete_button', 'export_button', 'world_button']) {
+        const button = document.getElementById(id);
+        if (button) button.style.display = 'flex';
+    }
 
     //create text poles
-    $('#rm_button_back').css('display', 'none');
+    const backButton = document.getElementById('rm_button_back');
+    if (backButton) backButton.style.display = 'none';
     //$("#character_import_button").css("display", "none");
-    $('#create_button').attr('value', 'Save');              // what is the use case for this?
-    $('#dupe_button').show();
-    $('#create_button_label').css('display', 'none');
-    $('.character-detail-edit-action').show();
+    document.getElementById('create_button')?.setAttribute('value', 'Save');              // what is the use case for this?
+    setCharacterSelectionVisibility('#dupe_button', true);
+    const createButtonLabel = document.getElementById('create_button_label');
+    if (createButtonLabel) createButtonLabel.style.display = 'none';
+    setCharacterSelectionVisibility('.character-detail-edit-action', true);
 
-    $('#set_chat_character_settings').show();
-    $('#rm_button_selected_ch').children('h2').text(character.name);
+    setCharacterSelectionVisibility('#set_chat_character_settings', true);
+    if (character.name !== undefined) {
+        for (const heading of document.getElementById('rm_button_selected_ch')?.querySelectorAll(':scope > h2') ?? []) {
+            heading.textContent = character.name ?? '';
+        }
+    }
 
-    $('#add_avatar_button').val('');
+    // jQuery .val(value) clears the field for both null and undefined.
+    const setMirrorValue = (id, value) => {
+        const field = document.getElementById(id);
+        if (field) field.value = value == null ? '' : String(value);
+    };
+    setMirrorValue('add_avatar_button', '');
 
-    $('#character_popup-button-h3').text(character.name);
-    $('#character_name_pole').val(character.name);
-    $('#description_textarea').val(character.description);
-    $('#character_world').val(character.data?.extensions?.world || '');
-    $('#creator_notes_textarea').val(character.data?.creator_notes || character.creatorcomment);
-    $('#creator_notes_spoiler').html(formatCreatorNotes(character.data?.creator_notes || character.creatorcomment, character.avatar));
-    $('#character_version_textarea').val(character.data?.character_version || '');
-    $('#system_prompt_textarea').val(character.data?.system_prompt || '');
-    $('#post_history_instructions_textarea').val(character.data?.post_history_instructions || '');
-    $('#tags_textarea').val(Array.isArray(character.data?.tags) ? character.data.tags.join(', ') : '');
-    $('#creator_textarea').val(character.data?.creator);
-    $('#character_version_textarea').val(character.data?.character_version || '');
-    $('#firstmessage_textarea').val(character.first_mes);
-    $('#scenario_pole').val(character.scenario);
-    $('#depth_prompt_prompt').val(character.data?.extensions?.depth_prompt?.prompt ?? '');
-    $('#depth_prompt_depth').val(character.data?.extensions?.depth_prompt?.depth ?? state.depth_prompt_depth_default);
-    $('#depth_prompt_role').val(character.data?.extensions?.depth_prompt?.role ?? state.depth_prompt_role_default);
-    $('#selected_chat_pole').val(character.chat);
-    $('#create_date_pole').val(timestampToMoment(character.create_date).toISOString());
-    $('#avatar_url_pole').val(character.avatar);
-    $('#chat_import_avatar_url').val(character.avatar);
-    $('#chat_import_character_name').val(character.name);
-    $('#character_json_data').val(character.json_data);
+    const popupHeading = document.getElementById('character_popup-button-h3');
+    if (popupHeading && character.name !== undefined) popupHeading.textContent = character.name ?? '';
+    setMirrorValue('character_name_pole', character.name);
+    setMirrorValue('description_textarea', character.description);
+    setMirrorValue('character_world', character.data?.extensions?.world || '');
+    setMirrorValue('creator_notes_textarea', character.data?.creator_notes || character.creatorcomment);
+    const formattedCreatorNotes = formatCreatorNotes(character.data?.creator_notes || character.creatorcomment, character.avatar);
+    const creatorNotesSpoiler = document.getElementById('creator_notes_spoiler');
+    if (creatorNotesSpoiler) creatorNotesSpoiler.innerHTML = formattedCreatorNotes;
+    setMirrorValue('character_version_textarea', character.data?.character_version || '');
+    setMirrorValue('system_prompt_textarea', character.data?.system_prompt || '');
+    setMirrorValue('post_history_instructions_textarea', character.data?.post_history_instructions || '');
+    setMirrorValue('tags_textarea', Array.isArray(character.data?.tags) ? character.data.tags.join(', ') : '');
+    setMirrorValue('creator_textarea', character.data?.creator);
+    setMirrorValue('character_version_textarea', character.data?.character_version || '');
+    setMirrorValue('firstmessage_textarea', character.first_mes);
+    setMirrorValue('scenario_pole', character.scenario);
+    setMirrorValue('depth_prompt_prompt', character.data?.extensions?.depth_prompt?.prompt ?? '');
+    setMirrorValue('depth_prompt_depth', character.data?.extensions?.depth_prompt?.depth ?? state.depth_prompt_depth_default);
+    setMirrorValue('depth_prompt_role', character.data?.extensions?.depth_prompt?.role ?? state.depth_prompt_role_default);
+    setMirrorValue('selected_chat_pole', character.chat);
+    setMirrorValue('create_date_pole', timestampToMoment(character.create_date).toISOString());
+    setMirrorValue('avatar_url_pole', character.avatar);
+    setMirrorValue('chat_import_avatar_url', character.avatar);
+    setMirrorValue('chat_import_character_name', character.name);
+    setMirrorValue('character_json_data', character.json_data);
 
     updateFavButtonState(character.fav || character.fav == 'true');
 
     const avatarUrl = character.avatar != 'none' ? getThumbnailUrl('avatar', character.avatar) : state.default_avatar;
-    $('#avatar_load_preview').attr('src', avatarUrl);
-    $('.open_alternate_greetings').data('chid', chid);
-    $('#set_character_world').data('chid', chid);
+    const avatarPreview = document.getElementById('avatar_load_preview');
+    if (avatarPreview && avatarUrl !== undefined) {
+        if (avatarUrl === null) avatarPreview.removeAttribute('src');
+        else avatarPreview.setAttribute('src', avatarUrl);
+    }
+    if (chid !== undefined) {
+        document.querySelectorAll('.open_alternate_greetings').forEach(control => { control.dataset.chid = String(chid); });
+    }
+    const worldControl = document.getElementById('set_character_world');
+    if (worldControl && chid !== undefined) worldControl.dataset.chid = String(chid);
     setWorldInfoButtonClass(chid);
     checkEmbeddedWorld(chid);
 
-    $('#name_div').removeClass('displayBlock');
-    $('#name_div').addClass('displayNone');
-    $('#renameCharButton').css('display', '');
+    const nameContainer = document.getElementById('name_div');
+    nameContainer?.classList.remove('displayBlock');
+    nameContainer?.classList.add('displayNone');
+    const renameButton = document.getElementById('renameCharButton');
+    if (renameButton) renameButton.style.display = '';
 
-    $('#form_create').attr('actiontype', 'editcharacter');
-    $('.form_create_bottom_buttons_block .chat_lorebook_button').show();
+    document.getElementById('form_create')?.setAttribute('actiontype', 'editcharacter');
+    setCharacterSelectionVisibility('.form_create_bottom_buttons_block .chat_lorebook_button', true);
     // Update some stuff about the char management dropdown
-    $('#character_source').attr('disabled', !getCharacterSource(chid) ? '' : null);
+    const sourceAvailable = getCharacterSource(chid);
+    const sourceControl = document.getElementById('character_source');
+    if (!sourceAvailable) sourceControl?.setAttribute('disabled', 'disabled');
+    else sourceControl?.removeAttribute('disabled');
 
     eventSource.emit(event_types.CHARACTER_EDITOR_OPENED, chid);
 
@@ -702,7 +780,8 @@ export function select_selected_character(chid, { switchMenu = true } = {}) {
 
 
 export async function openCharacterWorldPopup() {
-    const chid = $('#set_character_world').data('chid');
+    const storedChid = document.getElementById('set_character_world')?.dataset.chid;
+    const chid = storedChid === '-1' ? -1 : storedChid;
     const creating = state.menu_type === 'create';
     if (!creating && chid === undefined) {
         toastr.error('Does not have an Id for this character in world select menu.');
@@ -771,8 +850,10 @@ export async function createOrEditCharacter(e) {
     }
 
     const draftTagIds = getDraftTagIds();
-    $('#rm_info_avatar').html('');
-    const formData = new FormData(/** @type {HTMLFormElement} */($('#form_create').get(0)));
+    const infoAvatar = document.getElementById('rm_info_avatar');
+    if (infoAvatar) infoAvatar.innerHTML = '';
+    const form = /** @type {HTMLFormElement} */ (document.getElementById('form_create'));
+    const formData = new FormData(form || undefined);
     const editTarget = {
         id: String(state.this_chid), avatar: formData.get('avatar_url'),
         identity: shell().getCharacterWorldDraftIdentity?.(),
@@ -782,7 +863,7 @@ export async function createOrEditCharacter(e) {
         && state.characters[state.this_chid]?.avatar === editTarget.avatar
         && shell().getCharacterWorldDraftIdentity?.() === editTarget.identity
         && state.chat === editTarget.chat && state.chat_metadata === editTarget.metadata;
-    const finishSave = beginCharacterSave($('#form_create').attr('actiontype') === 'createcharacter' ? '' : String(formData.get('avatar_url') || ''));
+    const finishSave = beginCharacterSave(document.getElementById('form_create')?.getAttribute('actiontype') === 'createcharacter' ? '' : String(formData.get('avatar_url') || ''));
     if (!finishSave) return;
     try {
         formData.set('fav', String(state.fav_ch_checked));
@@ -796,8 +877,8 @@ export async function createOrEditCharacter(e) {
 
         const headers = getRequestHeaders({ omitContentType: true });
 
-        if ($('#form_create').attr('actiontype') == 'createcharacter') {
-            if (String($('#character_name_pole').val()).length === 0) {
+        if (document.getElementById('form_create')?.getAttribute('actiontype') == 'createcharacter') {
+            if (String(document.getElementById('character_name_pole')?.value).length === 0) {
                 toastr.error(t`Name is required`);
                 return;
             }
@@ -833,7 +914,7 @@ export async function createOrEditCharacter(e) {
 
                 const avatarId = await fetchResult.text();
 
-                $('#character_cross').trigger('click'); //closes the advanced character editing popup
+                document.getElementById('character_cross')?.click(); // closes the advanced character editing popup
                 const fields = [
                     { id: '#character_name_pole', callback: value => state.create_save.name = value },
                     { id: '#description_textarea', callback: value => state.create_save.description = value },
@@ -856,7 +937,8 @@ export async function createOrEditCharacter(e) {
 
                 fields.forEach(field => {
                     const fieldValue = field.defaultValue !== undefined ? field.defaultValue : '';
-                    $(field.id).val(fieldValue);
+                    const element = document.getElementById(field.id.slice(1));
+                    if (element) element.value = String(fieldValue);
                     if (field.callback) field.callback(fieldValue);
                 });
 
@@ -869,13 +951,12 @@ export async function createOrEditCharacter(e) {
                 }
                 state.create_save.extra_books = [];
 
-                $('#character_popup-button-h3').text('Create character');
+                const popupHeading = document.getElementById('character_popup-button-h3');
+                if (popupHeading) popupHeading.textContent = 'Create character';
 
                 state.create_save.avatar = null;
 
-                $('#add_avatar_button').replaceWith(
-                    $('#add_avatar_button').val('').clone(true),
-                );
+                clearCharacterAvatarFileInput();
 
                 let oldSelectedChar = null;
                 if (state.this_chid !== undefined) {
@@ -902,7 +983,8 @@ export async function createOrEditCharacter(e) {
                 }
 
                 formData.delete('alternate_greetings');
-                const chid = $('.open_alternate_greetings').data('chid');
+                const storedChid = document.querySelector('.open_alternate_greetings')?.dataset.chid;
+                const chid = storedChid === '-1' ? -1 : storedChid;
                 if (state.characters[chid] && Array.isArray(state.characters[chid]?.data?.alternate_greetings)) {
                     for (const value of state.characters[chid].data.alternate_greetings) {
                         formData.append('alternate_greetings', value);
@@ -931,10 +1013,8 @@ export async function createOrEditCharacter(e) {
                 if (!isCurrentEdit()) return;
                 state.favsToHotswap(); // Update fav state
 
-                $('#add_avatar_button').replaceWith(
-                    $('#add_avatar_button').val('').clone(true),
-                );
-                $('#create_button').attr('value', 'Save');
+                clearCharacterAvatarFileInput();
+                document.getElementById('create_button')?.setAttribute('value', 'Save');
                 state.crop_data = undefined;
                 await eventSource.emit(event_types.CHARACTER_EDITED, { detail: { id: state.this_chid, character: state.characters[state.this_chid] } });
                 if (!isCurrentEdit()) return;

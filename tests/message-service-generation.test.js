@@ -1,7 +1,10 @@
 import { beforeEach, expect, jest, test } from '@jest/globals';
 import { loadTsModule } from './helpers/load-ts-module.mjs';
+import { readFileSync } from 'node:fs';
 
 const emit = jest.fn(async () => {});
+const notificationInfo = jest.fn();
+jest.unstable_mockModule('../public/scripts/notifications.js', () => ({ default: { info: notificationInfo } }));
 jest.unstable_mockModule('../public/scripts/events.js', () => ({ eventSource: { emit }, event_types: { MESSAGE_RECEIVED: 'received', CHARACTER_MESSAGE_RENDERED: 'rendered' } }));
 jest.unstable_mockModule('../public/scripts/chat-message-render-descriptor.js', () => ({ buildChatMessageRenderDescriptor: jest.fn(), buildChatMessageRowPopulation: jest.fn() }));
 jest.unstable_mockModule('../public/scripts/chat-message-render-service.js', () => ({ buildChatMessageRichBodyRender: jest.fn() }));
@@ -16,9 +19,10 @@ jest.unstable_mockModule('../public/scripts/openai.js', () => ({ oai_settings: {
 jest.unstable_mockModule('../public/scripts/feature-settings.js', () => ({ feature_settings: { tool_bindings: [] } }));
 jest.unstable_mockModule('../public/scripts/tool-bindings.js', () => ({ syncPipelineToolBindings: jest.fn() }));
 const { registerMessageShellContext } = await import('../public/scripts/message-shell-context.js');
-const { saveReply } = await import('../public/scripts/message-service.js');
+const { addCopyToCodeBlocks, addOneMessage, appendMediaToMessage, saveReply } = await import('../public/scripts/message-service.js');
+const { createUserMessageService } = await import('../public/scripts/user-message-service.js');
 const { registerGenerationShellContext, installGenerationLifecycleService } = await import('../public/scripts/generation-shell-context.js');
-const { GenerationStreamSession, getCurrentGenerationContextIdentity } = await import('../public/scripts/generation-service.js');
+const { GenerationStreamSession, getCurrentGenerationContextIdentity, updateEditArrowClasses } = await import('../public/scripts/generation-service.js');
 const { createGenerationLifecycleService } = await loadTsModule('app/lib/generation/attempt-executor.ts');
 installGenerationLifecycleService(createGenerationLifecycleService(getCurrentGenerationContextIdentity));
 
@@ -35,6 +39,197 @@ beforeEach(() => {
     registerMessageShellContext({ state, getGeneratingApi: () => 'api', getGeneratingModel: () => 'model', getMessageTimeStamp: () => 'now',
         onlyUnique: () => true, isDataURL: value => value.startsWith('data:'), saveBase64AsFile, saveImageToMessage,
         isReactMainChatOwner: () => true, mountReactMainChatMessageListPanel: mount });
+});
+
+test('React user message pipeline saves, emits, and renders without requesting a jQuery return value', async () => {
+    const calls = [];
+    globalThis.$ = () => { throw Error('React message insertion must not use jQuery'); };
+    const service = createUserMessageService({
+        getChat: () => state.chat,
+        getComposerSnapshot: () => ({ contextKey: 'chat', contextRevision: 1 }),
+        regexUserInput: text => text, timestamp: () => 'now', substitute: text => text,
+        uuid: () => 'new-message', removeMacros: text => text,
+        populateAttachment: async () => { calls.push('attachment'); },
+        taint: () => { calls.push('taint'); }, save: async () => { calls.push('save'); },
+        emitSent: async id => { calls.push(`sent:${id}`); },
+        emitRendered: async id => { calls.push(`rendered:${id}`); },
+        addMessage: addOneMessage,
+    });
+    const message = await service.sendMessageAsUser('hello', '', null, false, 'User');
+    expect(state.chat).toEqual([message]);
+    expect(calls).toEqual(['attachment', 'taint', 'save', 'sent:0', 'rendered:0']);
+    expect(mount).toHaveBeenCalledTimes(1);
+    expect(globalThis.requestAnimationFrame).toHaveBeenCalledTimes(1);
+});
+
+test('React addOneMessage returns no legacy collection and respects scroll opt-out', () => {
+    globalThis.$ = () => { throw Error('React message insertion must not use jQuery'); };
+    const message = { mes: 'hello' };
+    state.chat.push(message);
+    expect(addOneMessage(message, { scroll: false })).toBeUndefined();
+    expect(mount).toHaveBeenCalledTimes(1);
+    expect(globalThis.requestAnimationFrame).not.toHaveBeenCalled();
+});
+
+test('React message insertion scrolls a native chat root when the animation frame runs', () => {
+    globalThis.$ = () => { throw Error('React message insertion must not use jQuery'); };
+    const root = { nodeType: 1, scrollHeight: 375, scrollTop: 0 };
+    state.chatElement = root;
+    const message = { mes: 'hello' };
+    state.chat.push(message);
+    addOneMessage(message);
+    expect(mount).toHaveBeenCalledTimes(1);
+    globalThis.requestAnimationFrame.mock.calls.at(-1)[0]();
+    expect(root.scrollTop).toBe(375);
+});
+
+test('legacy edit controls honor first and last visible message without jQuery collection methods', () => {
+    const makeRow = id => {
+        const buttons = Object.fromEntries(['down', 'up', 'copy', 'delete'].map(name => {
+            const classes = new Set(['disabled']);
+            return [`.mes_edit_${name}`, { classes, classList: { remove: value => classes.delete(value), toggle: (value, enabled) => enabled ? classes.add(value) : classes.delete(value) } }];
+        }));
+        return { matches: selector => selector === '.mes', getAttribute: () => String(id), querySelectorAll: selector => selector.split(', ').flatMap(part => buttons[part] ? [buttons[part]] : []), buttons };
+    };
+    const rows = [makeRow(3), makeRow(4), makeRow(5)];
+    const root = { children: rows, querySelectorAll: selector => selector === '.mes' ? rows : [] };
+    state.chatElement = { jquery: 'legacy', 0: root };
+    state.this_edit_mes_id = 3;
+    registerGenerationShellContext({ state, isReactMainChatOwner: () => false });
+    updateEditArrowClasses();
+    expect(rows[0].buttons['.mes_edit_up'].classes.has('disabled')).toBe(true);
+    expect(rows[0].buttons['.mes_edit_down'].classes.has('disabled')).toBe(false);
+    expect(rows[0].buttons['.mes_edit_copy'].classes.has('disabled')).toBe(false);
+    expect(rows[0].buttons['.mes_edit_delete'].classes.has('disabled')).toBe(false);
+    state.this_edit_mes_id = 5;
+    updateEditArrowClasses();
+    expect(rows[2].buttons['.mes_edit_up'].classes.has('disabled')).toBe(false);
+    expect(rows[2].buttons['.mes_edit_down'].classes.has('disabled')).toBe(true);
+    state.chatElement = root;
+    state.this_edit_mes_id = 4;
+    updateEditArrowClasses();
+    expect(rows[1].buttons['.mes_edit_up'].classes.has('disabled')).toBe(false);
+    expect(rows[1].buttons['.mes_edit_down'].classes.has('disabled')).toBe(false);
+});
+
+test('edit control update leaves React-owned rows alone', () => {
+    state.this_edit_mes_id = 0;
+    state.chatElement = { get children() { throw Error('React owner must not touch rows'); } };
+    registerGenerationShellContext({ state, isReactMainChatOwner: () => true });
+    expect(() => updateEditArrowClasses()).not.toThrow();
+});
+
+test('native message preview adds copy action without requiring jQuery', async () => {
+    const listeners = {};
+    const button = { classList: { add: jest.fn() }, addEventListener: (type, listener) => { listeners[type] = listener; } };
+    const code = { textContent: 'const value = 1;', closest: () => ({ textContent: 'const value = 1;' }), appendChild: jest.fn() };
+    const root = { querySelectorAll: jest.fn(() => [code]) };
+    const copyText = jest.fn(async () => {});
+    state.hljs = { highlightElement: jest.fn() };
+    registerMessageShellContext({ state, copyText, t: strings => strings[0] });
+    globalThis.$ = () => { throw new Error('jQuery must not be used for a native preview'); };
+    globalThis.document = { createElement: jest.fn(() => button) };
+
+    try {
+        addCopyToCodeBlocks(root);
+        expect(root.querySelectorAll).toHaveBeenCalledWith('pre code');
+        expect(state.hljs.highlightElement).toHaveBeenCalledWith(code);
+        expect(code.appendChild).toHaveBeenCalledWith(button);
+        const stopPropagation = jest.fn();
+        listeners.click({ stopPropagation });
+        expect(stopPropagation).toHaveBeenCalled();
+        await listeners.pointerup();
+        expect(copyText).toHaveBeenCalledWith('const value = 1;');
+        expect(notificationInfo).toHaveBeenCalled();
+    } finally {
+        delete globalThis.document;
+    }
+});
+
+test('message collection highlights overlapping roots once in document order without jQuery traversal', () => {
+    const code = position => ({ position, closest: () => ({ textContent: 'code' }), appendChild: jest.fn(),
+        compareDocumentPosition(other) { return this.position < other.position ? 4 : 2; } });
+    const first = code(1), second = code(2);
+    const collection = [
+        { querySelectorAll: () => [second] },
+        { querySelectorAll: () => [first, second] },
+    ];
+    collection.jquery = 'legacy';
+    collection.find = () => { throw Error('code blocks must not use jQuery traversal'); };
+    const button = { classList: { add: jest.fn() }, addEventListener: jest.fn() };
+    state.hljs = { highlightElement: jest.fn() };
+    globalThis.$ = () => { throw Error('existing collection must not be rewrapped'); };
+    globalThis.document = { createElement: () => button };
+    try {
+        addCopyToCodeBlocks(collection);
+        expect(state.hljs.highlightElement.mock.calls).toEqual([[first], [second]]);
+        expect(first.appendChild).toHaveBeenCalledWith(button);
+        expect(second.appendChild).toHaveBeenCalledWith(button);
+    } finally {
+        delete globalThis.document;
+    }
+});
+
+test('empty or disconnected message roots preserve iteration order without jQuery', () => {
+    const first = { closest: () => null, appendChild: jest.fn(), compareDocumentPosition: () => 1 };
+    const second = { closest: () => null, appendChild: jest.fn(), compareDocumentPosition: () => 1 };
+    const button = { classList: { add: jest.fn() }, addEventListener: jest.fn() };
+    state.hljs = { highlightElement: jest.fn() };
+    globalThis.$ = () => { throw Error('must not use jQuery'); };
+    globalThis.document = { createElement: () => button };
+    try {
+        addCopyToCodeBlocks([]);
+        addCopyToCodeBlocks([{ querySelectorAll: () => [second] }, { querySelectorAll: () => [first] }]);
+        expect(state.hljs.highlightElement.mock.calls).toEqual([[second], [first]]);
+    } finally {
+        delete globalThis.document;
+    }
+});
+
+test('React swipe reaches the real media service without a global jQuery binding', async () => {
+    const source = readFileSync(new URL('../public/scripts/chats.js', import.meta.url), 'utf8');
+    const code = source.slice(source.indexOf('async function onImageSwiped('), source.indexOf('\nlet openAttachmentPicker'));
+    const refresh = jest.fn();
+    const save = jest.fn(async () => {});
+    const row = { querySelector: () => null };
+    const message = { extra: { media: [{ url: 'a' }, { url: 'b' }], media_index: 0 } };
+    state.chat = [message];
+    registerMessageShellContext({ state, isReactMainChatOwner: () => true, scheduleMainChatMessageListPanelRefresh: refresh });
+    const event = jest.fn(async () => {});
+    const env = { chat: state.chat, getMediaIndex: () => 0, getMediaDisplay: () => 'gallery',
+        MEDIA_DISPLAY: { GALLERY: 'gallery' }, SWIPE_DIRECTION: { LEFT: 'left', RIGHT: 'right' },
+        eventSource: { emit: event }, event_types: { IMAGE_SWIPED: 'image_swiped' },
+        saveChatConditional: save, appendMediaToMessage, console: { warn: jest.fn() } };
+    const swipe = new Function(...Object.keys(env), `${code}; return onImageSwiped;`)(...Object.values(env));
+    const previousJQuery = globalThis.$;
+    delete globalThis.$;
+    try {
+        await swipe(0, row, 'right');
+        expect(event).toHaveBeenCalledWith('image_swiped', { message, element: row, direction: 'right' });
+        expect(message.extra.media_index).toBe(1);
+        expect(save).toHaveBeenCalledTimes(1);
+        expect(refresh).toHaveBeenCalledTimes(1);
+    } finally {
+        globalThis.$ = previousJQuery;
+    }
+});
+
+test('media refresh accepts a native message row for React and the legacy template path', () => {
+    const fileWrapper = { replaceChildren: jest.fn() };
+    const mediaWrapper = { replaceChildren: jest.fn() };
+    const row = { nodeType: 1, removeAttribute: jest.fn(), querySelectorAll: selector => ({ '.mes_file_wrapper': [fileWrapper], '.mes_media_wrapper': [mediaWrapper] })[selector] ?? [] };
+    const refresh = jest.fn();
+    registerMessageShellContext({ state, isReactMainChatOwner: () => true, scheduleMainChatMessageListPanelRefresh: refresh });
+    globalThis.$ = () => { throw Error('React media refresh must not wrap the row'); };
+    appendMediaToMessage({ extra: {} }, row);
+    expect(refresh).toHaveBeenCalledTimes(1);
+
+    globalThis.$ = jest.fn(() => { throw Error('legacy media refresh must not wrap the row'); });
+    registerMessageShellContext({ state, isReactMainChatOwner: () => false });
+    appendMediaToMessage({ extra: {} }, row);
+    expect(globalThis.$).not.toHaveBeenCalled();
+    expect(fileWrapper.replaceChildren).toHaveBeenCalledTimes(1);
+    expect(mediaWrapper.replaceChildren).toHaveBeenCalledTimes(1);
 });
 
 test('late image conversion after chat switch neither attaches nor publishes a reply', async () => {

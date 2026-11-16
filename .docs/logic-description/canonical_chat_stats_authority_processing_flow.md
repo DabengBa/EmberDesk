@@ -8,7 +8,7 @@
   - `src/endpoints/character-file-snapshot.js`
   - `src/endpoints/character-read-service.ts`
   - `src/canonical-sqlite-operator.js`
-  - `src/canonical-sqlite-shadow-import.js`
+  - `src/canonical-sqlite-shadow-import.ts`
   - `tests/interaction-performance-index.test.js`
 - Related tech docs:
   - [.docs/tech/canonical-sqlite-storage-roadmap.md](../tech/canonical-sqlite-storage-roadmap.md)

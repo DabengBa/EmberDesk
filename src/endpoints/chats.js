@@ -37,12 +37,12 @@ import { runCanonicalMigrations } from '../canonical-sqlite-migrations.js';
 import {
     getPersistedCanonicalAuditStatus,
     invalidateCanonicalAuditStatus,
-} from '../canonical-sqlite-shadow-import.js';
+} from '../canonical-sqlite-shadow-import.ts';
 import {
     readCanonicalChatPayload,
     serializeCanonicalChatPayload,
 } from './canonical-chat-read-service.ts';
-import { reconcileCanonicalChatSources } from '../canonical-chat-shadow-import.js';
+import { reconcileCanonicalChatSources } from '../canonical-chat-shadow-import.ts';
 import {
     readCanonicalRecentChatPayload,
     searchCanonicalChatPayload,

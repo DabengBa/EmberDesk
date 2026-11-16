@@ -99,7 +99,9 @@ OpenAI results. `tests/tokenizers-async.test.js` covers these contracts.
 `public/scripts/notifications.js` is the single stateful notification owner.
 First-party modules import it; its `globalThis.toastr` and
 `globalThis.emberDeskNotifications` aliases point to the same instance used by
-the React bridge. HTML strings are sanitized with DOMPurify; DOM and jQuery
+the React bridge. `notifications.native` shares that state but returns native
+elements; the legacy methods and `getContainer` retain jQuery wrappers when
+jQuery is available. HTML strings are sanitized with DOMPurify; DOM and jQuery
 nodes are trusted and moved intact, including their existing listeners. This
 does not establish a third-party extension runtime.
 `tests/notifications.test.js` covers the notification API and lifecycle;
@@ -123,7 +125,7 @@ modal, action loader and lifecycle integration.
 | Select2 | Removed with its placeholder plugin, styles, types and unused helpers. Character World Info and the global selector use React; browser checks cover selection, synchronization, dialogs and menus. Dynamic paths cannot be exhaustively established by static search alone. |
 | Cropper | Retained as the native image-crop implementation used by the React popup |
 
-Character selection and duplication keep their established busy checks, confirmation, request, event and refresh order in the lifecycle service. Tags use live getters and existing domain operations rather than copying character, tag or bulk-selection state into the root or a new store. The unused `createTagInput`, `findTag`, `selectTag` and `onTagInputFocus` chain is removed; favorite-character hotswap resizing remains.
+Character selection and duplication keep their established busy checks, confirmation, request, event and refresh order in the lifecycle service. On a React-owned Character Library, selection requests a toolbar snapshot refresh instead of mutating the row. Avatar file inputs are cleared in place so existing change listeners survive. Tags use live getters and existing domain operations rather than copying character, tag or bulk-selection state into the root or a new store. The unused `createTagInput`, `findTag`, `selectTag` and `onTagInputFocus` chain is removed; favorite-character hotswap resizing remains. `tests/character-selection-visibility.test.js`, `tests/character-avatar-native.test.js` and `tests/character-lifecycle-selection.test.js` cover the affected native and selection paths.
 
 Character lorebook controls use book names as values, including numeric names, rather than list indexes. Primary changes keep the established immediate character save and embedded-book clearing semantics; auxiliaries remain local `world_info.charLore` associations saved through the existing settings debounce. Create-mode associations remain on the create draft. Each dialog captures the character avatar/file name or create session identity, rejects stale actions and checks identity again after awaits. Replacing a cached card object during a refresh is allowed when the selected character and editing session still match. An already submitted edit still refreshes its own card, but its late completion cannot change another selected chat, authoring session or World Info button. The root's post-dialog draft sync also refuses a different authoring session.
 

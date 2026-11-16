@@ -10,9 +10,9 @@ import { AVATAR_HEIGHT, AVATAR_WIDTH } from '../src/constants.js';
 import { afterEach, describe, expect, test } from '@jest/globals';
 
 import { createCanonicalSqliteManager } from '../src/canonical-sqlite.js';
-import { recordWorldProjectionIntent } from '../src/canonical-world-info-projection.js';
-import { runCanonicalShadowImport, getPersistedCanonicalAuditStatus, persistCanonicalAuditStatus } from '../src/canonical-sqlite-shadow-import.js';
-import { runCanonicalChatShadowImport } from '../src/canonical-chat-shadow-import.js';
+import { recordWorldProjectionIntent } from '../src/canonical-world-info-projection.ts';
+import { runCanonicalShadowImport, getPersistedCanonicalAuditStatus, persistCanonicalAuditStatus } from '../src/canonical-sqlite-shadow-import.ts';
+import { runCanonicalChatShadowImport } from '../src/canonical-chat-shadow-import.ts';
 import { recordProjectionRepair } from '../src/endpoints/character-store.ts';
 import {
     recordWorldInfoProjectionRepair,
@@ -37,8 +37,8 @@ import {
     listOpenSettingsProjectionRepairs,
     recordSettingsProjectionRepair,
 } from '../src/endpoints/settings-store.ts';
-import { MANAGED_MEDIA_AUDIT_SCOPE } from '../src/canonical-managed-media-shadow-import.js';
-import { CANONICAL_CHAT_AUDIT_SCOPE } from '../src/canonical-chat-shadow-import.js';
+import { MANAGED_MEDIA_AUDIT_SCOPE } from '../src/canonical-managed-media-shadow-import.ts';
+import { CANONICAL_CHAT_AUDIT_SCOPE } from '../src/canonical-chat-shadow-import.ts';
 import { writeCanonicalChatPayload } from '../src/endpoints/canonical-chat-write-service.ts';
 import { recordCanonicalChatProjectionRepair } from '../src/endpoints/canonical-chat-store.ts';
 

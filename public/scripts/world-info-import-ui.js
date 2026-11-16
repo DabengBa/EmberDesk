@@ -1,6 +1,8 @@
-import toastr, { setNotificationHtml } from './notifications.js';
+import notificationOwner, { setNotificationHtml } from './notifications.js';
 import { runWorldInfoFileImport, runWorldInfoBatchImport } from './world-info-import-command.js';
 import { createWorldInfoImportResult, summarizeWorldInfoBatchImport } from './world-info-import-results.js';
+
+const toastr = notificationOwner.native ?? notificationOwner;
 
 /** World Info import presentation and command adapters; editor state remains in the session. */
 export function createWorldInfoImportUi({ getWorldNames, deleteWorldInfo, updateWorldInfoList, selectWorldInfoEditorName, eventSource, event_types, getSanitizedFilename, equalsIgnoreCaseAndAccents, checkOverwriteExistingData, escapeHtml, parseJsonFile, getFileBuffer, extractDataFromPng, getRequestHeaders, t, translate, showLocalDialog, beginLocalDialogOperation, runDestructiveOperation }) {
@@ -8,21 +10,24 @@ export function createWorldInfoImportUi({ getWorldNames, deleteWorldInfo, update
     let worldInfoImportToast = null;
     function setWorldImportBusy(isBusy, { showToast = true } = {}) {
         worldInfoImportBusy = Boolean(isBusy);
-        const importIcon = $('#world_import_menu_item').find('i').first();
+        const importMenu = document.querySelector('#world_import_menu_item');
+        const importIcon = importMenu?.querySelector('i');
+        const importFile = document.querySelector('#world_import_file');
 
-        $('#world_import_file').prop('disabled', worldInfoImportBusy);
-        $('#world_import_menu_item')
-            .toggleClass('disabled', worldInfoImportBusy)
-            .attr('aria-disabled', String(worldInfoImportBusy));
+        if (importFile) importFile.disabled = worldInfoImportBusy;
+        importMenu?.classList.toggle('disabled', worldInfoImportBusy);
+        importMenu?.setAttribute('aria-disabled', String(worldInfoImportBusy));
 
         if (worldInfoImportBusy) {
-            importIcon.removeClass('fa-file-import').addClass('fa-spinner fa-spin');
+            importIcon?.classList.remove('fa-file-import');
+            importIcon?.classList.add('fa-spinner', 'fa-spin');
 
             if (showToast && !worldInfoImportToast) {
                 worldInfoImportToast = toastr.info(t`Importing World Info...`, t`Please wait`, { timeOut: 0, extendedTimeOut: 0 });
             }
         } else {
-            importIcon.removeClass('fa-spinner fa-spin').addClass('fa-file-import');
+            importIcon?.classList.remove('fa-spinner', 'fa-spin');
+            importIcon?.classList.add('fa-file-import');
 
             if (worldInfoImportToast) {
                 toastr.clear(worldInfoImportToast, { force: true });
@@ -201,20 +206,25 @@ export function createWorldInfoImportUi({ getWorldNames, deleteWorldInfo, update
                 html: true,
             });
         } else {
-            worldInfoImportToast.find('.toast-title').text(progressTitle);
-            setNotificationHtml(worldInfoImportToast.find('.toast-message')[0], progressHtml);
+            const toast = worldInfoImportToast?.nodeType ? worldInfoImportToast : worldInfoImportToast?.[0];
+            const title = toast?.querySelector('.toast-title');
+            if (title) title.textContent = progressTitle;
+            const message = toast?.querySelector('.toast-message');
+            if (message) setNotificationHtml(message, progressHtml);
         }
 
-        worldInfoImportToast.find('.toast-message')
-            .attr('role', 'status')
-            .attr('aria-live', 'polite')
-            .attr('aria-atomic', 'true');
+        const toast = worldInfoImportToast?.nodeType ? worldInfoImportToast : worldInfoImportToast?.[0];
+        const message = toast?.querySelector('.toast-message');
+        message?.setAttribute('role', 'status');
+        message?.setAttribute('aria-live', 'polite');
+        message?.setAttribute('aria-atomic', 'true');
 
         const percent = total > 0 ? Math.round((progressIndex / total) * 100) : 0;
-        worldInfoImportToast.find('.toast-progress').css('width', `${percent}%`);
-        worldInfoImportToast.find('.world-info-batch-cancel').off('click').on('click', async (event) => {
-            const button = $(event.currentTarget);
-            button.prop('disabled', true);
+        const progress = toast?.querySelector('.toast-progress');
+        if (progress) progress.style.width = `${percent}%`;
+        toast?.querySelector('.world-info-batch-cancel')?.addEventListener('click', async (event) => {
+            const button = event.currentTarget;
+            button.disabled = true;
             batchState.cancelPromptOpen = true;
 
             try {
@@ -222,9 +232,9 @@ export function createWorldInfoImportUi({ getWorldNames, deleteWorldInfo, update
 
                 if (confirmed?.action === 'stop') {
                     batchState.cancelRequested = true;
-                    button.text(t`Cancelling...`);
+                    button.textContent = t`Cancelling...`;
                 } else {
-                    button.prop('disabled', false);
+                    button.disabled = false;
                 }
             } finally {
                 batchState.cancelPromptOpen = false;

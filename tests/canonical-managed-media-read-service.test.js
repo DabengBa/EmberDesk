@@ -6,7 +6,7 @@ import { afterEach, describe, expect, jest, test } from '@jest/globals';
 
 import { createCanonicalSqliteManager } from '../src/canonical-sqlite.js';
 import { runCanonicalMigrations } from '../src/canonical-sqlite-migrations.js';
-import { persistCanonicalAuditStatus } from '../src/canonical-sqlite-shadow-import.js';
+import { persistCanonicalAuditStatus } from '../src/canonical-sqlite-shadow-import.ts';
 import * as canonicalReadService from '../src/endpoints/canonical-managed-media-read-service.ts';
 import {
     getCanonicalManagedMediaReadState,

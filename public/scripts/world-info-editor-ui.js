@@ -1,5 +1,7 @@
-import toastr from './notifications.js';
+import notificationOwner from './notifications.js';
 import { world_names } from './world-info-state.js';
+
+const toastr = notificationOwner.native ?? notificationOwner;
 
 /** Interactive editor commands; the workbench session remains the sole editor owner. */
 export function createWorldInfoEditorUi({ getWorldInfoWorkbenchSession, worldInfoRepository, loadWorldInfo, createWorldInfoEntry, showLocalDialog, t, moveWorldInfoEntry }) {

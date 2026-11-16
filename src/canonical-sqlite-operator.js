@@ -8,22 +8,22 @@ import { AVATAR_HEIGHT, AVATAR_WIDTH, DEFAULT_AVATAR_PATH } from './constants.js
 import { avatarToPngSized } from './image-processing.js';
 import { serverDirectory } from './server-directory.js';
 import { withCanonicalTransaction } from './canonical-sqlite.js';
-import { getPersistedCanonicalAuditStatus, invalidateCanonicalAuditStatus, auditCanonicalShadowImport } from './canonical-sqlite-shadow-import.js';
-import { auditCanonicalWorldInfoShadowImport, WORLD_INFO_AUDIT_SCOPE } from './canonical-world-info-shadow-import.js';
-import { auditCanonicalSettingsShadowImport } from './canonical-settings-shadow-import.js';
-import { auditCanonicalManagedMediaShadowImport } from './canonical-managed-media-shadow-import.js';
+import { getPersistedCanonicalAuditStatus, invalidateCanonicalAuditStatus, auditCanonicalShadowImport } from './canonical-sqlite-shadow-import.ts';
+import { auditCanonicalWorldInfoShadowImport, WORLD_INFO_AUDIT_SCOPE } from './canonical-world-info-shadow-import.ts';
+import { auditCanonicalSettingsShadowImport } from './canonical-settings-shadow-import.ts';
+import { auditCanonicalManagedMediaShadowImport } from './canonical-managed-media-shadow-import.ts';
 import {
     auditCanonicalChatShadowImport,
     CANONICAL_CHAT_AUDIT_SCOPE,
-} from './canonical-chat-shadow-import.js';
+} from './canonical-chat-shadow-import.ts';
 import { recordImportLedgerEntry, removeImportLedgerEntry } from './canonical-import-ledger.js';
-import { replayWorldProjection } from './canonical-world-info-projection.js';
+import { replayWorldProjection } from './canonical-world-info-projection.ts';
 import { repairCanonicalManagedMediaProjection } from './endpoints/canonical-managed-media-write-service.ts';
 import {
     auditCanonicalSecretsShadowImport,
     CANONICAL_SECRETS_AUDIT_SCOPE,
     getCanonicalSecretsProjection,
-} from './canonical-secrets-shadow-import.js';
+} from './canonical-secrets-shadow-import.ts';
 import {
     buildCanonicalRollbackBlockers,
     listOpenProjectionRepairs,

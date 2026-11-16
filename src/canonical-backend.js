@@ -6,31 +6,31 @@ import {
     auditCanonicalShadowImport,
     getPersistedCanonicalAuditStatus,
     runCanonicalShadowImport,
-} from './canonical-sqlite-shadow-import.js';
+} from './canonical-sqlite-shadow-import.ts';
 import {
     auditCanonicalWorldInfoShadowImport,
     runCanonicalWorldInfoShadowImport,
-} from './canonical-world-info-shadow-import.js';
+} from './canonical-world-info-shadow-import.ts';
 import {
     auditCanonicalSettingsShadowImport,
     runCanonicalSettingsShadowImport,
-} from './canonical-settings-shadow-import.js';
+} from './canonical-settings-shadow-import.ts';
 import {
     auditCanonicalSecretsShadowImport,
     runCanonicalSecretsShadowImport,
-} from './canonical-secrets-shadow-import.js';
+} from './canonical-secrets-shadow-import.ts';
 import {
     auditCanonicalManagedMediaShadowImport,
     runCanonicalManagedMediaShadowImport,
-} from './canonical-managed-media-shadow-import.js';
+} from './canonical-managed-media-shadow-import.ts';
 import {
     auditCanonicalChatShadowImport,
     runCanonicalChatShadowImport,
-} from './canonical-chat-shadow-import.js';
+} from './canonical-chat-shadow-import.ts';
 import {
     auditCanonicalPresetsShadowImport,
     runCanonicalPresetsShadowImport,
-} from './canonical-presets-shadow-import.js';
+} from './canonical-presets-shadow-import.ts';
 import { getCanonicalStorageSlice } from './canonical-storage-slice-registry.js';
 import { buildCharacterFileSnapshotRow } from './endpoints/character-file-snapshot.js';
 import { parse as parseCharacterCard } from './character-card-parser.ts';

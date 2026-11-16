@@ -193,7 +193,7 @@ describe('character list structure', () => {
         expect(rightNavSource).toContain('id="char-management-dropdown"');
         expect(scriptSource).toContain('function getCharacterManagementDropdownActions()');
         expect(scriptSource).toContain('managementActions: getCharacterManagementDropdownActions()');
-        expect(scriptSource).toContain('$(\'#char-management-dropdown\').trigger(\'change\')');
+        expect(scriptSource).toContain("dropdown.dispatchEvent(new Event('change', { bubbles: true }))");
         expect(commandsSource).toContain('runManagementAction?(payload: Record<string, unknown>): CommandResult;');
         expect(workspacePanelsSource).toContain('function AuthoringActionsMenu(');
         expect(workspacePanelsSource).toContain('commands?.runManagementAction?.(');
@@ -220,8 +220,14 @@ describe('character list structure', () => {
         expect(folderRowSource).toContain('className={className}');
         expect(folderRowSource).toContain('{...{ tagid: String(id) }}');
         const lifecycleSource = read('public/scripts/character-lifecycle-service.js');
-        expect(lifecycleSource).toContain('$(\'#rm_print_characters_block .character_select\').removeClass(\'is_active\')');
-        expect(lifecycleSource).toContain('$(`#CharID${chid}`).addClass(\'is_active\')');
+        const syncSource = extractFunctionSource(scriptSource, 'syncReactCharacterLibraryToolbarState');
+        const snapshotSource = extractFunctionSource(scriptSource, 'createCharacterLibraryPanelStateSnapshot');
+        expect(lifecycleSource).toContain("dataset.reactCharacterLibraryOwner === 'react'");
+        expect(lifecycleSource).toContain('void shell().syncReactCharacterLibraryToolbarState();');
+        expect(syncSource).toContain('mountReactCharacterLibraryPanel(createCharacterLibraryPanelStateSnapshot({');
+        expect(snapshotSource).toContain('activeCharacterId: this_chid');
+        expect(lifecycleSource).toContain("querySelectorAll('.character_select').forEach(row => row.classList.remove('is_active'))");
+        expect(lifecycleSource).toContain("document.getElementById(`CharID${chid}`)?.classList.add('is_active')");
 
         const indexHtml = read('public/index.html');
         expect(indexHtml).not.toContain('group_type_badge');
@@ -431,7 +437,7 @@ describe('character list structure', () => {
         expect(reconcileSource).toContain('createCharacterBulkDeletePagePlan({');
         expect(reconcileSource).toContain('const isBulkDeleteContext = deleteContext?.source === \'bulk\';');
         expect(reconcileSource).toContain('const hasActiveFilter = entitiesFilter.hasAnyFilter();');
-        expect(reconcileSource).toContain('const isBulkEdit = $(\'#rm_print_characters_block\').hasClass(\'bulk_select\');');
+        expect(reconcileSource).toContain('const isBulkEdit = listElement.classList.contains(\'bulk_select\');');
         expect(reconcileSource).toContain('isBulkEdit: isBulkEdit && !isBulkDeleteContext');
         expect(reconcileSource).toContain('currentCharacterListEntitySnapshot = afterSnapshot;');
         expect(reconcileSource).toContain('await renderCharacterListPage(afterSnapshot, { requestedPage: plan.currentPage })');
@@ -508,7 +514,8 @@ describe('character list structure', () => {
 
         expect(selectSelectedCharacterSource).toContain('const character = state.characters[chid];');
         expect(selectSelectedCharacterSource).toMatch(/if \(!character\) \{\s+if \(switchMenu\) \{\s+select_rm_characters\(\);\s+\}\s+return false;\s+\}/);
-        expect(selectSelectedCharacterSource).toContain('$(\'#rm_button_selected_ch\').children(\'h2\').text(character.name);');
+        expect(selectSelectedCharacterSource).toContain("document.getElementById('rm_button_selected_ch')?.querySelectorAll(':scope > h2')");
+        expect(selectSelectedCharacterSource).toContain("heading.textContent = character.name ?? '';");
         expect(selectSelectedCharacterSource).not.toContain('$(\'#rm_button_selected_ch\').children(\'h2\').text(characters[chid].name);');
         expect(domHandlersSource).toMatch(/if \(state\.this_chid !== undefined && state\.characters\[state\.this_chid\]\) \{\s+state\.selected_button = 'character_edit';\s+select_selected_character\(state\.this_chid\);\s+\} else \{\s+state\.selected_button = 'characters';\s+select_rm_characters\(\);\s+\}/);
     });
@@ -595,23 +602,22 @@ describe('character list structure', () => {
         const enableBulkSelectSource = extractFunctionSource(bulkEditSource, 'enableBulkSelect');
         const disableBulkSelectSource = extractFunctionSource(bulkEditSource, 'disableBulkSelect');
 
-        expect(enableBulkSelectSource).toMatch(/\$\(\'#rm_print_characters_block \.character_select\'\)\.each/);
-        expect(enableBulkSelectSource).toMatch(/const checkbox = \$\('<input type=\\'checkbox\\' class=\\'bulk_select_checkbox\\' aria-label=\\'Select character for bulk edit\\'>'\);/);
-        expect(enableBulkSelectSource).toContain('$(el).attr(\'role\', \'checkbox\')');
-        expect(enableBulkSelectSource).toContain('$(el).attr(\'aria-selected\', \'false\')');
-        expect(enableBulkSelectSource).toContain('$(el).attr(\'aria-checked\', \'false\')');
-        expect(enableBulkSelectSource).toContain('$(el).attr(\'aria-describedby\', \'bulkSelectionHint\')');
-        expect(enableBulkSelectSource).toContain('$(\'#rm_print_characters_block\').addClass(\'bulk_select\')');
-        expect(enableBulkSelectSource).toContain('$(document).off(\'click.bulkSelectCheckbox\').on(\'click.bulkSelectCheckbox\'');
+        expect(enableBulkSelectSource).toContain('if (!isReactCharacterLibraryOwner())');
+        expect(enableBulkSelectSource).toContain("document.createElement('input')");
+        expect(enableBulkSelectSource).toContain("checkbox.setAttribute('aria-label', 'Select character for bulk edit')");
+        for (const attribute of ['role', 'aria-selected', 'aria-checked', 'aria-describedby']) {
+            expect(enableBulkSelectSource).toContain(`el.setAttribute('${attribute}'`);
+        }
+        expect(enableBulkSelectSource).toContain("classList.add('bulk_select')");
+        expect(enableBulkSelectSource).toContain("document.removeEventListener('click', guardBulkCheckboxClick)");
+        expect(enableBulkSelectSource).toContain("document.addEventListener('click', guardBulkCheckboxClick)");
         expect(bulkEditSource).toContain('if (is_bulk_edit) {');
         expect(bulkEditSource).toContain('overlay().onPageLoad();');
-        expect(bulkEditSource).toContain('$(\'#bulkSelectedCount\').css(\'display\', \'inline-flex\')');
-        expect(disableBulkSelectSource).toContain('$(\'.bulk_select_checkbox\').remove()');
-        expect(disableBulkSelectSource).toContain('$(\'#rm_print_characters_block .character_select\').removeAttr(\'role\')');
-        expect(disableBulkSelectSource).toContain('$(\'#rm_print_characters_block .character_select\').removeAttr(\'aria-selected\')');
-        expect(disableBulkSelectSource).toContain('$(\'#rm_print_characters_block .character_select\').removeAttr(\'aria-checked aria-describedby\')');
-        expect(disableBulkSelectSource).toContain('$(\'#rm_print_characters_block\').removeClass(\'bulk_select\')');
-        expect(disableBulkSelectSource).toContain('$(document).off(\'click.bulkSelectCheckbox\')');
+        expect(bulkEditSource).toContain("selectedCount.style.display = 'inline-flex'");
+        expect(disableBulkSelectSource).toContain("document.querySelectorAll('.bulk_select_checkbox')");
+        expect(disableBulkSelectSource).toContain("['role', 'aria-selected', 'aria-checked', 'aria-describedby']");
+        expect(disableBulkSelectSource).toContain("classList.remove('bulk_select')");
+        expect(disableBulkSelectSource).toContain("document.removeEventListener('click', guardBulkCheckboxClick)");
     });
 
     test('keeps bulk destructive actions disabled until a selection exists', () => {
@@ -631,7 +637,7 @@ describe('character list structure', () => {
         expect(enableBulkEditSource).not.toContain('overlay().updateBulkActionStates(0)');
         expect(disableBulkEditSource).toContain('overlay().updateSelectedCount(0)');
         expect(disableBulkEditSource).not.toContain('overlay().updateBulkActionStates(0)');
-        expect(deleteButtonSource).toContain('if ($(\'#bulkDeleteButton\').hasClass(\'disabled\'))');
+        expect(deleteButtonSource).toContain("document.getElementById('bulkDeleteButton')?.classList.contains('disabled')");
         expect(deleteButtonSource).toContain('return;');
         expect(deleteButtonSource).toContain('Reuse the overlay\'s delete flow; it also no-ops when selection is empty.');
     });

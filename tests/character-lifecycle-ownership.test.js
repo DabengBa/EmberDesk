@@ -1,7 +1,8 @@
 import { beforeEach, expect, jest, test } from '@jest/globals';
+import { readFileSync } from 'node:fs';
 
-const emit = jest.fn(async () => {});
-jest.unstable_mockModule('../public/scripts/events.js', () => ({ eventSource: { emit }, event_types: { CHARACTER_EDITED: 'edited', CHARACTER_DUPLICATED: 'duplicated' } }));
+jest.unstable_mockModule('../public/scripts/notifications.js', () => ({ default: new Proxy({}, { get: (_target, key) => globalThis.toastr?.[key] }) }));
+const emit = jest.fn(async () => {});jest.unstable_mockModule('../public/scripts/events.js', () => ({ eventSource: { emit }, event_types: { CHARACTER_EDITED: 'edited', CHARACTER_DUPLICATED: 'duplicated' } }));
 jest.unstable_mockModule('../public/scripts/character-authoring.js', () => ({ buildCharacterAuthoringFormData: jest.fn(), getCharacterAuthoringWriteUrl: jest.fn() }));
 jest.unstable_mockModule('../public/scripts/character-list-state.js', () => ({ getCharacterDeleteCandidates: jest.fn(), shouldRefreshCharacterAfterEdit: () => true }));
 jest.unstable_mockModule('../public/scripts/request-context.js', () => ({ getRequestHeaders: () => ({}) }));
@@ -9,6 +10,17 @@ jest.unstable_mockModule('../public/scripts/workspace-panels-react-bridge.js', (
 const { registerCharacterLifecycleShellContext } = await import('../public/scripts/character-lifecycle-shell-context.js');
 const lifecycle = await import('../public/scripts/character-lifecycle-service.js');
 let state, shell, identity;
+
+function fakeAvatarInput(file = { name: 'avatar.png' }) {
+    const input = new EventTarget();
+    input.files = [file];
+    let value = 'C:\\fakepath\\avatar.png';
+    Object.defineProperty(input, 'value', {
+        get: () => value,
+        set: next => { value = next; if (next === '') input.files = []; },
+    });
+    return input;
+}
 
 beforeEach(() => {
     emit.mockClear();
@@ -23,9 +35,28 @@ beforeEach(() => {
     registerCharacterLifecycleShellContext(shell);
     const field = { html() { return this; }, get: () => ({}), attr: (_name, value) => value === undefined ? 'editcharacter' : field, data: () => '0', val(value) { return value === undefined ? '' : this; }, clone() { return this; }, replaceWith() {} };
     globalThis.$ = () => field;
+    globalThis.document = { getElementById: id => id === 'form_create' ? { getAttribute: () => 'editcharacter' } : null, querySelector: () => ({ dataset: { chid: '0' } }) };
     globalThis.FormData = class extends Map { constructor() { super([['avatar_url', 'alice.png']]); } };
     globalThis.CustomEvent = class {};
     globalThis.toastr = { error: jest.fn(), warning: jest.fn(), success: jest.fn(), info: jest.fn() };
+});
+
+test('legacy edit sends greetings belonging to the editor identity without jQuery data', async () => {
+    state.characters[0].data.alternate_greetings = ['Alice greeting'];
+    state.characters[1].data.alternate_greetings = ['Bob one', 'Bob two'];
+    document.querySelector = () => ({ dataset: { chid: '1' } });
+    globalThis.FormData = class extends Map {
+        constructor() { super([['avatar_url', 'alice.png']]); this.appended = []; }
+        append(key, value) { this.appended.push([key, value]); }
+    };
+    const oldDollar = globalThis.$;
+    globalThis.$ = selector => {
+        if (selector === '.open_alternate_greetings') throw new Error('edit greeting identity must not use jQuery');
+        return oldDollar(selector);
+    };
+    globalThis.fetch = jest.fn(async () => ({ ok: false }));
+    await lifecycle.createOrEditCharacter();
+    expect(fetch.mock.calls[0][1].body.appended).toEqual([['alternate_greetings', 'Bob one'], ['alternate_greetings', 'Bob two']]);
 });
 
 test('a completed edit refreshes its card but does not touch another selected chat', async () => {
@@ -56,4 +87,162 @@ test('leaving and reopening the same character invalidates an earlier edit compl
     await saving;
     expect(shell.getFirstMessage).not.toHaveBeenCalled();
     expect(emit).not.toHaveBeenCalled();
+});
+
+test('authoring reads legacy fallback fields without jQuery before issuing the write', async () => {
+    const { buildCharacterAuthoringFormData } = await import('../public/scripts/character-authoring.js');
+    const oldDocument = globalThis.document, oldDollar = globalThis.$;
+    const fields = {
+        selected_chat_pole: { value: 'chat-legacy' }, create_date_pole: { value: 'date-legacy' },
+        character_json_data: { value: '{"legacy":true}' }, add_avatar_button: { files: [] },
+    };
+    globalThis.document = { getElementById: id => fields[id] ?? null };
+    globalThis.$ = () => { throw new Error('authoring fallback must not use jQuery'); };
+    state.create_save = {};
+    shell.getCurrentCharacterAuthoringMode = () => 'edit';
+    shell.getCurrentCharacterAuthoringSource = () => ({ avatar: 'alice.png' });
+    const sentinel = new Error('stop after building');
+    buildCharacterAuthoringFormData.mockImplementation(() => { throw sentinel; });
+    try {
+        await expect(lifecycle.saveCharacterAuthoringFromPayload({ fields: { name: 'Alice' } })).rejects.toBe(sentinel);
+        expect(buildCharacterAuthoringFormData).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+            existingAvatar: 'alice.png', chat: 'chat-legacy', createDate: 'date-legacy', jsonData: '{"legacy":true}', avatarFile: null,
+        }));
+    } finally {
+        buildCharacterAuthoringFormData.mockReset(); globalThis.document = oldDocument; globalThis.$ = oldDollar;
+    }
+});
+
+test('legacy creation validates the native form without jQuery before generating', async () => {
+    const oldDocument = globalThis.document, oldDollar = globalThis.$;
+    const form = { getAttribute: () => 'createcharacter' }, avatar = { innerHTML: 'stale' };
+    globalThis.document = { getElementById: id => ({ form_create: form, rm_info_avatar: avatar, character_name_pole: { value: 'Alice' } })[id] ?? null };
+    globalThis.$ = () => { throw new Error('legacy form validation must not use jQuery'); };
+    state.is_send_press = true;
+    globalThis.fetch = jest.fn();
+    try {
+        await lifecycle.createOrEditCharacter();
+        expect(avatar.innerHTML).toBe('');
+        expect(fetch).not.toHaveBeenCalled();
+        expect(toastr.error).toHaveBeenCalled();
+    } finally { globalThis.document = oldDocument; globalThis.$ = oldDollar; }
+});
+
+test('successful legacy creation clears all field mirrors without jQuery or change events', async () => {
+    const fields = Object.fromEntries(['character_name_pole', 'description_textarea', 'tags_textarea', 'depth_prompt_depth', 'depth_prompt_role'].map(id => [id, { value: 'stale' }]));
+    const mirrorChanged = jest.fn();
+    for (const id of ['character_world', 'alternate_greetings_template']) {
+        fields[id] = new EventTarget();
+        fields[id].value = 'stale';
+        fields[id].addEventListener('change', mirrorChanged);
+        fields[id].addEventListener('input', mirrorChanged);
+    }
+    const form = { getAttribute: () => 'createcharacter' };
+    fields.form_create = form;
+    const cross = new EventTarget();
+    cross.click = jest.fn(() => cross.dispatchEvent(new Event('click', { bubbles: true, cancelable: true })));
+    fields.character_cross = cross;
+    const popup = { style: { display: 'block' } };
+    fields.character_popup = popup;
+    state.is_advanced_char_open = true;
+    const transition = jest.fn((_element, options) => options.complete());
+    const handlerSource = readFileSync(new URL('../public/scripts/dom-handlers.js', import.meta.url), 'utf8');
+    const closeBody = handlerSource.match(/\$\('#character_cross'\)\.on\('click', function \(\) \{([\s\S]*?)\n    \}\);/);
+    expect(closeBody).not.toBeNull();
+    cross.addEventListener('click', new Function('state', 'document', 'transitionOpacity', `return function() {${closeBody[1]}\n};`)(state, { getElementById: id => fields[id] ?? null }, transition));
+    const avatarInput = fakeAvatarInput();
+    const avatarChange = jest.fn();
+    avatarInput.addEventListener('change', avatarChange);
+    fields.add_avatar_button = avatarInput;
+    fields['character_popup-button-h3'] = { textContent: 'Edit character' };
+    fields.character_name_pole.value = 'New';
+    globalThis.document = { getElementById: id => fields[id] ?? null };
+    globalThis.FormData = class extends Map { constructor() { super(); } append(key, value) { this.set(key, value); } };
+    const chain = { trigger() { return this; }, val() { return this; }, clone() { return this; }, replaceWith() { return this; }, text() { return this; } };
+    globalThis.$ = selector => {
+        if (selector === '#add_avatar_button') throw new Error('avatar reset must preserve the input without jQuery');
+        if (selector === '#character_cross') throw new Error('creation popup close must not use jQuery');
+        if (['#character_name_pole', '#description_textarea', '#tags_textarea', '#depth_prompt_depth', '#depth_prompt_role', '#character_popup-button-h3', '#character_world', '#alternate_greetings_template'].includes(selector)) throw new Error(`creation reset uses jQuery: ${selector}`);
+        return chain;
+    };
+    state.create_save = { alternate_greetings: [], extensions: {}, extra_books: [] };
+    state.depth_prompt_depth_default = 4; state.depth_prompt_role_default = 0;
+    Object.assign(shell, { assignTagIdsToAvatar: jest.fn(), getCharacters: jest.fn(async () => { expect(state.is_advanced_char_open).toBe(false); }), select_rm_info: jest.fn() });
+    globalThis.fetch = jest.fn(async () => ({ ok: true, text: async () => 'new.png' }));
+    await lifecycle.createOrEditCharacter();
+    expect(cross.click).toHaveBeenCalledTimes(1);
+    expect(transition).toHaveBeenCalledWith(popup, expect.objectContaining({ opacity: 0 }));
+    expect(popup.style.display).toBe('none');
+    expect(fields.character_name_pole.value).toBe('');
+    expect(fields.description_textarea.value).toBe('');
+    expect(fields.tags_textarea.value).toBe('');
+    expect(fields.character_world.value).toBe('');
+    expect(fields.alternate_greetings_template.value).toBe('');
+    expect(mirrorChanged).not.toHaveBeenCalled();
+    expect(String(fields.depth_prompt_depth.value)).toBe('4');
+    expect(String(fields.depth_prompt_role.value)).toBe('0');
+    expect(fields['character_popup-button-h3'].textContent).toBe('Create character');
+    expect(state.create_save).toEqual(expect.objectContaining({ name: '', world: '', depth_prompt_depth: 4, depth_prompt_role: 0, alternate_greetings: [] }));
+    expect(shell.assignTagIdsToAvatar).toHaveBeenCalledWith('new.png', []);
+    expect(shell.select_rm_info).toHaveBeenCalledWith('char_create', 'new.png', 'alice.png');
+    expect(fields.add_avatar_button).toBe(avatarInput);
+    expect(avatarInput.files).toHaveLength(0);
+    expect(avatarChange).not.toHaveBeenCalled();
+    avatarInput.dispatchEvent(new Event('change'));
+    expect(avatarChange).toHaveBeenCalledTimes(1);
+});
+
+test('a current character edit restores the save control without jQuery', async () => {
+    const saveButton = { setAttribute: jest.fn() };
+    const avatarInput = fakeAvatarInput();
+    const avatarChange = jest.fn();
+    avatarInput.addEventListener('change', avatarChange);
+    globalThis.document = { getElementById: id => id === 'form_create' ? { getAttribute: () => 'editcharacter' } : id === 'create_button' ? saveButton : id === 'add_avatar_button' ? avatarInput : null, querySelector: () => ({ dataset: { chid: '0' } }) };
+    const field = { data: () => '0', val() { return this; }, clone() { return this; }, replaceWith() {} };
+    globalThis.$ = selector => {
+        if (selector === '#create_button') throw new Error('edit save control must not use jQuery');
+        if (selector === '#add_avatar_button') throw new Error('avatar reset must preserve the input without jQuery');
+        return field;
+    };
+    state.chat_metadata.tainted = true;
+    globalThis.fetch = jest.fn(async () => ({ ok: true }));
+    await lifecycle.createOrEditCharacter();
+    expect(saveButton.setAttribute).toHaveBeenCalledWith('value', 'Save');
+    expect(emit).toHaveBeenCalledWith('edited', expect.objectContaining({ detail: expect.objectContaining({ id: '0' }) }));
+    expect(avatarInput.files).toHaveLength(0);
+    expect(avatarChange).not.toHaveBeenCalled();
+    avatarInput.dispatchEvent(new Event('change'));
+    expect(avatarChange).toHaveBeenCalledTimes(1);
+});
+
+test('payload edit clears the uploaded file without replacing its input or losing change listeners', async () => {
+    const { buildCharacterAuthoringFormData, getCharacterAuthoringWriteUrl } = await import('../public/scripts/character-authoring.js');
+    const file = new File(['avatar'], 'avatar.png', { type: 'image/png' });
+    const avatarInput = fakeAvatarInput(file);
+    const avatarChange = jest.fn();
+    avatarInput.addEventListener('change', avatarChange);
+    globalThis.document = { getElementById: id => id === 'add_avatar_button' ? avatarInput : null };
+    globalThis.$ = () => { throw new Error('avatar reset must preserve the input without jQuery'); };
+    state.create_save = { avatar: [file] };
+    Object.assign(shell, {
+        getCurrentCharacterAuthoringMode: () => 'edit',
+        getCurrentCharacterAuthoringSource: () => state.characters[0],
+        ensureImageFormatSupported: jest.fn(async value => value),
+        applyCharacterAuthoringSaveModel: jest.fn(),
+    });
+    buildCharacterAuthoringFormData.mockReturnValue(new Map([['avatar_url', 'alice.png']]));
+    getCharacterAuthoringWriteUrl.mockReturnValue('/api/characters/edit');
+    globalThis.fetch = jest.fn(async () => ({ ok: true }));
+    try {
+        const result = await lifecycle.saveCharacterAuthoringFromPayload({ fields: { name: 'Alice' }, changedFields: [] });
+        expect(result.ok).toBe(true);
+        expect(avatarInput.files).toHaveLength(0);
+        expect(state.create_save.avatar).toBeNull();
+        expect(avatarChange).not.toHaveBeenCalled();
+        avatarInput.dispatchEvent(new Event('change'));
+        expect(avatarChange).toHaveBeenCalledTimes(1);
+    } finally {
+        buildCharacterAuthoringFormData.mockReset();
+        getCharacterAuthoringWriteUrl.mockReset();
+    }
 });

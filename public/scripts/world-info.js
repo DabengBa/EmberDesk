@@ -175,7 +175,7 @@ const ensureWorldInfoRuntimeInitialized = createWorldInfoRuntimeInitializer({
     eventSource, eventTypes: event_types,
     getChatWorld: () => chat_metadata[METADATA_KEY],
     getWorldNames: () => world_names,
-    setChatWorldActive: active => $('.chat_lorebook_button').toggleClass('world_set', active),
+    setChatWorldActive: active => document.querySelectorAll('.chat_lorebook_button').forEach(button => button.classList.toggle('world_set', active)),
     getSortedEntries,
     getExternalActivations: () => WorldInfoBuffer.externalActivations,
 });
@@ -525,7 +525,7 @@ export async function openWorldInfoEditor(worldName) {
         return false;
     }
     if (!await selectWorldInfoEditorName(worldName)) return false;
-    if (!$('#WorldInfo').hasClass('openDrawer')) {
+    if (!document.querySelector('#WorldInfo')?.classList.contains('openDrawer')) {
         await getWorldInfoShell().openWorldInfoPanel();
     }
     return true;

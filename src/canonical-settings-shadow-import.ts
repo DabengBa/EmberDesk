@@ -1,9 +1,33 @@
+import type { DatabaseSync } from 'node:sqlite';
+
 import { getCanonicalMigrationStatus, runCanonicalMigrations } from './canonical-sqlite-migrations.js';
-import { persistCanonicalAuditStatus } from './canonical-sqlite-shadow-import.js';
+import { persistCanonicalAuditStatus } from './canonical-sqlite-shadow-import.ts';
 
 export const SETTINGS_AUDIT_SCOPE = 'settings';
 
-function summarizeImportResult({ handle, skipped = false, reason = null, entries, migrationStatus = null }) {
+type MigrationStatus = ReturnType<typeof runCanonicalMigrations>;
+type SettingsImportEntry = { status: string; reason: string };
+type ImportOptions = {
+    handle: string;
+    directories: { root: string; storage?: string };
+    featureFlags: { enabled?: boolean; shadowImport?: boolean; strict?: boolean } | null | undefined;
+    manager: {
+        open(options: {
+            handle: string;
+            directories: { root: string; storage?: string };
+            featureFlags: { enabled: boolean; strict: boolean };
+        }): DatabaseSync | null;
+    };
+    nowMs?: number;
+};
+
+function summarizeImportResult({ handle, skipped = false, reason = null, entries, migrationStatus = null }: {
+    handle: string;
+    skipped?: boolean;
+    reason?: string | null;
+    entries: SettingsImportEntry[];
+    migrationStatus?: MigrationStatus | null;
+}) {
     return {
         ok: skipped || (reason === null && !(migrationStatus && migrationStatus.ok === false)),
         handle,
@@ -31,7 +55,7 @@ export async function runCanonicalSettingsShadowImport({
     featureFlags,
     manager,
     nowMs = Date.now(),
-}) {
+}: ImportOptions) {
     if (!featureFlags?.enabled) {
         return summarizeImportResult({
             handle,
@@ -98,7 +122,7 @@ export async function auditCanonicalSettingsShadowImport({
     handle,
     db,
     auditedAtMs = Date.now(),
-}) {
+}: { handle: string; db: DatabaseSync; auditedAtMs?: number }) {
     const migrationStatus = getCanonicalMigrationStatus(db);
     if (!migrationStatus.ok) {
         return {
@@ -129,7 +153,7 @@ export async function auditCanonicalSettingsShadowImport({
     try {
         db.prepare('SELECT 1 FROM settings_documents LIMIT 1').get();
     } catch (error) {
-        if (String(error?.message ?? '').includes('no such table: settings_documents')) {
+        if (String((error as { message?: unknown } | null | undefined)?.message ?? '').includes('no such table: settings_documents')) {
             return {
                 ok: false,
                 handle,

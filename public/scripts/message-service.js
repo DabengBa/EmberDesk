@@ -253,10 +253,15 @@ export function updateMessageBlock(messageId, message, { rerenderMessage = true 
         return;
     }
 
-    const messageElement = state.chatElement.find(`[mesid="${messageId}"]`);
+    const chatElement = state.chatElement;
+    const root = chatElement?.jquery ? chatElement[0] : chatElement;
+    const matches = root?.querySelectorAll(`[mesid="${messageId}"]`) ?? [];
+    const rows = Array.from(matches);
+    const messageElement = rows.length === 1 ? rows[0] : rows;
     if (rerenderMessage) {
         const text = message?.extra?.display_text ?? message.mes;
-        messageElement.find('.mes_text').html(messageFormatting(text, message.name, message.is_system, message.is_user, messageId, {}, false));
+        const html = messageFormatting(text, message.name, message.is_system, message.is_user, messageId, {}, false);
+        rows.forEach(row => row.querySelectorAll('.mes_text').forEach(element => { element.innerHTML = html; }));
     }
 
     updateReasoningUI(messageElement);
@@ -432,7 +437,7 @@ export function getMediaIndex(mes) {
 /**
  * Appends image or file to the message element.
  * @param {ChatMessage} mes Message object
- * @param {JQuery<HTMLElement>} messageElement Message element
+ * @param {JQuery<HTMLElement>|HTMLElement|null} messageElement Message element
  * @param {string} [scrollBehavior] Scroll behavior when adjusting scroll position
  */
 export function appendMediaToMessage(mes, messageElement, scrollBehavior = SCROLL_BEHAVIOR.ADJUST) {
@@ -442,8 +447,23 @@ export function appendMediaToMessage(mes, messageElement, scrollBehavior = SCROL
         return;
     }
 
-    const fileWrapper = messageElement.find('.mes_file_wrapper');
-    const mediaWrapper = messageElement.find('.mes_media_wrapper');
+    // Legacy callers still supply jQuery collections; operate on their rows
+    // directly rather than creating a second owner for their contents.
+    const rows = messageElement?.querySelectorAll ? [messageElement] : Array.from(messageElement ?? []);
+    const findInRows = selector => [...new Set(rows.flatMap(row => Array.from(row.querySelectorAll(selector))))];
+    const fileWrapper = findInRows('.mes_file_wrapper');
+    const mediaWrapper = findInRows('.mes_media_wrapper');
+
+    // Like collection append, insert originals in the last target and clones
+    // in earlier targets. Real message rendering normally has one target.
+    const appendToWrappers = (wrappers, nodes) => wrappers.forEach((wrapper, index) => {
+        const inserted = index === wrappers.length - 1 ? nodes : nodes.map(node => node.cloneNode(true));
+        wrapper.append(...inserted);
+    });
+    const setSource = (element, url) => {
+        if (url === null) element.removeAttribute('src');
+        else if (url !== undefined) element.setAttribute('src', url);
+    };
 
     const hasMedia = Array.isArray(mes?.extra?.media) && mes.extra.media.length > 0;
     const hasFiles = Array.isArray(mes?.extra?.files) && mes.extra.files.length > 0;
@@ -453,8 +473,9 @@ export function appendMediaToMessage(mes, messageElement, scrollBehavior = SCROL
     const mediaBlocks = [];
     const mediaPromises = [];
 
-    const chatHeight = (hasMedia || hasFiles) ? state.chatElement.prop('scrollHeight') : 0;
-    const scrollPosition = (hasMedia || hasFiles) ? state.chatElement.scrollTop() : 0;
+    const chatRoot = (hasMedia || hasFiles) ? (state.chatElement?.nodeType === 1 ? state.chatElement : state.chatElement[0]) : undefined;
+    const chatHeight = (hasMedia || hasFiles) ? chatRoot?.scrollHeight : 0;
+    const scrollPosition = (hasMedia || hasFiles) ? chatRoot?.scrollTop : 0;
     const doAdjustScroll = () => {
         if (!hasMedia && !hasFiles) {
             return;
@@ -463,48 +484,50 @@ export function appendMediaToMessage(mes, messageElement, scrollBehavior = SCROL
             return;
         }
         if (scrollBehavior === SCROLL_BEHAVIOR.KEEP) {
-            state.chatElement.scrollTop(scrollPosition);
+            if (chatRoot) chatRoot.scrollTop = scrollPosition;
             return;
         }
-        const newChatHeight = state.chatElement.prop('scrollHeight');
+        const newChatHeight = chatRoot?.scrollHeight;
         const diff = newChatHeight - chatHeight;
-        state.chatElement.scrollTop(scrollPosition + diff);
+        if (chatRoot) chatRoot.scrollTop = scrollPosition + diff;
     };
 
-    // Set media display attribute
-    messageElement.attr('data-media-display', mediaDisplay);
-    // Toggle text visibility
-    messageElement.find('.mes_text').toggleClass('inline_media', hideMessageText);
+    // Keep the legacy collection boundary while updating each row natively.
+    for (const row of rows) {
+        if (mediaDisplay === null) row.removeAttribute('data-media-display');
+        else row.setAttribute('data-media-display', mediaDisplay);
+        row.querySelectorAll('.mes_text').forEach(text => text.classList.toggle('inline_media', hideMessageText));
+    }
 
     /**
      * Appends a single image attachment to the message element.
      * @param {MediaAttachment} attachment Image attachment object
      * @param {number} index Index of the image attachment
-     * @returns {JQuery<HTMLElement>} The appended image container element
+     * @returns {HTMLElement} The appended image container element
      */
     function appendImageAttachment(attachment, index) {
-        const template = $('#message_image_template .mes_img_container').clone();
-        template.attr('data-index', index);
+        const template = document.querySelector('#message_image_template .mes_img_container').cloneNode(true);
+        template.setAttribute('data-index', String(index));
 
-        const image = template.find('.mes_img');
-        image.attr('src', attachment.url);
-        image.attr('title', attachment.title || mes.extra.title || '');
+        const image = template.querySelector('.mes_img');
+        setSource(image, attachment.url);
+        image.setAttribute('title', attachment.title || mes.extra.title || '');
         mediaPromises.push(new Promise((resolve) => {
             function onLoad() {
-                image.removeAttr('alt');
-                image.removeClass('error');
+                image.removeAttribute('alt');
+                image.classList.remove('error');
                 resolve();
             }
             function onError() {
-                image.attr('alt', '');
-                image.addClass('error');
+                image.setAttribute('alt', '');
+                image.classList.add('error');
                 resolve();
             }
-            if (image.prop('complete')) {
+            if (image.complete) {
                 onLoad();
             } else {
-                image.off('load').on('load', onLoad);
-                image.off('error').on('error', onError);
+                image.addEventListener('load', onLoad);
+                image.addEventListener('error', onError);
             }
         }));
 
@@ -516,28 +539,28 @@ export function appendMediaToMessage(mes, messageElement, scrollBehavior = SCROL
      * Appends a single video attachment to the message element.
      * @param {MediaAttachment} attachment Video attachment object
      * @param {number} index Index of the video attachment
-     * @returns {JQuery<HTMLElement>} The appended video container element
+     * @returns {HTMLElement} The appended video container element
      */
     function appendVideoAttachment(attachment, index) {
-        const template = $('#message_video_template .mes_video_container').clone();
-        template.attr('data-index', index);
+        const template = document.querySelector('#message_video_template .mes_video_container').cloneNode(true);
+        template.setAttribute('data-index', String(index));
 
-        const video = template.find('.mes_video');
-        video.attr('src', attachment.url);
-        video.attr('title', attachment.title || mes.extra.title || '');
+        const video = template.querySelector('.mes_video');
+        setSource(video, attachment.url);
+        video.setAttribute('title', attachment.title || mes.extra.title || '');
         mediaPromises.push(new Promise((resolve) => {
             function onLoad() {
                 resolve();
             }
             function onError() {
-                video.addClass('error');
+                video.classList.add('error');
                 resolve();
             }
-            if (video.prop('readyState') >= HTMLMediaElement.HAVE_CURRENT_DATA) {
+            if (video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
                 onLoad();
             } else {
-                video.off('loadeddata').on('loadeddata', onLoad);
-                video.off('error').on('error', onError);
+                video.addEventListener('loadeddata', onLoad);
+                video.addEventListener('error', onError);
             }
         }));
 
@@ -549,32 +572,32 @@ export function appendMediaToMessage(mes, messageElement, scrollBehavior = SCROL
      * Appends a single audio attachment to the message element.
      * @param {MediaAttachment} attachment Audio attachment object
      * @param {number} index Index of the audio attachment
-     * @returns {JQuery<HTMLElement>} The appended audio container element
+     * @returns {HTMLElement} The appended audio container element
      */
     function appendAudioAttachment(attachment, index) {
-        const template = $('#message_audio_template .mes_audio_container').clone();
-        template.attr('data-index', index);
-        const audio = template.find('.mes_audio');
-        audio.attr('src', attachment.url);
-        audio.attr('title', attachment.title || mes.extra.title || '');
+        const template = document.querySelector('#message_audio_template .mes_audio_container').cloneNode(true);
+        template.setAttribute('data-index', String(index));
+        const audio = template.querySelector('.mes_audio');
+        setSource(audio, attachment.url);
+        audio.setAttribute('title', attachment.title || mes.extra.title || '');
 
         mediaPromises.push(new Promise((resolve) => {
             function onLoad() {
                 resolve();
             }
             function onError() {
-                audio.addClass('error');
+                audio.classList.add('error');
                 resolve();
             }
-            if (audio.prop('readyState') >= HTMLMediaElement.HAVE_CURRENT_DATA) {
+            if (audio.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
                 onLoad();
             } else {
-                audio.off('loadeddata').on('loadeddata', onLoad);
-                audio.off('error').on('error', onError);
+                audio.addEventListener('loadeddata', onLoad);
+                audio.addEventListener('error', onError);
             }
         }));
 
-        new state.AudioPlayer(audio.get(0), template.get(0));
+        new state.AudioPlayer(audio, template);
 
         mediaBlocks.push(template);
         return template;
@@ -584,7 +607,7 @@ export function appendMediaToMessage(mes, messageElement, scrollBehavior = SCROL
      * Appends a media attachment to the message element.
      * @param {MediaAttachment} attachment Media attachment object
      * @param {number} index Index of the media attachment
-     * @returns {JQuery<HTMLElement>} The appended media container element
+     * @returns {HTMLElement} The appended media container element
      */
     function appendMediaAttachment(attachment, index) {
         if (!attachment.type) {
@@ -609,17 +632,24 @@ export function appendMediaToMessage(mes, messageElement, scrollBehavior = SCROL
      */
     function saveMediaStates() {
         const states = new Map();
-        const media = mediaWrapper.find('video, audio');
-        media.each((_, element) => {
+        for (const element of getPlaybackElements()) {
             if (element instanceof HTMLMediaElement) {
                 if (!element.currentSrc || element.readyState === HTMLMediaElement.HAVE_NOTHING) {
-                    return;
+                    continue;
                 }
                 const state = { currentTime: element.currentTime, paused: element.paused };
                 states.set(element.currentSrc, state);
             }
-        });
+        }
         return states;
+    }
+
+    function getPlaybackElements() {
+        const elements = new Set();
+        for (const wrapper of mediaWrapper) {
+            for (const element of wrapper.querySelectorAll('video, audio')) elements.add(element);
+        }
+        return elements;
     }
 
     /**
@@ -627,8 +657,7 @@ export function appendMediaToMessage(mes, messageElement, scrollBehavior = SCROL
      * @param {Map<string, MediaState>} states Media playback times by source URL
      */
     function restoreMediaStates(states) {
-        const media = mediaWrapper.find('video, audio');
-        media.each((_, element) => {
+        for (const element of getPlaybackElements()) {
             if (element instanceof HTMLMediaElement) {
                 const restoreState = () => {
                     if (!states.has(element.currentSrc)) {
@@ -646,7 +675,7 @@ export function appendMediaToMessage(mes, messageElement, scrollBehavior = SCROL
                     restoreState();
                 }
             }
-        });
+        }
     }
 
     // Add media gallery to message
@@ -654,13 +683,16 @@ export function appendMediaToMessage(mes, messageElement, scrollBehavior = SCROL
         const mediaIndex = getMediaIndex(mes);
         const selectedMedia = mes.extra.media[mediaIndex];
 
-        const galleryControls = $('#message_gallery_controls .mes_img_swipes').clone();
-        const counter = galleryControls.find('.mes_img_swipe_counter');
-        counter.text(`${mediaIndex + 1}/${mes.extra.media.length}`);
+        const galleryControls = Array.from(document.querySelectorAll('#message_gallery_controls .mes_img_swipes'), node => node.cloneNode(true));
+        for (const controls of galleryControls) {
+            controls.querySelectorAll('.mes_img_swipe_counter').forEach(counter => {
+                counter.textContent = `${mediaIndex + 1}/${mes.extra.media.length}`;
+            });
+        }
 
         const template = appendMediaAttachment(selectedMedia, mediaIndex);
-        template.addClass('img_swipes');
-        template.append(galleryControls);
+        template.classList.add('img_swipes');
+        template.append(...galleryControls);
     }
 
     // Add media as a list to message
@@ -672,23 +704,34 @@ export function appendMediaToMessage(mes, messageElement, scrollBehavior = SCROL
     }
 
     // Remove existing file containers
-    fileWrapper.empty();
+    fileWrapper.forEach(wrapper => wrapper.replaceChildren());
 
     // Add files to message
     if (hasFiles) {
         for (let index = 0; index < mes.extra.files.length; index++) {
             const file = mes.extra.files[index];
-            const template = $('#message_file_template .mes_file_container').clone();
-            template.attr('data-index', index);
-            template.find('.mes_file_name').text(file.name).attr('title', file.name);
-            template.find('.mes_file_size').text(humanFileSize(file.size)).attr('title', file.size);
-            fileWrapper.append(template);
+            const templates = Array.from(document.querySelectorAll('#message_file_template .mes_file_container'), node => node.cloneNode(true));
+            const sizeText = humanFileSize(file.size);
+            for (const template of templates) {
+                template.setAttribute('data-index', String(index));
+                template.querySelectorAll('.mes_file_name').forEach(name => {
+                    name.textContent = file.name ?? '';
+                    if (file.name === null) name.removeAttribute('title');
+                    else if (file.name !== undefined) name.setAttribute('title', file.name);
+                });
+                template.querySelectorAll('.mes_file_size').forEach(size => {
+                    size.textContent = sizeText ?? '';
+                    if (file.size === null) size.removeAttribute('title');
+                    else if (file.size !== undefined) size.setAttribute('title', String(file.size));
+                });
+            }
+            appendToWrappers(fileWrapper, templates);
         }
     }
 
     // Early return if no media
     if (!hasMedia) {
-        mediaWrapper.empty();
+        mediaWrapper.forEach(wrapper => wrapper.replaceChildren());
         doAdjustScroll();
         return;
     }
@@ -696,7 +739,8 @@ export function appendMediaToMessage(mes, messageElement, scrollBehavior = SCROL
     // TODO: Consider making this awaitable
     Promise.race([Promise.all(mediaPromises), delay(debounce_timeout.short)]).then(() => {
         const states = saveMediaStates();
-        mediaWrapper.empty().append(mediaBlocks);
+        mediaWrapper.forEach(wrapper => wrapper.replaceChildren());
+        appendToWrappers(mediaWrapper, mediaBlocks);
         restoreMediaStates(states);
         doAdjustScroll();
         void mountReactMainChatMessageListPanel();
@@ -705,9 +749,18 @@ export function appendMediaToMessage(mes, messageElement, scrollBehavior = SCROL
 
 export function addCopyToCodeBlocks(messageElement) {
     const skipFrontend = state.power_user?.frontend_frames?.skip_highlight !== false;
-    const codeBlocks = $(messageElement).find('pre code');
-    for (let i = 0; i < codeBlocks.length; i++) {
-        const codeElement = codeBlocks.get(i);
+    // Legacy template callers still pass collections; traverse their DOM roots
+    // directly and retain jQuery find's de-duplication and document order.
+    const roots = messageElement?.querySelectorAll ? [messageElement] : Array.from(messageElement ?? []);
+    const codeBlocks = [...new Set(roots.flatMap(root => Array.from(root?.querySelectorAll?.('pre code') ?? [])))];
+    if (roots.length > 1) {
+        codeBlocks.sort((left, right) => {
+            const position = left.compareDocumentPosition(right);
+            if (position & 1) return 0; // Disconnected nodes retain their input order.
+            return position & 4 ? -1 : position & 2 ? 1 : 0;
+        });
+    }
+    for (const codeElement of codeBlocks) {
         if (skipFrontend && isFrontendContent(codeElement.closest('pre')?.textContent)) {
             continue;
         }
@@ -763,7 +816,7 @@ function buildChatMessageRichBody(message, { messageId = state.chat.indexOf(mess
  * @param {boolean} [options.scroll=true] Whether to scroll to the new message
  * @param {number} [options.insertBefore=null] Message ID to insert the new message before
  * @param {number} [options.forceId=null] Force the message ID
- * @returns {JQuery<HTMLElement>} The newly added message element
+ * @returns {JQuery<HTMLElement>|undefined} The legacy message element, or undefined when React owns rendering
  */
 export function addOneMessage(mes, { insertAfter = null, scroll = true, insertBefore = null, forceId = null } = {}) {
     // Callers push the new message to chat before calling addOneMessage
@@ -789,26 +842,35 @@ export function addOneMessage(mes, { insertAfter = null, scroll = true, insertBe
         if (!insertAfter && !insertBefore && scroll) {
             scrollChatToBottom({ waitForFrame: true });
         }
-        return $();
+        return;
     }
 
     let messageElement;
 
     messageElement = updateMessageElement(mes, { messageId, adjustMediaScroll: scroll ? SCROLL_BEHAVIOR.ADJUST : SCROLL_BEHAVIOR.NONE });
-    if (typeof insertAfter === 'number' && insertAfter >= 0) {
-        const target = state.chatElement.find(`.mes[mesid="${insertAfter}"]`);
-        $(messageElement).insertAfter(target);
-    } else if (typeof insertBefore === 'number' && insertBefore >= 0) {
-        const target = state.chatElement.find(`.mes[mesid="${insertBefore}"]`);
-        $(messageElement).insertBefore(target);
+    const nodes = messageElement?.querySelectorAll ? [messageElement] : Array.from(messageElement);
+    const roots = state.chatElement?.nodeType === 1 ? [state.chatElement] : Array.from(state.chatElement);
+    if ((typeof insertAfter === 'number' && insertAfter >= 0) || (typeof insertBefore === 'number' && insertBefore >= 0)) {
+        const after = typeof insertAfter === 'number' && insertAfter >= 0;
+        const id = after ? insertAfter : insertBefore;
+        const targets = roots[0].querySelectorAll(`.mes[mesid="${id}"]`);
+        targets.forEach((target, index) => {
+            const reference = after ? target.nextSibling : target;
+            for (const node of nodes) {
+                target.parentNode?.insertBefore(index === targets.length - 1 ? node : node.cloneNode(true), reference);
+            }
+        });
     } else {
-        state.chatElement.append(messageElement);
+        roots.forEach((root, index) => {
+            root.append(...nodes.map(node => index === roots.length - 1 ? node : node.cloneNode(true)));
+        });
     }
 
 
     //last_mes should always be updated.
-    state.chatElement.find('.mes').removeClass('last_mes');
-    state.chatElement.find('.mes').last().addClass('last_mes');
+    const rows = roots[0].querySelectorAll('.mes');
+    rows.forEach(row => row.classList.remove('last_mes'));
+    rows[rows.length - 1]?.classList.add('last_mes');
 
     // Don't scroll if not inserting last
     if (!insertAfter && !insertBefore && scroll) {
@@ -825,12 +887,22 @@ export function addOneMessage(mes, { insertAfter = null, scroll = true, insertBe
  * @param {ChatMessage} mes Message object
  * @param {object} [options] Options
  * @param {number} [options.messageId=chat.length - 1] Force the message ID
- * @param {JQuery<HTMLElement>} [options.messageElement=messageTemplate.clone()] This message element will be updated with the ChatMessage object.
+ * @param {JQuery<HTMLElement>|HTMLElement} [options.messageElement] This message element will be updated with the ChatMessage object.
  * @param {SCROLL_BEHAVIOR} [options.adjustMediaScroll=SCROLL_BEHAVIOR.NONE] Scroll behavior option passed to appendMediaToMessage.
  * @returns {JQuery<HTMLElement>} Rendered HTMLElement.
  */
-export function updateMessageElement(mes, { messageId = state.chat.length - 1, messageElement = state.messageTemplate.clone(), adjustMediaScroll = SCROLL_BEHAVIOR.NONE } = {}) {
-    if (messageElement.closest('[data-main-chat-message-row-owner="react"]').length) {
+export function updateMessageElement(mes, { messageId = state.chat.length - 1, messageElement, adjustMediaScroll = SCROLL_BEHAVIOR.NONE } = {}) {
+    if (messageElement === undefined) {
+        const template = state.messageTemplate;
+        if (template?.querySelectorAll) {
+            messageElement = template.cloneNode(true);
+        } else {
+            // Preserve the legacy collection return contract for shared callers.
+            messageElement = template.pushStack(Array.from(template, row => row.cloneNode(true)));
+        }
+    }
+    const rows = messageElement?.querySelectorAll ? [messageElement] : Array.from(messageElement ?? []);
+    if (rows.some(row => row.closest?.('[data-main-chat-message-row-owner="react"]'))) {
         scheduleMainChatMessageListPanelRefresh();
         return messageElement;
     }
@@ -863,40 +935,59 @@ export function updateMessageElement(mes, { messageId = state.chat.length - 1, m
         timerTitle,
     });
 
-    messageElement.attr(rowPopulation.attributes);
-
-    messageElement.find('.avatar img').attr('src', rowPopulation.avatarSrc);
-    messageElement.find('.ch_name .name_text').text(rowPopulation.displayName);
-    messageElement.find('.timestamp').text(rowPopulation.timestampText).attr('title', rowPopulation.timestampTitle);
-    if (rowPopulation.messageTitle) messageElement.attr('title', rowPopulation.messageTitle);
-    if (rowPopulation.timer.value) messageElement.find('.mes_timer').attr('title', rowPopulation.timer.title).text(rowPopulation.timer.value);
+    const setAttribute = (element, name, value) => {
+        if (value === undefined) return;
+        if (value === null) element.removeAttribute(name);
+        else element.setAttribute(name, String(value));
+    };
+    const setText = (element, value) => {
+        if (value !== undefined) element.textContent = value === null ? '' : String(value);
+    };
+    for (const row of rows) {
+        for (const [name, value] of Object.entries(rowPopulation.attributes)) setAttribute(row, name, value);
+        row.querySelectorAll('.avatar img').forEach(image => setAttribute(image, 'src', rowPopulation.avatarSrc));
+        row.querySelectorAll('.ch_name .name_text').forEach(name => setText(name, rowPopulation.displayName));
+        row.querySelectorAll('.timestamp').forEach(timestamp => {
+            setText(timestamp, rowPopulation.timestampText);
+            setAttribute(timestamp, 'title', rowPopulation.timestampTitle);
+        });
+        if (rowPopulation.messageTitle) setAttribute(row, 'title', rowPopulation.messageTitle);
+        if (rowPopulation.timer.value) row.querySelectorAll('.mes_timer').forEach(timer => {
+            setAttribute(timer, 'title', rowPopulation.timer.title);
+            setText(timer, rowPopulation.timer.value);
+        });
+    }
 
     if (richBody.biasHtml) {
-        messageElement.find('.mes_bias').html(richBody.biasHtml);
+        rows.forEach(row => row.querySelectorAll('.mes_bias').forEach(bias => { bias.innerHTML = richBody.biasHtml; }));
     }
 
     updateReasoningUI(messageElement);
 
 
     if (rowPopulation.classes.smallSysMes) {
-        messageElement.addClass('smallSysMes');
+        rows.forEach(row => row.classList.add('smallSysMes'));
     }
 
     if (rowPopulation.classes.toolCall) {
-        messageElement.addClass('toolCall');
+        rows.forEach(row => row.classList.add('toolCall'));
     }
 
     if (rowPopulation.classes.replyPipelineHidden) {
-        messageElement.addClass('replyPipelineHidden');
+        rows.forEach(row => row.classList.add('replyPipelineHidden'));
     }
 
-    messageElement.find('.avatar img').on('error', function () {
-        $(this).hide();
-        $(this).parent().html('<div class="missing-avatar fa-solid fa-user-slash"></div>');
+    rows.forEach(row => {
+        row.querySelectorAll('.avatar img').forEach(image => {
+            image.addEventListener('error', () => {
+                image.style.display = 'none';
+                if (image.parentElement) image.parentElement.innerHTML = '<div class="missing-avatar fa-solid fa-user-slash"></div>';
+            });
+        });
     });
 
     appendMediaToMessage(mes, messageElement, adjustMediaScroll);
-    messageElement.find('.mes_text').html(messageHTML);
+    rows.forEach(row => row.querySelectorAll('.mes_text').forEach(text => { text.innerHTML = messageHTML; }));
     addCopyToCodeBlocks(messageElement);
 
     return messageElement;
@@ -968,8 +1059,9 @@ export function formatGenerationTimer(gen_started, gen_finished, tokenCount, rea
  */
 export function scrollChatToBottom({ waitForFrame } = {}) {
     const doScroll = () => {
-        const position = state.chatElement[0].scrollHeight;
-        state.chatElement.scrollTop(position);
+        const elements = state.chatElement?.nodeType === 1 ? [state.chatElement] : state.chatElement;
+        const position = elements[0].scrollHeight;
+        for (const element of elements) element.scrollTop = position;
         requestId = null;
     };
 

@@ -6,7 +6,7 @@ import { afterEach, describe, expect, jest, test } from '@jest/globals';
 
 import { createCanonicalSqliteManager } from '../src/canonical-sqlite.js';
 import { runCanonicalMigrations } from '../src/canonical-sqlite-migrations.js';
-import { persistCanonicalAuditStatus } from '../src/canonical-sqlite-shadow-import.js';
+import { persistCanonicalAuditStatus } from '../src/canonical-sqlite-shadow-import.ts';
 import {
     collectCanonicalManagedMediaGarbage,
     deleteCanonicalManagedMediaReference,
@@ -421,7 +421,7 @@ describe('canonical managed media write service', () => {
         // Out-of-band leftover file with no reference → orphan under sync.
         fs.writeFileSync(path.join(directories.files, 'loose.bin'), 'loose-bytes');
 
-        const { auditCanonicalManagedMediaShadowImport } = await import('../src/canonical-managed-media-shadow-import.js');
+        const { auditCanonicalManagedMediaShadowImport } = await import('../src/canonical-managed-media-shadow-import.ts');
         const offAudit = await auditCanonicalManagedMediaShadowImport({
             handle: 'alice',
             directories,

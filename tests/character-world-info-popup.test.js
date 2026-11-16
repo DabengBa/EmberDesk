@@ -13,7 +13,7 @@ jest.unstable_mockModule('../public/scripts/world-info-state.js', () => ({ world
 
 const { registerCharacterLifecycleShellContext } = await import('../public/scripts/character-lifecycle-shell-context.js');
 const { openCharacterWorldPopup } = await import('../public/scripts/character-lifecycle-service.js');
-let state, shell, props, finish, cleanup, draftIdentity;
+let state, shell, props, finish, cleanup, draftIdentity, worldControl;
 
 beforeEach(() => {
     const character = { avatar: 'alice.png', data: { name: 'Alice', extensions: { world: '1' } } };
@@ -31,11 +31,38 @@ beforeEach(() => {
         Popup: class { async show() { await new Promise(resolve => { finish = resolve; }); } }, POPUP_TYPE: { TEXT: 1 },
     };
     registerCharacterLifecycleShellContext(shell);
-    const legacy = { data: () => 0, clone() { return this; }, find() { return this; }, text() { return this; }, append() { return this; }, on() { return this; } };
+    worldControl = { dataset: { chid: '0' } };
+    const legacy = { data: () => Number(worldControl.dataset.chid), clone() { return this; }, find() { return this; }, text() { return this; }, append() { return this; }, on() { return this; } };
     globalThis.$ = () => legacy;
     globalThis.Option = class {};
-    globalThis.document = { createElement: () => ({}) };
+    globalThis.document = { createElement: () => ({}), getElementById: id => id === 'set_character_world' ? worldControl : null };
     globalThis.toastr = { error: jest.fn() };
+});
+
+test('existing character, new draft, and another character retain identity and stale commands are rejected', async () => {
+    props = undefined;
+    state.characters.push({ avatar: 'bob.png', data: { name: 'Bob', extensions: { world: '' } } });
+    let result = opened();
+    for (let i = 0; i < 8 && !props; i++) await Promise.resolve();
+    const aliceProps = props;
+    expect(aliceProps.characterName).toBe('Alice');
+    state.menu_type = 'create'; state.create_save = { name: 'Draft', world: '' }; draftIdentity = {};
+    worldControl.dataset.chid = '-1';
+    await expect(aliceProps.onPrimaryChange('Lore')).rejects.toThrow('Character changed');
+    finish(); await result;
+    props = undefined; result = opened();
+    for (let i = 0; i < 8 && !props; i++) await Promise.resolve();
+    const draftProps = props;
+    expect(draftProps.characterName).toBe('Draft');
+    expect(draftProps.primaryWorld).toBe('');
+    state.menu_type = 'edit'; state.this_chid = 1; worldControl.dataset.chid = '1'; draftIdentity = {};
+    await expect(draftProps.onAuxChange(['Lore'])).rejects.toThrow('Character changed');
+    finish(); await result;
+    props = undefined; result = opened();
+    for (let i = 0; i < 8 && !props; i++) await Promise.resolve();
+    expect(props.characterName).toBe('Bob');
+    expect(props.primaryWorld).toBe('');
+    finish(); await result;
 });
 
 async function opened() {
@@ -43,6 +70,20 @@ async function opened() {
     for (let i = 0; i < 8 && !props; i++) await Promise.resolve();
     return result;
 }
+
+test('world popup reads native identity and reports an absent edit identity without jQuery', async () => {
+    globalThis.$ = () => { throw new Error('world identity must not use jQuery'); };
+    props = undefined;
+    const result = opened();
+    for (let i = 0; i < 8 && !props; i++) await Promise.resolve();
+    expect(props.characterName).toBe('Alice');
+    finish(); await result;
+    delete worldControl.dataset.chid;
+    props = undefined;
+    await openCharacterWorldPopup();
+    expect(mount).toHaveBeenCalledTimes(1);
+    expect(toastr.error).toHaveBeenCalledWith('Does not have an Id for this character in world select menu.');
+});
 
 test('uses names and original filename for immediate primary and auxiliary writes, then unmounts', async () => {
     props = undefined;
@@ -177,12 +218,14 @@ test('delegates actual command owner semantics for embedded primary and debounce
     const { world_info } = await import('../public/scripts/world-info-state.js');
     Object.assign(world_info, state.world_info);
     state.world_info = world_info;
-    const values = { '#character_world': 'Lore', '#character_json_data': JSON.stringify({ data: { character_book: { entries: [] } } }) };
-    globalThis.$ = selector => selector === '#set_character_world' ? { data: () => 0 } : {
-        val(value) { if (value !== undefined) values[selector] = value; return values[selector]; },
-    };
+    const values = { character_world: { value: 'Lore' }, character_json_data: { value: JSON.stringify({ data: { character_book: { entries: [] } } }) } };
+    globalThis.document.getElementById = id => id === 'set_character_world' ? worldControl : values[id] ?? null;
+    globalThis.$ = () => { throw new Error('world info field access must not use jQuery'); };
     toastr.info = jest.fn();
-    const saveCharacter = jest.fn(async () => {});
+    const saveCharacter = jest.fn(async () => {
+        expect(values.character_world.value).toBe('');
+        expect(JSON.parse(values.character_json_data.value).data.character_book).toBeUndefined();
+    });
     const saveSettings = jest.fn();
     const commands = createWorldInfoBookCommands({
         getCurrentShellMenuType: () => state.menu_type, create_save: state.create_save,
@@ -196,7 +239,7 @@ test('delegates actual command owner semantics for embedded primary and debounce
     const result = opened();
     for (let i = 0; i < 8 && !props; i++) await Promise.resolve();
     await props.onPrimaryChange('');
-    expect(JSON.parse(values['#character_json_data']).data.character_book).toBeUndefined();
+    expect(JSON.parse(values.character_json_data.value).data.character_book).toBeUndefined();
     expect(saveCharacter).toHaveBeenCalledTimes(1);
     await props.onAuxChange(['1']);
     expect(state.world_info.charLore).toEqual([{ name: 'alice', extraBooks: ['1'] }]);

@@ -1,4 +1,5 @@
 import { beforeEach, expect, jest, test } from '@jest/globals';
+import fs from 'node:fs';
 
 jest.unstable_mockModule('../public/scripts/notifications.js', () => ({ default: new Proxy({}, { get: (_target, key) => globalThis.toastr?.[key] }) }));
 
@@ -9,7 +10,7 @@ jest.unstable_mockModule('../public/scripts/character-list-state.js', () => ({ g
 jest.unstable_mockModule('../public/scripts/request-context.js', () => ({ getRequestHeaders: () => ({ 'Content-Type': 'application/json' }) }));
 jest.unstable_mockModule('../public/scripts/workspace-panels-react-bridge.js', () => ({ loadWorkspacePanelsModule: jest.fn() }));
 const { registerCharacterLifecycleShellContext } = await import('../public/scripts/character-lifecycle-shell-context.js');
-const { selectCharacterById, duplicateCharacter } = await import('../public/scripts/character-lifecycle-service.js');
+const { selectCharacterById, duplicateCharacter, select_selected_character } = await import('../public/scripts/character-lifecycle-service.js');
 let state, shell, order;
 beforeEach(() => {
     order = [];
@@ -28,6 +29,7 @@ beforeEach(() => {
     emit.mockReset().mockImplementation(async (...args) => { order.push(['event', ...args]); });
     globalThis.toastr = { warning: jest.fn(), error: jest.fn(), success: jest.fn(), info: jest.fn() };
     globalThis.window = { matchMedia: () => ({ matches: true }) };
+    globalThis.document = { createElement: () => ({ innerHTML: '' }) };
     globalThis.$ = value => value;
     globalThis.fetch = jest.fn(async () => ({ ok: true, json: async () => ({ path: 'copy.png' }) }));
 });
@@ -69,4 +71,149 @@ test('cancelled or missing duplication never sends a request', async () => {
     expect(await duplicateCharacter()).toBe('');
     expect(await duplicateCharacter({ avatar: 'missing.png' })).toBe('');
     expect(fetch).not.toHaveBeenCalled();
+});
+
+test('duplication confirmation uses a native popup element and preserves cancellation', async () => {
+    const oldDocument = globalThis.document, oldDollar = globalThis.$;
+    const host = { innerHTML: '' };
+    globalThis.document = { createElement: jest.fn(() => host) };
+    globalThis.$ = () => { throw new Error('duplication confirmation must not use jQuery'); };
+    shell.renderTemplateAsync.mockResolvedValue('<div>Confirm</div>');
+    shell.callGenericPopup.mockResolvedValue(false);
+    try {
+        expect(await duplicateCharacter()).toBe('');
+        expect(host.innerHTML).toBe('<div>Confirm</div>');
+        expect(shell.callGenericPopup).toHaveBeenCalledWith(host, 1);
+        expect(fetch).not.toHaveBeenCalled();
+        expect(emit).not.toHaveBeenCalled();
+    } finally { globalThis.document = oldDocument; globalThis.$ = oldDollar; }
+});
+
+test('selecting a character refreshes the React-owned active row and authoring mirrors without mutating rows', async () => {
+    const { transformWithOxc } = await import('vite');
+    const source = fs.readFileSync(new URL('../app/lib/character-library-row-helpers.ts', import.meta.url), 'utf8');
+    const compiled = await transformWithOxc(source, 'character-library-row-helpers.ts');
+    const { projectCharacterEntityToRowModel, buildCharacterRowClassName } = await import(`data:text/javascript;base64,${Buffer.from(compiled.code).toString('base64')}`);
+    const projections = [];
+    Object.assign(state.characters[0], {
+        name: 'Alice', description: 'Biography', avatar: 'alice.png', first_mes: 'Hello',
+        chat: null, create_date: 'original', json_data: '{"a":1}', scenario: undefined,
+        data: { creator_notes: 'Notes', tags: ['one', 'two'], extensions: { world: 'Lore', depth_prompt: { depth: 0, role: 0 } } },
+    });
+    Object.assign(shell, {
+        setTemporaryChatStatus: jest.fn(), select_rm_create: jest.fn(),
+        updateFavButtonState: jest.fn(), timestampToMoment: () => ({ toISOString: () => 'iso-date' }),
+        formatCreatorNotes: jest.fn(notes => `<p>${notes}</p>`), getThumbnailUrl: () => '/alice.png',
+        setWorldInfoButtonClass: jest.fn(), checkEmbeddedWorld: jest.fn(),
+        getCharacterSource: () => 'local', saveSettingsDebounced: jest.fn(),
+        syncReactCharacterLibraryToolbarState: jest.fn(() => {
+            projections.push(state.characters.map((item, id) => {
+                const row = projectCharacterEntityToRowModel({ type: 'character', id, item }, { activeCharacterId: state.this_chid });
+                return buildCharacterRowClassName({ isFav: row.isFav, isActive: row.isActive }).includes(' is_active');
+            }));
+        }),
+    });
+    const ids = ['add_avatar_button', 'character_name_pole', 'description_textarea', 'creator_notes_textarea',
+        'character_version_textarea', 'system_prompt_textarea', 'post_history_instructions_textarea', 'tags_textarea',
+        'creator_textarea', 'firstmessage_textarea', 'scenario_pole', 'depth_prompt_prompt', 'depth_prompt_depth',
+        'depth_prompt_role', 'selected_chat_pole', 'create_date_pole', 'avatar_url_pole', 'chat_import_avatar_url',
+        'chat_import_character_name', 'character_json_data'];
+    const elements = Object.fromEntries(ids.map(id => [id, { value: 'unchanged' }]));
+    elements.rm_print_characters_block = { dataset: { reactCharacterLibraryOwner: 'react' }, querySelectorAll: () => { throw new Error('React rows must not be mutated'); } };
+    const world = { dataset: {} }; elements.set_character_world = world;
+    for (const id of ['delete_button', 'export_button', 'world_button', 'rm_button_back', 'create_button_label', 'renameCharButton']) {
+        elements[id] = { style: {} };
+    }
+    elements.create_button = { setAttribute(name, value) { this[name] = value; } };
+    elements['character_popup-button-h3'] = { textContent: '' };
+    const legacyHeading = { textContent: '' };
+    elements.rm_button_selected_ch = { querySelectorAll: () => [legacyHeading] };
+    elements.avatar_load_preview = { setAttribute(name, value) { this[name] = value; } };
+    elements.creator_notes_spoiler = { innerHTML: 'old notes' };
+    elements.character_world = { value: 'previous', dispatchEvent: jest.fn() };
+    elements.name_div = { classList: { add: jest.fn(), remove: jest.fn() } };
+    elements.form_create = { setAttribute: jest.fn() };
+    elements.character_source = { setAttribute: jest.fn(), removeAttribute: jest.fn() };
+    const nativeSelectors = ['delete_button', 'export_button', 'world_button', 'rm_button_back', 'create_button',
+        'create_button_label', 'renameCharButton', 'character_popup-button-h3', 'rm_button_selected_ch', 'avatar_load_preview',
+        'name_div', 'form_create', 'character_source', 'creator_notes_spoiler', 'character_world'];
+    const greetingControls = [{ dataset: {} }, { dataset: {} }];
+    const editAction = { style: { display: 'none' }, nodeName: 'OPTION', isConnected: true };
+    const duplicate = { style: { display: 'none' }, nodeName: 'BUTTON', isConnected: true };
+    const settings = { style: { display: 'none' }, nodeName: 'OPTION', isConnected: true };
+    const chatLore = { style: { display: 'none' }, nodeName: 'BUTTON', isConnected: true };
+    const visibility = { '#dupe_button': [duplicate], '.character-detail-edit-action': [editAction], '#set_chat_character_settings': [settings], '.form_create_bottom_buttons_block .chat_lorebook_button': [chatLore] };
+    const ownerDocument = { defaultView: { getComputedStyle: element => ({ display: element.style.display || (element === editAction ? 'none' : 'inline-block') }) }, body: { appendChild: node => node, removeChild: () => {} }, createElement: tag => ({ nodeName: tag, style: {} }) };
+    for (const element of [editAction, duplicate, settings, chatLore]) element.ownerDocument = ownerDocument;
+    globalThis.document = {
+        getElementById: id => elements[id] ?? null,
+        querySelectorAll: selector => selector === '.open_alternate_greetings' ? greetingControls : visibility[selector] ?? [],
+    };
+    const chain = new Proxy({}, { get: (_target, prop) => prop === 'data' ? () => chain : () => chain });
+    globalThis.$ = selector => {
+        if (selector.includes('character_select') || selector.startsWith('#CharID')) throw new Error('React row must not use jQuery');
+        if (selector === '.open_alternate_greetings') throw new Error('greeting identity must not use jQuery');
+        if (selector in visibility) throw new Error('selection visibility must not use jQuery');
+        if ([...ids, ...nativeSelectors].some(id => selector === `#${id}`)) throw new Error(`authoring mirror uses jQuery: ${selector}`);
+        return chain;
+    };
+    select_selected_character('0', { switchMenu: false });
+    expect(duplicate.style.display).toBe('');
+    expect(settings.style.display).toBe('');
+    expect(editAction.style.display).toBe('inline-block');
+    expect(chatLore.style.display).toBe('');
+    expect(shell.syncReactCharacterLibraryToolbarState).toHaveBeenCalledTimes(1);
+    expect(projections).toEqual([[true, false]]);
+    expect(elements.character_name_pole.value).toBe('Alice');
+    expect(elements.description_textarea.value).toBe('Biography');
+    expect(elements.tags_textarea.value).toBe('one, two');
+    expect(elements.scenario_pole.value).toBe('');
+    expect(elements.selected_chat_pole.value).toBe('');
+    expect(String(elements.depth_prompt_depth.value)).toBe('0');
+    expect(elements.create_date_pole.value).toBe('iso-date');
+    expect(elements.character_json_data.value).toBe('{"a":1}');
+    expect(elements.creator_notes_spoiler.innerHTML).toBe('<p>Notes</p>');
+    expect(shell.formatCreatorNotes).toHaveBeenCalledWith('Notes', 'alice.png');
+    expect(elements.character_world.value).toBe('Lore');
+    expect(elements.character_world.dispatchEvent).not.toHaveBeenCalled();
+    expect(elements.delete_button.style.display).toBe('flex');
+    expect(elements.rm_button_back.style.display).toBe('none');
+    expect(elements.create_button.value).toBe('Save');
+    expect(legacyHeading.textContent).toBe('Alice');
+    expect(elements['character_popup-button-h3'].textContent).toBe('Alice');
+    expect(elements.avatar_load_preview.src).toBe('/alice.png');
+    expect(elements.name_div.classList.remove).toHaveBeenCalledWith('displayBlock');
+    expect(elements.name_div.classList.add).toHaveBeenCalledWith('displayNone');
+    expect(elements.form_create.setAttribute).toHaveBeenCalledWith('actiontype', 'editcharacter');
+    expect(elements.character_source.removeAttribute).toHaveBeenCalledWith('disabled');
+    shell.getCharacterSource = () => null;
+    state.characters[0].data.extensions.world = null;
+    state.characters[0].data.creator_notes = '';
+    state.characters[0].creatorcomment = 'Legacy notes';
+    select_selected_character('0', { switchMenu: false });
+    expect(elements.character_world.value).toBe('');
+    expect(elements.character_world.dispatchEvent).not.toHaveBeenCalled();
+    expect(shell.formatCreatorNotes).toHaveBeenLastCalledWith('Legacy notes', 'alice.png');
+    expect(elements.creator_notes_spoiler.innerHTML).toBe('<p>Legacy notes</p>');
+    expect(elements.character_source.setAttribute).toHaveBeenCalledWith('disabled', 'disabled');
+    expect(world.dataset.chid).toBe('0');
+    expect(greetingControls.map(control => control.dataset.chid)).toEqual(['0', '0']);
+    expect(shell.setWorldInfoButtonClass).toHaveBeenCalledWith('0');
+    state.this_chid = '1';
+    select_selected_character('1', { switchMenu: false });
+    expect(greetingControls.map(control => control.dataset.chid)).toEqual(['1', '1']);
+    expect(projections.at(-1)).toEqual([false, true]);
+    const count = projections.length;
+    expect(select_selected_character('99', { switchMenu: false })).toBe(false);
+    expect(projections).toHaveLength(count);
+    elements.rm_print_characters_block.dataset.reactCharacterLibraryOwner = '';
+    const classes = initial => ({ values: new Set(initial), add(name) { this.values.add(name); }, remove(name) { this.values.delete(name); } });
+    const row0 = { classList: classes(['character_select']) }, row1 = { classList: classes(['character_select', 'is_active']) };
+    elements.rm_print_characters_block.querySelectorAll = selector => selector === '.character_select' ? [row0, row1] : [];
+    elements.CharID0 = row0;
+    globalThis.$ = () => { throw new Error('non-React selection rows must not use jQuery'); };
+    select_selected_character('0', { switchMenu: false });
+    expect(row0.classList.values.has('is_active')).toBe(true);
+    expect(row1.classList.values.has('is_active')).toBe(false);
+    expect(projections).toHaveLength(count);
 });

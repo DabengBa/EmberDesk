@@ -1,4 +1,4 @@
-import toastr from '../../notifications.js';
+import notificationOwner from '../../notifications.js';
 import { characters, getCurrentChatId, messageFormatting, reloadCurrentChat, saveSettingsDebounced, this_chid } from '../../../script.js';
 import { eventSource, event_types } from '../../events.js';
 import { feature_settings, renderFeatureTemplateAsync } from '../../feature-settings.js';
@@ -13,6 +13,8 @@ import { createRegexPresetController } from './regex-preset-controller.js';
 import { t } from '../../i18n.js';
 import { accountStorage } from '../../util/AccountStorage.js';
 import { getPresetManager, saveSettingsStrict } from '../../preset-manager.js';
+
+const toastr = notificationOwner.native ?? notificationOwner;
 
 // Re-exports for legacy extensions
 export { getRegexScripts };
@@ -205,12 +207,11 @@ async function onRegexDebuggerOpenClick() {
         },
         commands: {
             openStepsPopup: html => callGenericPopup(html, POPUP_TYPE.TEXT, t`Step-by-step Transformation`, { wide: true }),
-            openFinalPopup: ({ text, html }) => callGenericPopup(
-                html !== undefined ? html : $(document.createElement('pre')).text(text),
-                POPUP_TYPE.TEXT,
-                t`Final Output`,
-                { wide: true, large: true },
-            ),
+            openFinalPopup: ({ text, html }) => {
+                const content = html !== undefined ? html : document.createElement('pre');
+                if (html === undefined) content.textContent = text;
+                return callGenericPopup(content, POPUP_TYPE.TEXT, t`Final Output`, { wide: true, large: true });
+            },
         },
         ref: debuggerRef,
     });
@@ -313,9 +314,8 @@ const regexToolbar = {
  */
 async function onRegexEditorOpenClick(existingId, scriptType, target = captureRegexTarget(scriptType)) {
     const host = document.createElement('div');
-    const wrapper = $(host);
     const editorHost = document.createElement('div');
-    wrapper.append(editorHost);
+    host.append(editorHost);
     const array = getScriptsForTarget(target);
 
     let initial = null;
@@ -337,7 +337,7 @@ async function onRegexEditorOpenClick(existingId, scriptType, target = captureRe
         infoFor: editorInfoFor,
     });
 
-    const popupResult = await new Popup(wrapper, POPUP_TYPE.CONFIRM, '', {
+    const popupResult = await new Popup(host, POPUP_TYPE.CONFIRM, '', {
         okButton: t`Save`,
         cancelButton: t`Cancel`,
         allowVerticalScrolling: true,
@@ -745,8 +745,8 @@ export async function init() {
         return;
     }
 
-    const regexSettingsHost = $(document.createElement('div'));
-    $(regexPanel).append(regexSettingsHost);
+    const regexSettingsHost = document.createElement('div');
+    regexPanel.append(regexSettingsHost);
     const workspacePanels = await loadWorkspacePanelsModule();
     regexListBridge.refresh();
     // Published library snapshots replace character objects. Refresh only the
@@ -768,7 +768,7 @@ export async function init() {
         uuid: uuidv4,
         SCRIPT_TYPES,
     });
-    workspacePanels.mountRegexSettings(regexSettingsHost.get(0), { list: regexListBridge, toolbar: regexToolbar, presets: presetController, toolBindings: getToolBindingsBridge() });
+    workspacePanels.mountRegexSettings(regexSettingsHost, { list: regexListBridge, toolbar: regexToolbar, presets: presetController, toolBindings: getToolBindingsBridge() });
 
     await loadRegexScripts();
 

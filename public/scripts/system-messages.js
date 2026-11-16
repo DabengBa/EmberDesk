@@ -150,9 +150,12 @@ export function sendSystemMessage(type, text, extra = {}) {
     }
 }
 
-$(document).on('click', '[data-displayHelp]', function (e) {
+document.addEventListener('click', function (e) {
+    const target = e.target?.nodeType === 3 ? e.target.parentElement : e.target;
+    const link = target?.closest?.('[data-displayHelp]');
+    if (!link) return;
     e.preventDefault();
-    const page = String($(this).data('displayhelp')).trim().toLowerCase();
+    const page = String(link.getAttribute('data-displayHelp')).trim().toLowerCase();
 
     switch (page) {
         case 'format':

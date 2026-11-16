@@ -116,6 +116,19 @@ run without a production loader or emitted graph.
 
 ## Migrated slices
 
+The canonical shadow import and audit modules for characters/chat stats, chat,
+World Info, settings, secrets, managed media and presets, plus the World Info
+projection helper, are `src/canonical-*-shadow-import.ts` and
+`src/canonical-world-info-projection.ts`. Callers including
+`src/canonical-backend.js` and `src/canonical-storage-slice-registry.js` use
+their actual `.ts` paths; there are no JavaScript shims for these modules.
+The migration preserves existing import, audit and projection boundaries; the
+[storage roadmap](canonical-sqlite-storage-roadmap.md) owns their behavior.
+Focused regression coverage includes `tests/u004-sqlite-import.test.js`,
+`tests/u004-chat-import.test.js`, `tests/u004-world-info-import.test.js`,
+`tests/u004-settings-backend.test.js`, `tests/u004-secrets-import.test.js`,
+`tests/u004-managed-media-import.test.js` and `tests/u004-presets-import.test.js`.
+
 `src/endpoints/settings-store.ts` and `src/endpoints/presets-store.ts` are the
 sole implementations of their canonical stores. Presets continue to import
 `stableSettingsPayloadJson` and `hashSettingsPayload` from settings. Settings

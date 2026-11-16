@@ -11,6 +11,7 @@ import {
     setActiveCharacter,
     getEntitiesList,
     buildAvatarList,
+
     menu_type,
     substituteParams,
     openWorkspaceChildSlotHost,
@@ -38,6 +39,7 @@ import { accountStorage } from './util/AccountStorage.js';
 import { getCurrentUserHandle } from './user.js';
 import { getComposerValue, setComposerValue, subscribeComposerValue } from './main-chat-composer-service.js';
 import { scrollChatTo } from './chat-ui-motion.js';
+
 
 // Populated in initRossMods: drawer/panel markup is React-mounted after module eval.
 // The settings drawer opener is injected by script.js — importing it here would
@@ -203,20 +205,22 @@ export async function RA_CountCharTokens() {
 }
 export async function favsToHotswap() {
     const entities = getEntitiesList({ doFilter: false });
-    const container = $('#right-nav-panel .hotswap');
+    const containers = document.querySelectorAll('#right-nav-panel .hotswap');
 
     // Hard limit is required because even if all hotswaps don't fit the screen, their images would still be loaded
     // 25 is roughly calculated as the maximum number of favs that can fit an ultrawide monitor with the default theme
     const FAVS_LIMIT = 25;
     const favs = entities.filter(x => x.item.fav || x.item.fav == 'true').slice(0, FAVS_LIMIT);
 
+
     //helpful instruction message if no characters are favorited
     if (favs.length == 0) {
-        container.html(`<small><span><i class="fa-solid fa-star"></i>&nbsp;${DOMPurify.sanitize(container.attr('no_favs'))}</span></small>`);
+        const label = DOMPurify.sanitize(containers[0]?.getAttribute('no_favs'));
+        containers.forEach(container => { container.innerHTML = `<small><span><i class="fa-solid fa-star"></i>&nbsp;${label}</span></small>`; });
         return;
     }
 
-    buildAvatarList(container, favs, { interactable: true, highlightFavs: false });
+    buildAvatarList(containers, favs, { interactable: true, highlightFavs: false });
 }
 
 //changes input bar and send button display depending on connection status
@@ -489,8 +493,8 @@ export function initRossMods({ openWorkspaceShellSettings = null, drawerService 
     SelectedCharacterTab = document.getElementById('rm_button_selected_ch');
 
     //when "+New Character" is clicked
-    $('#rm_button_create').on('click', function () {
-        $(SelectedCharacterTab).children('h2').html('');        // empty nav's 3rd panel tab
+    document.getElementById('rm_button_create')?.addEventListener('click', function () {
+        SelectedCharacterTab?.querySelectorAll(':scope > h2').forEach(heading => { heading.innerHTML = ''; }); // empty nav's 3rd panel tab
     });
     //when any input is made to the create/edit character form textareas
     $('#rm_ch_create_block').on('input', function () { countTokensDebounced(); });
@@ -521,8 +525,12 @@ export function initRossMods({ openWorkspaceShellSettings = null, drawerService 
     // when a char is selected from the list, save them as the auto-load character for next page load
 
     // when a char is selected from the list, save their name as the auto-load character for next page load
-    $(document).on('click', '.character_select', function () {
-        const characterId = $(this).attr('data-chid');
+    document.addEventListener('click', function onCharacterSelectSave(event) {
+        if (event.button >= 1) return;
+        const target = event.target instanceof Element ? event.target : event.target?.parentElement;
+        const character = target?.closest('.character_select');
+        if (!character || character.disabled === true) return;
+        const characterId = character.getAttribute('data-chid') ?? undefined;
         setActiveCharacter(characterId);
         saveSettingsDebounced();
     });

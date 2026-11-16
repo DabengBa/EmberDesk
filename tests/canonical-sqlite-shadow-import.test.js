@@ -15,7 +15,7 @@ import {
     invalidateCanonicalAuditStatus,
     persistCanonicalAuditStatus,
     runCanonicalShadowImport,
-} from '../src/canonical-sqlite-shadow-import.js';
+} from '../src/canonical-sqlite-shadow-import.ts';
 import { recordProjectionRepair } from '../src/endpoints/character-store.ts';
 import { buildCharacterFileSnapshotRow } from '../src/endpoints/character-file-snapshot.js';
 

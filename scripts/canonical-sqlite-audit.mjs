@@ -5,7 +5,7 @@ import process from 'node:process';
 
 import { createCanonicalSqliteManager } from '../src/canonical-sqlite.js';
 import { runCanonicalMigrations } from '../src/canonical-sqlite-migrations.js';
-import { runCanonicalChatShadowImport } from '../src/canonical-chat-shadow-import.js';
+import { runCanonicalChatShadowImport } from '../src/canonical-chat-shadow-import.ts';
 import { runCanonicalAudit, runCanonicalSliceAudit } from '../src/canonical-sqlite-operator.js';
 import { getUserDirectories } from '../src/user-directories.ts';
 

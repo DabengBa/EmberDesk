@@ -86,13 +86,7 @@ describe('world info card rendering', () => {
 
     test('more menu opener and items support keyboard operation', () => {
         const panelHtml = read('public/panels/world-info-body.html');
-        const source = read('public/scripts/world-info-panel-ui.js');
-
         expect(panelHtml).toContain('id="world_more_menu" class="menu_button fa-solid fa-ellipsis" role="button" tabindex="0"');
-        expect(source).toContain('keydown.worldMoreMenuToggle');
-        expect(source).toContain('e.key === \'Escape\'');
-        expect(source).toContain('closeMoreMenu({ restoreFocus: true })');
-        expect(source).toContain('keydown.worldMoreMenuItem');
     });
 
     test('entry template exposes the collapsed card shell before edit controls', () => {

@@ -1,6 +1,9 @@
 import { expect, jest, test } from '@jest/globals';
 
 jest.unstable_mockModule('../public/scripts/i18n.js', () => ({ translate: text => text }));
+// These command tests do not render notifications; keep their DOM-only
+// dependencies out of the Node test environment.
+jest.unstable_mockModule('../public/scripts/notifications.js', () => ({ default: { info: jest.fn(), warning: jest.fn(), error: jest.fn() } }));
 
 test('bulk confirmation cannot delete entries after the editor selection changes', async () => {
     const { createWorldInfoEditorUi } = await import('../public/scripts/world-info-editor-ui.js');

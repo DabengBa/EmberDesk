@@ -12,7 +12,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { EventEmitter } from 'node:events';
 import { runCanonicalMigrations } from '../src/canonical-sqlite-migrations.js';
 import { canonicalSqliteManager } from '../src/canonical-sqlite.js';
-import { getPersistedCanonicalAuditStatus } from '../src/canonical-sqlite-shadow-import.js';
+import { getPersistedCanonicalAuditStatus } from '../src/canonical-sqlite-shadow-import.ts';
 import { upsertCanonicalSettingsDocument } from '../src/endpoints/settings-store.ts';
 import { setConfigFilePath } from '../src/util.js';
 import { createCharacterLibraryChangeObserver } from '../src/character-library-change-observer.js';

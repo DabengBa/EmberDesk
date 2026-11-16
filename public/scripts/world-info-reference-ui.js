@@ -1,11 +1,13 @@
-import toastr from './notifications.js';
+import notificationOwner from './notifications.js';
 import { world_names } from './world-info-state.js';
+
+const toastr = notificationOwner.native ?? notificationOwner;
 
 /** Character embedded-book and global-selection shell UI compatibility. */
 export function createWorldInfoReferenceUi({ characters, accountStorage, callGenericPopup, POPUP_TYPE, Popup, t, convertCharacterBook, saveWorldInfo, updateWorldInfoList, getWorldInfoShell, selectWorldInfoEditorName, setWorldInfoGlobalActiveNames }) {
     function setWorldInfoButtonClass(chid, forceValue = undefined) {
         if (forceValue !== undefined) {
-            $('#set_character_world, #world_button').toggleClass('world_set', forceValue);
+            document.querySelectorAll('#set_character_world, #world_button').forEach(button => button.classList.toggle('world_set', forceValue));
             return;
         }
 
@@ -15,18 +17,22 @@ export function createWorldInfoReferenceUi({ characters, accountStorage, callGen
 
         const world = characters[chid]?.data?.extensions?.world;
         const worldSet = Boolean(world && world_names.includes(world));
-        $('#set_character_world, #world_button').toggleClass('world_set', worldSet);
+        document.querySelectorAll('#set_character_world, #world_button').forEach(button => button.classList.toggle('world_set', worldSet));
     }
 
     function checkEmbeddedWorld(chid) {
-        $('#import_character_info').hide();
+        const importControl = document.querySelector('#import_character_info');
+        if (importControl) importControl.style.display = 'none';
 
         if (chid === undefined) {
             return false;
         }
 
         if (characters[chid]?.data?.character_book) {
-            $('#import_character_info').data('chid', chid).show();
+            if (importControl) {
+                importControl.worldInfoChid = chid;
+                importControl.style.display = '';
+            }
 
             // Only show the alert once per character
             const checkKey = `AlertWI_${characters[chid].avatar}`;
@@ -53,7 +59,7 @@ export function createWorldInfoReferenceUi({ characters, accountStorage, callGen
     }
 
     async function importEmbeddedWorldInfo(skipPopup = false) {
-        const chid = $('#import_character_info').data('chid');
+        const chid = document.querySelector('#import_character_info')?.worldInfoChid;
 
         if (chid === undefined || chid === -1) {
             return;
@@ -79,7 +85,11 @@ export function createWorldInfoReferenceUi({ characters, accountStorage, callGen
 
         await saveWorldInfo(bookName, convertedBook, true);
         await updateWorldInfoList();
-        $('#character_world').val(bookName).trigger('change');
+        const characterWorld = document.getElementById('character_world');
+        if (characterWorld) {
+            characterWorld.value = bookName;
+            characterWorld.dispatchEvent(new Event('change', { bubbles: true }));
+        }
 
         toastr.success(t`The world '${bookName}' has been imported and linked to the character successfully.`, t`World/Lorebook imported`);
 

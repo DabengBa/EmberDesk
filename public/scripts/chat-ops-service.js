@@ -218,8 +218,9 @@ export async function loadEarlierChatMessages(messagesToLoad = null) {
         return;
     }
 
-    const firstDisplayedMesId = state.chatElement.children('.mes').first().attr('mesid');
-    const firstDisplayedMessage = state.chatElement.children('.mes').first();
+    const chatElement = state.chatElement?.jquery ? state.chatElement[0] : state.chatElement;
+    const firstDisplayedMessage = Array.from(chatElement?.children ?? []).find(element => element.matches('.mes'));
+    const firstDisplayedMesId = firstDisplayedMessage?.getAttribute('mesid') ?? undefined;
     let messageId = Number(firstDisplayedMesId);
     let count = messagesToLoad || CHAT_TRUNCATION;
 
@@ -230,9 +231,9 @@ export async function loadEarlierChatMessages(messagesToLoad = null) {
     }
 
     console.debug('Inserting messages before', messageId, 'count', count, 'chat length', state.chat.length);
-    const prevHeight = state.chatElement.prop('scrollHeight');
-    const showMoreButton = $('#show_more_messages');
-    const isButtonInView = isElementInViewport(showMoreButton[0]);
+    const prevHeight = chatElement?.scrollHeight;
+    const showMoreButton = document.getElementById('show_more_messages');
+    const isButtonInView = isElementInViewport(showMoreButton ?? undefined);
 
     const firstId = clamp(messageId - count, 0, Infinity);
     const messageElements = [];
@@ -240,25 +241,28 @@ export async function loadEarlierChatMessages(messagesToLoad = null) {
         messageElements.push(updateMessageElement(message, { messageId: firstId + id }));
     });
     const messageNodes = messageElements
-        .map(messageElement => messageElement?.[0] instanceof HTMLElement ? messageElement[0] : null)
+        .map(messageElement => {
+            const node = messageElement?.jquery ? messageElement[0] : messageElement?.[0] ?? messageElement;
+            return node instanceof HTMLElement ? node : null;
+        })
         .filter(Boolean);
 
     // Insert older rows ahead of the current first message so load-more keeps
     // chronological DOM order and scroll compensation remains stable.
-    if (firstDisplayedMessage[0] instanceof HTMLElement && messageNodes.length > 0) {
-        firstDisplayedMessage[0].before(...messageNodes);
-    } else if (showMoreButton[0]) {
-        showMoreButton[0].after(...messageNodes);
+    if (firstDisplayedMessage instanceof HTMLElement && messageNodes.length > 0) {
+        firstDisplayedMessage.before(...messageNodes);
+    } else if (showMoreButton) {
+        showMoreButton.after(...messageNodes);
     } else {
-        state.chatElement.prepend(messageNodes);
+        chatElement?.prepend(...messageNodes);
     }
     if (firstId === 0) {
-        showMoreButton.remove();
+        showMoreButton?.remove();
     }
 
-    if (isButtonInView) {
-        const newHeight = state.chatElement.prop('scrollHeight');
-        state.chatElement.scrollTop(newHeight - prevHeight);
+    if (isButtonInView && chatElement) {
+        const newHeight = chatElement.scrollHeight;
+        chatElement.scrollTop = newHeight - prevHeight;
     }
 
     applyStylePins();
@@ -284,7 +288,13 @@ export async function printMessages() {
 
     if (state.chat.length > count) {
         startIndex = state.chat.length - count;
-        state.chatElement.append('<div id="show_more_messages">Show more messages</div>');
+        const chatElement = state.chatElement?.jquery ? state.chatElement[0] : state.chatElement;
+        if (chatElement) {
+            const showMoreButton = document.createElement('div');
+            showMoreButton.id = 'show_more_messages';
+            showMoreButton.textContent = 'Show more messages';
+            chatElement.append(showMoreButton);
+        }
     }
 
     await redisplayChat({ startIndex, fade: false });
@@ -380,11 +390,13 @@ export async function clearChat({ clearData = false, preserveMainChatScrollSnaps
         // is enough to clear rows and avoids a second DOM writer.
         if (!isReactMainChatOwner()) {
             // This also removes non '.mes' elements, e.g. '#show_more_messages'.
-            state.chatElement.children().remove();
+            const roots = state.chatElement?.jquery ? Array.from(state.chatElement) : [state.chatElement];
+            roots.forEach(root => Array.from(root?.children ?? []).forEach(child => child.remove()));
         }
-        if ($('.zoomed_avatar[forChar]').length) {
+        const zoomedAvatars = document.querySelectorAll('.zoomed_avatar[forChar]');
+        if (zoomedAvatars.length) {
             console.debug('saw avatars to remove');
-            $('.zoomed_avatar[forChar]').remove();
+            zoomedAvatars.forEach(avatar => avatar.remove());
         } else { console.debug('saw no avatars'); }
 
         if (clearData) state.chat.length = 0;
@@ -869,7 +881,9 @@ export async function getChat({ strictReload = false } = {}) {
         delay(debounce_timeout.short).then(() => {
             unsubscribeFocus();
             if (focusContextChanged) return;
-            if ($(document.activeElement).is('input:visible, textarea:visible, select:visible, button:visible, a:visible, [contenteditable]:visible')) {
+            const activeElement = document.activeElement;
+            if (activeElement?.matches('input, textarea, select, button, a, [contenteditable]')
+                && (activeElement.offsetWidth || activeElement.offsetHeight || activeElement.getClientRects().length)) {
                 return;
             }
             requestComposerFocus();
@@ -901,7 +915,8 @@ export async function openCharacterChat(file_name) {
     state.characters[state.this_chid].chat = file_name;
     state.chat_metadata = {};
     if (await getChat() === false) return;
-    $('#selected_chat_pole').val(file_name);
+    const selectedChatInput = globalThis.document?.getElementById('selected_chat_pole');
+    if (selectedChatInput) selectedChatInput.value = file_name ?? '';
     await createOrEditCharacter(new CustomEvent('newChat'));
 }
 
@@ -1086,7 +1101,8 @@ export async function renameCharacterChat({ characterId, oldFileName, newFileNam
 
         if (characterId !== undefined && String(characterId) === String(state.this_chid) && state.characters[characterId]?.chat === oldFileName) {
             state.characters[characterId].chat = newFileName;
-            $('#selected_chat_pole').val(state.characters[characterId].chat);
+            const selectedChatInput = globalThis.document?.getElementById('selected_chat_pole');
+            if (selectedChatInput) selectedChatInput.value = state.characters[characterId].chat ?? '';
             await createOrEditCharacter();
         }
 
@@ -1127,7 +1143,10 @@ export async function closeCurrentChatForDelete() {
             state.selected_button = 'characters';
         },
         selectCharactersView: () => {
-            $('#rm_button_selected_ch').children('h2').text('');
+            const selectedCharacterButton = globalThis.document?.getElementById('rm_button_selected_ch');
+            for (const child of selectedCharacterButton?.children ?? []) {
+                if (child.tagName === 'H2') child.textContent = '';
+            }
             select_rm_characters();
         },
         emitChatChanged: async () => {

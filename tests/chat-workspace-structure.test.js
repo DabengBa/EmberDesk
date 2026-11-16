@@ -241,8 +241,9 @@ describe('chat workspace structure', () => {
             'function buildChatMessageRichBody(message, { messageId = state.chat.indexOf(message) } = {}) {',
             'return buildChatMessageRichBody(message, { messageId }).messageHtml;',
             'const richBody = buildChatMessageRichBody(mes, { messageId });',
-            'messageElement.find(\'.mes_bias\').html(richBody.biasHtml);',
         ], { contractName: 'message service render delegation' });
+        // The bias and message DOM population are exercised through the real
+        // addOneMessage export in u001-message-template-native.test.js.
         expectContainsMarkers(scriptSource, [
             'formatMessage: messageFormatting',
         ], { contractName: 'script.js render service delegation' });
@@ -253,25 +254,18 @@ describe('chat workspace structure', () => {
 
         expectContainsMarkers(scriptSource, [
             'Promise.race([Promise.all(mediaPromises), delay(debounce_timeout.short)]).then(() => {',
-            'mediaWrapper.empty().append(mediaBlocks);',
+            'appendToWrappers(mediaWrapper, mediaBlocks);',
             'void mountReactMainChatMessageListPanel();',
         ]);
-        const appendIndex = scriptSource.indexOf('mediaWrapper.empty().append(mediaBlocks);');
+        const appendIndex = scriptSource.indexOf('appendToWrappers(mediaWrapper, mediaBlocks);');
         const refreshIndex = scriptSource.indexOf('void mountReactMainChatMessageListPanel();', appendIndex);
         expect(refreshIndex).toBeGreaterThan(appendIndex);
     });
 
     test('keeps reasoning header toggle explicit for React-owned message rows', () => {
-        const reasoningSource = readRepoFile('public/scripts/reasoning.js');
         const rowSource = readRepoFile('app/components/main-chat/MainChatMessageRow.tsx');
-        const headerBlock = reasoningSource.match(/\$\(document\)\.on\('click', '\.mes_reasoning_header',[\s\S]*?\n    \}\);/)?.[0] ?? '';
-
-        expectContainsMarkers(headerBlock, [
-            'if (isReactMainChatMessageRow(this)) return;',
-            "const wasOpen = messageBlock.find('.mes_reasoning_details').prop('open') === true;",
-            'commands.setMessageReasoningOpen(messageId, !wasOpen)',
-        ]);
-        expect(headerBlock).not.toMatch(/\.prop\('open',|\.attr\('open',|\.removeAttr\('open'/);
+        // The legacy delegation and React-owner guard are exercised by
+        // u001-reasoning-native.test.js rather than tied to source syntax here.
         const summaryBlock = rowSource.match(/<summary\s+className="mes_reasoning_summary[\s\S]*?<div className="mes_reasoning_header_block/)?.[0] ?? '';
         expectContainsMarkers(rowSource, ['open={message.reasoningOpen}', 'commands?.setMessageReasoningOpen(messageUid, open)']);
         expectContainsMarkers(summaryBlock, ['event.preventDefault();', 'event.stopPropagation();', 'setReasoningOpen(!message.reasoningOpen);']);
@@ -391,12 +385,8 @@ describe('chat workspace structure', () => {
 
         expect(scriptSource).toContain("function showGenerationAutoRecoveryStatus(messageId, status, recoveryStage = 'primary')");
         expect(scriptSource).toContain('function clearGenerationAutoRecoveryStatus(messageId)');
-        expect(scriptSource).toContain("const statusRow = $('<div class=\"generation_auto_recovery_status\"");
-        expect(scriptSource).toContain('statusRow.attr(\'role\', \'status\');');
-        expect(scriptSource).toContain("statusRow.attr('data-recovery-stage', recoveryStage === 'fallback' ? 'fallback' : 'primary');");
-        expect(scriptSource).toContain("messageElement.find('.mes_text').after(statusRow);");
-        expect(scriptSource).not.toContain("messageElement.find('.mes_text').text(status");
-        expect(scriptSource).toContain("messageElement.find('.generation_auto_recovery_status').remove();");
+        // DOM placement and status removal are exercised against the production
+        // recovery functions in u001-script-recovery-native.test.js.
         expect(scriptSource).not.toContain('generation_failure_retry');
 
         expect(styleSource).toContain('.generation_auto_recovery_status');

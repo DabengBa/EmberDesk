@@ -1,5 +1,7 @@
-import toastr from './notifications.js';
+import notificationOwner from './notifications.js';
 import { world_info, world_names, selected_world_info, setWorldNames } from './world-info-state.js';
+
+const toastr = notificationOwner.native ?? notificationOwner;
 
 /** Book lifecycle and character/chat reference operations. */
 export function createWorldInfoBookCommands({ POPUP_TYPE, showLocalDialog, t, equalsIgnoreCaseAndAccents, saveWorldInfo, setWorldInfoGlobalActiveNames, selectWorldInfoEditorName, saveSettingsDebounced, characters, getRequestHeaders, getOneCharacter, getCurrentShellCharacterId, getCharacterWorldDraftIdentity, select_selected_character, setWorldInfoButtonClass, flushDeletedWorldsFromUI, getSanitizedFilename, checkOverwriteExistingData, updateWorldInfoList, hideWorldEditor, chat_metadata, METADATA_KEY, openWorldInfoEditor, renderTemplateAsync, getCurrentChatId, saveMetadata, callGenericPopup, loadWorldInfo, deleteWIOriginalDataValue, getSelectedWorldInfoEditorName, reloadEditor, getCurrentShellMenuType, create_save, createOrEditCharacter, getCharaFilename, normalizeArray, isWorldInfoDeletionBlocked, runDestructiveOperation = (_names, operation) => operation() }) {
@@ -270,11 +272,13 @@ export function createWorldInfoBookCommands({ POPUP_TYPE, showLocalDialog, t, eq
             return;
         }
 
-        const template = $(await renderTemplateAsync('chatLorebook'));
+        const container = document.createElement('template');
+        container.innerHTML = await renderTemplateAsync('chatLorebook');
+        const template = container.content;
 
-        const worldSelect = template.find('select');
-        const chatName = template.find('.chat_name');
-        chatName.text(getCurrentChatId());
+        const worldSelect = template.querySelector('select');
+        const chatName = template.querySelector('.chat_name');
+        chatName.textContent = getCurrentChatId();
 
         for (const worldName of world_names) {
             const option = document.createElement('option');
@@ -284,16 +288,16 @@ export function createWorldInfoBookCommands({ POPUP_TYPE, showLocalDialog, t, eq
             worldSelect.append(option);
         }
 
-        worldSelect.on('change', function () {
-            const worldName = $(this).val();
+        worldSelect.addEventListener('change', function () {
+            const worldName = this.value;
 
             if (worldName) {
                 chat_metadata[METADATA_KEY] = worldName;
-                $('.chat_lorebook_button').addClass('world_set');
             } else {
                 delete chat_metadata[METADATA_KEY];
-                $('.chat_lorebook_button').removeClass('world_set');
             }
+
+            document.querySelectorAll('.chat_lorebook_button').forEach(button => button.classList.toggle('world_set', Boolean(worldName)));
 
             saveMetadata();
         });
@@ -414,8 +418,9 @@ export function createWorldInfoBookCommands({ POPUP_TYPE, showLocalDialog, t, eq
         const characterId = getCurrentShellCharacterId?.();
         const avatar = characters?.[characterId]?.avatar;
         const draftIdentity = getCharacterWorldDraftIdentity?.();
-        const previousValue = $('#character_world').val();
-        $('#character_world').val(name);
+        const characterWorld = typeof document === 'undefined' ? null : document.getElementById('character_world');
+        const previousValue = characterWorld?.value.replace(/\r/g, '');
+        if (characterWorld) characterWorld.value = name ?? '';
 
         console.debug('Character world selected:', name);
 
@@ -427,13 +432,14 @@ export function createWorldInfoBookCommands({ POPUP_TYPE, showLocalDialog, t, eq
         if (previousValue && !name) {
             try {
                 // Dirty hack to remove embedded lorebook from character JSON data.
-                const data = JSON.parse(String($('#character_json_data').val()));
+                const characterJson = typeof document === 'undefined' ? null : document.getElementById('character_json_data');
+                const data = JSON.parse(String(characterJson?.value.replace(/\r/g, '')));
 
                 if (data?.data?.character_book) {
                     data.data.character_book = undefined;
                 }
 
-                $('#character_json_data').val(JSON.stringify(data));
+                if (characterJson) characterJson.value = JSON.stringify(data);
                 toastr.info(t`Embedded lorebook will be removed from this character.`);
             } catch {
                 console.error('Failed to parse character JSON data.');

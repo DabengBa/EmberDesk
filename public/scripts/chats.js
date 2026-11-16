@@ -257,7 +257,7 @@ export async function populateFileAttachment(message, inputId = 'file_form_input
     } finally {
         const selected = Array.from(fileInput?.files ?? []);
         if (files.length && isCurrent() && selected.length === files.length && selected.every((file, index) => file === files[index])) {
-            $('#file_form').trigger('reset');
+            document.getElementById('file_form')?.reset();
         }
     }
 }
@@ -362,7 +362,7 @@ async function onFileAttach(fileList) {
         // If file is binary
         if (!isValid) {
             toastr.warning(t`File ${file.name} is not supported.`);
-            $('#file_form').trigger('reset');
+            document.getElementById('file_form')?.reset();
             return;
         }
     }
@@ -370,22 +370,31 @@ async function onFileAttach(fileList) {
     const name = fileList.length === 1 ? fileList[0].name : t`${fileList.length} files selected`;
     const size = [...fileList].reduce((acc, file) => acc + file.size, 0);
     const title = [...fileList].map(x => x.name).join('\n');
-    $('#file_form .file_name').text(name).attr('title', title);
-    $('#file_form .file_size').text(humanFileSize(size)).attr('title', size);
-    $('#file_form').removeClass('displayNone');
+    const form = document.getElementById('file_form');
+    const nameElement = form?.querySelector('.file_name');
+    const sizeElement = form?.querySelector('.file_size');
+    if (nameElement) {
+        nameElement.textContent = name;
+        nameElement.setAttribute('title', title);
+    }
+    if (sizeElement) {
+        sizeElement.textContent = humanFileSize(size);
+        sizeElement.setAttribute('title', String(size));
+    }
+    form?.classList.remove('displayNone');
 
     // Reset form on chat change (if not on a welcome screen)
     const currentChatId = getCurrentChatId();
     if (currentChatId) {
         eventSource.once(event_types.CHAT_CHANGED, () => {
-            $('#file_form').trigger('reset');
+            document.getElementById('file_form')?.reset();
         });
     }
 }
 
 /**
  * Deletes file from a message.
- * @param {JQuery<HTMLElement>} messageBlock Message block element
+ * @param {HTMLElement|null} messageBlock Message block element
  * @param {number} messageId Message ID
  * @param {number} fileIndex File index
  */
@@ -456,10 +465,12 @@ async function viewMessageFile(messageId, fileIndex) {
     await openFilePopup(messageFile);
 }
 
+let embedChangeHandler;
+
 /**
  * Inserts a file embed into the message.
  * @param {number} messageId
- * @param {JQuery<HTMLElement>} messageBlock
+ * @param {HTMLElement|null} messageBlock
  * @returns {Promise<void>}
  */
 function embedMessageFile(messageId, messageBlock) {
@@ -470,12 +481,14 @@ function embedMessageFile(messageId, messageBlock) {
         return;
     }
 
-    $('#embed_file_input')
-        .off('change')
-        .on('change', parseAndUploadEmbed)
-        .trigger('click');
+    const input = document.getElementById('embed_file_input');
+    if (!input) return;
+    if (embedChangeHandler) input.removeEventListener('change', embedChangeHandler);
+    embedChangeHandler = parseAndUploadEmbed;
+    input.addEventListener('change', embedChangeHandler);
+    input.click();
 
-    async function parseAndUploadEmbed(/** @type {JQuery.ChangeEvent} */ e) {
+    async function parseAndUploadEmbed(/** @type {Event} */ e) {
         if (!(e.target instanceof HTMLInputElement)) return;
         if (!e.target.files.length) return;
 
@@ -484,7 +497,7 @@ function embedMessageFile(messageId, messageBlock) {
 
             if (!isValid) {
                 toastr.warning(t`File ${file.name} is not supported.`);
-                $('#file_form').trigger('reset');
+                document.getElementById('file_form')?.reset();
                 return;
             }
         }
@@ -831,27 +844,28 @@ async function openGlobalStylesPreferenceDialog() {
     const preference = new StylesPreference(entityId);
     const currentValue = preference.get();
 
-    const template = $(await renderTemplateAsync('globalStylesPreference'));
+    const container = document.createElement('div');
+    container.innerHTML = (await renderTemplateAsync('globalStylesPreference')) ?? '';
+    const template = container.firstElementChild ?? container;
 
-    const allowedRadio = template.find('#global_styles_allowed');
-    const forbiddenRadio = template.find('#global_styles_forbidden');
+    for (const radio of template.querySelectorAll('input[name="global_styles_preference"]')) {
+        radio.addEventListener('change', function () {
+            const allowed = this.id === 'global_styles_allowed';
+            preference.set(allowed);
+            document.getElementById('rm_button_selected_ch')?.click();
+            setGlobalStylesButtonClass(allowed);
+        });
+    }
 
-    template.find('input[name="global_styles_preference"]').on('change', function () {
-        const allowed = this.id === 'global_styles_allowed';
-        preference.set(allowed);
-        $('#rm_button_selected_ch').trigger('click');
-        setGlobalStylesButtonClass(allowed);
-    });
-
-    const currentPreferenceRadio = currentValue ? allowedRadio : forbiddenRadio;
-    template.find(currentPreferenceRadio).prop('checked', true);
+    const currentPreferenceRadio = template.querySelector(currentValue ? '#global_styles_allowed' : '#global_styles_forbidden');
+    if (currentPreferenceRadio) currentPreferenceRadio.checked = true;
 
     await callGenericPopup(template, POPUP_TYPE.TEXT, '', { wide: false, large: false, okButton: t`Done` });
 
     // Re-render the notes if the preference changed
     const newValue = preference.get();
     if (newValue !== currentValue) {
-        $('#rm_button_selected_ch').trigger('click');
+        document.getElementById('rm_button_selected_ch')?.click();
         setGlobalStylesButtonClass(newValue);
     }
 }
@@ -874,8 +888,11 @@ async function checkForCreatorNotesStyles() {
     const preference = new StylesPreference(avatarId);
     const hasPreference = preference.exists();
     if (!hasPreference) {
-        const template = $(await renderTemplateAsync('globalStylesPopup'));
-        template.find('textarea').val(styleContents);
+        const container = document.createElement('div');
+        container.innerHTML = (await renderTemplateAsync('globalStylesPopup')) ?? '';
+        const template = container.firstElementChild ?? container;
+        const preview = template.querySelector('textarea');
+        if (preview) preview.value = styleContents;
         const confirmResult = await callGenericPopup(template, POPUP_TYPE.TEXT, '', {
             wide: false,
             large: false,
@@ -899,7 +916,7 @@ async function checkForCreatorNotesStyles() {
                 break;
         }
 
-        $('#rm_button_selected_ch').trigger('click');
+        document.getElementById('rm_button_selected_ch')?.click();
     }
 
     const currentPreference = preference.get();
@@ -911,10 +928,10 @@ async function checkForCreatorNotesStyles() {
  * @param {boolean|null} state State of the button
  */
 function setGlobalStylesButtonClass(state) {
-    const button = $('#creators_note_styles_button');
-    button.toggleClass('empty', state === null);
-    button.toggleClass('allowed', state === true);
-    button.toggleClass('forbidden', state === false);
+    const button = document.getElementById('creators_note_styles_button');
+    button?.classList.toggle('empty', state === null);
+    button?.classList.toggle('allowed', state === true);
+    button?.classList.toggle('forbidden', state === false);
 }
 
 /**
@@ -1065,7 +1082,7 @@ function expandMessageMedia(messageId, mediaIndex) {
  * Deletes an image from a message.
  * @param {number} messageId Message ID
  * @param {number} mediaIndex Image index
- * @param {JQuery<HTMLElement>} messageBlock Message block element
+ * @param {HTMLElement|null} messageBlock Message block element
  */
 async function deleteMessageMedia(messageId, mediaIndex, messageBlock) {
     if (isNaN(messageId) || isNaN(mediaIndex)) {
@@ -1154,7 +1171,7 @@ async function deleteMessageMedia(messageId, mediaIndex, messageBlock) {
 /**
  * Switches the media display mode for a message.
  * @param {number} messageId Message ID
- * @param {JQuery<HTMLElement>} messageBlock Message block element
+ * @param {HTMLElement|null} messageBlock Message block element
  * @param {MEDIA_DISPLAY} targetDisplay Target display mode
  */
 async function switchMessageMediaDisplay(messageId, messageBlock, targetDisplay) {
@@ -1249,9 +1266,14 @@ export async function deleteFileFromServer(url, silent = false) {
 async function openFilePopup(attachment) {
     const fileText = attachment.text || (await getFileAttachment(attachment.url));
 
-    const modalTemplate = $('<div><pre><code></code></pre></div>');
-    modalTemplate.find('code').addClass('txt').text(fileText);
-    modalTemplate.addClass('file_modal').addClass('textarea_compact').addClass('fontsize90p');
+    const modalTemplate = document.createElement('div');
+    modalTemplate.className = 'file_modal textarea_compact fontsize90p';
+    const pre = document.createElement('pre');
+    const code = document.createElement('code');
+    code.className = 'txt';
+    code.textContent = fileText ?? '';
+    pre.append(code);
+    modalTemplate.append(pre);
     addCopyToCodeBlocks(modalTemplate);
 
     callGenericPopup(modalTemplate, POPUP_TYPE.TEXT, '', { wide: true, large: true });
@@ -1402,16 +1424,14 @@ export function addDOMPurifyHooks() {
 /**
  * Switches an image to the next or previous one in the swipe list.
  * @param {number} messageId Message ID
- * @param {JQuery<HTMLElement>} element Message element
+ * @param {HTMLElement|null} element Message element
  * @param {string} direction Swipe direction
  * @returns {Promise<void>}
  */
 async function onImageSwiped(messageId, element, direction) {
     const animationClass = 'fa-fade';
-    const messageMedia = element.find('.mes_img, .mes_video');
-
     // Current image is already animating
-    if (messageMedia.hasClass(animationClass)) {
+    if (element?.querySelector(`.mes_img.${animationClass}, .mes_video.${animationClass}`)) {
         return;
     }
 
@@ -1431,7 +1451,10 @@ async function onImageSwiped(messageId, element, direction) {
         return;
     }
 
-    await eventSource.emit(event_types.IMAGE_SWIPED, { message, element, direction });
+    // Preserve the established collection when jQuery is present. Without it,
+    // pass the native row through the event and React media refresh instead.
+    const eventElement = typeof $ === 'function' ? $(element) : element;
+    await eventSource.emit(event_types.IMAGE_SWIPED, { message, element: eventElement, direction });
 
     if (media.length === 1) {
         console.warn('Only one media item in the message, swiping is not applicable');
@@ -1451,7 +1474,7 @@ async function onImageSwiped(messageId, element, direction) {
     }
 
     await saveChatConditional();
-    appendMediaToMessage(message, element);
+    appendMediaToMessage(message, eventElement);
 }
 
 let openAttachmentPicker = () => {};
@@ -1461,11 +1484,19 @@ export function openFileAttachmentPicker() {
 }
 
 export function initChatUtilities(mergeAttachmentFiles) {
-    $(document).on('click', '.mes_pin', async function () {
+    function delegateClick(root, selector, handler) {
+        root?.addEventListener('click', event => {
+            const target = event.target?.nodeType === 3 ? event.target.parentElement : event.target;
+            const match = target?.closest?.(selector);
+            if (match && (root === document || root.contains(match))) handler.call(match, event);
+        });
+    }
+
+    delegateClick(document, '.mes_pin', async function () {
         // Pinned messages never participate in turn summarization: pinning any
         // message locks its whole turn verbatim (chat-memory contract).
-        const messageBlock = $(this).closest('.mes');
-        const messageId = Number(messageBlock.attr('mesid'));
+        const messageBlock = this.closest('.mes');
+        const messageId = Number(messageBlock?.getAttribute('mesid') ?? undefined);
         const message = chat[messageId];
         if (!message || typeof message !== 'object') {
             return;
@@ -1479,35 +1510,35 @@ export function initChatUtilities(mergeAttachmentFiles) {
         requireGenerationShellContext().scheduleMainChatMessageListPanelRefresh();
     });
 
-    $(document).on('click', '.mes_hide', async function () {
-        const messageBlock = $(this).closest('.mes');
-        const messageId = Number(messageBlock.attr('mesid'));
+    delegateClick(document, '.mes_hide', async function () {
+        const messageBlock = this.closest('.mes');
+        const messageId = Number(messageBlock?.getAttribute('mesid') ?? undefined);
         await hideChatMessageRange(messageId, messageId, false);
     });
 
-    $(document).on('click', '.mes_unhide', async function () {
-        const messageBlock = $(this).closest('.mes');
-        const messageId = Number(messageBlock.attr('mesid'));
+    delegateClick(document, '.mes_unhide', async function () {
+        const messageBlock = this.closest('.mes');
+        const messageId = Number(messageBlock?.getAttribute('mesid') ?? undefined);
         await hideChatMessageRange(messageId, messageId, true);
     });
 
-    $(document).on('click', '.mes_file_delete', async function () {
-        const messageBlock = $(this).closest('.mes');
-        const messageId = Number(messageBlock.attr('mesid'));
-        const fileBlock = $(this).closest('.mes_file_container');
-        const fileIndex = Number(fileBlock.attr('data-index'));
+    delegateClick(document, '.mes_file_delete', async function () {
+        const messageBlock = this.closest('.mes');
+        const messageId = Number(messageBlock?.getAttribute('mesid') ?? undefined);
+        const fileBlock = this.closest('.mes_file_container');
+        const fileIndex = Number(fileBlock?.getAttribute('data-index') ?? undefined);
         await deleteMessageFile(messageBlock, messageId, fileIndex);
     });
 
-    $(document).on('click', '.mes_file_open', async function () {
-        const messageBlock = $(this).closest('.mes');
-        const messageId = Number(messageBlock.attr('mesid'));
-        const fileBlock = $(this).closest('.mes_file_container');
-        const fileIndex = Number(fileBlock.attr('data-index'));
+    delegateClick(document, '.mes_file_open', async function () {
+        const messageBlock = this.closest('.mes');
+        const messageId = Number(messageBlock?.getAttribute('mesid') ?? undefined);
+        const fileBlock = this.closest('.mes_file_container');
+        const fileIndex = Number(fileBlock?.getAttribute('data-index') ?? undefined);
         await viewMessageFile(messageId, fileIndex);
     });
 
-    $(document).on('click', '.assistant_note_export', async function (_e) {
+    delegateClick(document, '.assistant_note_export', async function (_e) {
         /** @type {ChatHeader} */
         const chatHeader = {
             chat_metadata: chat_metadata,
@@ -1522,7 +1553,7 @@ export function initChatUtilities(mergeAttachmentFiles) {
         download(chatToSave.map((m) => JSON.stringify(m)).join('\n'), `Assistant - ${humanizedDateTime()}.jsonl`, 'application/json');
     });
 
-    $(document).on('click', '.assistant_note_import', async function () {
+    delegateClick(document, '.assistant_note_import', async function () {
         const importFile = async () => {
             const file = fileInput.files[0];
             if (!file) {
@@ -1556,10 +1587,8 @@ export function initChatUtilities(mergeAttachmentFiles) {
     let attachmentChangeHandler;
     openAttachmentPicker = function () {
         if (!(fileInput instanceof HTMLInputElement)) return;
-        const $fileInput = $(fileInput);
         const existing = Array.from(fileInput.files);
         if (attachmentChangeHandler) fileInput.removeEventListener('change', attachmentChangeHandler);
-        $fileInput.off('change');
         attachmentChangeHandler = async () => {
             const dataTransfer = new DataTransfer();
             for (const file of mergeAttachmentFiles(existing, fileInput.files, isSameFile)) dataTransfer.items.add(file);
@@ -1570,33 +1599,35 @@ export function initChatUtilities(mergeAttachmentFiles) {
         fileInput.click();
     };
 
-    $(document).on('click', '.mes_embed', function () {
-        const messageBlock = $(this).closest('.mes');
-        const messageId = Number(messageBlock.attr('mesid'));
+    delegateClick(document, '.mes_embed', function () {
+        const messageBlock = this.closest('.mes');
+        const messageId = Number(messageBlock?.getAttribute('mesid') ?? undefined);
         embedMessageFile(messageId, messageBlock);
     });
 
-    $(document).on('click', '.editor_maximize', async function (e) {
+    delegateClick(document, '.editor_maximize', async function (e) {
         e.preventDefault();
         e.stopPropagation();
 
-        const broId = $(this).attr('data-for');
-        const bro = $(`#${broId}`);
-        const contentEditable = bro.is('[contenteditable]');
-        const withTab = $(this).attr('data-tab');
+        const broId = this.getAttribute('data-for');
+        const bro = document.getElementById(broId);
+        const withTab = this.getAttribute('data-tab');
 
-        if (!bro.length) {
+        if (!bro) {
             console.error('Could not find editor with id', broId);
             return;
         }
+        const contentEditable = bro.hasAttribute('contenteditable');
 
         const wrapper = document.createElement('div');
         wrapper.classList.add('height100p', 'wide100p', 'flex-container');
         wrapper.classList.add('flexFlowColumn', 'justifyCenter', 'alignitemscenter');
-        const fieldName = bro.attr('aria-label')
-            || document.getElementById(bro.attr('aria-labelledby'))?.textContent?.trim()
-            || bro[0].labels?.[0]?.textContent?.trim()
-            || bro.prevAll('h4, .title_restorable').first().find('span').first().text().trim()
+        let previous = bro.previousElementSibling;
+        while (previous && !previous.matches('h4, .title_restorable')) previous = previous.previousElementSibling;
+        const fieldName = bro.getAttribute('aria-label')
+            || document.getElementById(bro.getAttribute('aria-labelledby'))?.textContent?.trim()
+            || bro.labels?.[0]?.textContent?.trim()
+            || previous?.querySelector('span')?.textContent?.trim()
             || t`Expanded editor`;
         const heading = document.createElement('h3');
         heading.textContent = fieldName;
@@ -1610,21 +1641,21 @@ export function initChatUtilities(mergeAttachmentFiles) {
         textarea.setAttribute('aria-label', fieldName);
         textarea.setAttribute('aria-describedby', hint.id);
         textarea.autofocus = true;
-        if (bro[0].dataset.macros !== undefined) {
-            textarea.dataset.macros = bro[0].dataset.macros;
+        if (bro.dataset.macros !== undefined) {
+            textarea.dataset.macros = bro.dataset.macros;
             textarea.dataset.macrosAutocomplete = 'always'; // Always show autocomplete in expanded editor
             textarea.dataset.macrosAutocompleteStyle = 'expanded'; // Use expanded autocomplete style
         }
-        textarea.value = String(contentEditable ? bro[0].innerText : bro.val());
+        textarea.value = String(contentEditable ? bro.innerText : bro.value);
         textarea.classList.add('height100p', 'wide100p', 'maximized_textarea');
-        if (bro.hasClass('monospace')) textarea.classList.add('monospace');
+        if (bro.classList.contains('monospace')) textarea.classList.add('monospace');
         textarea.addEventListener('input', function () {
             if (contentEditable) {
-                bro[0].innerText = textarea.value;
-                bro.trigger('input');
+                bro.innerText = textarea.value;
             } else {
-                bro.val(textarea.value).trigger('input');
+                bro.value = textarea.value;
             }
+            bro.dispatchEvent(new Event('input', { bubbles: true }));
         });
         wrapper.appendChild(textarea);
 
@@ -1662,13 +1693,13 @@ export function initChatUtilities(mergeAttachmentFiles) {
             wide: true, large: true, okButton: t`Done`,
             onOpen: () => {
                 textarea.focus();
-                if (!contentEditable) textarea.setSelectionRange(bro[0].selectionStart, bro[0].selectionEnd);
+                if (!contentEditable) textarea.setSelectionRange(bro.selectionStart, bro.selectionEnd);
             },
         });
     });
 
 
-    $('#creators_note_styles_button').on('click', function (e) {
+    document.getElementById('creators_note_styles_button')?.addEventListener('click', function (e) {
         e.stopPropagation();
         openGlobalStylesPreferenceDialog();
     });
@@ -1677,49 +1708,50 @@ export function initChatUtilities(mergeAttachmentFiles) {
      * Returns information about the closest media container.
      * @returns {MediaContainerInfo} Information about the media container
      * @typedef {object} MediaContainerInfo
-     * @property {JQuery<HTMLElement>} messageBlock The closest message block
+     * @property {HTMLElement|null} messageBlock The closest message block
      * @property {number} messageId The message ID
-     * @property {JQuery<HTMLElement>} mediaBlock The closest media container block
+     * @property {HTMLElement|null} mediaBlock The closest media container block
      * @property {number} mediaIndex The media index within the message
      */
     function getMediaContainerInfo(containerClass = '.mes_media_container') {
-        const messageBlock = $(this).closest('.mes');
-        const messageId = Number(messageBlock.attr('mesid'));
-        const mediaBlock = $(this).closest(containerClass);
-        const mediaIndex = Number(mediaBlock.attr('data-index'));
+        const messageBlock = this.closest('.mes');
+        const messageId = Number(messageBlock?.getAttribute('mesid') ?? undefined);
+        const mediaBlock = this.closest(containerClass);
+        const mediaIndex = Number(mediaBlock?.getAttribute('data-index') ?? undefined);
         return { messageBlock, messageId, mediaBlock, mediaIndex };
     }
-    chatElement.on('click', '.mes_img', async function () {
+    const chatRoot = chatElement?.nodeType === 1 ? chatElement : chatElement?.[0];
+    delegateClick(chatRoot, '.mes_img', async function () {
         const { messageId, mediaIndex } = getMediaContainerInfo.call(this);
         expandMessageMedia(messageId, mediaIndex);
     });
-    chatElement.on('click', '.mes_media_enlarge', async function () {
+    delegateClick(chatRoot, '.mes_media_enlarge', async function () {
         const { messageId, mediaIndex } = getMediaContainerInfo.call(this);
         expandMessageMedia(messageId, mediaIndex).click();
     });
-    chatElement.on('click', '.mes_media_delete', async function () {
+    delegateClick(chatRoot, '.mes_media_delete', async function () {
         const { messageId, mediaIndex, messageBlock } = getMediaContainerInfo.call(this);
         await deleteMessageMedia(messageId, mediaIndex, messageBlock);
     });
-    chatElement.on('click', '.mes_media_list', async function () {
+    delegateClick(chatRoot, '.mes_media_list', async function () {
         const { messageId, messageBlock } = getMediaContainerInfo.call(this);
         await switchMessageMediaDisplay(messageId, messageBlock, MEDIA_DISPLAY.GALLERY);
     });
-    chatElement.on('click', '.mes_media_gallery', async function () {
+    delegateClick(chatRoot, '.mes_media_gallery', async function () {
         const { messageId, messageBlock } = getMediaContainerInfo.call(this);
         await switchMessageMediaDisplay(messageId, messageBlock, MEDIA_DISPLAY.LIST);
     });
-    chatElement.on('click', '.mes_img_swipe_left', async function () {
+    delegateClick(chatRoot, '.mes_img_swipe_left', async function () {
         const { messageId, messageBlock } = getMediaContainerInfo.call(this);
         await onImageSwiped(messageId, messageBlock, SWIPE_DIRECTION.LEFT);
     });
-    chatElement.on('click', '.mes_img_swipe_right', async function () {
+    delegateClick(chatRoot, '.mes_img_swipe_right', async function () {
         const { messageId, messageBlock } = getMediaContainerInfo.call(this);
         await onImageSwiped(messageId, messageBlock, SWIPE_DIRECTION.RIGHT);
     });
 
-    $('#file_form').on('reset', function () {
-        $('#file_form').addClass('displayNone');
+    document.getElementById('file_form')?.addEventListener('reset', function () {
+        this.classList.add('displayNone');
     });
 
     document.getElementById('send_textarea').addEventListener('paste', async function (event) {

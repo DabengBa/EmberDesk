@@ -7,6 +7,14 @@ import { translate, useTranslated } from '../../compat/i18n.js';
 import { useFrontendFrames } from '../../compat/frontend-frames';
 import { getWorkspaceBulkDeleteController } from '../../lib/dialogue-service';
 
+type MessageTagRuntime = {
+    subscribe: (listener: () => void) => () => void;
+    getSnapshot: () => number;
+    getAttributes: (avatarSrc: string) => Record<string, string>;
+};
+const messageTagRuntime = (globalThis as typeof globalThis & { [key: symbol]: MessageTagRuntime | undefined })[Symbol.for('emberdesk.messageTagRuntime')];
+const subscribeMessageTags = (listener: () => void) => messageTagRuntime?.subscribe(listener) ?? (() => {});
+const getMessageTagRevision = () => messageTagRuntime?.getSnapshot() ?? 0;
 
 const EMPTY_RENDER = {
     messageHtml: '',
@@ -338,6 +346,8 @@ export const MainChatMessageRow = memo(function MainChatMessageRow({
     const avatarSrc = message.avatarUrl || 'img/No-Image-Placeholder.svg';
     const [failedAvatarSrc, setFailedAvatarSrc] = useState<string | null>(null);
     const avatarFailed = failedAvatarSrc === avatarSrc;
+    useSyncExternalStore(subscribeMessageTags, getMessageTagRevision, getMessageTagRevision);
+    const messageTagAttributes = avatarFailed ? {} : messageTagRuntime?.getAttributes(avatarSrc) ?? {};
     const setReasoningOpen = (open: boolean) => {
         if (canAddressMessage && hasReasoning) {
             void commands?.setMessageReasoningOpen(messageUid, open);
@@ -373,6 +383,7 @@ export const MainChatMessageRow = memo(function MainChatMessageRow({
         <div
             ref={rowRef}
             {...roleAttributes}
+            {...messageTagAttributes}
             className={`${normalizeClassNames(message, isLast)}${bulkSelected ? ' selected' : ''}`}
             data-main-chat-message-row-owner="react"
             data-main-chat-message-row={message.id}

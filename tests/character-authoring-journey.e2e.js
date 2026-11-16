@@ -29,9 +29,24 @@ test('bulk deletion waits for an in-flight character save', async ({ page }) => 
     });
     try {
         await testSetup.awaitST({ page });
+        // Delete a disposable copy, not the seed used by other specs in this lane.
+        const duplicateAvatar = await page.evaluate(async () => {
+            const original = window.SillyTavern.getContext().characters.find(character => character.name === 'Dev Character 002');
+            if (!original) throw new Error('Seed character for bulk-delete fixture is missing');
+            const { token } = await fetch('/csrf-token').then(response => response.json());
+            const response = await fetch('/api/characters/duplicate', {
+                method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': token },
+                body: JSON.stringify({ avatar_url: original.avatar }),
+            });
+            if (!response.ok) throw new Error(`Duplicate fixture failed: ${response.status}`);
+            const result = await response.json();
+            if (!result.path) throw new Error('Duplicate fixture did not return an avatar');
+            return result.path;
+        });
+        await expect.poll(() => page.evaluate(avatar => window.SillyTavern.getContext().characters.some(character => character.avatar === avatar), duplicateAvatar), { timeout: 15_000 }).toBe(true);
         const library = page.locator('[data-react-workspace-shell-chrome] nav button').filter({ hasText: '角色库' });
         await library.click();
-        const row = page.locator('#rm_print_characters_block .character_select').filter({ hasText: 'Dev Character 002' }).first();
+        const row = page.locator('#rm_print_characters_block .character_select').filter({ has: page.locator('.avatar').filter({ has: page.locator(`img[src*="${duplicateAvatar}"]`) }) });
         await row.click();
         await page.locator('[data-react-authoring-owner="characterAuthoring"] [data-react-authoring-field="description"] textarea').fill('Pending save');
         await held;
@@ -46,6 +61,7 @@ test('bulk deletion waits for an in-flight character save', async ({ page }) => 
         await expect(row).toHaveCount(0);
         await expect(page.locator('#toast-container').locator('.toast-error')).toHaveCount(0);
         expect(deleteSent).toBe(true);
+        await expect.poll(() => page.evaluate(() => window.SillyTavern.getContext().characters.some(character => character.name === 'Dev Character 002'))).toBe(true);
     } finally {
         release();
     }
@@ -73,6 +89,8 @@ test('character authoring keeps management usable without extension notice or gr
         name: 'authoring.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(card)),
     });
     await expect(page.locator('.toast-success')).toContainText(name);
+    // The server's import toast precedes asynchronous library publication.
+    await expect.poll(() => page.evaluate(characterName => window.SillyTavern.getContext().characters.some(item => item.name === characterName), name), { timeout: 15_000 }).toBe(true);
     const avatar = await page.evaluate(characterName => {
         const character = window.SillyTavern.getContext().characters.find(item => item.name === characterName);
         if (!character) throw new Error(`Imported character missing: ${characterName}`);
@@ -81,9 +99,10 @@ test('character authoring keeps management usable without extension notice or gr
     await page.locator('.character_select').filter({ hasText: name }).first().click();
     const authoring = page.locator('[data-react-authoring-owner="characterAuthoring"]');
     await expect(authoring).toBeVisible();
-    await authoring.locator('[data-react-authoring-field="characterWorld"] select').selectOption(book);
+    const worldSelectControl = authoring.locator('[data-react-authoring-field="characterWorld"]').getByRole('combobox', { name: /绑定的世界书文件|Bound World Info file/ });
+    await worldSelectControl.selectOption(book);
     await expect.poll(async () => (await readCard(page, avatar)).data?.extensions?.world).toBe(book);
-    await expect(authoring.locator('[data-react-authoring-field="characterWorld"] select')).toHaveValue(book);
+    await expect(worldSelectControl).toHaveValue(book);
 
     // Soft assertions keep the rest of this journey observable on the old UI.
     await expect.soft(authoring.getByText(/保存时会保留扩展数据|Extension data preserved on save/)).toHaveCount(0);
@@ -103,7 +122,7 @@ test('character authoring keeps management usable without extension notice or gr
         const data = (await readCard(page, avatar)).data;
         return { world: data?.extensions?.world, greetings: data?.alternate_greetings, extension: data?.extensions?.fixture_extension };
     }).toEqual({ world: book, greetings: [updated], extension: { retained: true } });
-    await expect.soft(authoring.locator('[data-react-authoring-field="characterWorld"] select')).toHaveValue(book);
+    await expect.soft(worldSelectControl).toHaveValue(book);
     await authoring.locator('[data-react-authoring-action="openBoundWorldInfo"]').click({ timeout: 5_000 });
 
     const worldSelect = page.locator('[data-world-info-react-control="world-select"]');

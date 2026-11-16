@@ -18,14 +18,14 @@ import {
 import {
     auditCanonicalWorldInfoShadowImport,
     runCanonicalWorldInfoShadowImport,
-} from '../src/canonical-world-info-shadow-import.js';
+} from '../src/canonical-world-info-shadow-import.ts';
 import {
     recordWorldProjectionIntent,
-} from '../src/canonical-world-info-projection.js';
+} from '../src/canonical-world-info-projection.ts';
 import {
     getPersistedCanonicalAuditStatus,
     persistCanonicalAuditStatus,
-} from '../src/canonical-sqlite-shadow-import.js';
+} from '../src/canonical-sqlite-shadow-import.ts';
 
 const tempRoots = [];
 const managers = [];

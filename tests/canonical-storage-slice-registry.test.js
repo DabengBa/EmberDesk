@@ -24,11 +24,11 @@ import {
 import { recordProjectionRepair } from '../src/endpoints/character-store.ts';
 import { recordCanonicalChatProjectionRepair } from '../src/endpoints/canonical-chat-store.ts';
 import { recordCanonicalManagedMediaRepair } from '../src/endpoints/canonical-managed-media-store.ts';
-import { MANAGED_MEDIA_AUDIT_SCOPE } from '../src/canonical-managed-media-shadow-import.js';
-import { CANONICAL_CHAT_AUDIT_SCOPE } from '../src/canonical-chat-shadow-import.js';
+import { MANAGED_MEDIA_AUDIT_SCOPE } from '../src/canonical-managed-media-shadow-import.ts';
+import { CANONICAL_CHAT_AUDIT_SCOPE } from '../src/canonical-chat-shadow-import.ts';
 import { recordWorldInfoProjectionRepair, upsertCanonicalWorldInfoBook } from '../src/endpoints/world-info-store.ts';
-import { recordWorldProjectionIntent } from '../src/canonical-world-info-projection.js';
-import { persistCanonicalAuditStatus } from '../src/canonical-sqlite-shadow-import.js';
+import { recordWorldProjectionIntent } from '../src/canonical-world-info-projection.ts';
+import { persistCanonicalAuditStatus } from '../src/canonical-sqlite-shadow-import.ts';
 
 const tempRoots = [];
 const managers = [];

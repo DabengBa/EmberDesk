@@ -293,6 +293,7 @@ import {
     saveCharacterAuthoringFromPayload,
     selectCharacterById as selectCharacterInLifecycle,
     select_selected_character,
+    setCharacterSelectionVisibility,
 } from './scripts/character-lifecycle-service.js';
 import {
     addCopyToCodeBlocks,
@@ -568,7 +569,7 @@ registerGenerationShellContext({
         get chat() { return chat; },
         get chat_metadata() { return chat_metadata; },
         get characters() { return characters; },
-        get chatElement() { return chatElement; },
+        get chatElement() { return chatRoot; },
         get this_chid() { return this_chid; },
         get main_api() { return main_api; },
         get name1() { return name1; },
@@ -711,7 +712,7 @@ registerChatOpsShellContext({
         set this_edit_mes_id(value) { this_edit_mes_id = value; },
         get characters() { return characters; },
         get chat() { return chat; },
-        get chatElement() { return chatElement; },
+        get chatElement() { return chatRoot; },
         get chat_metadata() { return chat_metadata; },
         get extension_prompts() { return extension_prompts; },
         get is_delete_mode() { return is_delete_mode; },
@@ -916,7 +917,7 @@ registerMessageShellContext({
         get chat() { return chat; },
         get chat_metadata() { return chat_metadata; },
         get characters() { return characters; },
-        get chatElement() { return chatElement; },
+        get chatElement() { return chatRoot; },
         get converter() { return converter; },
         get default_avatar() { return default_avatar; },
         get default_user_avatar() { return default_user_avatar; },
@@ -2573,7 +2574,7 @@ function syncAuthoringDraftFromPopups(draft) {
         : create_save.alternate_greetings;
     draft.alternateGreetings = Array.isArray(greetingSource) ? [...greetingSource] : [];
     // charUpdatePrimaryWorld mirrors the latest selection into #character_world.
-    const worldValue = String($('#character_world').val() ?? '')
+    const worldValue = String(document.getElementById('character_world')?.value ?? '')
         || String(editMode ? sourceCharacter?.data?.extensions?.world ?? '' : create_save.world ?? '');
     draft.characterWorld = worldValue;
     return draft;
@@ -2758,7 +2759,7 @@ function getCharacterAuthoringReactCommands() {
                 const option = dropdown?.querySelector?.(`option[id="${CSS.escape(actionId)}"]`);
                 if (option instanceof HTMLOptionElement) {
                     option.selected = true;
-                    $('#char-management-dropdown').trigger('change');
+                    dropdown.dispatchEvent(new Event('change', { bubbles: true }));
                     // Let the synchronous prefix of the legacy change handler settle.
                     await delay(0);
                 }
@@ -3456,59 +3457,22 @@ function hideLegacyCharacterLibraryToolbarChrome() {
 }
 
 /**
- * Keeps legacy compatibility surfaces on the character-library toolbar alive after
- * the React toolbar took over the visible controls:
- * - paginationjs string/numeric method calls on #rm_print_characters_pagination
- *   (extensions, character lookup jumps) route through the plugin's event
- *   dispatch into the React page pipeline;
- * - the retired #rm_button_search Find toggle focuses the React search input.
+ * Keeps the retired #rm_button_search Find toggle focused on the React search input.
+ * Pagination is owned by the React panel and its page commands.
  */
-function ensureCharacterLibraryToolbarCompatBridges() {
-    const $paginationHost = $('#rm_print_characters_pagination');
-    if (!$paginationHost.length) {
-        return;
-    }
-    if (!$paginationHost.data('pagination')) {
-        const compatData = { initialized: true };
-        Object.defineProperties(compatData, {
-            model: {
-                get: () => ({
-                    pageNumber: getCharacterListCurrentPage(),
-                    pageSize: getCharacterListCurrentPageSize(),
-                    totalNumber: Number(currentCharacterListEntitySnapshot?.total) || 0,
-                    disabled: false,
-                }),
-            },
-            currentPageData: {
-                get: () => currentCharacterListPageEntities,
-            },
-        });
-        $paginationHost.data('pagination', compatData);
-    }
-    $paginationHost
-        .off('.reactLibraryPaginationCompat')
-        .on('pagination:go.reactLibraryPaginationCompat', (_event, page) => {
-            void requestCharacterListPage(Number(Array.isArray(page) ? page[0] : page) || 1);
-        })
-        .on('pagination:previous.reactLibraryPaginationCompat', () => {
-            void requestCharacterListPage(getCharacterListCurrentPage() - 1);
-        })
-        .on('pagination:next.reactLibraryPaginationCompat', () => {
-            void requestCharacterListPage(getCharacterListCurrentPage() + 1);
-        })
-        .on('pagination:first.reactLibraryPaginationCompat', () => {
-            void requestCharacterListPage(1);
-        })
-        .on('pagination:last.reactLibraryPaginationCompat', () => {
-            const total = Number(currentCharacterListEntitySnapshot?.total) || 0;
-            void requestCharacterListPage(Math.max(Math.ceil(total / getCharacterListCurrentPageSize()), 1));
-        });
+let characterLibrarySearchCompatHandler;
 
-    $(document)
-        .off('click.reactLibraryToolbarCompat', '#rm_button_search')
-        .on('click.reactLibraryToolbarCompat', '#rm_button_search', () => {
+function ensureCharacterLibraryToolbarCompatBridges() {
+
+    if (characterLibrarySearchCompatHandler) {
+        document.removeEventListener('click', characterLibrarySearchCompatHandler);
+    }
+    characterLibrarySearchCompatHandler = event => {
+        if (event.target?.closest?.('#rm_button_search')) {
             document.getElementById('emberdesk-react-character-search')?.focus();
-        });
+        }
+    };
+    document.addEventListener('click', characterLibrarySearchCompatHandler);
 }
 
 function getReactCharacterLibraryPanelBridge() {
@@ -3517,10 +3481,10 @@ function getReactCharacterLibraryPanelBridge() {
             void selectCharacterById(Number(id));
         },
         onOpenFolder(id) {
-            chooseBogusFolder($('#rm_print_characters_block'), String(id));
+            chooseBogusFolder(null, String(id));
         },
         onBackFolder() {
-            chooseBogusFolder($('#rm_print_characters_block'), 'back');
+            chooseBogusFolder(null, 'back');
         },
         onClearFilters() {
             const input = document.getElementById('character_search_bar');
@@ -3577,7 +3541,7 @@ function getReactCharacterLibraryPanelBridge() {
             if (!characterGroupOverlay) {
                 return;
             }
-            if ($('#rm_print_characters_block').hasClass('bulk_select')) {
+            if (document.getElementById('rm_print_characters_block')?.classList.contains('bulk_select')) {
                 characterGroupOverlay.browseState();
             } else {
                 characterGroupOverlay.selectState();
@@ -3728,7 +3692,7 @@ function enrichCharacterLibraryPageEntities(pageEntities) {
 }
 
 function createCharacterLibraryPanelStateSnapshot({ listElement, pageEntities, renderPlan, currentPage, pageSize, totalCount = null }) {
-    const bulkMode = $('#rm_print_characters_block').hasClass('bulk_select');
+    const bulkMode = document.getElementById('rm_print_characters_block')?.classList.contains('bulk_select') ?? false;
     const selectedCharacterIds = Array.isArray(characterGroupOverlay?.selectedCharacters)
         ? characterGroupOverlay.selectedCharacters.slice()
         : [];
@@ -3770,7 +3734,7 @@ function createCharacterLibraryToolbarStateSnapshot() {
         searchQuery: getCharacterLibraryToolbarSearchQuery(),
         sortValue: getCharacterLibraryToolbarSortValue(),
         sortOptions: getCharacterLibrarySortOptions(),
-        isBulkEdit: $('#rm_print_characters_block').hasClass('bulk_select'),
+        isBulkEdit: document.getElementById('rm_print_characters_block')?.classList.contains('bulk_select') ?? false,
         bulkSelectedCount: characterGroupOverlay?.selectedCharacters?.length ?? 0,
         tagControlsElement: document.querySelector('#charListFixedTop .rm_tag_controls'),
         tagFilters: createCharacterTagFilterViewState(entitiesFilter),
@@ -4011,25 +3975,26 @@ toastr.subscribe(function (args) {
         return;
     }
 
-    const $container = toastr.getContainer(args.options, false);
-    if (!$container || !$container.length) {
+    const container = toastr.native.getContainer(args.options, false);
+    if (!container) {
         return;
     }
 
     // toastr has already inserted the element at this point
-    const $toast = args.options.newestOnTop
-        ? $container.children().first()
-        : $container.children().last();
+    const toast = args.options.newestOnTop
+        ? container.firstElementChild
+        : container.lastElementChild;
+    if (!toast) return;
 
     // Meaning of "clickable":
     // Interactable unless tapToDismiss was explicitly false
     const isInteractable = args.options.tapToDismiss !== false;
-    $toast.toggleClass('interactable', isInteractable);
+    toast.classList.toggle('interactable', isInteractable);
     if (isInteractable) {
-        $toast.attr('title', t`Tap to close`);
+        toast.setAttribute('title', t`Tap to close`);
     } else {
-        $toast.removeAttr('title');
-        $toast.addClass('toast-non-interactable');
+        toast.removeAttribute('title');
+        toast.classList.add('toast-non-interactable');
     }
 });
 
@@ -4151,7 +4116,8 @@ function getVisibleCharacterExportTrigger() {
 }
 
 // Saved here for performance reasons
-const messageTemplate = $('#message_template .mes');
+const messageTemplate = document.querySelector('#message_template .mes');
+const chatRoot = document.getElementById('chat');
 export const chatElement = $('#chat');
 
 let dialogueController = null;
@@ -4834,7 +4800,7 @@ async function reconcileCharacterListAfterDelete(options) {
         const pageSize = getCharacterListCurrentPageSize();
         const afterSnapshot = createCharacterListEntitySnapshot(getEntitiesList({ doFilter: true }));
         const hasActiveFilter = entitiesFilter.hasAnyFilter();
-        const isBulkEdit = $('#rm_print_characters_block').hasClass('bulk_select');
+        const isBulkEdit = listElement.classList.contains('bulk_select');
         const isBulkDeleteContext = deleteContext?.source === 'bulk';
         const isBogusFolderOpenNow = isBogusFolderOpen();
         const plan = isBulkDeleteContext
@@ -4884,7 +4850,7 @@ function verifyCharactersSearchSortRule() {
     const searchTerm = entitiesFilter.getFilterData(FILTER_TYPES.SEARCH);
     const selector = /** @type {HTMLSelectElement|null} */ (document.getElementById('character_sort_order'));
     if (optionsMenuModuleRef?.updateCharacterSearchSort(selector, searchTerm, { field: power_user.sort_field, order: power_user.sort_order })) {
-        flashHighlight($(selector));
+        if (selector) flashHighlight(selector);
     }
 
     updateCharacterLibraryToolbarOwnerState({ sortValue: getSelectedCharacterLibrarySortValue() });
@@ -5476,8 +5442,8 @@ function clearGenerationAutoRecoveryStatus(messageId) {
         return;
     }
 
-    const messageElement = chatElement.find(`.mes[mesid="${messageId}"]`);
-    messageElement.find('.generation_auto_recovery_status').remove();
+    const messageElements = chatRoot.querySelectorAll(`.mes[mesid="${messageId}"]`);
+    messageElements.forEach(row => row.querySelectorAll('.generation_auto_recovery_status').forEach(status => status.remove()));
     void mountReactMainChatMessageListPanel();
 }
 
@@ -5491,19 +5457,27 @@ function showGenerationAutoRecoveryStatus(messageId, status, recoveryStage = 'pr
         return;
     }
 
-    const messageElement = chatElement.find(`.mes[mesid="${messageId}"]`);
-    if (!messageElement.length) {
+    const messageElements = chatRoot.querySelectorAll(`.mes[mesid="${messageId}"]`);
+    if (!messageElements.length) {
         return;
     }
 
-    messageElement.find('.generation_auto_recovery_status').remove();
-    const statusRow = $('<div class="generation_auto_recovery_status"></div>');
-    statusRow.attr('role', 'status');
-    statusRow.attr('aria-live', 'polite');
-    statusRow.attr('data-recovery-stage', recoveryStage === 'fallback' ? 'fallback' : 'primary');
-    statusRow.append($('<i class="fa-solid fa-circle-notch"></i>'));
-    statusRow.append($('<span></span>').text(status));
-    messageElement.find('.mes_text').after(statusRow);
+    messageElements.forEach(row => {
+        row.querySelectorAll('.generation_auto_recovery_status').forEach(element => element.remove());
+        row.querySelectorAll('.mes_text').forEach(text => {
+            const statusRow = document.createElement('div');
+            statusRow.className = 'generation_auto_recovery_status';
+            statusRow.setAttribute('role', 'status');
+            statusRow.setAttribute('aria-live', 'polite');
+            statusRow.setAttribute('data-recovery-stage', recoveryStage === 'fallback' ? 'fallback' : 'primary');
+            const icon = document.createElement('i');
+            icon.className = 'fa-solid fa-circle-notch';
+            const label = document.createElement('span');
+            if (status !== undefined) label.textContent = status == null ? '' : String(status);
+            statusRow.append(icon, label);
+            text.after(statusRow);
+        });
+    });
     void mountReactMainChatMessageListPanel();
 }
 
@@ -5525,10 +5499,11 @@ function clearGenerationAttemptMessage(messageId) {
         return;
     }
 
-    const messageElement = chatElement.find(`.mes[mesid="${messageId}"]`);
-    messageElement.find('.mes_text').empty();
-    messageElement.find('.mes_reasoning').empty();
-    messageElement.find('.generation_failure_notice').remove();
+    const messageElements = chatRoot.querySelectorAll(`.mes[mesid="${messageId}"]`);
+    messageElements.forEach(row => {
+        row.querySelectorAll('.mes_text, .mes_reasoning').forEach(element => { element.innerHTML = ''; });
+        row.querySelectorAll('.generation_failure_notice').forEach(notice => notice.remove());
+    });
     void mountReactMainChatMessageListPanel();
 }
 
@@ -5544,7 +5519,7 @@ async function replaceAssistantRecoveryMessage(messageId, options) {
             if (!isReactMainChatOwner()) {
                 updateMessageElement(message, {
                     messageId: id,
-                    messageElement: chatElement.find(`.mes[mesid="${id}"]`),
+                    messageElement: Array.from(chatRoot.querySelectorAll(`.mes[mesid="${id}"]`)),
                     adjustMediaScroll: SCROLL_BEHAVIOR.ADJUST,
                 });
                 return;
@@ -5573,15 +5548,21 @@ function showGenerationFailureRecovery(messageId) {
         return;
     }
 
-    const messageElement = chatElement.find(`.mes[mesid="${messageId}"]`);
+    const messageElements = chatRoot.querySelectorAll(`.mes[mesid="${messageId}"]`);
 
-    if (!messageElement.length || messageElement.find('.generation_failure_notice').length) {
+    if (!messageElements.length || Array.from(messageElements).some(row => row.querySelectorAll('.generation_failure_notice').length)) {
         void mountReactMainChatMessageListPanel();
         return;
     }
 
-    const notice = $('<div class="generation_failure_notice" role="status" data-i18n="Generation failed. You can retry by sending a new message or keep chatting.">Generation failed. You can retry by sending a new message or keep chatting.</div>');
-    messageElement.find('.mes_text').after(notice);
+    messageElements.forEach(row => row.querySelectorAll('.mes_text').forEach(text => {
+        const notice = document.createElement('div');
+        notice.className = 'generation_failure_notice';
+        notice.setAttribute('role', 'status');
+        notice.setAttribute('data-i18n', 'Generation failed. You can retry by sending a new message or keep chatting.');
+        notice.textContent = 'Generation failed. You can retry by sending a new message or keep chatting.';
+        text.after(notice);
+    }));
     void mountReactMainChatMessageListPanel();
 }
 
@@ -5598,11 +5579,18 @@ export async function redisplayChat({ targetChat = chat, startIndex = 0, fade: _
         return;
     }
 
-    const messageElements = chatElement.find('.mes');
-    messageElements.removeClass('last_mes');
+    const messageElements = Array.from(chatRoot.querySelectorAll('.mes'));
+    messageElements.forEach(row => row.classList.remove('last_mes'));
 
     //Remove messages after index.
-    messageElements.filter(`.mes[mesid="${startIndex}"]`).nextAll('.mes').addBack().remove();
+    messageElements.filter(row => row.getAttribute('mesid') === String(startIndex)).forEach(row => {
+        for (let next = row.nextElementSibling; next;) {
+            const following = next.nextElementSibling;
+            if (next.matches('.mes')) next.remove();
+            next = following;
+        }
+        row.remove();
+    });
 
     const t1 = performance.now();
 
@@ -5613,14 +5601,14 @@ export async function redisplayChat({ targetChat = chat, startIndex = 0, fade: _
             const i = startIndex + offset;
             const messageElement = updateMessageElement(message, { messageId: i });
 
-            return messageElement[0];
+            return messageElement?.nodeType === 1 ? messageElement : messageElement[0];
         });
 
         //The last_mes has been removed, add it to the new last message.
         newMessageElements.at(-1).classList.add('last_mes');
 
         //Append to chat in one DOM update.
-        chatElement.append(newMessageElements);
+        chatRoot.append(...newMessageElements);
 
         applyCharacterTagsToMessageDivs({ mesIds: lodash.range(startIndex, targetChat.length, 1) });
     }
@@ -5637,7 +5625,7 @@ export function scrollOnMediaLoad(renderGeneration = mainChatMessageRenderGenera
     }
 
     const started = Date.now();
-    const media = chatElement.find('.mes_block img, .mes_block video, .mes_block audio').toArray();
+    const media = Array.from(chatRoot.querySelectorAll('.mes_block img, .mes_block video, .mes_block audio'));
     let mediaLoaded = 0;
 
     for (const currentElement of media) {
@@ -7094,36 +7082,44 @@ export function getThumbnailUrl(type, file, t = false) {
 }
 
 export function buildAvatarList(block, entities, { templateId = 'inline_avatar_template', empty = true, interactable = false, highlightFavs = true } = {}) {
-    if (empty) {
-        block.empty();
-    }
+    // The public shell bridge historically accepted a jQuery collection. Keep
+    // that input contract without making the renderer depend on jQuery.
+    const targets = block?.nodeType ? [block] : Array.from(block ?? []);
+    if (empty) targets.forEach(target => target.replaceChildren());
+    const templates = document.querySelectorAll(`#${templateId} .avatar`);
 
     for (const entity of entities) {
-        const id = entity.id;
-
-        // Populate the template
-        const avatarTemplate = $(`#${templateId} .avatar`).clone();
-
         let this_avatar = default_avatar;
         if (entity.item.avatar !== undefined && entity.item.avatar != 'none') {
             this_avatar = getThumbnailUrl('avatar', entity.item.avatar);
         }
 
-        avatarTemplate.attr('data-type', entity.type);
-        avatarTemplate.attr('data-chid', id);
-        avatarTemplate.find('img').attr('src', this_avatar).attr('alt', entity.item.name);
-        avatarTemplate.attr('title', `[Character] ${entity.item.name}\nFile: ${entity.item.avatar}`);
-        if (highlightFavs) {
-            avatarTemplate.toggleClass('is_fav', entity.item.fav || entity.item.fav == 'true');
-            avatarTemplate.find('.ch_fav').val(entity.item.fav);
+        for (const target of targets) {
+            for (const template of templates) {
+                const avatar = template.cloneNode(true);
+                if (entity.type != null) avatar.setAttribute('data-type', entity.type);
+                else if (entity.type === null) avatar.removeAttribute('data-type');
+                if (entity.id != null) avatar.setAttribute('data-chid', entity.id);
+                else if (entity.id === null) avatar.removeAttribute('data-chid');
+                avatar.querySelectorAll('img').forEach(img => {
+                    img.setAttribute('src', this_avatar);
+                    if (entity.item.name != null) img.setAttribute('alt', entity.item.name);
+                    else if (entity.item.name === null) img.removeAttribute('alt');
+                });
+                avatar.setAttribute('title', `[Character] ${entity.item.name}\nFile: ${entity.item.avatar}`);
+                if (highlightFavs) {
+                    const state = entity.item.fav || entity.item.fav == 'true';
+                    if (typeof state === 'boolean') avatar.classList.toggle('is_fav', state);
+                    else avatar.classList.toggle('is_fav');
+                    avatar.querySelectorAll('.ch_fav').forEach(input => { input.value = entity.item.fav == null ? '' : String(entity.item.fav); });
+                }
+                if (interactable) {
+                    avatar.classList.add(INTERACTABLE_CONTROL_CLASS);
+                    avatar.classList.toggle('character_select', entity.type === 'character');
+                }
+                target.append(avatar);
+            }
         }
-
-        if (interactable) {
-            avatarTemplate.addClass(INTERACTABLE_CONTROL_CLASS);
-            avatarTemplate.toggleClass('character_select', entity.type === 'character');
-        }
-
-        block.append(avatarTemplate);
     }
 }
 
@@ -7747,16 +7743,19 @@ export function select_rm_info(type, charId, previousCharId = null) {
                 void requestCharacterListPage(page);
 
                 waitUntilCondition(() => document.querySelector(selector) !== null).then(() => {
-                    const element = $(selector).parent();
+                    const elements = [...new Set(Array.from(document.querySelectorAll(selector), match => match.parentElement).filter(Boolean))];
 
-                    if (element.length === 0) {
+                    if (elements.length === 0) {
                         console.log(`Could not find element for character ${charId}`);
                         return;
                     }
 
-                    const scrollOffset = element.offset().top - element.parent().offset().top;
-                    element.parent().scrollTop(scrollOffset);
-                    flashHighlight(element, 5000);
+                    const firstParent = elements[0].parentElement;
+                    if (!firstParent) return;
+                    const scrollOffset = elements[0].getBoundingClientRect().top - firstParent.getBoundingClientRect().top;
+                    const parents = new Set(elements.map(element => element.parentElement).filter(Boolean));
+                    for (const parent of parents) parent.scrollTop = scrollOffset;
+                    for (const element of elements) flashHighlight(element, 5000);
                 });
             } catch (e) {
                 console.error(e);
@@ -7785,7 +7784,7 @@ function select_rm_create({ switchMenu = true } = {}) {
 
     //console.log('select_rm_Create() -- selected button: '+selected_button);
     if (selected_button == 'create' && create_save.avatar) {
-        const addAvatarInput = /** @type {HTMLInputElement} */ ($('#add_avatar_button').get(0));
+        const addAvatarInput = /** @type {HTMLInputElement} */ (document.getElementById('add_avatar_button'));
         addAvatarInput.files = create_save.avatar;
         read_avatar_load(addAvatarInput);
     }
@@ -7794,49 +7793,59 @@ function select_rm_create({ switchMenu = true } = {}) {
         selectRightMenuWithAnimation('rm_ch_create_block');
     }
 
-    $('#set_chat_character_settings').hide();
-    $('#delete_button_div').css('display', 'none');
-    $('#delete_button').css('display', 'none');
-    $('#export_button').css('display', 'none');
-    $('#world_button').css('display', 'none');
-    $('#create_button_label').css('display', '');
-    $('#create_button').attr('value', 'Create');
-    $('#dupe_button').hide();
-    $('.character-detail-edit-action').hide();
+    setCharacterSelectionVisibility('#set_chat_character_settings', false);
+    for (const id of ['delete_button_div', 'delete_button', 'export_button', 'world_button']) {
+        const element = document.getElementById(id);
+        if (element) element.style.display = 'none';
+    }
+    const createLabel = document.getElementById('create_button_label');
+    if (createLabel) createLabel.style.display = '';
+    document.getElementById('create_button')?.setAttribute('value', 'Create');
+    setCharacterSelectionVisibility('#dupe_button', false);
+    setCharacterSelectionVisibility('.character-detail-edit-action', false);
 
     //create text poles
-    $('#rm_button_back').css('display', '');
-    $('#character_import_button').css('display', '');
-    $('#character_popup-button-h3').text('Create character');
-    $('#character_name_pole').val(create_save.name);
-    $('#description_textarea').val(create_save.description);
-    $('#character_world').val(create_save.world);
-    $('#creator_notes_textarea').val(create_save.creator_notes);
-    $('#creator_notes_spoiler').html(formatCreatorNotes(create_save.creator_notes, ''));
-    $('#post_history_instructions_textarea').val(create_save.post_history_instructions);
-    $('#system_prompt_textarea').val(create_save.system_prompt);
-    $('#tags_textarea').val(create_save.tags);
-    $('#creator_textarea').val(create_save.creator);
-    $('#character_version_textarea').val(create_save.character_version);
-    $('#firstmessage_textarea').val(create_save.first_message);
-    $('#scenario_pole').val(create_save.scenario);
-    $('#depth_prompt_prompt').val(create_save.depth_prompt_prompt);
-    $('#depth_prompt_depth').val(create_save.depth_prompt_depth);
-    $('#depth_prompt_role').val(create_save.depth_prompt_role);
-    $('#character_json_data').val('');
-    $('#avatar_div').css('display', 'flex');
-    $('#avatar_load_preview').attr('src', default_avatar);
-    $('#renameCharButton').css('display', 'none');
-    $('#name_div').removeClass('displayNone');
-    $('#name_div').addClass('displayBlock');
-    $('.open_alternate_greetings').data('chid', -1);
-    $('#set_character_world').data('chid', -1);
+    for (const id of ['rm_button_back', 'character_import_button']) {
+        const element = document.getElementById(id);
+        if (element) element.style.display = '';
+    }
+    const title = document.getElementById('character_popup-button-h3');
+    if (title) title.textContent = 'Create character';
+    const setCreateMirrorValues = values => {
+        for (const [id, value] of Object.entries(values)) {
+            const element = document.getElementById(id);
+            if (element) element.value = String(value ?? '');
+        }
+    };
+    setCreateMirrorValues({
+        character_name_pole: create_save.name, description_textarea: create_save.description,
+        character_world: create_save.world, creator_notes_textarea: create_save.creator_notes,
+    });
+    const notes = document.getElementById('creator_notes_spoiler');
+    if (notes) notes.innerHTML = formatCreatorNotes(create_save.creator_notes, '');
+    setCreateMirrorValues({
+        post_history_instructions_textarea: create_save.post_history_instructions, system_prompt_textarea: create_save.system_prompt,
+        tags_textarea: create_save.tags, creator_textarea: create_save.creator, character_version_textarea: create_save.character_version,
+        firstmessage_textarea: create_save.first_message, scenario_pole: create_save.scenario,
+        depth_prompt_prompt: create_save.depth_prompt_prompt, depth_prompt_depth: create_save.depth_prompt_depth,
+        depth_prompt_role: create_save.depth_prompt_role, character_json_data: '',
+    });
+    const avatar = document.getElementById('avatar_div');
+    if (avatar) avatar.style.display = 'flex';
+    document.getElementById('avatar_load_preview')?.setAttribute('src', default_avatar);
+    const rename = document.getElementById('renameCharButton');
+    if (rename) rename.style.display = 'none';
+    document.getElementById('name_div')?.classList.remove('displayNone');
+    document.getElementById('name_div')?.classList.add('displayBlock');
+    document.querySelectorAll('.open_alternate_greetings').forEach(control => { control.dataset.chid = '-1'; });
+    const worldControl = document.getElementById('set_character_world');
+    if (worldControl) worldControl.dataset.chid = '-1';
     setWorldInfoButtonClass(undefined, !!create_save.world);
     updateFavButtonState(false);
     checkEmbeddedWorld();
 
-    $('#form_create').attr('actiontype', 'createcharacter');
-    $('.form_create_bottom_buttons_block .chat_lorebook_button').hide();
+    document.getElementById('form_create')?.setAttribute('actiontype', 'createcharacter');
+    setCharacterSelectionVisibility('.form_create_bottom_buttons_block .chat_lorebook_button', false);
 }
 
 function select_rm_characters() {
@@ -7924,9 +7933,15 @@ function updateFavButtonState(state) {
     // Update global state of the flag
     // TODO: This is bad and needs to be refactored.
     fav_ch_checked = state;
-    $('#fav_checkbox').prop('checked', state);
-    $('#favorite_button').toggleClass('fav_on', state);
-    $('#favorite_button').toggleClass('fav_off', !state);
+    const checkbox = /** @type {HTMLInputElement|null} */ (document.getElementById('fav_checkbox'));
+    if (checkbox) checkbox.checked = Boolean(state);
+    const button = document.getElementById('favorite_button');
+    if (button) {
+        // jQuery toggleClass(name, nonBoolean) toggles rather than forcing.
+        if (typeof state === 'boolean') button.classList.toggle('fav_on', state);
+        else button.classList.toggle('fav_on');
+        button.classList.toggle('fav_off', !state);
+    }
 }
 
 export async function setCharacterSettingsOverrides() {
@@ -8164,12 +8179,14 @@ export function cancelTtsPlay() {
 }
 
 function updateAlternateGreetingsHintVisibility(root) {
-    const numberOfGreetings = root.find('.alternate_greetings_list .alternate_greeting').length;
-    $(root).find('.alternate_grettings_hint').toggle(numberOfGreetings == 0);
+    const numberOfGreetings = root.querySelectorAll('.alternate_greetings_list .alternate_greeting').length;
+    const hint = root.querySelector('.alternate_grettings_hint');
+    if (hint) hint.style.display = numberOfGreetings === 0 ? '' : 'none';
 }
 
 async function openAlternateGreetings() {
-    const chid = $('.open_alternate_greetings').data('chid');
+    const storedChid = document.querySelector('.open_alternate_greetings')?.dataset.chid;
+    const chid = storedChid === '-1' ? -1 : storedChid;
 
     if (menu_type != 'create' && chid === undefined) {
         toastr.error('Does not have an Id for this character in editor menu.');
@@ -8183,7 +8200,8 @@ async function openAlternateGreetings() {
         }
     }
 
-    const template = $('#alternate_greetings_template .alternate_grettings').clone();
+    const template = document.querySelector('#alternate_greetings_template .alternate_grettings')?.cloneNode(true);
+    if (!template) return;
     const sourceArray = menu_type == 'create' ? create_save.alternate_greetings : characters[chid].data.alternate_greetings;
     const draftArray = Array.isArray(sourceArray) ? [...sourceArray] : [];
     const getArray = () => draftArray;
@@ -8218,14 +8236,14 @@ async function openAlternateGreetings() {
         addAlternateGreeting(template, getArray()[index], index, getArray, popup);
     }
 
-    template.find('.add_alternate_greeting').on('click', function () {
+    template.querySelector('.add_alternate_greeting')?.addEventListener('click', function () {
         const array = getArray();
         const index = array.length;
         array.push('');
         addAlternateGreeting(template, '', index, getArray, popup);
         updateAlternateGreetingsHintVisibility(template);
-        const list = template.find('.alternate_greetings_list');
-        list.scrollTop(list.prop('scrollHeight'));
+        const list = template.querySelector('.alternate_greetings_list');
+        if (list) list.scrollTop = list.scrollHeight;
     });
 
     popup.show();
@@ -8234,25 +8252,26 @@ async function openAlternateGreetings() {
 
 /**
  * Adds an alternate greeting to the template.
- * @param {JQuery<HTMLElement>} template
+ * @param {HTMLElement} template
  * @param {string} greeting
  * @param {number} index
  * @param {() => any[]} getArray
  * @param {Popup} popup
  */
 function addAlternateGreeting(template, greeting, index, getArray, popup) {
-    const greetingBlock = $('#alternate_greeting_form_template .alternate_greeting').clone();
-    greetingBlock.attr('data-index', index);
-    greetingBlock.find('.alternate_greeting_text')
-        .attr('id', `alternate_greeting_${index}`)
-        .on('input', async function () {
-            const value = $(this).val();
-            const array = getArray();
-            array[index] = value;
-        }).val(greeting);
-    greetingBlock.find('.editor_maximize').attr('data-for', `alternate_greeting_${index}`);
-    greetingBlock.find('.greeting_index').text(index + 1);
-    greetingBlock.find('.delete_alternate_greeting').on('click', async function (event) {
+    const greetingBlock = document.querySelector('#alternate_greeting_form_template .alternate_greeting')?.cloneNode(true);
+    if (!greetingBlock) return;
+    greetingBlock.setAttribute('data-index', String(index));
+    const greetingText = greetingBlock.querySelector('.alternate_greeting_text');
+    if (greetingText) {
+        greetingText.setAttribute('id', `alternate_greeting_${index}`);
+        greetingText.addEventListener('input', function () { getArray()[index] = greetingText.value; });
+        greetingText.value = greeting ?? '';
+    }
+    greetingBlock.querySelector('.editor_maximize')?.setAttribute('data-for', `alternate_greeting_${index}`);
+    const greetingIndex = greetingBlock.querySelector('.greeting_index');
+    if (greetingIndex) greetingIndex.textContent = String(index + 1);
+    greetingBlock.querySelector('.delete_alternate_greeting')?.addEventListener('click', async function (event) {
         event.preventDefault();
         event.stopPropagation();
 
@@ -8268,16 +8287,16 @@ function addAlternateGreeting(template, greeting, index, getArray, popup) {
         await popup.complete(POPUP_RESULT.AFFIRMATIVE);
         openAlternateGreetings();
     });
-    greetingBlock.find('.move_up_alternate_greeting').on('click', function (event) {
+    greetingBlock.querySelector('.move_up_alternate_greeting')?.addEventListener('click', function (event) {
         handleMoveAlternateGreeting(event, -1);
     });
-    greetingBlock.find('.move_down_alternate_greeting').on('click', function (event) {
+    greetingBlock.querySelector('.move_down_alternate_greeting')?.addEventListener('click', function (event) {
         handleMoveAlternateGreeting(event, 1);
     });
 
     /**
      * Handles moving an alternate greeting up or down in the list.
-     * @param {JQuery.ClickEvent} event - The click event
+     * @param {MouseEvent} event - The click event
      * @param {number} direction - Direction to move: -1 for up, 1 for down
      */
     function handleMoveAlternateGreeting(event, direction) {
@@ -8285,7 +8304,7 @@ function addAlternateGreeting(template, greeting, index, getArray, popup) {
         event.stopPropagation();
 
         const array = getArray();
-        const index = Number(greetingBlock.attr('data-index'));
+        const index = Number(greetingBlock.dataset.index);
         const newIndex = index + direction;
 
         // Check bounds
@@ -8300,14 +8319,15 @@ function addAlternateGreeting(template, greeting, index, getArray, popup) {
         [array[index], array[newIndex]] = [array[newIndex], array[index]];
 
         // Update current greeting
-        greetingBlock.find('.alternate_greeting_text').val(array[index]);
+        const currentText = greetingBlock.querySelector('.alternate_greeting_text');
+        if (currentText) currentText.value = array[index] ?? '';
 
         // Update adjacent greeting
-        const adjacentGreetingBlock = template.find(`.alternate_greeting[data-index="${newIndex}"]`);
-        adjacentGreetingBlock.find('.alternate_greeting_text').val(array[newIndex]);
+        const adjacentText = template.querySelector(`.alternate_greeting[data-index="${newIndex}"]`)?.querySelector('.alternate_greeting_text');
+        if (adjacentText) adjacentText.value = array[newIndex] ?? '';
     }
 
-    template.find('.alternate_greetings_list').append(greetingBlock);
+    template.querySelector('.alternate_greetings_list')?.append(greetingBlock);
 }
 
 
@@ -8777,40 +8797,40 @@ function initCharacterSearch() {
         setCharacterSearchBusy(false);
     });
 
-    const searchForm = $('#form_character_search_form');
-    const searchInput = $('#character_search_bar');
-    const searchButton = $('#rm_button_search');
-    const searchStatus = $('#character_search_status');
+    const searchForm = document.getElementById('form_character_search_form');
+    const searchInput = /** @type {HTMLInputElement|null} */ (document.getElementById('character_search_bar'));
+    const searchButton = document.getElementById('rm_button_search');
+    const searchStatus = document.getElementById('character_search_status');
 
     const storageKey = 'characterSearchFormVisible';
 
     function setCharacterSearchBusy(isBusy) {
-        searchInput.attr('aria-busy', String(isBusy));
-        searchStatus.prop('hidden', !isBusy);
+        searchInput?.setAttribute('aria-busy', String(isBusy));
+        if (searchStatus) searchStatus.hidden = !isBusy;
     }
 
-    searchInput.on('input', function () {
-        const searchQuery = String($(this).val());
+    searchInput?.addEventListener('input', function () {
+        const searchQuery = String(this.value);
         updateCharacterLibraryToolbarOwnerState({ searchQuery });
         void syncReactCharacterLibraryToolbarState();
         setCharacterSearchBusy(true);
         debouncedCharacterSearch(searchQuery);
     });
 
-    searchButton.on('click', function () {
-        const newVisibility = !searchForm.is(':visible');
-        searchForm.toggle(newVisibility);
-        searchButton.toggleClass('active', newVisibility);
+    searchButton?.addEventListener('click', function () {
+        const newVisibility = !(searchForm && (searchForm.offsetWidth || searchForm.offsetHeight || searchForm.getClientRects().length));
+        setCharacterSelectionVisibility('#form_character_search_form', newVisibility);
+        searchButton.classList.toggle('active', newVisibility);
         accountStorage.setItem(storageKey, String(newVisibility));
         if (newVisibility) {
-            searchInput.trigger('focus');
+            searchInput?.focus();
         }
     });
 
     eventSource.on(event_types.APP_READY, () => {
         const isVisible = accountStorage.getItem(storageKey) === 'true';
-        searchForm.toggle(isVisible);
-        searchButton.toggleClass('active', isVisible);
+        setCharacterSelectionVisibility('#form_character_search_form', isVisible);
+        searchButton?.classList.toggle('active', isVisible);
     });
 }
 

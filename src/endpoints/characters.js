@@ -41,7 +41,7 @@ import { getCanonicalStorageSlice } from '../canonical-storage-slice-registry.js
 import { ensureCanonicalSliceBackend } from '../canonical-backend.js';
 import { CanonicalSqliteDisabledError, getCanonicalStorageStatus, openCanonicalDatabase, withCanonicalTransaction } from '../canonical-sqlite.js';
 import { CanonicalMigrationBlockedError, runCanonicalMigrations } from '../canonical-sqlite-migrations.js';
-import { getPersistedCanonicalAuditStatus, invalidateCanonicalAuditStatus } from '../canonical-sqlite-shadow-import.js';
+import { getPersistedCanonicalAuditStatus, invalidateCanonicalAuditStatus } from '../canonical-sqlite-shadow-import.ts';
 import { recordImportLedgerEntry, removeImportLedgerEntry } from '../canonical-import-ledger.js';
 import {
     renameCharacterAvatarBlobReference,
@@ -68,7 +68,7 @@ import {
     renameCharacterCard,
 } from './character-write-service.ts';
 import { listCanonicalCharacterChatPayload } from './canonical-chat-query-service.ts';
-import { reconcileCanonicalChatSources } from '../canonical-chat-shadow-import.js';
+import { reconcileCanonicalChatSources } from '../canonical-chat-shadow-import.ts';
 import {
     deleteCanonicalChatSessionsForOwner,
     retargetCanonicalChatSessionsOwner,

@@ -164,14 +164,19 @@ describe('reasoning row event ownership', () => {
         const previousDollar = globalThis.$;
         const previousElement = globalThis.Element;
         const handlers = new Map();
-        globalThis.Element = class { closest() { return {}; } };
-        globalThis.document = { getElementById: () => ({ dataset: { reactMainChatOwner: 'react' } }) };
-        globalThis.$ = () => ({ on: (_event, selector, handler) => handlers.set(selector, handler) });
+        globalThis.Element = class {
+            nodeType = 1;
+            parentElement = null;
+            closest() { return {}; }
+            matches(selector) { return selector === '.mes_reasoning_edit, .mes_edit_add_reasoning'; }
+        };
+        globalThis.document = { getElementById: () => ({ dataset: { reactMainChatOwner: 'react' } }), addEventListener: (type, handler) => handlers.set(type, handler) };
+        globalThis.$ = () => { throw new Error('reasoning delegation must not use jQuery'); };
         try {
             const { initReasoning } = await import('../public/scripts/reasoning.js');
             initReasoning();
             const start = jest.spyOn(f.commands, 'startMessageReasoningEdit');
-            handlers.get('.mes_reasoning_edit, .mes_edit_add_reasoning').call(new globalThis.Element(), { preventDefault: jest.fn(), stopPropagation: jest.fn() });
+            handlers.get('click')({ target: new globalThis.Element(), preventDefault: jest.fn(), stopPropagation: jest.fn() });
             expect(start).not.toHaveBeenCalled();
         } finally {
             globalThis.document = previousDocument;

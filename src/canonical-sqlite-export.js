@@ -11,7 +11,7 @@ import { listImportLedgerEntries, recordImportLedgerEntry } from './canonical-im
 import { resolveCanonicalChatProjectionPath } from './endpoints/canonical-chat-projection-path.ts';
 import { listCanonicalChatSessions } from './endpoints/canonical-chat-store.ts';
 import { getCanonicalManagedMediaReference, listCanonicalManagedMediaReferences } from './endpoints/canonical-managed-media-store.ts';
-import { getCanonicalSecretsProjection } from './canonical-secrets-shadow-import.js';
+import { getCanonicalSecretsProjection } from './canonical-secrets-shadow-import.ts';
 import { getCanonicalSettingsDocument } from './endpoints/settings-store.ts';
 import { listCanonicalPresets } from './endpoints/presets-store.ts';
 import { listCanonicalWorldInfoBookRows } from './endpoints/world-info-store.ts';

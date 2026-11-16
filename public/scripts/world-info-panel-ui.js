@@ -1,5 +1,7 @@
 import { world_names } from './world-info-state.js';
 
+let menuBindings;
+
 /** Bind the preserved shell controls without owning editor state. */
 export function createWorldInfoPanelUi({ characters, checkEmbeddedWorld, openWorldInfoEditor, importEmbeddedWorldInfo, saveCharacterDebounced, addLongPressEvent, assignLorebookToChat, t, isWorldInfoImportBusy, importWorldInfoFiles, DragAndDropHandler, getFreeWorldName, Popup, createNewWorldInfo }) {
     let worldInfoCoreInitialized = false;
@@ -8,20 +10,28 @@ export function createWorldInfoPanelUi({ characters, checkEmbeddedWorld, openWor
     let worldInfoImportDragDropHandler = null;
 
     function closeMoreMenu({ restoreFocus = false } = {}) {
-        $('#world_more_menu_dropdown').hide();
-        const moreMenu = $('#world_more_menu');
-        moreMenu.attr('aria-expanded', 'false');
-        $('#WorldInfo').removeClass('wi-more-menu-open');
+        const dropdown = document.querySelector('#world_more_menu_dropdown');
+        if (dropdown) dropdown.style.display = 'none';
+        const moreMenu = document.querySelector('#world_more_menu');
+        moreMenu?.setAttribute('aria-expanded', 'false');
+        document.querySelector('#WorldInfo')?.classList.remove('wi-more-menu-open');
         if (restoreFocus) {
-            moreMenu.trigger('focus');
+            moreMenu?.focus();
         }
     }
 
     function initWorldInfo() {
         if (!worldInfoCoreInitialized) {
-            $('#world_button').on('click', async function (event) {
-                const openSetWorldMenu = () => $('#char-management-dropdown').val($('#set_character_world').val()).trigger('change');
-                const chid = $('#set_character_world').data('chid');
+            document.getElementById('world_button')?.addEventListener('click', async function (event) {
+                const openSetWorldMenu = () => {
+                    const dropdown = document.getElementById('char-management-dropdown');
+                    const option = document.getElementById('set_character_world');
+                    if (!dropdown || !option) return;
+                    dropdown.value = option.value;
+                    dropdown.dispatchEvent(new Event('change', { bubbles: true }));
+                };
+                const storedChid = document.getElementById('set_character_world')?.dataset.chid;
+                const chid = storedChid === '-1' ? -1 : storedChid;
 
                 if (chid === -1) {
                     openSetWorldMenu();
@@ -40,10 +50,15 @@ export function createWorldInfoPanelUi({ characters, checkEmbeddedWorld, openWor
                 }
             });
             addLongPressEvent('#world_button', function () {
-                $(this).trigger($.Event('click', { shiftKey: true }));
+                this.dispatchEvent(new MouseEvent('click', { bubbles: true, shiftKey: true }));
             });
 
-            $(document).on('click', '.chat_lorebook_button', assignLorebookToChat);
+            document.addEventListener('click', event => {
+                const target = event.target instanceof Element ? event.target : event.target?.parentElement;
+                if (target?.closest('.chat_lorebook_button')) {
+                    void assignLorebookToChat(event);
+                }
+            });
             addLongPressEvent('.chat_lorebook_button', function () {
                 assignLorebookToChat({ shiftKey: true, altKey: false });
             });
@@ -53,16 +68,16 @@ export function createWorldInfoPanelUi({ characters, checkEmbeddedWorld, openWor
 
         if (!worldInfoPanelInitialized && document.querySelector('#world_import_file')) {
             // More menu: import
-            $('#world_import_menu_item').on('click', function () {
+            document.querySelector('#world_import_menu_item')?.addEventListener('click', function () {
                 if (isWorldInfoImportBusy()) {
                     return;
                 }
 
-                $('#world_import_file').trigger('click');
+                document.querySelector('#world_import_file')?.click();
                 closeMoreMenu();
             });
 
-            $('#world_import_file').on('change', async function (e) {
+            document.querySelector('#world_import_file').addEventListener('change', async function (e) {
                 if (!(e.target instanceof HTMLInputElement)) {
                     return;
                 }
@@ -87,17 +102,23 @@ export function createWorldInfoPanelUi({ characters, checkEmbeddedWorld, openWor
             }
 
             // More menu toggle
-            $('#world_more_menu').off('click.worldMoreMenuToggle keydown.worldMoreMenuToggle').on('click.worldMoreMenuToggle', function (e) {
+            menuBindings?.abort();
+            menuBindings = new AbortController();
+            const bindingOptions = { signal: menuBindings.signal };
+            const moreMenu = document.querySelector('#world_more_menu');
+            const dropdown = document.querySelector('#world_more_menu_dropdown');
+            moreMenu?.addEventListener('click', function (e) {
                 e.stopPropagation();
-                const menu = $('#world_more_menu_dropdown');
-                menu.toggle();
-                const isVisible = menu.is(':visible');
-                $('#WorldInfo').toggleClass('wi-more-menu-open', isVisible);
-                $(this).attr('aria-expanded', String(isVisible));
+                if (!dropdown) return;
+                const isVisible = dropdown.style.display === 'none';
+                dropdown.style.display = isVisible ? '' : 'none';
+                document.querySelector('#WorldInfo')?.classList.toggle('wi-more-menu-open', isVisible);
+                this.setAttribute('aria-expanded', String(isVisible));
                 if (isVisible) {
-                    menu.find('[role="menuitem"]:visible').first().trigger('focus');
+                    [...dropdown.querySelectorAll('[role="menuitem"]')].find(item => item.getClientRects().length)?.focus();
                 }
-            }).on('keydown.worldMoreMenuToggle', function (e) {
+            }, bindingOptions);
+            moreMenu?.addEventListener('keydown', function (e) {
                 if (e.key === 'Escape') {
                     e.preventDefault();
                     closeMoreMenu({ restoreFocus: true });
@@ -109,10 +130,10 @@ export function createWorldInfoPanelUi({ characters, checkEmbeddedWorld, openWor
                 }
 
                 e.preventDefault();
-                $(this).trigger('click');
-            });
+                this.click();
+            }, bindingOptions);
 
-            $('#world_more_menu_dropdown .options-menu').off('keydown.worldMoreMenuItem').on('keydown.worldMoreMenuItem', function (e) {
+            document.querySelectorAll('#world_more_menu_dropdown .options-menu').forEach(item => item.addEventListener('keydown', function (e) {
                 if (e.key === 'Escape') {
                     e.preventDefault();
                     closeMoreMenu({ restoreFocus: true });
@@ -124,17 +145,17 @@ export function createWorldInfoPanelUi({ characters, checkEmbeddedWorld, openWor
                 }
 
                 e.preventDefault();
-                $(this).trigger('click');
-            });
+                this.click();
+            }, bindingOptions));
 
-            $(document).off('click.worldMoreMenu').on('click.worldMoreMenu', function (e) {
-                if (!$(e.target).closest('#world_more_menu_wrapper').length) {
+            document.addEventListener('click', function (e) {
+                if (!(e.target instanceof Element) || !e.target.closest('#world_more_menu_wrapper')) {
                     closeMoreMenu();
                 }
-            });
+            }, bindingOptions);
 
             // More menu: create new world (uses separate ID to avoid conflict with new-entry button)
-            $('#world_create_world').on('click', async () => {
+            document.querySelector('#world_create_world')?.addEventListener('click', async () => {
                 const tempName = getFreeWorldName();
                 const finalName = await Popup.show.input(t`Create a new World Info`, t`Enter a name for the new file:`, tempName);
 

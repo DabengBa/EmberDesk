@@ -41,14 +41,14 @@ export const ReasoningType = {
 };
 
 /**
- * Gets a message from a jQuery element.
+ * Gets a message from an element.
  * @param {Element} element
- * @returns {{messageId: number, message: object, messageBlock: JQuery<HTMLElement>}}
+ * @returns {{messageId: number, message: object, messageBlock: Element|null}}
  */
-function getMessageFromJquery(element) {
+function getMessageFromElement(element) {
     const chat = requireMessageShellContext().state.chat;
-    const messageBlock = $(element).closest('.mes');
-    const messageId = Number(messageBlock.attr('mesid'));
+    const messageBlock = element.closest('.mes');
+    const messageId = Number(messageBlock?.getAttribute('mesid') ?? undefined);
     const message = chat[messageId];
     return { messageId: messageId, message, messageBlock };
 }
@@ -258,7 +258,9 @@ export class ReasoningHandler {
             ? document.querySelector(`#chat [mesid="${messageIdOrElement}"]`)
             : messageIdOrElement instanceof HTMLElement
                 ? messageIdOrElement
-                : $(messageIdOrElement)[0];
+                : typeof messageIdOrElement === 'string'
+                    ? document.querySelector(messageIdOrElement)
+                    : messageIdOrElement?.[0];
         const messageId = Number(messageElement.getAttribute('mesid'));
 
         if (isNaN(messageId) || !chat[messageId]) return;
@@ -722,73 +724,92 @@ function isReactMainChatMessageRow(element) {
 }
 
 function setReasoningEventHandlers() {
-    $(document).on('click', '.mes_reasoning_details', function (e) {
+    const handlers = new Map();
+    function delegate(type, selector, handler) {
+        if (!handlers.has(type)) {
+            const registrations = [];
+            handlers.set(type, registrations);
+            document.addEventListener(type, event => {
+                let target = event.target?.nodeType === 3 ? event.target.parentElement : event.target;
+                while (target && target !== document) {
+                    for (const entry of registrations) {
+                        if (target.matches?.(entry.selector)) entry.handler.call(target, event);
+                    }
+                    if (event.cancelBubble) break;
+                    target = target.parentElement;
+                }
+            });
+        }
+        handlers.get(type).push({ selector, handler });
+    }
+
+    delegate('click', '.mes_reasoning_details', function (e) {
         if (isReactMainChatMessageRow(this)) return;
         if (!e.target.closest('.mes_reasoning_actions') && !e.target.closest('.mes_reasoning_header')) e.preventDefault();
     });
 
-    $(document).on('click', '.mes_reasoning_header', function (e) {
+    delegate('click', '.mes_reasoning_header', function (e) {
         if (isReactMainChatMessageRow(this)) return;
         e.preventDefault();
-        const { messageId, messageBlock } = getMessageFromJquery(this);
-        const wasOpen = messageBlock.find('.mes_reasoning_details').prop('open') === true;
+        const { messageId, messageBlock } = getMessageFromElement(this);
+        const wasOpen = messageBlock?.querySelector('.mes_reasoning_details')?.open === true;
         const commands = getChatMessageCommands();
-        if (commands.setMessageReasoningOpen(messageId, !wasOpen) && !wasOpen && messageBlock.find('#curEditTextarea').length) {
+        if (commands.setMessageReasoningOpen(messageId, !wasOpen) && !wasOpen && messageBlock?.querySelector('#curEditTextarea')) {
             commands.startMessageReasoningEdit(messageId);
         }
     });
 
-    $(document).on('click', '.mes_reasoning_copy', function (e) {
+    delegate('click', '.mes_reasoning_copy', function (e) {
         if (isReactMainChatMessageRow(this)) return;
         e.stopPropagation();
         e.preventDefault();
     });
 
-    $(document).on('click', '.mes_reasoning_edit, .mes_edit_add_reasoning', function (e) {
+    delegate('click', '.mes_reasoning_edit, .mes_edit_add_reasoning', function (e) {
         if (isReactMainChatMessageRow(this)) return;
         e.stopPropagation();
         e.preventDefault();
-        const { messageId } = getMessageFromJquery(this);
+        const { messageId } = getMessageFromElement(this);
         getChatMessageCommands().startMessageReasoningEdit(messageId);
     });
 
-    $(document).on('click', '.mes_reasoning_close_all', function (e) {
+    delegate('click', '.mes_reasoning_close_all', function (e) {
         if (isReactMainChatMessageRow(this)) return;
         e.stopPropagation();
         e.preventDefault();
         getChatMessageCommands().collapseAllMessageReasoning();
     });
 
-    $(document).on('click', '.mes_reasoning_edit_done', async function (e) {
+    delegate('click', '.mes_reasoning_edit_done', async function (e) {
         if (isReactMainChatMessageRow(this)) return;
         e.stopPropagation();
         e.preventDefault();
-        const { messageId, messageBlock } = getMessageFromJquery(this);
+        const { messageId, messageBlock } = getMessageFromElement(this);
         const commands = getChatMessageCommands();
-        const textarea = messageBlock.find('.reasoning_edit_textarea');
-        if (textarea.length) commands.updateMessageReasoningEdit(messageId, textarea.val());
+        const textarea = messageBlock?.querySelector('.reasoning_edit_textarea');
+        if (textarea) commands.updateMessageReasoningEdit(messageId, textarea.value);
         await commands.commitMessageReasoningEdit(messageId);
     });
 
-    $(document).on('click', '.mes_reasoning_edit_cancel', async function (e) {
+    delegate('click', '.mes_reasoning_edit_cancel', async function (e) {
         if (isReactMainChatMessageRow(this)) return;
         e.stopPropagation();
         e.preventDefault();
-        const { messageId } = getMessageFromJquery(this);
+        const { messageId } = getMessageFromElement(this);
         await getChatMessageCommands().cancelMessageReasoningEdit(messageId);
     });
 
-    $(document).on('click', '.mes_reasoning_delete', async function (e) {
+    delegate('click', '.mes_reasoning_delete', async function (e) {
         if (isReactMainChatMessageRow(this)) return;
         e.stopPropagation();
         e.preventDefault();
-        const { messageId } = getMessageFromJquery(this);
+        const { messageId } = getMessageFromElement(this);
         await getChatMessageCommands().deleteMessageReasoning(messageId);
     });
 
-    $(document).on('pointerup', '.mes_reasoning_copy', async function () {
+    delegate('pointerup', '.mes_reasoning_copy', async function () {
         if (isReactMainChatMessageRow(this)) return;
-        const { messageId } = getMessageFromJquery(this);
+        const { messageId } = getMessageFromElement(this);
         await getChatMessageCommands().copyMessageReasoning(messageId);
     });
 }

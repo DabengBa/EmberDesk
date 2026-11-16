@@ -64,6 +64,23 @@ describe('chat edit shortcut dispatch', () => {
         f.snapshot.composer.value = ''; f.composerAtStart = false;
         expect(dispatchChatEditShortcut(f)).toBe(false);
     });
+    test('uses the focused composer value immediately, even before its projected snapshot updates', async () => {
+        const f = fixture({ key: 'ArrowUp', ctrlKey: false, target: { id: 'send_textarea', value: '' } });
+        f.snapshot.messagesById[0].editing = false;
+        f.snapshot.composer = { value: 'stale text', focused: false };
+        expect(dispatchChatEditShortcut(f)).toBe(true);
+        await Promise.resolve();
+        expect(f.commands.startMessageEdit).toHaveBeenCalledWith('uid-2');
+    });
+    test('does not edit if the live composer is nonempty or not at the start', () => {
+        const f = fixture({ key: 'ArrowUp', ctrlKey: false, target: { id: 'send_textarea', value: 'text' } });
+        f.snapshot.messagesById[0].editing = false;
+        expect(dispatchChatEditShortcut(f)).toBe(false);
+        f.event.target.value = '';
+        f.composerAtStart = false;
+        expect(dispatchChatEditShortcut(f)).toBe(false);
+        expect(f.commands.loadMoreUntilMessage).not.toHaveBeenCalled();
+    });
     test('Escape stops active generation even for an empty chat', () => {
         const f = fixture({ key: 'Escape', ctrlKey: false });
         f.snapshot.orderedMessageIds = []; f.snapshot.messagesById = {};

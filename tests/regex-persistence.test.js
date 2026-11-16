@@ -514,7 +514,7 @@ test('failed preset write preserves newer settings edits rather than rolling the
 // Integration proof: production list bridge, engine, settings save and character
 // extension writer; only HTTP and browser boundaries are controlled. Each test
 // owns its in-memory state, no shared directory or temp files; budget 10 seconds.
-function integratedMoveSetup(sourceType) {
+function integratedMoveSetup(sourceType, { noJQuery = false, missingField = false } = {}) {
     const settings = settingsSetup();
     const character = { avatar: 'alice.png', data: { extensions: { regex_scripts: sourceType === 1 ? [{ id: 'r' }] : [] } } };
     character.json_data = JSON.stringify({ data: character.data });
@@ -535,7 +535,11 @@ function integratedMoveSetup(sourceType) {
         setValueByPath, deleteValueByPath: extract('public/scripts/utils.js', 'export function deleteValueByPath(', '\n/**', {}),
         getRequestHeaders: () => ({}), fetch, console: { error: jest.fn(), warn: jest.fn() },
         $: () => ({ val: value => value === undefined ? domValue : (domValue = value) }),
+        document: { getElementById: id => !missingField && id === 'character_json_data' ? {
+            get value() { return domValue; }, set value(value) { domValue = value; },
+        } : null },
     };
+    if (noJQuery) delete characterContext.$;
     const writeExtensionField = extract('public/scripts/feature-settings.js', 'export async function writeExtensionField(', '\n/**', characterContext);
     const engineContext = { SCRIPT_TYPES: { GLOBAL: 0, SCOPED: 1, PRESET: 2 }, SCRIPT_TYPE_UNKNOWN: -1,
         DEFAULT_GET_REGEX_SCRIPTS_OPTIONS: { allowedOnly: false }, characters: [character], this_chid: 0,
@@ -550,8 +554,44 @@ function integratedMoveSetup(sourceType) {
         failNext: url => { failUrl = url; } };
 }
 
-test('global destination HTTP failure then recovery allows the real move to retry', async () => {
-    const s = integratedMoveSetup(1);
+test('actual scoped regex save updates the character mirror without jQuery', async () => {
+    const s = integratedMoveSetup(0, { noJQuery: true });
+    await s.engine.saveScriptsByType([{ id: 'saved' }], 1, s.engine.captureRegexTarget(1));
+    expect(s.requests.at(-1).url).toBe('/api/characters/merge-attributes');
+    expect(JSON.parse(s.getDom()).data.extensions.regex_scripts).toEqual([{ id: 'saved' }]);
+});
+
+test('scoped save without jQuery tolerates a missing character JSON field', async () => {
+    const s = integratedMoveSetup(0, { noJQuery: true, missingField: true });
+    await s.engine.saveScriptsByType([{ id: 'saved' }], 1, s.engine.captureRegexTarget(1));
+    expect(s.requests.at(-1).url).toBe('/api/characters/merge-attributes');
+    expect(JSON.parse(s.character.json_data).data.extensions.regex_scripts).toEqual([{ id: 'saved' }]);
+});
+
+test('failed actual scoped regex save rolls back its current mirror without jQuery', async () => {
+    const s = integratedMoveSetup(0, { noJQuery: true });
+    const before = s.getDom();
+    s.failNext('/api/characters/merge-attributes');
+    await expect(s.engine.saveScriptsByType([{ id: 'saved' }], 1, s.engine.captureRegexTarget(1))).rejects.toThrow('offline');
+    expect(s.getDom()).toBe(before);
+    expect(s.character.json_data).toBe(before);
+    expect(s.character.data.extensions.regex_scripts).toEqual([]);
+});
+
+test('failed scoped save without jQuery leaves a newer form draft untouched', async () => {
+    const s = integratedMoveSetup(0, { noJQuery: true });
+    let finish;
+    s.fetch.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    const pending = s.engine.saveScriptsByType([{ id: 'saved' }], 1, s.engine.captureRegexTarget(1));
+    await tick();
+    s.setDom('newer draft');
+    finish({ ok: false, status: 500, statusText: 'offline' });
+    await expect(pending).rejects.toThrow('offline');
+    expect(s.getDom()).toBe('newer draft');
+});
+
+test.each([false, true])('global destination HTTP failure then recovery allows the real move to retry (no jQuery: %s)', async noJQuery => {
+    const s = integratedMoveSetup(1, { noJQuery });
     const action = { kind: 'move', refs: [{ groupKey: 'character:alice.png', id: 'r' }], toType: 0 };
     s.failNext('/api/settings/save');
     await expect(s.bridge.execute(action)).rejects.toThrow('offline');
@@ -564,8 +604,8 @@ test('global destination HTTP failure then recovery allows the real move to retr
     expect(s.requests.at(-1).url).toBe('/api/characters/merge-attributes');
 });
 
-test('character destination HTTP failure then recovery allows the real move to retry', async () => {
-    const s = integratedMoveSetup(0);
+test.each([false, true])('character destination HTTP failure then recovery allows the real move to retry (no jQuery: %s)', async noJQuery => {
+    const s = integratedMoveSetup(0, { noJQuery });
     const action = { kind: 'move', refs: [{ groupKey: 'global', id: 'r' }], toType: 1 };
     s.failNext('/api/characters/merge-attributes');
     await expect(s.bridge.execute(action)).rejects.toThrow('offline');
