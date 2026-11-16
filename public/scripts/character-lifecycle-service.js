@@ -1,3 +1,4 @@
+import toastr from './notifications.js';
 import { eventSource, event_types } from './events.js';
 import { buildCharacterAuthoringFormData, getCharacterAuthoringWriteUrl } from './character-authoring.js';
 import { getCharacterDeleteCandidates, shouldRefreshCharacterAfterEdit } from './character-list-state.js';

@@ -11,7 +11,7 @@ type ToastrLike = {
 
 function reportFailure(action: string, error: unknown) {
     console.error(`[BulkTagEditor] ${action} failed`, error);
-    const toastr = (globalThis as { toastr?: ToastrLike }).toastr;
+    const toastr = (globalThis as { emberDeskNotifications?: ToastrLike }).emberDeskNotifications;
     toastr?.error?.(translate('Tag operation failed.'));
 }
 

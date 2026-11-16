@@ -130,7 +130,6 @@ export function guesstimate(str) {
     const byteLength = textEncoder.encode(str).length;
     return Math.ceil(byteLength / BYTES_PER_TOKEN);
 }
-
 async function loadTokenCache() {
     try {
         console.debug('Chat Completions: loading token cache');
@@ -225,26 +224,6 @@ export function getFriendlyTokenizerName(forApi) {
     return { tokenizerName, tokenizerKey, tokenizerId };
 }
 
-/**
- * Calls the underlying tokenizer model to the token count for a string.
- * @param {number} type Tokenizer type.
- * @param {string} str String to tokenize.
- * @returns {number} Token count.
- */
-function callTokenizer(type, str) {
-    if (type === tokenizers.NONE) return guesstimate(str);
-
-    switch (type) {
-        default: {
-            const endpointUrl = TOKENIZER_URLS[type]?.count;
-            if (!endpointUrl) {
-                console.warn('Unknown tokenizer type', type);
-                return apiFailureTokenCount(str);
-            }
-            return countTokensFromServer(endpointUrl, str);
-        }
-    }
-}
 
 /**
  * Calls the underlying tokenizer model to the token count for a string.
@@ -252,23 +231,14 @@ function callTokenizer(type, str) {
  * @param {string} str String to tokenize.
  * @returns {Promise<number>} Token count.
  */
-function callTokenizerAsync(type, str) {
-    return new Promise(resolve => {
-        if (type === tokenizers.NONE) {
-            return resolve(guesstimate(str));
-        }
-
-        switch (type) {
-            default: {
-                const endpointUrl = TOKENIZER_URLS[type]?.count;
-                if (!endpointUrl) {
-                    console.warn('Unknown tokenizer type', type);
-                    return resolve(apiFailureTokenCount(str));
-                }
-                return countTokensFromServer(endpointUrl, str, resolve);
-            }
-        }
-    });
+async function callTokenizerAsync(type, str) {
+    if (type === tokenizers.NONE) return guesstimate(str);
+    const endpointUrl = TOKENIZER_URLS[type]?.count;
+    if (!endpointUrl) {
+        console.warn('Unknown tokenizer type', type);
+        return apiFailureTokenCount(str);
+    }
+    return await countTokensFromServer(endpointUrl, str);
 }
 
 /**
@@ -325,10 +295,10 @@ export async function getTokenCountAsync(str, padding = undefined) {
  * Gets the token count for a string using the current model tokenizer.
  * @param {string} str String to tokenize
  * @param {number | undefined} padding Optional padding tokens. Defaults to 0.
- * @returns {number} Token count.
+ * @returns {Promise<number>} Token count.
  * @deprecated Use getTokenCountAsync instead.
  */
-export function getTokenCount(str, padding = undefined) {
+export async function getTokenCount(str, padding = undefined) {
     if (typeof str !== 'string' || !str?.length) {
         return 0;
     }
@@ -361,7 +331,7 @@ export function getTokenCount(str, padding = undefined) {
         return cacheObject[cacheKey];
     }
 
-    const result = callTokenizer(tokenizerType, str) + padding;
+    const result = (await callTokenizerAsync(tokenizerType, str)) + padding;
 
     if (isNaN(result)) {
         console.warn('Token count calculation returned NaN');
@@ -375,7 +345,7 @@ export function getTokenCount(str, padding = undefined) {
 /**
  * Gets the token count for a string using the OpenAI tokenizer.
  * @param {string} text Text to tokenize.
- * @returns {number} Token count.
+ * @returns {Promise<number>} Token count.
  * @deprecated Use counterWrapperOpenAIAsync instead.
  */
 function counterWrapperOpenAI(text) {
@@ -401,8 +371,9 @@ export function getTokenizerModel() {
  * @param {any[] | Object} messages
  * @deprecated Use countTokensOpenAIAsync instead.
  */
-export function countTokensOpenAI(messages, full = false) {
-    const tokenizerEndpoint = `/api/tokenizers/openai/count?model=${getTokenizerModel()}`;
+export async function countTokensOpenAI(messages, full = false) {
+    const model = getTokenizerModel();
+    const tokenizerEndpoint = `/api/tokenizers/openai/count?model=${model}`;
     const cacheObject = getTokenCacheObject();
 
     if (!Array.isArray(messages)) {
@@ -412,8 +383,6 @@ export function countTokensOpenAI(messages, full = false) {
     let token_count = -1;
 
     for (const message of messages) {
-        const model = getTokenizerModel();
-
         if (model === 'claude') {
             full = true;
         }
@@ -425,18 +394,17 @@ export function countTokensOpenAI(messages, full = false) {
         if (typeof cachedCount === 'number') {
             token_count += cachedCount;
         } else {
-            jQuery.ajax({
-                async: false,
-                type: 'POST', //
-                url: tokenizerEndpoint,
-                data: JSON.stringify([message]),
-                dataType: 'json',
-                contentType: 'application/json',
-                success: function (data) {
-                    token_count += Number(data.token_count);
-                    cacheObject[cacheKey] = Number(data.token_count);
-                },
-            });
+            try {
+                const response = await fetch(tokenizerEndpoint, {
+                    method: 'POST', headers: getRequestHeaders(), body: JSON.stringify([message]),
+                });
+                if (!response.ok) continue;
+                const data = await response.json();
+                token_count += Number(data.token_count);
+                cacheObject[cacheKey] = Number(data.token_count);
+            } catch {
+                // The legacy synchronous entry skipped failed messages.
+            }
         }
     }
 
@@ -452,7 +420,8 @@ export function countTokensOpenAI(messages, full = false) {
  * @returns {Promise<number>} Token count.
  */
 export async function countTokensOpenAIAsync(messages, full = false) {
-    const tokenizerEndpoint = `/api/tokenizers/openai/count?model=${getTokenizerModel()}`;
+    const model = getTokenizerModel();
+    const tokenizerEndpoint = `/api/tokenizers/openai/count?model=${model}`;
     const cacheObject = getTokenCacheObject();
 
     if (!Array.isArray(messages)) {
@@ -462,8 +431,6 @@ export async function countTokensOpenAIAsync(messages, full = false) {
     let token_count = -1;
 
     for (const message of messages) {
-        const model = getTokenizerModel();
-
         if (model === 'claude') {
             full = true;
         }
@@ -519,72 +486,51 @@ function getTokenCacheObject() {
  * Count tokens using the server API.
  * @param {string} endpoint API endpoint.
  * @param {string} str String to tokenize.
- * @param {function} [resolve] Promise resolve function.s
- * @returns {number} Token count.
+ * @returns {Promise<number>} Token count.
  */
-function countTokensFromServer(endpoint, str, resolve) {
-    const isAsync = typeof resolve === 'function';
-    let tokenCount = 0;
-
-    jQuery.ajax({
-        async: isAsync,
-        type: 'POST',
-        url: endpoint,
-        data: JSON.stringify({ text: str }),
-        dataType: 'json',
-        contentType: 'application/json',
-        success: function (data) {
-            if (typeof data.count === 'number') {
-                tokenCount = data.count;
-            } else {
-                tokenCount = apiFailureTokenCount(str);
-            }
-
-            if (isAsync) resolve(tokenCount);
-        },
-    });
-
-    return tokenCount;
+async function countTokensFromServer(endpoint, str) {
+    try {
+        const response = await fetch(endpoint, {
+            method: 'POST', headers: getRequestHeaders(), body: JSON.stringify({ text: str }),
+        });
+        if (!response.ok) return 0;
+        const data = await response.json();
+        return typeof data.count === 'number' ? data.count : apiFailureTokenCount(str);
+    } catch {
+        return 0;
+    }
 }
 
 /**
  * Calls the underlying tokenizer model to encode a string to tokens.
  * @param {string} endpoint API endpoint.
  * @param {string} str String to tokenize.
- * @param {function} [resolve] Promise resolve function.
- * @returns {number[]} Array of token ids.
+ * @returns {Promise<number[]>} Array of token ids.
  */
-function getTextTokensFromServer(endpoint, str, resolve) {
-    const isAsync = typeof resolve === 'function';
-    let ids = [];
-    jQuery.ajax({
-        async: isAsync,
-        type: 'POST',
-        url: endpoint,
-        data: JSON.stringify({ text: str }),
-        dataType: 'json',
-        contentType: 'application/json',
-        success: function (data) {
-            ids = data.ids;
-
-            // Don't want to break reverse compatibility, so sprinkle in some of the JS magic
-            if (Array.isArray(data.chunks)) {
-                Object.defineProperty(ids, 'chunks', { value: data.chunks });
-            }
-
-            if (isAsync) resolve(ids);
-        },
-    });
-    return ids;
+async function getTextTokensFromServer(endpoint, str) {
+    try {
+        const response = await fetch(endpoint, {
+            method: 'POST', headers: getRequestHeaders(), body: JSON.stringify({ text: str }),
+        });
+        if (!response.ok) return [];
+        const data = await response.json();
+        const ids = data.ids;
+        if (Array.isArray(data.chunks)) {
+            Object.defineProperty(ids, 'chunks', { value: data.chunks });
+        }
+        return ids;
+    } catch {
+        return [];
+    }
 }
 
 /**
  * Encodes a string to tokens using the server API.
  * @param {number} tokenizerType Tokenizer type.
  * @param {string} str String to tokenize.
- * @returns {number[]} Array of token ids.
+ * @returns {Promise<number[]>} Array of token ids.
  */
-export function getTextTokens(tokenizerType, str) {
+export async function getTextTokens(tokenizerType, str) {
     switch (tokenizerType) {
         default: {
             const tokenizerEndpoints = TOKENIZER_URLS[tokenizerType];
@@ -611,9 +557,9 @@ export function getTextTokens(tokenizerType, str) {
  * Decodes token ids to text using the server API.
  * @param {number} tokenizerType Tokenizer type.
  * @param {number[]} ids Array of token ids
- * @returns {({ text: string, chunks?: string[] })} Decoded token text as a single string and individual chunks (if available).
+ * @returns {Promise<{ text: string, chunks?: string[] }>} Decoded token text as a single string and individual chunks (if available).
  */
-export function decodeTextTokens(tokenizerType, ids) {
+export async function decodeTextTokens(tokenizerType, ids) {
     const tokenizerEndpoints = TOKENIZER_URLS[tokenizerType];
     if (!tokenizerEndpoints) {
         console.warn('Unknown tokenizer type', tokenizerType);
@@ -639,27 +585,19 @@ function apiFailureTokenCount(str) {
  * Calls the server API to decode token ids to text.
  * @param {string} endpoint API endpoint.
  * @param {number[]} ids Array of token ids.
- * @param {function} [resolve] Promise resolve function.
- * @returns {({ text: string, chunks?: string[] })} Decoded token text.
+ * @returns {Promise<{ text: string, chunks?: string[] }>} Decoded token text.
  */
-function decodeTextTokensFromServer(endpoint, ids, resolve) {
-    const isAsync = typeof resolve === 'function';
-    let text = '';
-    let chunks = [];
-    jQuery.ajax({
-        async: isAsync,
-        type: 'POST',
-        url: endpoint,
-        data: JSON.stringify({ ids: ids }),
-        dataType: 'json',
-        contentType: 'application/json',
-        success: function (data) {
-            text = data.text;
-            chunks = data.chunks;
-            if (isAsync) resolve({ text, chunks });
-        },
-    });
-    return { text, chunks };
+async function decodeTextTokensFromServer(endpoint, ids) {
+    try {
+        const response = await fetch(endpoint, {
+            method: 'POST', headers: getRequestHeaders(), body: JSON.stringify({ ids }),
+        });
+        if (!response.ok) return { text: '', chunks: [] };
+        const data = await response.json();
+        return { text: data.text, chunks: data.chunks };
+    } catch {
+        return { text: '', chunks: [] };
+    }
 }
 
 export async function initTokenizers() {

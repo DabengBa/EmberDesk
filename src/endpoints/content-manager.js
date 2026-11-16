@@ -9,7 +9,7 @@ import sanitize from 'sanitize-filename';
 import { sync as writeFileAtomicSync } from 'write-file-atomic';
 
 import { getConfigValue, color, setPermissionsSync, isValidUrl } from '../util.js';
-import { write } from '../character-card-parser.js';
+import { write } from '../character-card-parser.ts';
 import { serverDirectory } from '../server-directory.js';
 import { imageToPng } from '../image-processing.js';
 import { DEFAULT_AVATAR_PATH } from '../constants.js';

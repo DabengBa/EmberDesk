@@ -1,5 +1,7 @@
 import { beforeEach, expect, jest, test } from '@jest/globals';
 
+jest.unstable_mockModule('../public/scripts/notifications.js', () => ({ default: new Proxy({}, { get: (_target, key) => globalThis.toastr?.[key] }) }));
+
 const characters = [];
 const fetchMock = jest.fn();
 const getCharacters = jest.fn();

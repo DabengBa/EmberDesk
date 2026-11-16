@@ -18,7 +18,7 @@ import {
 } from '../src/endpoints/canonical-chat-store.ts';
 import { recordCharacterAvatarBlob } from '../src/canonical-avatar-blob-service.ts';
 import { getCanonicalSettingsDocument, upsertCanonicalSettingsDocument } from '../src/endpoints/settings-store.ts';
-import { read } from '../src/character-card-parser.js';
+import { read } from '../src/character-card-parser.ts';
 
 const __filename = fileURLToPath(import.meta.url);
 const repoRoot = path.resolve(path.dirname(__filename), '..');

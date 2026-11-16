@@ -123,8 +123,9 @@ export function getContext() {
         sendGenerationRequest,
         stopGeneration,
         tokenizers,
+        /** Returns a Promise of token IDs. */
         getTextTokens,
-        /** @deprecated Use getTokenCountAsync instead */
+        /** Returns a Promise of the token count. @deprecated Use getTokenCountAsync instead */
         getTokenCount,
         getTokenCountAsync,
         extensionPrompts: extension_prompts,

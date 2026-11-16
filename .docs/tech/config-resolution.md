@@ -19,7 +19,7 @@ Primary files:
 - `src/util.js` — `getConfigValue`, `stringToBool`, `setConfigFilePath`, `keyToEnv`
 - `default/config.yaml` — canonical default values
 
-`src/util.js` no longer carries EmberDesk's archive/zip helper implementations. Those now live in `src/archive-utils.js` and are re-exported for compatibility, so this document intentionally treats `util.js` only as the remaining config-related helper surface.
+`src/util.js` no longer carries EmberDesk's archive/zip helper implementations. Those live in `src/archive-utils.ts`; `src/archive-utils.js` is a compatibility re-export used by `util.js`. This document treats `util.js` only as the remaining config-related helper surface.
 
 ## Architecture And Constraints
 

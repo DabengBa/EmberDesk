@@ -16,8 +16,8 @@ import storage from 'node-persist';
 import { DEFAULT_AVATAR_PATH } from '../constants.js';
 import { default as validateAvatarUrlMiddleware, getFileNameValidationFunction, forbiddenRegExp } from '../middleware/validateFileName.js';
 import { deepMerge, humanizedDateTime, tryParse, MemoryLimitedMap, getConfigValue, mutateJsonString, clientRelativePath, getUniqueName, sanitizeSafeCharacterReplacements } from '../util.js';
-import { TavernCardValidator } from '../validator/TavernCardValidator.js';
-import { parse, write } from '../character-card-parser.js';
+import { TavernCardValidator } from '../validator/TavernCardValidator.ts';
+import { parse, write } from '../character-card-parser.ts';
 import { processUnsetSentinels, toShallow, unsetPrivateFields } from './character-card-helpers.js';
 import {
     buildCharacterFileSnapshotRow,
@@ -30,7 +30,7 @@ import {
     convertWorldInfoToCharacterBook,
     getCharaCardV2,
     readFromV2,
-} from './character-card-v2.js';
+} from './character-card-v2.ts';
 import {
     CanonicalReadBlockedError,
     readCharacterFullPayload,

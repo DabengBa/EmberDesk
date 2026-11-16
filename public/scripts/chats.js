@@ -1,3 +1,4 @@
+import toastr from './notifications.js';
 // Move chat functions here from script.js (eventually)
 
 import { css, DOMPurify } from '../lib.js';

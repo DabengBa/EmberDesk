@@ -9,7 +9,7 @@ import sharp from 'sharp';
 import extract from 'png-chunks-extract';
 import PNGtext from 'png-chunk-text';
 import * as realImageProcessing from '../src/image-processing.js';
-import * as realCharacterCard from '../src/character-card-parser.js';
+import * as realCharacterCard from '../src/character-card-parser.ts';
 import { setConfigFilePath } from '../src/util.js';
 import { makeAnimatedImages, makeBmp } from './helpers/animated-image-fixtures.js';
 
@@ -92,7 +92,7 @@ async function importCharacterRoutes({ generateThumbnailImpl, thumbnailsEnabled 
         avatarToPng: realImages ? realImageProcessing.avatarToPng : async () => Buffer.from('cropped'),
     }));
 
-    jest.unstable_mockModule('../src/character-card-parser.js', () => ({
+    jest.unstable_mockModule('../src/character-card-parser.ts', () => ({
         parse: mockParse,
         read: realImages ? realCharacterCard.read : () => '{"spec":"chara_card_v2","data":{"name":"Character"}}',
         write: mockWrite,
@@ -112,7 +112,7 @@ async function importCharacterRoutes({ generateThumbnailImpl, thumbnailsEnabled 
         forbiddenRegExp: /[<>:"|?*]/,
     }));
 
-    jest.unstable_mockModule('../src/validator/TavernCardValidator.js', () => ({
+    jest.unstable_mockModule('../src/validator/TavernCardValidator.ts', () => ({
         TavernCardValidator: class {
             validate() { return true; }
             get lastValidationError() { return null; }

@@ -11,13 +11,24 @@
  */
 
 import { StringDecoder } from 'node:string_decoder';
+import type { WireLogContext } from './wire-log-store.ts';
+
+type TokenUsage = Record<string, number | { cached_tokens: number }>;
+type ToolCall = { index: number; id: string; type: string; function: { name: string; arguments: string } };
+type Fragment = { index?: number; id?: unknown; type?: unknown; function?: { name?: unknown; arguments?: unknown } | null } | null;
+type Choice = { delta?: { content?: unknown; reasoning_content?: unknown; reasoning?: unknown; tool_calls?: Fragment[] } | null;
+    finish_reason?: unknown; message?: { finish_reason?: unknown; content?: unknown } | null } | null;
+type Payload = { usage?: unknown; choices?: Choice[] } | null;
+type StreamState = { content: string; reasoning: string; finishReason: string | null; usage: TokenUsage | null;
+    toolCalls: Map<number, ToolCall>; parseErrors: string[]; events: number };
+type AssembledStream = Omit<StreamState, 'toolCalls'> & { toolCalls: ToolCall[] };
 
 const SSE_DATA_PREFIX = 'data:';
 const SSE_DONE = '[DONE]';
 // Context fields that are fixed for the whole generation. They come from the
 // request (the client's `_trace` or the endpoint's own knowledge), not from the
 // response bytes, so they are resolved once when the session begins.
-const TRACE_STRING_FIELDS = ['chatId', 'charName', 'type', 'model', 'source', 'pipelineRun', 'pipelineStep'];
+const TRACE_STRING_FIELDS = ['chatId', 'charName', 'type', 'model', 'source', 'pipelineRun', 'pipelineStep'] as const;
 const USAGE_FIELDS = [
     'prompt_tokens',
     'completion_tokens',
@@ -34,22 +45,24 @@ const USAGE_FIELDS = [
  * @param {unknown} usage Provider-supplied usage value
  * @returns {object|null} Sanitized token counts, or null when none are valid
  */
-export function sanitizeUsage(usage) {
+export function sanitizeUsage(usage: unknown): TokenUsage | null {
     if (!usage || typeof usage !== 'object' || Array.isArray(usage)) {
         return null;
     }
 
     /** @type {Record<string, unknown>} */
-    const result = {};
+    const result: TokenUsage = {};
+    const source = usage as Record<string, unknown>;
     for (const field of USAGE_FIELDS) {
-        const value = usage[field];
-        if (Number.isSafeInteger(value) && value >= 0) {
+        const value = source[field];
+        if (typeof value === 'number' && Number.isSafeInteger(value) && value >= 0) {
             result[field] = value;
         }
     }
 
-    const cachedTokens = usage.prompt_tokens_details?.cached_tokens;
-    if (Number.isSafeInteger(cachedTokens) && cachedTokens >= 0) {
+    const details = source.prompt_tokens_details as { cached_tokens?: unknown } | null | undefined;
+    const cachedTokens = details?.cached_tokens;
+    if (typeof cachedTokens === 'number' && Number.isSafeInteger(cachedTokens) && cachedTokens >= 0) {
         result.prompt_tokens_details = { cached_tokens: cachedTokens };
     }
 
@@ -70,10 +83,10 @@ export function sanitizeUsage(usage) {
  * @param {string} [args.chatId] Explicit active chat id from the caller
  * @returns {{context: object, chatId: string|null}} Trace context plus the resolved chat id
  */
-export function createRecordTrace({ context = {}, chatId } = {}) {
-    const source = context && typeof context === 'object' && !Array.isArray(context) ? context : {};
+export function createRecordTrace({ context = {}, chatId }: { context?: unknown; chatId?: unknown } = {}): { context: WireLogContext; chatId: string | null } {
+    const source = context && typeof context === 'object' && !Array.isArray(context) ? context as Record<string, unknown> : {};
     /** @type {Record<string, string|boolean>} */
-    const trace = {};
+    const trace: WireLogContext = {};
     for (const field of TRACE_STRING_FIELDS) {
         const value = source[field];
         if (typeof value === 'string' && value) {
@@ -115,8 +128,8 @@ export function createRecordTrace({ context = {}, chatId } = {}) {
  * @param {Map<number, AssembledToolCall>} store Accumulator
  * @param {object} fragment Incoming delta tool call fragment
  */
-function mergeToolCallFragment(store, fragment) {
-    const index = Number.isInteger(fragment?.index) ? fragment.index : 0;
+function mergeToolCallFragment(store: Map<number, ToolCall>, fragment: Fragment) {
+    const index = Number.isInteger(fragment?.index) ? fragment!.index! : 0;
     const existing = store.get(index) ?? {
         index,
         id: '',
@@ -142,10 +155,10 @@ function mergeToolCallFragment(store, fragment) {
 
 /**
  * Applies one parsed SSE payload to the accumulator.
- * @param {any} payload Parsed JSON payload
+ * @param {object|null} payload Parsed JSON payload
  * @param {object} state Mutable accumulator state
  */
-function applyPayload(payload, state) {
+function applyPayload(payload: Payload, state: StreamState) {
     // Token counts travel on their own trailing event when the caller asked for
     // `stream_options.include_usage`, so the last one wins.
     if (payload?.usage && typeof payload.usage === 'object' && !Array.isArray(payload.usage)) {
@@ -187,8 +200,8 @@ function applyPayload(payload, state) {
  */
 export function createSseAssembler() {
     /** @type {Map<number, AssembledToolCall>} */
-    const toolCalls = new Map();
-    const state = {
+    const toolCalls = new Map<number, ToolCall>();
+    const state: StreamState = {
         content: '',
         reasoning: '',
         finishReason: null,
@@ -205,14 +218,14 @@ export function createSseAssembler() {
     /**
      * @param {Buffer|string} chunk Raw bytes from the upstream stream
      */
-    function push(chunk) {
+    function push(chunk: Buffer | string) {
         buffer += Buffer.isBuffer(chunk) ? decoder.write(chunk) : String(chunk ?? '');
 
         let separatorIndex = buffer.search(/\r?\n\r?\n/);
         while (separatorIndex !== -1) {
             const match = buffer.slice(separatorIndex).match(/^\r?\n\r?\n/);
             const eventText = buffer.slice(0, separatorIndex);
-            buffer = buffer.slice(separatorIndex + match[0].length);
+            buffer = buffer.slice(separatorIndex + match![0].length);
             consumeEvent(eventText);
             separatorIndex = buffer.search(/\r?\n\r?\n/);
         }
@@ -221,7 +234,7 @@ export function createSseAssembler() {
     /**
      * @param {string} eventText One complete SSE event block
      */
-    function consumeEvent(eventText) {
+    function consumeEvent(eventText: string) {
         for (const line of eventText.split(/\r?\n/)) {
             if (!line.startsWith(SSE_DATA_PREFIX)) {
                 continue;
@@ -269,7 +282,7 @@ export function createSseAssembler() {
  * @param {AssembledStream} assembled Result of `createSseAssembler().finish()`
  * @returns {{content: string, reasoning: string, finishReason: string|null, usage: object|null, toolCalls: AssembledToolCall[]}}
  */
-export function summarizeSseAssembled(assembled) {
+export function summarizeSseAssembled(assembled: AssembledStream) {
     return {
         content: assembled.content,
         reasoning: assembled.reasoning,

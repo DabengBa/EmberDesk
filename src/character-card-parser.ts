@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import { Buffer } from 'node:buffer';
 
-import encode from './png/encode.js';
+import encode from './png/encode.ts';
 import extract from 'png-chunks-extract';
 import PNGtext from 'png-chunk-text';
 
@@ -12,7 +12,7 @@ import PNGtext from 'png-chunk-text';
  * @param {string} data Character data to write
  * @returns {Buffer} PNG image buffer with metadata
  */
-export const write = (image, data) => {
+export const write = (image: Buffer, data: string): Buffer => {
     const chunks = extract(new Uint8Array(image));
     const tEXtChunks = chunks.filter(chunk => chunk.name === 'tEXt');
 
@@ -53,7 +53,7 @@ export const write = (image, data) => {
  * @param {Buffer} image PNG image buffer
  * @returns {Buffer} PNG image buffer without textual chunks
  */
-export const extractImageData = (image) => {
+export const extractImageData = (image: Buffer): Buffer => {
     const chunks = extract(new Uint8Array(image));
     const imageChunks = chunks.filter(chunk => !['tEXt', 'zTXt', 'iTXt'].includes(chunk.name));
     return Buffer.from(encode(imageChunks));
@@ -65,7 +65,7 @@ export const extractImageData = (image) => {
  * @param {Buffer} image PNG image buffer
  * @returns {string} Character data
  */
-export const read = (image) => {
+export const read = (image: Buffer): string => {
     const chunks = extract(new Uint8Array(image));
 
     const textChunks = chunks.filter((chunk) => chunk.name === 'tEXt').map((chunk) => PNGtext.decode(chunk.data));
@@ -97,7 +97,7 @@ export const read = (image) => {
  * @param {string} format File format
  * @returns {Promise<string>} Character data
  */
-export const parse = async (cardUrl, format) => {
+export const parse = async (cardUrl: string, format?: string): Promise<string> => {
     let fileFormat = format === undefined ? 'png' : format;
 
     switch (fileFormat) {

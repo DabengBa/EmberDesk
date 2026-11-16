@@ -1,3 +1,4 @@
+import toastr from './notifications.js';
 import { world_info, world_names } from './world-info-state.js';
 
 /** Interactive book management and reference cascade feedback. */

@@ -30,12 +30,12 @@ import {
     auditCanonicalChatShadowImport,
     runCanonicalChatShadowImport,
 } from '../src/canonical-chat-shadow-import.js';
-import { parse as parseCharacterCard, write as writeCharacterCardPngData } from '../src/character-card-parser.js';
+import { parse as parseCharacterCard, write as writeCharacterCardPngData } from '../src/character-card-parser.ts';
 import {
     markCanonicalWorldInfoBookDeleted,
     upsertCanonicalWorldInfoBook,
 } from '../src/endpoints/world-info-store.ts';
-import encodePngChunks from '../src/png/encode.js';
+import encodePngChunks from '../src/png/encode.ts';
 import { setConfigFilePath } from '../src/util.js';
 import { getCanonicalSettingsDocument, upsertCanonicalSettingsDocument } from '../src/endpoints/settings-store.ts';
 import { buildCharacterFileSnapshotRow } from '../src/endpoints/character-file-snapshot.js';

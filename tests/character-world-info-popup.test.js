@@ -1,5 +1,7 @@
 import { beforeEach, expect, jest, test } from '@jest/globals';
 
+jest.unstable_mockModule('../public/scripts/notifications.js', () => ({ default: new Proxy({}, { get: (_target, key) => globalThis.toastr?.[key] }) }));
+
 const mount = jest.fn();
 const load = jest.fn(async () => ({ mountCharacterWorldInfoEditor: mount }));
 jest.unstable_mockModule('../public/scripts/workspace-panels-react-bridge.js', () => ({ loadWorkspacePanelsModule: load }));
@@ -7,7 +9,7 @@ jest.unstable_mockModule('../public/scripts/events.js', () => ({ eventSource: { 
 jest.unstable_mockModule('../public/scripts/character-authoring.js', () => ({ buildCharacterAuthoringFormData: jest.fn(), getCharacterAuthoringWriteUrl: jest.fn() }));
 jest.unstable_mockModule('../public/scripts/character-list-state.js', () => ({ getCharacterDeleteCandidates: jest.fn(), shouldRefreshCharacterAfterEdit: jest.fn() }));
 jest.unstable_mockModule('../public/scripts/request-context.js', () => ({ getRequestHeaders: jest.fn() }));
-jest.unstable_mockModule('../public/scripts/world-info-state.js', () => ({ world_info: {}, world_names: [], selected_world_info: [] }));
+jest.unstable_mockModule('../public/scripts/world-info-state.js', () => ({ world_info: {}, world_names: [], selected_world_info: [], setWorldNames: jest.fn() }));
 
 const { registerCharacterLifecycleShellContext } = await import('../public/scripts/character-lifecycle-shell-context.js');
 const { openCharacterWorldPopup } = await import('../public/scripts/character-lifecycle-service.js');

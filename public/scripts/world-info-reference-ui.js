@@ -1,3 +1,4 @@
+import toastr from './notifications.js';
 import { world_names } from './world-info-state.js';
 
 /** Character embedded-book and global-selection shell UI compatibility. */

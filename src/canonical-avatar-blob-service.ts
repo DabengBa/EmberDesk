@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import type { DatabaseSync } from 'node:sqlite';
 
-import { extractImageData } from './character-card-parser.js';
+import { extractImageData } from './character-card-parser.ts';
 import { ensureCanonicalSliceBackend } from './canonical-backend.js';
 import {
     CHARACTER_AVATAR_OWNER_TYPE,

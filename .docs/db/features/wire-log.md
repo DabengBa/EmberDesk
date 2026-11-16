@@ -17,7 +17,7 @@ When a reply is wrong, the question is almost always "what did we actually send,
 
 ## Ownership Direction
 
-`src/wire-log-store.js` owns the on-disk shape (one record = one file under `<user root>/wire-logs/<YYYY-MM-DD>/`, written temp-then-rename) plus listing, reading, deleting and purging. `src/wire-log-tap.js` owns passive observation: the SSE assembler and the per-session trace context (`createRecordTrace`). `src/wire-log-recorder.js` owns the session lifecycle (begin / complete / stream / fail / flush), the normalized options, and the per-session retention sweep. `src/endpoints/backends/chat-completions.js` is the only writer: it reads `feature_settings.wire_log` from the canonical settings document, opens a recorder, and drives the session. `src/endpoints/wire-log.js` is the viewer API and the settings read/write route. The viewer UI (`app/components/wire-log/`) never touches the filesystem — it only calls `/api/wire-logs`.
+The chat-completions backend records each generation; the viewer accesses records and settings through `/api/wire-logs`, not the filesystem. The storage, recorder and route implementation boundaries are described in [Server TypeScript](../../tech/server-typescript.md#wire-log-and-archivecard-formats).
 
 ## User-Visible Contract
 

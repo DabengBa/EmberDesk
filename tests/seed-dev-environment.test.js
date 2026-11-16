@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
 
 import { afterEach, describe, expect, test } from '@jest/globals';
-import { parse as parseCharacterCard } from '../src/character-card-parser.js';
+import { parse as parseCharacterCard } from '../src/character-card-parser.ts';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);

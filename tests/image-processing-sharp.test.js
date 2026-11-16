@@ -1,8 +1,8 @@
 import { describe, expect, test } from '@jest/globals';
 import sharp from 'sharp';
 import extract from 'png-chunks-extract';
-import encode from '../src/png/encode.js';
-import { read, write } from '../src/character-card-parser.js';
+import encode from '../src/png/encode.ts';
+import { read, write } from '../src/character-card-parser.ts';
 import { AVATAR_HEIGHT, AVATAR_WIDTH } from '../src/constants.js';
 import { avatarToPng, avatarToPngSized, imageToPng, thumbnailImage } from '../src/image-processing.js';
 import { makeAnimatedImages } from './helpers/animated-image-fixtures.js';

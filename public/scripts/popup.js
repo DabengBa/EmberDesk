@@ -1,3 +1,4 @@
+import toastr from './notifications.js';
 import { shouldSendOnEnter } from './RossAscends-mods.js';
 import { translate } from './i18n.js';
 import { toastPositionClasses } from './power-user.js';

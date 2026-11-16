@@ -4,7 +4,7 @@ import path from 'node:path';
 import sharp from 'sharp';
 import extract from 'png-chunks-extract';
 import { makeAnimatedImages, makeBmp } from './helpers/animated-image-fixtures.js';
-import { read as readCharacterCard } from '../src/character-card-parser.js';
+import { read as readCharacterCard } from '../src/character-card-parser.ts';
 import { AVATAR_HEIGHT, AVATAR_WIDTH } from '../src/constants.js';
 
 import { afterEach, describe, expect, test } from '@jest/globals';

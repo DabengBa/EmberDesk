@@ -8,7 +8,7 @@ const writeCharacterCardMock = jest.fn();
 const parseCharacterCardMock = jest.fn();
 const invalidateDirectoryMock = jest.fn();
 
-jest.unstable_mockModule('../src/character-card-parser.js', () => ({
+jest.unstable_mockModule('../src/character-card-parser.ts', () => ({
     read: readCharacterCardMock,
     write: writeCharacterCardMock,
     parse: parseCharacterCardMock,

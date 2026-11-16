@@ -1,3 +1,4 @@
+import toastr from './notifications.js';
 import { world_names } from './world-info-state.js';
 
 /** Interactive editor commands; the workbench session remains the sole editor owner. */

@@ -663,7 +663,7 @@ Code binding points:
 - `character-read-service.ts` owns character read coordination.
 - `character-write-service.ts` owns core character write sequencing.
 - `canonical-backend.js` owns lazy per-user slice activation (open/migrate/import/audit decision) shared by all slice gates.
-- `character-card-v2.js` owns the shared character-card V2 normalization chain so runtime routes and operator/CLI tooling produce byte-equivalent canonical snapshots; canonical rows store the card's native payload while linked World Info `character_book` content is re-injected from the canonical World Info store on canonical reads.
+- `src/endpoints/character-card-v2.ts` owns the shared character-card V2 normalization chain so runtime routes and operator/CLI tooling produce byte-equivalent canonical snapshots; canonical rows store the card's native payload while linked World Info `character_book` content is re-injected from the canonical World Info store on canonical reads.
 - `chats.js` owns chat save/rename/delete/import route side effects.
 - `character-index.js` is retired from normal runtime and remains only as a historical/helper-level proof surface.
 - `settings.js`, `secrets.js`, `assets.js`, and `extensions.js` remain their HTTP/facade owners while domain stores move behind them.

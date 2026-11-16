@@ -23,7 +23,7 @@ import {
     summarizeScenarioPayload,
     validateInteractionPath,
 } from '../src/interaction-performance-report.js';
-import { write as writeCharacterCardPngData } from '../src/character-card-parser.js';
+import { write as writeCharacterCardPngData } from '../src/character-card-parser.ts';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);

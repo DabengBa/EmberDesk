@@ -29,7 +29,7 @@ fs.writeFileSync(
 setConfigFilePath(configPath);
 globalThis.COMMAND_LINE_ARGS = {};
 
-const { router: wireLogRouter } = await import('../src/endpoints/wire-log.js');
+const { router: wireLogRouter } = await import('../src/endpoints/wire-log.ts');
 
 function makeDirectories() {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'emberdesk-wire-log-fallback-'));

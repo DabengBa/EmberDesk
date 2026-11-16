@@ -24,7 +24,7 @@ fs.writeFileSync(tmpConfigPath, process.env.WIRE_FLAG_CHILD
 setConfigFilePath(tmpConfigPath);
 
 const { router: chatCompletionsRouter } = await import('../src/endpoints/backends/chat-completions.js');
-const { router: wireLogRouter } = await import('../src/endpoints/wire-log.js');
+const { router: wireLogRouter } = await import('../src/endpoints/wire-log.ts');
 const { canonicalSqliteManager } = await import('../src/canonical-sqlite.js');
 
 const HANDLE = 'wire-log-generate-user';

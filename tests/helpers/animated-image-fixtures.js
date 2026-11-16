@@ -1,6 +1,6 @@
 import sharp from 'sharp';
 import extract from 'png-chunks-extract';
-import encode from '../../src/png/encode.js';
+import encode from '../../src/png/encode.ts';
 
 export async function makeAnimatedImages() {
     const red = await sharp({ create: { width: 2, height: 2, channels: 4, background: '#ff0000' } }).png().toBuffer();

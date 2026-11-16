@@ -19,6 +19,31 @@ const ID_PATTERN = /^wl_[A-Za-z0-9_-]{6,64}$/;
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const DEFAULT_MAX_FILE_BYTES = 2 * 1024 * 1024;
 
+export type WireLogContext = {
+    type?: string; model?: string; source?: string; chatId?: string; charName?: string;
+    pipelineRun?: string; pipelineStep?: string; regenerate?: boolean;
+};
+
+export type WireLogResponse = {
+    status: number | null | undefined; statusText: string; headers: Record<string, string>;
+    streamed: boolean; body: unknown; usage: unknown; bytes: number; truncated: boolean;
+    durationMs: number | undefined; ttftMs: number | null; chunks: number | null;
+};
+
+export type WireRecord = {
+    id: string; ts: number; status: string;
+    request: { url: string; method: string; headers: Record<string, string>; body: unknown;
+        bytes: number; truncated: boolean; messageCount: number; toolCount: number };
+    response: WireLogResponse | null;
+    error: { message: string; code: string | null } | null;
+    context: WireLogContext;
+};
+
+type RecordInput = { url: string; headers: Record<string, unknown>; body: unknown;
+    context?: unknown; redact?: string[]; maxFileBytes?: number };
+type ListOptions = { date?: string; status?: string; type?: string; chatId?: string; limit?: number };
+type RetentionOptions = { retentionDays?: number; now?: Date };
+
 /**
  * @typedef {object} WireLogContext
  * @property {string} [type] Generation type (`normal`, `quiet`, ...)
@@ -38,13 +63,13 @@ const DEFAULT_MAX_FILE_BYTES = 2 * 1024 * 1024;
  * @param {string[]} [names] Lowercase header names to mask
  * @returns {Record<string, string>} Header map with masked values
  */
-export function redactHeaders(headers, names = []) {
+export function redactHeaders(headers: unknown, names: string[] = []): Record<string, string> {
     if (!headers || typeof headers !== 'object' || Array.isArray(headers)) {
         return {};
     }
     const masked = new Set((Array.isArray(names) ? names : []).map(name => String(name).toLowerCase()));
     /** @type {Record<string, string>} */
-    const result = {};
+    const result: Record<string, string> = {};
     for (const [key, value] of Object.entries(headers)) {
         result[key] = masked.has(key.toLowerCase()) ? REDACTION_MASK : String(value);
     }
@@ -58,7 +83,7 @@ export function redactHeaders(headers, names = []) {
  * @param {number} [limitBytes] Serialized size limit
  * @returns {{value: unknown, truncated: boolean, bytes: number}}
  */
-export function truncateBody(body, limitBytes = DEFAULT_MAX_FILE_BYTES) {
+export function truncateBody(body: unknown, limitBytes = DEFAULT_MAX_FILE_BYTES): { value: unknown; truncated: boolean; bytes: number } {
     let serialized = '';
     try {
         serialized = JSON.stringify(body ?? null) ?? '';
@@ -83,7 +108,7 @@ function buildRecordId(timestamp = Date.now()) {
     return `wl_${iso}_${randomUUID().replaceAll('-', '').slice(0, 8)}`;
 }
 
-function datePartition(timestamp) {
+function datePartition(timestamp: number) {
     return new Date(timestamp).toISOString().slice(0, 10);
 }
 
@@ -93,7 +118,7 @@ function datePartition(timestamp) {
  * @returns {string} The validated id
  * @throws {Error} When the id is not a well-formed wire log id
  */
-function assertRecordId(id) {
+function assertRecordId(id: unknown): string {
     if (typeof id !== 'string' || !ID_PATTERN.test(id)) {
         throw new Error(`invalid wire log id: ${String(id)}`);
     }
@@ -106,7 +131,7 @@ function assertRecordId(id) {
  * @returns {string} The validated date
  * @throws {Error} When the date is malformed
  */
-function assertDatePartition(date) {
+function assertDatePartition(date: unknown): string {
     if (typeof date !== 'string' || !DATE_PATTERN.test(date)) {
         throw new Error(`invalid wire log date: ${String(date)}`);
     }
@@ -131,9 +156,11 @@ export function createWireRecord({
     context = {},
     redact = [],
     maxFileBytes = DEFAULT_MAX_FILE_BYTES,
-}) {
+}: RecordInput): WireRecord {
     const ts = Date.now();
     const truncated = truncateBody(body, maxFileBytes);
+    // Property access on arbitrary request bodies is intentionally as permissive as JS.
+    const requestBody = body as { messages?: unknown; tools?: unknown } | null | undefined;
     return {
         id: buildRecordId(ts),
         ts,
@@ -145,8 +172,8 @@ export function createWireRecord({
             body: truncated.value,
             bytes: truncated.bytes,
             truncated: truncated.truncated,
-            messageCount: Array.isArray(body?.messages) ? body.messages.length : 0,
-            toolCount: Array.isArray(body?.tools) ? body.tools.length : 0,
+            messageCount: Array.isArray(requestBody?.messages) ? requestBody.messages.length : 0,
+            toolCount: Array.isArray(requestBody?.tools) ? requestBody.tools.length : 0,
         },
         response: null,
         error: null,
@@ -160,21 +187,22 @@ export function createWireRecord({
  * @param {unknown} context Raw context
  * @returns {WireLogContext} Sanitized context
  */
-export function sanitizeContext(context) {
+export function sanitizeContext(context: unknown): WireLogContext {
     if (!context || typeof context !== 'object' || Array.isArray(context)) {
         return {};
     }
     /** @type {WireLogContext} */
-    const result = {};
-    const stringFields = ['type', 'model', 'source', 'chatId', 'charName', 'pipelineRun', 'pipelineStep'];
+    const result: WireLogContext = {};
+    const source = context as Record<string, unknown>;
+    const stringFields = ['type', 'model', 'source', 'chatId', 'charName', 'pipelineRun', 'pipelineStep'] as const;
     for (const field of stringFields) {
-        const value = context[field];
+        const value = source[field];
         if (typeof value === 'string' && value) {
             result[field] = value.slice(0, 512);
         }
     }
-    if (typeof context.regenerate === 'boolean') {
-        result.regenerate = context.regenerate;
+    if (typeof source.regenerate === 'boolean') {
+        result.regenerate = source.regenerate;
     }
     return result;
 }
@@ -185,7 +213,7 @@ export function sanitizeContext(context) {
  * @param {object} record Record to persist
  * @returns {Promise<string>} Written file path
  */
-export async function writeRecord(storeRoot, record) {
+export async function writeRecord(storeRoot: string, record: WireRecord): Promise<string> {
     const id = assertRecordId(record?.id);
     const directory = path.join(storeRoot, datePartition(record.ts ?? Date.now()));
     await fs.mkdir(directory, { recursive: true });
@@ -208,7 +236,7 @@ export async function writeRecord(storeRoot, record) {
  * @param {string} id Record id
  * @returns {Promise<string|null>} File path when found
  */
-async function findRecordPath(storeRoot, id) {
+async function findRecordPath(storeRoot: string, id: string): Promise<string | null> {
     const partitions = await readPartitions(storeRoot);
     for (const partition of partitions) {
         const candidate = path.join(storeRoot, partition, `${id}.json`);
@@ -226,7 +254,7 @@ async function findRecordPath(storeRoot, id) {
  * @param {string} storeRoot Wire log root
  * @returns {Promise<string[]>} Existing `YYYY-MM-DD` directories, newest first
  */
-async function readPartitions(storeRoot) {
+async function readPartitions(storeRoot: string): Promise<string[]> {
     let entries = [];
     try {
         entries = await fs.readdir(storeRoot, { withFileTypes: true });
@@ -245,7 +273,7 @@ async function readPartitions(storeRoot) {
  * @param {string} id Record id
  * @returns {Promise<object|null>} Record, or null when it does not exist
  */
-export async function readRecord(storeRoot, id) {
+export async function readRecord(storeRoot: string, id: string): Promise<WireRecord | null> {
     const safeId = assertRecordId(id);
     const filePath = await findRecordPath(storeRoot, safeId);
     if (!filePath) {
@@ -265,7 +293,7 @@ export async function readRecord(storeRoot, id) {
  * @param {object} record Full record
  * @returns {object} Metadata-only entry
  */
-function toListItem(record) {
+function toListItem(record: WireRecord) {
     return {
         id: record.id,
         ts: record.ts,
@@ -306,7 +334,7 @@ function toListItem(record) {
  * @param {number} [options.limit] Maximum entries to return
  * @returns {Promise<object[]>} Metadata entries
  */
-export async function listRecords(storeRoot, { date, status, type, chatId, limit } = {}) {
+export async function listRecords(storeRoot: string, { date, status, type, chatId, limit }: ListOptions = {}) {
     const partitions = date
         ? [assertDatePartition(date)]
         : await readPartitions(storeRoot);
@@ -362,7 +390,7 @@ export async function listRecords(storeRoot, { date, status, type, chatId, limit
  * @param {string} id Record id
  * @returns {Promise<boolean>} Whether a file was removed
  */
-export async function deleteRecord(storeRoot, id) {
+export async function deleteRecord(storeRoot: string, id: string): Promise<boolean> {
     const safeId = assertRecordId(id);
     const filePath = await findRecordPath(storeRoot, safeId);
     if (!filePath) {
@@ -383,7 +411,7 @@ export async function deleteRecord(storeRoot, id) {
  * @param {Date} [options.now] Reference clock
  * @returns {Promise<number>} Number of records removed
  */
-export async function purgeExpiredRecords(storeRoot, { retentionDays = 2, now = new Date() } = {}) {
+export async function purgeExpiredRecords(storeRoot: string, { retentionDays = 2, now = new Date() }: RetentionOptions = {}): Promise<number> {
     if (!Number.isFinite(retentionDays) || retentionDays <= 0) {
         return 0;
     }
@@ -424,7 +452,7 @@ export async function purgeExpiredRecords(storeRoot, { retentionDays = 2, now = 
  * @param {Date} [options.now] Reference clock
  * @returns {Promise<number>} Number of partitions removed
  */
-export async function purgeExpired(storeRoot, { retentionDays = 2, now = new Date() } = {}) {
+export async function purgeExpired(storeRoot: string, { retentionDays = 2, now = new Date() }: RetentionOptions = {}): Promise<number> {
     if (!Number.isFinite(retentionDays) || retentionDays <= 0) {
         return 0;
     }

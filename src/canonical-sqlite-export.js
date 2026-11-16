@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { sync as writeFileAtomicSync } from 'write-file-atomic';
 import sanitize from 'sanitize-filename';
 
-import { write as writeCharacterCard } from './character-card-parser.js';
+import { write as writeCharacterCard } from './character-card-parser.ts';
 import { listImportLedgerEntries, recordImportLedgerEntry } from './canonical-import-ledger.js';
 import { resolveCanonicalChatProjectionPath } from './endpoints/canonical-chat-projection-path.ts';
 import { listCanonicalChatSessions } from './endpoints/canonical-chat-store.ts';

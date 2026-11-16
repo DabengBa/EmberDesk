@@ -1,3 +1,4 @@
+import toastr from './notifications.js';
 import { world_info, world_names, selected_world_info, setWorldNames } from './world-info-state.js';
 
 /** Book lifecycle and character/chat reference operations. */

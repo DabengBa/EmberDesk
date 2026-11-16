@@ -1,3 +1,4 @@
+import toastr from './notifications.js';
 import { DOMPurify, Fuse, Handlebars } from '../lib.js';
 import { markCharacterSortChanged } from './character-sort-save-guard.js';
 

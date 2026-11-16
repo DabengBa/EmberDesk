@@ -1,3 +1,4 @@
+import toastr from './notifications.js';
 import {
     characters,
     saveChat,

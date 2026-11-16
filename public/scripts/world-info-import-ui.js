@@ -1,3 +1,4 @@
+import toastr, { setNotificationHtml } from './notifications.js';
 import { runWorldInfoFileImport, runWorldInfoBatchImport } from './world-info-import-command.js';
 import { createWorldInfoImportResult, summarizeWorldInfoBatchImport } from './world-info-import-results.js';
 
@@ -201,7 +202,7 @@ export function createWorldInfoImportUi({ getWorldNames, deleteWorldInfo, update
             });
         } else {
             worldInfoImportToast.find('.toast-title').text(progressTitle);
-            worldInfoImportToast.find('.toast-message').html(progressHtml);
+            setNotificationHtml(worldInfoImportToast.find('.toast-message')[0], progressHtml);
         }
 
         worldInfoImportToast.find('.toast-message')

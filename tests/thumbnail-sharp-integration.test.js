@@ -5,8 +5,8 @@ import { afterEach, expect, jest, test } from '@jest/globals';
 import sharp from 'sharp';
 import extract from 'png-chunks-extract';
 import PNGtext from 'png-chunk-text';
-import encode from '../src/png/encode.js';
-import { write as writeCard } from '../src/character-card-parser.js';
+import encode from '../src/png/encode.ts';
+import { write as writeCard } from '../src/character-card-parser.ts';
 import { makeAnimatedImages, makeBmp } from './helpers/animated-image-fixtures.js';
 
 jest.unstable_mockModule('../src/util.js', () => ({

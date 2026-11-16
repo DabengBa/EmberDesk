@@ -1,5 +1,5 @@
 import { getCanonicalStorageSlice } from '../canonical-storage-slice-registry.js';
-import { convertWorldInfoToCharacterBook } from './character-card-v2.js';
+import { convertWorldInfoToCharacterBook } from './character-card-v2.ts';
 import { editCharacterCard } from './character-write-service.ts';
 import { listCanonicalCharactersBoundToWorld } from './character-store.ts';
 import {

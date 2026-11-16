@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 import zlib from 'node:zlib';
 import sharp from 'sharp';
 import { makeBmp } from './helpers/animated-image-fixtures.js';
-import { read as readCharacterCard } from '../src/character-card-parser.js';
+import { read as readCharacterCard } from '../src/character-card-parser.ts';
 
 import { describe, expect, jest, test } from '@jest/globals';
 

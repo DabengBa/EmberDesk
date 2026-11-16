@@ -1,7 +1,7 @@
 import { describe, expect, test } from '@jest/globals';
 
 async function importTap() {
-    return import(`../src/wire-log-tap.js?cacheBust=${Date.now()}-${Math.random()}`);
+    return import(`../src/wire-log-tap.ts?cacheBust=${Date.now()}-${Math.random()}`);
 }
 
 function sseChunk(payload) {

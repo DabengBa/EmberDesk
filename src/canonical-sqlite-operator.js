@@ -62,8 +62,8 @@ import {
     calculateCharacterChatStats,
     getCharacterChatDirectory,
 } from './endpoints/character-file-snapshot.js';
-import { getCharaCardV2 } from './endpoints/character-card-v2.js';
-import { parse as parseCharacterCard, write as writeCharacterCard } from './character-card-parser.js';
+import { getCharaCardV2 } from './endpoints/character-card-v2.ts';
+import { parse as parseCharacterCard, write as writeCharacterCard } from './character-card-parser.ts';
 
 function createSnapshotBuilder() {
     return (avatar, directories) => buildCharacterFileSnapshotRow({

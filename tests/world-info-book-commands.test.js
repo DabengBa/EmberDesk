@@ -1,5 +1,7 @@
 import { expect, jest, test } from '@jest/globals';
 
+jest.unstable_mockModule('../public/scripts/notifications.js', () => ({ default: new Proxy({}, { get: (_target, key) => globalThis.toastr?.[key] }) }));
+
 jest.unstable_mockModule('../public/scripts/i18n.js', () => ({ translate: text => text }));
 
 test.each(['delete', 'rename', 'move', 'create overwrite'])('%s enters the shared operation owner before writes', async kind => {

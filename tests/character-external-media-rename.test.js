@@ -1,11 +1,14 @@
 import { beforeEach, expect, jest, test } from '@jest/globals';
 
+jest.unstable_mockModule('../public/scripts/notifications.js', () => ({ default: new Proxy({}, { get: (_target, key) => globalThis.toastr?.[key] }) }));
+
 const state = {};
 const shell = {
     state, t: strings => strings[0], getCharaFilename: (_id, options) => options.manualAvatarKey,
     renameTagKey: jest.fn(), deleteTagKey: avatar => { delete state.tag_map[avatar]; }, saveSettingsDebounced: jest.fn(), delay: jest.fn(),
     setCharacterId: id => { state.this_chid = id; },
     prepareChatTransition: jest.fn(async () => {}),
+
     getCharacters: () => { state.characters = [{ name: 'New', avatar: 'new.png' }]; },
     selectCharacterById: id => { state.this_chid = id; },
 };
