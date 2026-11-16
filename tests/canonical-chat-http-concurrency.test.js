@@ -8,7 +8,7 @@ import { afterAll, beforeAll, expect, jest, test } from '@jest/globals';
 import { setConfigFilePath } from '../src/util.js';
 import { canonicalSqliteManager } from '../src/canonical-sqlite.js';
 import { runCanonicalMigrations } from '../src/canonical-sqlite-migrations.js';
-import { auditCanonicalChatShadowImport, runCanonicalChatShadowImport } from '../src/canonical-chat-shadow-import.js';
+import { auditCanonicalChatShadowImport, runCanonicalChatShadowImport } from '../src/canonical-chat-shadow-import.ts';
 
 jest.setTimeout(20000);
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'emberdesk-chat-http-concurrency-'));

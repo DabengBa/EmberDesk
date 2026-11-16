@@ -38,10 +38,10 @@ let previousMessage;
 let nextId = 0;
 
 function wrap(element) {
-    return globalThis.jQuery(element);
+    return typeof globalThis.jQuery === 'function' ? globalThis.jQuery(element) : element;
 }
 
-function getContainer(options, create = false) {
+function getNativeContainer(options, create = false) {
     const settings = { ...defaults, ...notifications.options, ...options };
     let container = document.getElementById(settings.containerId);
     if (!container && create) {
@@ -56,7 +56,7 @@ function getContainer(options, create = false) {
         }
         target.append(container);
     }
-    return wrap(container);
+    return container;
 }
 
 export function setNotificationHtml(parent, value) {
@@ -148,7 +148,7 @@ function show(type, message, title, override) {
         if (message === previousMessage) return undefined;
         previousMessage = message;
     }
-    const container = getContainer(options, true)[0];
+    const container = getNativeContainer(options, true);
     const element = document.createElement('div');
     element.className = `${options.toastClass} ${override?.iconClass || options.iconClasses[type]}`;
     if (options.rtl) element.classList.add('rtl');
@@ -219,7 +219,12 @@ function show(type, message, title, override) {
         });
     }
     subscriber?.(event);
-    return wrap(element);
+    return element;
+}
+
+function showLegacy(type, message, title, options) {
+    const element = show(type, message, title, options);
+    return element === undefined ? undefined : wrap(element);
 }
 
 const notifications = {
@@ -233,8 +238,19 @@ const notifications = {
             for (const item of [...active.keys()]) finishRemoval(item, false);
         }
     },
-    getContainer,
+    getContainer(options, create = false) { return wrap(getNativeContainer(options, create)); },
     subscribe(callback) { subscriber = callback; },
+    error(message, title, options) { return showLegacy('error', message, title, options); },
+    info(message, title, options) { return showLegacy('info', message, title, options); },
+    success(message, title, options) { return showLegacy('success', message, title, options); },
+    warning(message, title, options) { return showLegacy('warning', message, title, options); },
+};
+
+// The native facade shares all state with the legacy public singleton.
+notifications.native = {
+    getContainer: getNativeContainer,
+    clear,
+    remove: notifications.remove,
     error(message, title, options) { return show('error', message, title, options); },
     info(message, title, options) { return show('info', message, title, options); },
     success(message, title, options) { return show('success', message, title, options); },

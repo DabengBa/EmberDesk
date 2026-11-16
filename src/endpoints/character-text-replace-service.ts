@@ -9,7 +9,7 @@ import {
 import {
     commitWorldBookWithProjectionIntent,
     replayWorldProjection,
-} from '../canonical-world-info-projection.js';
+} from '../canonical-world-info-projection.ts';
 import { getCanonicalWorldInfoWriteState } from './worldinfo.js';
 import {
     openCanonicalChatForTextReplace,

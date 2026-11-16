@@ -6,7 +6,7 @@ import type { DatabaseSync } from 'node:sqlite';
 import mime from 'mime-types';
 import { canonicalSqliteManager, withCanonicalTransaction } from '../canonical-sqlite.js';
 import { runCanonicalMigrations } from '../canonical-sqlite-migrations.js';
-import { getPersistedCanonicalAuditStatus, invalidateCanonicalAuditStatus } from '../canonical-sqlite-shadow-import.js';
+import { getPersistedCanonicalAuditStatus, invalidateCanonicalAuditStatus } from '../canonical-sqlite-shadow-import.ts';
 import {
     recordImportLedgerEntry,
     removeImportLedgerEntry,

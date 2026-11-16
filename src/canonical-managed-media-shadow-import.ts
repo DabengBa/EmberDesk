@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
+import type { DatabaseSync } from 'node:sqlite';
 
 import mime from 'mime-types';
 
@@ -10,7 +11,7 @@ import {
     resolveAuditDriftReason,
 } from './canonical-import-ledger.js';
 import { getCanonicalMigrationStatus, runCanonicalMigrations } from './canonical-sqlite-migrations.js';
-import { persistCanonicalAuditStatus } from './canonical-sqlite-shadow-import.js';
+import { persistCanonicalAuditStatus } from './canonical-sqlite-shadow-import.ts';
 import {
     listCanonicalManagedMediaReferences,
     upsertCanonicalManagedMediaReference,
@@ -24,13 +25,26 @@ const MEDIA_DOMAINS = Object.freeze([
     { key: 'assets', ownerType: 'asset', role: 'asset', recursive: true },
     { key: 'files', ownerType: 'attachment', role: 'attachment', recursive: true },
     { key: 'userImages', ownerType: 'user_image', role: 'user_image', recursive: true },
-]);
+] as const);
 
-function toCompatibilityPath(directories, filePath) {
+type MediaDirectories = { root: string; storage?: string; assets?: string; files?: string; userImages?: string; backgrounds?: string };
+type MediaDomain = (typeof MEDIA_DOMAINS)[number];
+type MigrationStatus = ReturnType<typeof runCanonicalMigrations>;
+type MediaImportEntry = { compatibility_path: string; status: string; errorMessage?: string };
+type MediaAuditEntry = { compatibility_path: string; status: string; drift_types: string[]; details: { suppressed?: boolean; [key: string]: unknown }; audited_at_ms: number };
+type MediaImportOptions = {
+    handle: string;
+    directories: MediaDirectories;
+    featureFlags: { enabled?: boolean; shadowImport?: boolean; strict?: boolean } | null | undefined;
+    manager: { open(options: { handle: string; directories: MediaDirectories; featureFlags: { enabled: boolean; strict: boolean } }): DatabaseSync | null };
+    nowMs?: number;
+};
+
+function toCompatibilityPath(directories: MediaDirectories, filePath: string) {
     return path.relative(directories.root, filePath).split(path.sep).join(path.posix.sep);
 }
 
-function isSafeCompatibilityPath(directories, compatibilityPath, domainRoot = null) {
+function isSafeCompatibilityPath(directories: MediaDirectories, compatibilityPath: string, domainRoot: string | null | undefined = null) {
     if (typeof compatibilityPath !== 'string' || !compatibilityPath) {
         return false;
     }
@@ -54,13 +68,13 @@ function isSafeCompatibilityPath(directories, compatibilityPath, domainRoot = nu
     return !domainRoot || isPathUnderParent(path.resolve(domainRoot), resolved);
 }
 
-function listDomainFiles(directories, domain) {
+function listDomainFiles(directories: MediaDirectories, domain: MediaDomain) {
     const root = directories?.[domain.key];
     if (!root || !fs.existsSync(root)) {
         return [];
     }
-    const files = [];
-    const walk = current => {
+    const files: { domain: MediaDomain; filePath: string; compatibilityPath: string }[] = [];
+    const walk = (current: string) => {
         let entries = [];
         try {
             entries = fs.readdirSync(current, { withFileTypes: true });
@@ -90,18 +104,18 @@ function listDomainFiles(directories, domain) {
     return files.sort((left, right) => left.compatibilityPath.localeCompare(right.compatibilityPath));
 }
 
-function listCompatibilityMedia(directories) {
+function listCompatibilityMedia(directories: MediaDirectories) {
     return MEDIA_DOMAINS.flatMap(domain => listDomainFiles(directories, domain));
 }
 
-function hashFile(filePath) {
+function hashFile(filePath: string) {
     const hash = crypto.createHash('sha256');
     hash.update(fs.readFileSync(filePath));
     return hash.digest('hex');
 }
 
-function summarizeImport({ handle, entries, skipped = false, reason = null, migrationStatus = null }) {
-    const count = status => entries.filter(entry => entry.status === status).length;
+function summarizeImport({ handle, entries, skipped = false, reason = null, migrationStatus = null }: { handle: string; entries: MediaImportEntry[]; skipped?: boolean; reason?: string | null; migrationStatus?: MigrationStatus | null }) {
+    const count = (status: string) => entries.filter(entry => entry.status === status).length;
     return {
         ok: skipped || (reason == null && count('error') === 0 && migrationStatus?.ok !== false),
         handle,
@@ -116,7 +130,7 @@ function summarizeImport({ handle, entries, skipped = false, reason = null, migr
     };
 }
 
-function buildAuditSummary({ handle, migrationStatus, entries, ignoreSuppressed = false }) {
+function buildAuditSummary({ handle, migrationStatus, entries, ignoreSuppressed = false }: { handle: string; migrationStatus: MigrationStatus; entries: MediaAuditEntry[]; ignoreSuppressed?: boolean }) {
     const active = entries.filter(entry => !(ignoreSuppressed && entry.details?.suppressed));
     const blocking = active.some(entry => entry.status === 'drift' || entry.status === 'error');
     return {
@@ -130,14 +144,14 @@ function buildAuditSummary({ handle, migrationStatus, entries, ignoreSuppressed 
     };
 }
 
-function getDomainForPath(directories, compatibilityPath) {
+function getDomainForPath(directories: MediaDirectories, compatibilityPath: string) {
     return MEDIA_DOMAINS.find(domain => {
         const root = directories?.[domain.key];
         return root && isSafeCompatibilityPath(directories, compatibilityPath, root);
     }) ?? null;
 }
 
-function isRetiredCompatibilityPath(directories, reference) {
+function isRetiredCompatibilityPath(directories: MediaDirectories, reference: ReturnType<typeof listCanonicalManagedMediaReferences>[number]) {
     return reference.ownerType === 'background'
         && isSafeCompatibilityPath(directories, reference.compatibilityPath, directories?.backgrounds);
 }
@@ -148,7 +162,7 @@ export async function runCanonicalManagedMediaShadowImport({
     featureFlags,
     manager,
     nowMs = Date.now(),
-} = {}) {
+}: MediaImportOptions = {} as MediaImportOptions) {
     if (!featureFlags?.enabled) {
         return summarizeImport({ handle, skipped: true, reason: 'canonical_storage_disabled', entries: [] });
     }
@@ -168,7 +182,7 @@ export async function runCanonicalManagedMediaShadowImport({
         return summarizeImport({ handle, reason: 'migration_blocked', entries: [], migrationStatus });
     }
 
-    const entries = [];
+    const entries: MediaImportEntry[] = [];
     for (const item of listCompatibilityMedia(directories)) {
         try {
             const stat = fs.statSync(item.filePath);
@@ -201,7 +215,7 @@ export async function runCanonicalManagedMediaShadowImport({
             entries.push({
                 compatibility_path: item.compatibilityPath,
                 status: 'error',
-                errorMessage: String(error?.message ?? error ?? ''),
+                errorMessage: String((error as { message?: unknown } | null | undefined)?.message ?? error ?? ''),
             });
         }
     }
@@ -214,7 +228,7 @@ export async function auditCanonicalManagedMediaShadowImport({
     db,
     auditedAtMs = Date.now(),
     projection = 'sync',
-} = {}) {
+}: { handle: string; directories: MediaDirectories; db: DatabaseSync; auditedAtMs?: number; projection?: string } = {} as { handle: string; directories: MediaDirectories; db: DatabaseSync; auditedAtMs?: number; projection?: string }) {
     const migrationStatus = getCanonicalMigrationStatus(db);
     if (!migrationStatus.ok || migrationStatus.currentVersion !== migrationStatus.targetVersion) {
         return {
@@ -238,7 +252,7 @@ export async function auditCanonicalManagedMediaShadowImport({
         ? { projection_mode: 'off', suppressed: true }
         : {};
 
-    const entries = [];
+    const entries: MediaAuditEntry[] = [];
     const liveFiles = new Map(listCompatibilityMedia(directories).map(item => [item.compatibilityPath, item]));
     const references = listCanonicalManagedMediaReferences(db);
     const referenceCountsByBlob = new Map();

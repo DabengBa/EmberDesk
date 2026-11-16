@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import type { DatabaseSync, SQLOutputValue } from 'node:sqlite';
 
 import { withCanonicalTransaction } from './canonical-sqlite.js';
 import { getCanonicalMigrationStatus, runCanonicalMigrations } from './canonical-sqlite-migrations.js';
@@ -19,17 +20,31 @@ import {
 } from './canonical-import-ledger.js';
 import { uuidv4 } from './util.js';
 
-function listCharacterAvatarFiles(directories) {
+type Directories = { root: string; characters: string; chats: string; storage?: string };
+type Payload = { name?: unknown; date_added?: unknown; world?: unknown; data?: { extensions?: { world?: unknown } } };
+type SnapshotRow = { avatar: string; fullPayload: Payload; shallowPayload: Payload; sourceMtimeMs?: number; sourceHash?: string };
+type StoredRow = Record<string, SQLOutputValue> & { id: string };
+type CharacterRecord = ReturnType<typeof buildCanonicalCharacterRecord>;
+type ChatStatsRecord = ReturnType<typeof buildCanonicalChatStatsRecord>;
+type MigrationStatus = ReturnType<typeof runCanonicalMigrations>;
+type ImportEntry = { avatar_filename: string; character_id: string | null; status: string; errorMessage?: string };
+type AuditEntry = { handle: string; avatar_filename: string | null; character_id: string | null; status: string; drift_types: string[]; details: Record<string, unknown>; audited_at_ms: number };
+type AuditResult = { blocking: boolean; entries?: { status: string }[]; handle?: string | null; migrationStatus?: unknown; hasDrift?: boolean; avatarBlobMissing?: unknown; reason?: string | null; ok?: boolean; invalidatedBy?: string | null };
+type SnapshotBuilder = (avatar: string, directories: Directories) => Promise<SnapshotRow>;
+type AuditOptions = { handle: string; directories: Directories; db: DatabaseSync; buildSnapshotRow: SnapshotBuilder; auditedAtMs?: number; projection?: string };
+type ImportOptions = { handle: string; directories: Directories; featureFlags: { enabled?: boolean; shadowImport?: boolean; strict?: boolean } | null | undefined; manager: { open(options: { handle: string; directories: Directories; featureFlags: { enabled: boolean; strict: boolean } }): DatabaseSync | null }; buildSnapshotRow: SnapshotBuilder; nowMs?: number };
+
+function listCharacterAvatarFiles(directories: Directories) {
     return fs.readdirSync(directories.characters)
         .filter(file => file.endsWith('.png'))
         .sort((left, right) => left.localeCompare(right));
 }
 
-function normalizeWorldName(snapshotRow) {
+function normalizeWorldName(snapshotRow: { fullPayload: Payload }) {
     return String(snapshotRow?.fullPayload?.data?.extensions?.world ?? snapshotRow?.fullPayload?.world ?? '').trim();
 }
 
-function buildCanonicalCharacterRecord(snapshotRow, existingId = null) {
+function buildCanonicalCharacterRecord(snapshotRow: SnapshotRow, existingId: string | null = null) {
     const avatarFilename = snapshotRow.avatar;
     const internalName = path.parse(avatarFilename).name;
     const normalizedFullPayload = normalizeCanonicalCharacterPayload(snapshotRow.fullPayload);
@@ -48,7 +63,7 @@ function buildCanonicalCharacterRecord(snapshotRow, existingId = null) {
     };
 }
 
-function buildCanonicalChatStatsRecord(directories, snapshotRow, characterId, nowMs, db = null) {
+function buildCanonicalChatStatsRecord(directories: Directories, snapshotRow: SnapshotRow, characterId: string | null, nowMs: number, db: DatabaseSync | null = null) {
     let chatCount;
     let chatSize;
     let dateLastChat;
@@ -59,7 +74,7 @@ function buildCanonicalChatStatsRecord(directories, snapshotRow, characterId, no
             String(snapshotRow.avatar ?? '').replace('.png', ''),
         ));
     } else {
-        const chatsDirectory = getCharacterChatDirectory(directories, snapshotRow.avatar);
+        const chatsDirectory = getCharacterChatDirectory(directories as Parameters<typeof getCharacterChatDirectory>[0], snapshotRow.avatar);
         ({ chatCount, chatSize, dateLastChat } = calculateCharacterChatStats(chatsDirectory));
     }
     return {
@@ -71,7 +86,7 @@ function buildCanonicalChatStatsRecord(directories, snapshotRow, characterId, no
     };
 }
 
-function getStoredCanonicalRow(db, avatarFilename) {
+function getStoredCanonicalRow(db: DatabaseSync, avatarFilename: string) {
     return db.prepare(`
         SELECT
             characters.id,
@@ -92,10 +107,10 @@ function getStoredCanonicalRow(db, avatarFilename) {
         LEFT JOIN character_chat_stats
             ON character_chat_stats.character_id = characters.id
         WHERE characters.avatar_filename = ?
-    `).get(avatarFilename);
+    `).get(avatarFilename) as StoredRow | undefined;
 }
 
-function listCanonicalRows(db) {
+function listCanonicalRows(db: DatabaseSync) {
     return db.prepare(`
         SELECT
             characters.id,
@@ -115,10 +130,10 @@ function listCanonicalRows(db) {
         FROM characters
         LEFT JOIN character_chat_stats
             ON character_chat_stats.character_id = characters.id
-    `).all();
+    `).all() as StoredRow[];
 }
 
-function isSameCharacterRecord(storedRow, nextCharacterRecord) {
+function isSameCharacterRecord(storedRow: StoredRow | undefined, nextCharacterRecord: CharacterRecord) {
     return storedRow
         && storedRow.id === nextCharacterRecord.id
         && storedRow.avatar_filename === nextCharacterRecord.avatar_filename
@@ -132,7 +147,7 @@ function isSameCharacterRecord(storedRow, nextCharacterRecord) {
         && storedRow.deleted_at_ms === nextCharacterRecord.deleted_at_ms;
 }
 
-function isSameChatStatsRecord(storedRow, nextStatsRecord) {
+function isSameChatStatsRecord(storedRow: StoredRow | undefined, nextStatsRecord: ChatStatsRecord) {
     // stats_updated_at_ms is a write-time clock, not content. Ignoring it keeps re-imports idempotent.
     return storedRow
         && Number(storedRow.chat_count) === Number(nextStatsRecord.chat_count)
@@ -140,8 +155,8 @@ function isSameChatStatsRecord(storedRow, nextStatsRecord) {
         && Number(storedRow.date_last_chat_ms) === Number(nextStatsRecord.date_last_chat_ms);
 }
 
-function upsertCanonicalCharacter(db, characterRecord, chatStatsRecord) {
-    withCanonicalTransaction(db, txnDb => {
+function upsertCanonicalCharacter(db: DatabaseSync, characterRecord: CharacterRecord, chatStatsRecord: ChatStatsRecord) {
+    withCanonicalTransaction(db, (txnDb: DatabaseSync) => {
         txnDb.prepare(`
             INSERT INTO characters (
                 id,
@@ -200,7 +215,7 @@ function upsertCanonicalCharacter(db, characterRecord, chatStatsRecord) {
     });
 }
 
-function summarizeImportResult({ handle, skipped = false, reason = null, entries, migrationStatus = null }) {
+function summarizeImportResult({ handle, skipped = false, reason = null, entries, migrationStatus = null }: { handle: string; skipped?: boolean; reason?: string | null; entries: ImportEntry[]; migrationStatus?: MigrationStatus | null }) {
     const importedCount = entries.filter(entry => entry.status === 'imported').length;
     const updatedCount = entries.filter(entry => entry.status === 'updated').length;
     const unchangedCount = entries.filter(entry => entry.status === 'unchanged').length;
@@ -219,7 +234,7 @@ function summarizeImportResult({ handle, skipped = false, reason = null, entries
     };
 }
 
-function buildAuditEntry({ handle, avatarFilename, characterId, status, driftTypes, details, auditedAtMs }) {
+function buildAuditEntry({ handle, avatarFilename, characterId, status, driftTypes, details, auditedAtMs }: { handle: string; avatarFilename: string | null; characterId: string | null; status: string; driftTypes: string[]; details: Record<string, unknown>; auditedAtMs: number }): AuditEntry {
     return {
         handle,
         avatar_filename: avatarFilename,
@@ -231,11 +246,11 @@ function buildAuditEntry({ handle, avatarFilename, characterId, status, driftTyp
     };
 }
 
-function countEntriesByStatus(entries, status) {
+function countEntriesByStatus(entries: { status: string }[], status: string) {
     return entries.filter(entry => entry.status === status).length;
 }
 
-function normalizePersistedAuditState(row) {
+function normalizePersistedAuditState(row: Record<string, SQLOutputValue> | null | undefined) {
     if (!row) {
         return {
             ok: false,
@@ -270,8 +285,8 @@ function normalizePersistedAuditState(row) {
     };
 }
 
-export function getPersistedCanonicalAuditStatus(db, { scope = 'character_metadata_and_chat_stats' } = {}) {
-    let row = null;
+export function getPersistedCanonicalAuditStatus(db: DatabaseSync, { scope = 'character_metadata_and_chat_stats' } = {}) {
+    let row: Record<string, SQLOutputValue> | null | undefined = null;
     try {
         row = db.prepare(`
             SELECT
@@ -288,7 +303,7 @@ export function getPersistedCanonicalAuditStatus(db, { scope = 'character_metada
             WHERE audit_scope = ?
         `).get(scope);
     } catch (error) {
-        if (String(error?.message ?? '').includes('no such table: canonical_audit_state')) {
+        if (String((error as { message?: unknown } | null | undefined)?.message ?? '').includes('no such table: canonical_audit_state')) {
             return normalizePersistedAuditState(null);
         }
         throw error;
@@ -297,11 +312,11 @@ export function getPersistedCanonicalAuditStatus(db, { scope = 'character_metada
     return normalizePersistedAuditState(row);
 }
 
-export function persistCanonicalAuditStatus(db, auditResult, { scope = 'character_metadata_and_chat_stats', auditedAtMs = Date.now() } = {}) {
-    return withCanonicalTransaction(db, txn => persistCanonicalAuditStatusInTransaction(txn, auditResult, { scope, auditedAtMs }));
+export function persistCanonicalAuditStatus(db: DatabaseSync, auditResult: AuditResult, { scope = 'character_metadata_and_chat_stats', auditedAtMs = Date.now() } = {}) {
+    return withCanonicalTransaction(db, (txn: DatabaseSync) => persistCanonicalAuditStatusInTransaction(txn, auditResult, { scope, auditedAtMs }));
 }
 
-export function persistCanonicalAuditStatusInTransaction(db, auditResult, { scope = 'character_metadata_and_chat_stats', auditedAtMs = Date.now() } = {}) {
+export function persistCanonicalAuditStatusInTransaction(db: DatabaseSync, auditResult: AuditResult, { scope = 'character_metadata_and_chat_stats', auditedAtMs = Date.now() } = {}) {
     const driftCount = countEntriesByStatus(auditResult.entries ?? [], 'drift');
     const errorCount = countEntriesByStatus(auditResult.entries ?? [], 'error');
     const persistedState = {
@@ -366,13 +381,13 @@ export function persistCanonicalAuditStatusInTransaction(db, auditResult, { scop
     };
 }
 
-export function invalidateCanonicalAuditStatus(db, {
+export function invalidateCanonicalAuditStatus(db: DatabaseSync, {
     scope = 'character_metadata_and_chat_stats',
     auditedAtMs = Date.now(),
     reason = 'projection_stale',
-    source = /** @type {string | null} */ (null),
-    handle = /** @type {string | null} */ (null),
-} = {}) {
+    source = null,
+    handle = null,
+}: { scope?: string; auditedAtMs?: number; reason?: string; source?: string | null; handle?: string | null } = {}) {
     return persistCanonicalAuditStatus(db, {
         ok: false,
         handle,
@@ -395,7 +410,7 @@ export async function runCanonicalShadowImport({
     manager,
     buildSnapshotRow,
     nowMs = Date.now(),
-}) {
+}: ImportOptions) {
     if (!featureFlags?.enabled) {
         return summarizeImportResult({
             handle,
@@ -445,7 +460,7 @@ export async function runCanonicalShadowImport({
         });
     }
 
-    const entries = [];
+    const entries: ImportEntry[] = [];
     for (const avatarFilename of listCharacterAvatarFiles(directories)) {
         const storedRow = getStoredCanonicalRow(db, avatarFilename);
         try {
@@ -487,7 +502,7 @@ export async function runCanonicalShadowImport({
                 avatar_filename: avatarFilename,
                 character_id: storedRow?.id ?? null,
                 status: 'error',
-                errorMessage: String(error?.message ?? error ?? ''),
+                errorMessage: String((error as { message?: unknown } | null | undefined)?.message ?? error ?? ''),
             });
         }
     }
@@ -506,7 +521,7 @@ export async function auditCanonicalShadowImport({
     buildSnapshotRow,
     auditedAtMs = Date.now(),
     projection = 'sync',
-}) {
+}: AuditOptions) {
     const migrationStatus = getCanonicalMigrationStatus(db);
     if (!migrationStatus.ok) {
         return {
@@ -541,7 +556,7 @@ export async function auditCanonicalShadowImport({
         ? { projection_mode: 'off', suppressed: true }
         : {};
 
-    const entries = [];
+    const entries: AuditEntry[] = [];
     const avatarFiles = listCharacterAvatarFiles(directories);
     const avatarFileSet = new Set(avatarFiles);
 
@@ -578,7 +593,7 @@ export async function auditCanonicalShadowImport({
             }
 
             const driftTypes = [];
-            const details = { import_classification: importClassification };
+            const details: Record<string, unknown> = { import_classification: importClassification };
 
             if (!isSameCharacterRecord(storedRow, characterRecord)) {
                 if (storedRow.deleted_at_ms != null) {
@@ -654,7 +669,7 @@ export async function auditCanonicalShadowImport({
                 status: 'error',
                 driftTypes: ['audit_error'],
                 details: {
-                    errorMessage: String(error?.message ?? error ?? ''),
+                    errorMessage: String((error as { message?: unknown } | null | undefined)?.message ?? error ?? ''),
                     ...suppressDetails,
                 },
                 auditedAtMs,

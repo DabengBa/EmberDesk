@@ -106,6 +106,7 @@ test('CtrlShift scrolling uses native chat geometry without duplicating edit sho
     await composer.fill('');
     await composer.press('ArrowUp');
     await expect(page.locator('#curEditTextarea')).toHaveCount(1);
+    await expect(page.locator('#chat > .mes[mesid="23"] #curEditTextarea')).toHaveCount(1);
     await page.locator('#curEditTextarea').press('Escape');
     await expect(page.locator('#curEditTextarea')).toHaveCount(0);
     expect(await page.evaluate(() => window.SillyTavern.getContext().chat.length)).toBe(24);

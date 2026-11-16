@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
+import type { DatabaseSync } from 'node:sqlite';
 
 import {
     classifyImportCandidate,
@@ -8,7 +9,7 @@ import {
     resolveAuditDriftReason,
 } from './canonical-import-ledger.js';
 import { getCanonicalMigrationStatus, runCanonicalMigrations } from './canonical-sqlite-migrations.js';
-import { persistCanonicalAuditStatus } from './canonical-sqlite-shadow-import.js';
+import { persistCanonicalAuditStatus } from './canonical-sqlite-shadow-import.ts';
 import {
     getCanonicalChatMessagePayloads,
     getCanonicalChatSession,
@@ -20,7 +21,16 @@ import {
 
 export const CANONICAL_CHAT_AUDIT_SCOPE = 'chats';
 
-function hashIdentity(...parts) {
+type ChatDirectories = { root: string; chats: string; groupChats: string; storage?: string };
+type ChatItem = { ownerType: 'character' | 'group'; ownerId: string; sourcePath: string; filePath: string };
+type ChatProjection = ReturnType<typeof parseJsonlProjection>;
+type MigrationStatus = ReturnType<typeof runCanonicalMigrations>;
+type ChatImportEntry = { source_path: string; session_id?: string; status: string | undefined; errorMessage?: string };
+type ChatAuditEntry = { source_path: string | null; session_id: string | null; status: string; drift_types: string[]; details: { suppressed?: boolean; [key: string]: unknown }; audited_at_ms: number };
+type ChatFlags = { enabled?: boolean; shadowImport?: boolean; strict?: boolean } | null | undefined;
+type ChatOptions = { handle: string; directories: ChatDirectories; db?: DatabaseSync | null; manager?: { open(options: { handle: string; directories: ChatDirectories; featureFlags: { enabled: boolean; strict: boolean } }): DatabaseSync | null } | null; featureFlags: ChatFlags; nowMs?: number };
+
+function hashIdentity(...parts: unknown[]) {
     const hash = crypto.createHash('sha256');
     for (const part of parts) {
         hash.update(String(part));
@@ -29,11 +39,11 @@ function hashIdentity(...parts) {
     return hash.digest('hex');
 }
 
-function toSourcePath(directories, filePath) {
+function toSourcePath(directories: ChatDirectories, filePath: string) {
     return path.relative(directories.root, filePath).split(path.sep).join('/');
 }
 
-function listJsonlFiles(root) {
+function listJsonlFiles(root: string) {
     let entries = [];
     try {
         entries = fs.readdirSync(root, { withFileTypes: true });
@@ -46,9 +56,9 @@ function listJsonlFiles(root) {
         .sort((left, right) => left.localeCompare(right));
 }
 
-function listChatProjectionFiles(directories) {
-    const characterFiles = [];
-    let characterDirectories = [];
+function listChatProjectionFiles(directories: ChatDirectories) {
+    const characterFiles: ChatItem[] = [];
+    let characterDirectories: fs.Dirent[] = [];
     try {
         characterDirectories = fs.readdirSync(directories?.chats, { withFileTypes: true });
     } catch {
@@ -69,7 +79,7 @@ function listChatProjectionFiles(directories) {
         }
     }
 
-    const groupFiles = listJsonlFiles(directories?.groupChats).map(filePath => ({
+    const groupFiles: ChatItem[] = listJsonlFiles(directories?.groupChats).map(filePath => ({
         ownerType: 'group',
         ownerId: path.parse(filePath).name,
         sourcePath: toSourcePath(directories, filePath),
@@ -78,7 +88,7 @@ function listChatProjectionFiles(directories) {
     return [...characterFiles, ...groupFiles].sort((left, right) => left.sourcePath.localeCompare(right.sourcePath));
 }
 
-function parseJsonlProjection(item) {
+function parseJsonlProjection(item: ChatItem) {
     const sourceJsonl = fs.readFileSync(item.filePath, 'utf8');
     const lines = sourceJsonl.split('\n');
     if (lines.length > 1 && lines[lines.length - 1] === '') {
@@ -87,7 +97,7 @@ function parseJsonlProjection(item) {
     if (lines.length === 0 || lines[0] === '') {
         throw new Error('Chat JSONL must contain a header.');
     }
-    const parseLine = line => JSON.parse(line.endsWith('\r') ? line.slice(0, -1) : line);
+    const parseLine = (line: string) => JSON.parse(line.endsWith('\r') ? line.slice(0, -1) : line);
     const header = parseLine(lines[0]);
     if (!header || typeof header !== 'object' || Array.isArray(header)) {
         throw new Error('Chat JSONL header must be an object.');
@@ -111,7 +121,7 @@ function parseJsonlProjection(item) {
     };
 }
 
-function buildSessionSourceKey(projection) {
+function buildSessionSourceKey(projection: ChatProjection) {
     return hashIdentity(
         projection.ownerType,
         projection.ownerId,
@@ -119,7 +129,7 @@ function buildSessionSourceKey(projection) {
     );
 }
 
-function getMessageIdentityBase(message) {
+function getMessageIdentityBase(message: ChatProjection['messages'][number]) {
     const payload = message.payload;
     return payload.id
         ?? payload.mesid
@@ -127,7 +137,7 @@ function getMessageIdentityBase(message) {
         ?? hashIdentity(payload.name ?? '', payload.send_date ?? '', message.payloadJson);
 }
 
-function listStringLeaves(value, fieldPath = []) {
+function listStringLeaves(value: unknown, fieldPath: (string | number)[] = []): { value: string; fieldPath: (string | number)[] }[] {
     if (typeof value === 'string') {
         return [{ value, fieldPath }];
     }
@@ -140,11 +150,11 @@ function listStringLeaves(value, fieldPath = []) {
     return Object.entries(value).flatMap(([key, entry]) => listStringLeaves(entry, [...fieldPath, key]));
 }
 
-function isManagedAttachmentCandidate(value) {
+function isManagedAttachmentCandidate(value: string) {
     return /^(files|assets|user-images)\//.test(value);
 }
 
-function getManagedMediaByCompatibilityPath(db) {
+function getManagedMediaByCompatibilityPath(db: DatabaseSync) {
     try {
         return new Map(db.prepare(`
             SELECT compatibility_path, blob_id
@@ -152,14 +162,14 @@ function getManagedMediaByCompatibilityPath(db) {
             WHERE deleted_at_ms IS NULL
         `).all().map(row => [row.compatibility_path, row.blob_id]));
     } catch (error) {
-        if (String(error?.message ?? '').includes('no such table: media_references')) {
+        if (String((error as { message?: unknown } | null | undefined)?.message ?? '').includes('no such table: media_references')) {
             return new Map();
         }
         throw error;
     }
 }
 
-function buildChatRecord(projection, db, nowMs) {
+function buildChatRecord(projection: ChatProjection, db: DatabaseSync, nowMs: number) {
     const sourceKey = buildSessionSourceKey(projection);
     const occurrenceByBase = new Map();
     const mediaByPath = getManagedMediaByCompatibilityPath(db);
@@ -204,8 +214,8 @@ function buildChatRecord(projection, db, nowMs) {
     };
 }
 
-function summarizeImport({ handle, entries, skipped = false, reason = null, migrationStatus = null }) {
-    const count = status => entries.filter(entry => entry.status === status).length;
+function summarizeImport({ handle, entries, skipped = false, reason = null, migrationStatus = null }: { handle: string; entries: ChatImportEntry[]; skipped?: boolean; reason?: string | null; migrationStatus?: MigrationStatus | null }) {
+    const count = (status: string) => entries.filter(entry => entry.status === status).length;
     return {
         ok: skipped || (reason == null && count('error') === 0 && migrationStatus?.ok !== false),
         handle,
@@ -220,7 +230,7 @@ function summarizeImport({ handle, entries, skipped = false, reason = null, migr
     };
 }
 
-function getImportDatabase({ handle, directories, db, manager, featureFlags }) {
+function getImportDatabase({ handle, directories, db, manager, featureFlags }: ChatOptions) {
     if (db) {
         return db;
     }
@@ -238,7 +248,7 @@ export async function runCanonicalChatShadowImport({
     manager = null,
     featureFlags,
     nowMs = Date.now(),
-} = {}) {
+}: ChatOptions = {} as ChatOptions) {
     if (!featureFlags?.enabled) {
         return summarizeImport({ handle, skipped: true, reason: 'canonical_storage_disabled', entries: [] });
     }
@@ -254,8 +264,8 @@ export async function runCanonicalChatShadowImport({
         return summarizeImport({ handle, reason: 'migration_blocked', entries: [], migrationStatus });
     }
 
-    const entries = [];
-    const projections = [];
+    const entries: ChatImportEntry[] = [];
+    const projections: ChatProjection[] = [];
     for (const item of listChatProjectionFiles(directories)) {
         if (hasCanonicalChatProjectionTombstone(activeDb, item)) continue;
         try {
@@ -265,7 +275,7 @@ export async function runCanonicalChatShadowImport({
             entries.push({
                 source_path: item.sourcePath,
                 status: 'error',
-                errorMessage: String(error?.message ?? error ?? ''),
+                errorMessage: String((error as { message?: unknown } | null | undefined)?.message ?? error ?? ''),
             });
         }
     }
@@ -295,7 +305,7 @@ export async function runCanonicalChatShadowImport({
         });
         entries.push({
             source_path: projection.sourcePath,
-            session_id: result.id,
+            session_id: (result as { id?: string }).id,
             status: result.status,
         });
     }
@@ -332,8 +342,8 @@ export function reconcileCanonicalChatSources({
     ownerId,
     filePaths = null,
     nowMs = Date.now(),
-} = {}) {
-    const result = { imported: 0, errors: [] };
+}: { db: DatabaseSync; directories: ChatDirectories; ownerType: 'character' | 'group'; ownerId: string; filePaths?: string[] | null; nowMs?: number } = {} as { db: DatabaseSync; directories: ChatDirectories; ownerType: 'character' | 'group'; ownerId: string; filePaths?: string[] | null; nowMs?: number }) {
+    const result: { imported: number; errors: { sourcePath: string; message: string }[] } = { imported: 0, errors: [] };
     if (!db || !directories) {
         return result;
     }
@@ -389,14 +399,14 @@ export function reconcileCanonicalChatSources({
         } catch (error) {
             result.errors.push({
                 sourcePath: item.sourcePath,
-                message: String(error?.message ?? error ?? ''),
+                message: String((error as { message?: unknown } | null | undefined)?.message ?? error ?? ''),
             });
         }
     }
     return result;
 }
 
-function buildAuditSummary({ handle, migrationStatus, entries, ignoreSuppressed = false }) {
+function buildAuditSummary({ handle, migrationStatus, entries, ignoreSuppressed = false }: { handle: string; migrationStatus: MigrationStatus; entries: ChatAuditEntry[]; ignoreSuppressed?: boolean }) {
     const active = entries.filter(entry => !(ignoreSuppressed && entry.details?.suppressed));
     const blocking = active.some(entry => entry.status === 'drift' || entry.status === 'error');
     return {
@@ -410,10 +420,10 @@ function buildAuditSummary({ handle, migrationStatus, entries, ignoreSuppressed 
     };
 }
 
-function buildAuditEntry({ projection, stored, status, driftTypes, details, auditedAtMs }) {
+function buildAuditEntry({ projection, stored, status, driftTypes, details, auditedAtMs }: { projection?: ChatItem; stored?: { id?: unknown; source_path?: unknown } | null; status: string; driftTypes: string[]; details: ChatAuditEntry['details']; auditedAtMs: number }): ChatAuditEntry {
     return {
-        source_path: projection?.sourcePath ?? stored?.source_path ?? null,
-        session_id: stored?.id ?? null,
+        source_path: (projection?.sourcePath ?? stored?.source_path ?? null) as string | null,
+        session_id: (stored?.id ?? null) as string | null,
         status,
         drift_types: driftTypes,
         details,
@@ -421,13 +431,13 @@ function buildAuditEntry({ projection, stored, status, driftTypes, details, audi
     };
 }
 
-function collectDanglingAttachments(projection, mediaByPath) {
+function collectDanglingAttachments(projection: ChatProjection, mediaByPath: ReturnType<typeof getManagedMediaByCompatibilityPath>) {
     return projection.messages.flatMap(message => listStringLeaves(message.payload)
         .filter(leaf => isManagedAttachmentCandidate(leaf.value) && !mediaByPath.has(leaf.value))
         .map(leaf => ({ messageOrder: message.order, path: leaf.value, fieldPath: leaf.fieldPath })));
 }
 
-function compareMessageOrder(projection, storedMessages) {
+function compareMessageOrder(projection: ChatProjection, storedMessages: ReturnType<typeof getCanonicalChatMessagePayloads>) {
     const projectionPayloads = projection.messages.map(message => message.payloadJson);
     const storedPayloads = storedMessages.map(message => message.payloadJson);
     if (projectionPayloads.length === storedPayloads.length
@@ -447,7 +457,7 @@ export async function auditCanonicalChatShadowImport({
     db,
     auditedAtMs = Date.now(),
     projection = 'sync',
-} = {}) {
+}: { handle: string; directories: ChatDirectories; db: DatabaseSync; auditedAtMs?: number; projection?: string } = {} as { handle: string; directories: ChatDirectories; db: DatabaseSync; auditedAtMs?: number; projection?: string }) {
     const migrationStatus = getCanonicalMigrationStatus(db);
     if (!migrationStatus.ok || migrationStatus.currentVersion !== migrationStatus.targetVersion) {
         return {
@@ -466,8 +476,8 @@ export async function auditCanonicalChatShadowImport({
         ? { projection_mode: 'off', suppressed: true }
         : {};
 
-    const entries = [];
-    const projections = [];
+    const entries: ChatAuditEntry[] = [];
+    const projections: ChatProjection[] = [];
     for (const item of listChatProjectionFiles(directories)) {
         if (hasCanonicalChatProjectionTombstone(db, item) && !getCanonicalChatSession(db, item)) continue;
         try {
@@ -477,7 +487,7 @@ export async function auditCanonicalChatShadowImport({
                 projection: item,
                 status: 'error',
                 driftTypes: ['parse_failure'],
-                details: { errorMessage: String(error?.message ?? error ?? ''), ...suppressDetails },
+                details: { errorMessage: String((error as { message?: unknown } | null | undefined)?.message ?? error ?? ''), ...suppressDetails },
                 auditedAtMs,
             }));
         }

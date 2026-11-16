@@ -11,9 +11,9 @@ import { runCanonicalMigrations } from '../src/canonical-sqlite-migrations.js';
 import {
     auditCanonicalShadowImport,
     runCanonicalShadowImport,
-} from '../src/canonical-sqlite-shadow-import.js';
+} from '../src/canonical-sqlite-shadow-import.ts';
 import { decideCanonicalBackendInitAction } from '../src/canonical-backend.js';
-import { runCanonicalChatShadowImport } from '../src/canonical-chat-shadow-import.js';
+import { runCanonicalChatShadowImport } from '../src/canonical-chat-shadow-import.ts';
 import {
     classifyImportCandidate,
     getImportLedgerEntry,
@@ -26,7 +26,7 @@ import { buildCharacterFileSnapshotRow } from '../src/endpoints/character-file-s
 import { writeCanonicalSecret } from '../src/endpoints/canonical-secrets-store.ts';
 import { upsertCanonicalSettingsDocument } from '../src/endpoints/settings-store.ts';
 import { listCanonicalWorldInfoBookRows, upsertCanonicalWorldInfoBook } from '../src/endpoints/world-info-store.ts';
-import { commitWorldBookWithProjectionIntent, replayWorldProjection } from '../src/canonical-world-info-projection.js';
+import { commitWorldBookWithProjectionIntent, replayWorldProjection } from '../src/canonical-world-info-projection.ts';
 import { upsertCanonicalManagedMediaReference } from '../src/endpoints/canonical-managed-media-store.ts';
 import { parse as parseCharacterCard } from '../src/character-card-parser.ts';
 
@@ -141,7 +141,7 @@ describe('canonical import ledger', () => {
         fs.symlinkSync(activeBeta, path.join(out, 'worlds', 'Beta.json'));
         const alphaTarget = path.join(out, 'worlds', 'Alpha.json');
         const sqlUrl = pathToFileURL(path.join(repoRoot, 'src/canonical-sqlite.js')).href;
-        const projectionUrl = pathToFileURL(path.join(repoRoot, 'src/canonical-world-info-projection.js')).href;
+        const projectionUrl = pathToFileURL(path.join(repoRoot, 'src/canonical-world-info-projection.ts')).href;
         const script = `import {createCanonicalSqliteManager} from ${JSON.stringify(sqlUrl)};
             import {commitWorldBookWithProjectionIntent} from ${JSON.stringify(projectionUrl)};
             const directories = JSON.parse(process.argv[1]);
@@ -184,7 +184,7 @@ describe('canonical import ledger', () => {
         const target = path.join(out, 'worlds', 'Beta.json');
         fs.symlinkSync(active, target);
         const sqlUrl = pathToFileURL(path.join(repoRoot, 'src/canonical-sqlite.js')).href;
-        const projectionUrl = pathToFileURL(path.join(repoRoot, 'src/canonical-world-info-projection.js')).href;
+        const projectionUrl = pathToFileURL(path.join(repoRoot, 'src/canonical-world-info-projection.ts')).href;
         const script = `import {createCanonicalSqliteManager} from ${JSON.stringify(sqlUrl)};
             import {commitWorldBookWithProjectionIntent} from ${JSON.stringify(projectionUrl)};
             const directories = JSON.parse(process.argv[1]);

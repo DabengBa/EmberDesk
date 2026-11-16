@@ -6,8 +6,8 @@ import { afterEach, beforeAll, describe, expect, test } from '@jest/globals';
 
 import { canonicalSqliteManager } from '../src/canonical-sqlite.js';
 import { runCanonicalMigrations } from '../src/canonical-sqlite-migrations.js';
-import { runCanonicalWorldInfoShadowImport } from '../src/canonical-world-info-shadow-import.js';
-import { getPersistedCanonicalAuditStatus, persistCanonicalAuditStatus } from '../src/canonical-sqlite-shadow-import.js';
+import { runCanonicalWorldInfoShadowImport } from '../src/canonical-world-info-shadow-import.ts';
+import { getPersistedCanonicalAuditStatus, persistCanonicalAuditStatus } from '../src/canonical-sqlite-shadow-import.ts';
 import { repairCanonicalWorldInfoProjection, runCanonicalWorldInfoAudit } from '../src/canonical-sqlite-operator.js';
 import { upsertCanonicalWorldInfoBook } from '../src/endpoints/world-info-store.ts';
 import { router } from '../src/endpoints/worldinfo.js';

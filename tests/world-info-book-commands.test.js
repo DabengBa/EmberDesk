@@ -4,6 +4,42 @@ jest.unstable_mockModule('../public/scripts/notifications.js', () => ({ default:
 
 jest.unstable_mockModule('../public/scripts/i18n.js', () => ({ translate: text => text }));
 
+test('chat lorebook picker updates metadata and every button without jQuery', async () => {
+    const { createWorldInfoBookCommands } = await import('../public/scripts/world-info-book-commands.js');
+    const state = await import('../public/scripts/world-info-state.js');
+    const previousDocument = globalThis.document;
+    const select = { value: '', options: [], append(option) { this.options.push(option); }, addEventListener(_type, handler) { this.change = handler; } };
+    const name = {};
+    const fragment = { querySelector: selector => selector === 'select' ? select : name };
+    const toggles = [jest.fn(), jest.fn()];
+    globalThis.document = {
+        createElement(tag) { return tag === 'template' ? { content: fragment } : {}; },
+        querySelectorAll() { return toggles.map(toggle => ({ classList: { toggle } })); },
+    };
+    state.setWorldNames(['A', 'B']);
+    const metadata = {}, save = jest.fn(), popup = jest.fn(async () => {});
+    try {
+        const commands = createWorldInfoBookCommands({
+            chat_metadata: metadata, METADATA_KEY: 'world', getCurrentChatId: () => 'Chat',
+            renderTemplateAsync: async () => '<div>template</div>',
+            callGenericPopup: popup, POPUP_TYPE: { TEXT: 1 }, saveMetadata: save,
+        });
+        await commands.assignLorebookToChat({ shiftKey: false, altKey: false });
+        expect(popup).toHaveBeenCalledWith(fragment, 1);
+        expect(name.textContent).toBe('Chat');
+        expect(select.options.map(option => option.value)).toEqual(['A', 'B']);
+        select.value = 'B'; select.change();
+        expect(metadata.world).toBe('B');
+        select.value = ''; select.change();
+        expect(metadata).not.toHaveProperty('world');
+        expect(save).toHaveBeenCalledTimes(2);
+        for (const toggle of toggles) expect(toggle.mock.calls).toEqual([['world_set', true], ['world_set', false]]);
+    } finally {
+        globalThis.document = previousDocument;
+        state.setWorldNames([]);
+    }
+});
+
 test.each(['delete', 'rename', 'move', 'create overwrite'])('%s enters the shared operation owner before writes', async kind => {
     const { createWorldInfoBookCommands } = await import('../public/scripts/world-info-book-commands.js');
     const state = await import('../public/scripts/world-info-state.js');

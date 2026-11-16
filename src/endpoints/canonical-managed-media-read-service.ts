@@ -7,7 +7,7 @@ import mime from 'mime-types';
 import { MEDIA_REQUEST_TYPE } from '../constants.js';
 import { canonicalSqliteManager } from '../canonical-sqlite.js';
 import { runCanonicalMigrations } from '../canonical-sqlite-migrations.js';
-import { getPersistedCanonicalAuditStatus } from '../canonical-sqlite-shadow-import.js';
+import { getPersistedCanonicalAuditStatus } from '../canonical-sqlite-shadow-import.ts';
 import { getCanonicalStorageSlice } from '../canonical-storage-slice-registry.js';
 import {
     getCanonicalManagedMediaReference,

@@ -22,7 +22,7 @@ import { canonicalSqliteManager } from '../canonical-sqlite.js';
 import { getCanonicalStorageSlice } from '../canonical-storage-slice-registry.js';
 import { runCanonicalMigrations } from '../canonical-sqlite-migrations.js';
 import { ensureCanonicalSliceBackend } from '../canonical-backend.js';
-import { getPersistedCanonicalAuditStatus } from '../canonical-sqlite-shadow-import.js';
+import { getPersistedCanonicalAuditStatus } from '../canonical-sqlite-shadow-import.ts';
 import { getDefaultTemplateFile } from './content-manager.js';
 import {
     ensureCanonicalSettingsDocument,

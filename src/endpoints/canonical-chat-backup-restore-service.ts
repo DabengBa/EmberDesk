@@ -9,8 +9,8 @@ import { sync as writeFileAtomicSync } from 'write-file-atomic';
 
 import { withCanonicalTransaction } from '../canonical-sqlite.js';
 import { getCanonicalMigrationStatus } from '../canonical-sqlite-migrations.js';
-import { invalidateCanonicalAuditStatus } from '../canonical-sqlite-shadow-import.js';
-import { auditCanonicalChatShadowImport } from '../canonical-chat-shadow-import.js';
+import { invalidateCanonicalAuditStatus } from '../canonical-sqlite-shadow-import.ts';
+import { auditCanonicalChatShadowImport } from '../canonical-chat-shadow-import.ts';
 import {
     createCanonicalChatSessionRecord,
     listOpenCanonicalChatProjectionRepairs,

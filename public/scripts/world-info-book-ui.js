@@ -1,5 +1,7 @@
-import toastr from './notifications.js';
+import notificationOwner from './notifications.js';
 import { world_info, world_names } from './world-info-state.js';
+
+const toastr = notificationOwner.native ?? notificationOwner;
 
 /** Interactive book management and reference cascade feedback. */
 export function createWorldInfoBookUi({ getFreeWorldName, showLocalDialog, t, createNewWorldInfo, getSelectedWorldInfoEditorName, loadWorldInfo, download, renameWorldInfo, saveWorldInfo, updateWorldInfoList, selectWorldInfoEditorName, hideWorldEditor, getRequestHeaders, flushDeletedWorldsFromUI, saveSettingsDebounced, deleteWorldInfo, runDestructiveOperation = (_names, operation) => operation() }) {

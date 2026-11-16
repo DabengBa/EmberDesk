@@ -449,6 +449,8 @@ jest.unstable_mockModule('../public/scripts/i18n.js', () => ({ t: strings => str
 jest.unstable_mockModule('../public/scripts/openai.js', () => ({ oai_settings: {} }));
 jest.unstable_mockModule('../public/scripts/feature-settings.js', () => ({ feature_settings: { tool_bindings: [] } }));
 jest.unstable_mockModule('../public/scripts/tool-bindings.js', () => ({ syncPipelineToolBindings: jest.fn() }));
+// Generation tests exercise the real service; notification rendering needs a browser.
+jest.unstable_mockModule('../public/scripts/notifications.js', () => ({ default: { info: jest.fn(), warning: jest.fn(), error: jest.fn(), success: jest.fn() } }));
 
 const { registerGenerationShellContext, installGenerationLifecycleService } = await import('../public/scripts/generation-shell-context.js');
 const { GenerationStreamSession, executeGenerationRequestInShell, getCurrentGenerationContextIdentity } = await import('../public/scripts/generation-service.js');

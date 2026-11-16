@@ -18,8 +18,8 @@ import {
     CANONICAL_SECRETS_AUDIT_SCOPE,
     auditCanonicalSecretsShadowImport,
     runCanonicalSecretsShadowImport,
-} from '../src/canonical-secrets-shadow-import.js';
-import { getPersistedCanonicalAuditStatus } from '../src/canonical-sqlite-shadow-import.js';
+} from '../src/canonical-secrets-shadow-import.ts';
+import { getPersistedCanonicalAuditStatus } from '../src/canonical-sqlite-shadow-import.ts';
 import { runCanonicalSliceRepair } from '../src/canonical-sqlite-operator.js';
 
 const tempRoots = [];

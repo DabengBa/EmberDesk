@@ -4,6 +4,7 @@ import { loadTsModule } from './helpers/load-ts-module.mjs';
 import { createUserMessageService } from '../public/scripts/user-message-service.js';
 
 const events = { emit: jest.fn(async () => {}) };
+jest.unstable_mockModule('../public/scripts/notifications.js', () => ({ default: { info: jest.fn(), warning: jest.fn(), error: jest.fn(), success: jest.fn() } }));
 jest.unstable_mockModule('../public/scripts/events.js', () => ({ eventSource: events, event_types: { GENERATION_STARTED: 'started', GENERATION_AFTER_COMMANDS: 'commands' } }));
 jest.unstable_mockModule('../public/scripts/world-info-service.js', () => ({ getWorldInfoPrompt: jest.fn() }));
 jest.unstable_mockModule('../public/scripts/chat-memory-service.js', () => ({ applyChatMemoryToCoreChat: jest.fn() }));
@@ -15,7 +16,8 @@ const composer = await import('../public/scripts/main-chat-composer-service.js')
 const { registerGenerationShellContext, installGenerationLifecycleService } = await import('../public/scripts/generation-shell-context.js');
 const { executeGenerationRequestInShell, previewNextGenerationRequest, GenerationStreamSession, getCurrentGenerationContextIdentity } = await import('../public/scripts/generation-service.js');
 const { createGenerationLifecycleService } = await loadTsModule('app/lib/generation/attempt-executor.ts');
-installGenerationLifecycleService(createGenerationLifecycleService(getCurrentGenerationContextIdentity));
+const lifecycle = createGenerationLifecycleService(getCurrentGenerationContextIdentity);
+installGenerationLifecycleService(lifecycle);
 
 let context;
 let submission;
@@ -41,6 +43,33 @@ beforeEach(() => {
 function generate() {
     return executeGenerationRequestInShell({ type: 'normal', options: { composerSubmission: submission }, dryRun: false });
 }
+
+test('streaming message ports use native rows for media and copy controls', async () => {
+    const row = {};
+    const querySelector = jest.fn(() => row);
+    const oldDollar = globalThis.$;
+    globalThis.$ = () => { throw new Error('streaming rows must not be wrapped in jQuery'); };
+    context.state.ReasoningHandler = class {};
+    context.state.chatElement = { jquery: 'test', 0: { querySelector }, find: () => { throw new Error('copy controls must use native DOM'); } };
+    context.isReactMainChatOwner = jest.fn(() => false);
+    context.appendMediaToMessage = jest.fn();
+    context.addCopyToCodeBlocks = jest.fn();
+    const message = {};
+    const spy = jest.spyOn(lifecycle, 'startStreamMessage').mockImplementation((session, ports) => {
+        session.messageDom = row;
+        ports.renderImages(message);
+        ports.addCopyButtons(7);
+    });
+    try {
+        await new GenerationStreamSession('normal', false, new Date(), null).onStartStreaming('');
+        expect(context.appendMediaToMessage).toHaveBeenCalledWith(message, row);
+        expect(querySelector).toHaveBeenCalledWith('.mes[mesid="7"]');
+        expect(context.addCopyToCodeBlocks).toHaveBeenCalledWith(row);
+    } finally {
+        globalThis.$ = oldDollar;
+        spy.mockRestore();
+    }
+});
 
 test('stopping while a preview user message is being built discards the stale preview', async () => {
     context.state.main_api = 'unsupported';
@@ -524,10 +553,10 @@ function attachmentHarness() {
     const read = new Promise(resolve => { release = resolve; });
     const save = jest.fn(async () => '/old.png');
     const env = {
-        document: { getElementById: () => input }, HTMLInputElement: Input,
+        document: { getElementById: id => id === 'file_form' ? { reset } : input }, HTMLInputElement: Input,
         getStringHash: () => 'test', getBase64Async: () => read, getFileExtension: () => 'png',
         MEDIA_TYPE: { getFromMime: () => 'image' }, MEDIA_SOURCE: { UPLOAD: 'upload' },
-        saveBase64AsFile: save, name2: 'Original character', $: () => ({ trigger: reset }),
+        saveBase64AsFile: save, name2: 'Original character', $: () => { throw new Error('attachment reset must not depend on jQuery'); },
         toastr: { error: jest.fn() }, t: strings => strings[0], console,
     };
     const run = new Function(...Object.keys(env), `${attachmentSource.replace('export ', '')}; return populateFileAttachment;`)(...Object.values(env));

@@ -135,7 +135,7 @@ Current delivered foundation:
 
 - `src/canonical-sqlite.js` now exists as the canonical DB manager.
 - `src/canonical-sqlite-migrations.js` now exists as the migration runner for canonical schema history and phase-one schema bootstrap.
-- `src/canonical-sqlite-shadow-import.js` now exists as the Phase 1 shadow import/audit owner for character metadata and chat stats.
+- `src/canonical-sqlite-shadow-import.ts` now exists as the Phase 1 shadow import/audit owner for character metadata and chat stats.
 - `src/endpoints/character-file-snapshot.js` now exists as the shared file-backed snapshot helper reused by direct compatibility-file reads and canonical shadow import.
 - `src/storage-feature-flags.js` now exposes the current storage flag snapshot for this slice.
 - `USER_DIRECTORY_TEMPLATE` and `getUserDirectories(handle)` now include per-user `storage`.
@@ -172,7 +172,7 @@ Current delivered foundation:
 - `src/endpoints/character-read-service.ts` now gates DB-first reads on the persisted canonical audit summary instead of inferring audit success from schema version parity.
 - Once canonical reads are requested, `src/endpoints/character-read-service.ts` now falls back directly to compatibility files when canonical rows are blocked or missing instead of reviving `_cache/character-index.sqlite` as a second authority path.
 - `src/canonical-sqlite-migrations.js` phase-one schema now includes `canonical_audit_state` for the persisted audit gate contract.
-- `src/canonical-sqlite-shadow-import.js` now persists clean vs blocked audit summaries after successful audit runs, and `getPersistedCanonicalAuditStatus()` now fails closed as `audit_not_run` until that summary exists.
+- `src/canonical-sqlite-shadow-import.ts` now persists clean vs blocked audit summaries after successful audit runs, and `getPersistedCanonicalAuditStatus()` now fails closed as `audit_not_run` until that summary exists.
 - `src/endpoints/characters.js` and `src/endpoints/chats.js` now invalidate the persisted canonical audit state after successful file-backed character or chat mutations so DB-first reads cannot continue serving stale canonical rows after normal runtime writes.
 - Route-level proof currently lives in `tests/character-read-service.test.js` and `tests/interaction-performance-index.test.js`, including canonical `/all` and `/get` reads, `audit_not_run` fallback, strict-mode failure, and stale-audit invalidation after file-backed character edits.
 
@@ -261,7 +261,7 @@ Current delivered foundation:
 
 - `src/canonical-sqlite-migrations.js` now includes the `world_info_authority` migration with `world_books`, `world_book_entries`, and `world_info_projection_repairs`.
 - `src/endpoints/world-info-store.ts` owns canonical World Info row normalization to projection-safe file ids, route-compatible list/get payload reconstruction, DB-first write helpers, and open projection-repair listing.
-- `src/canonical-world-info-shadow-import.js` imports existing `worlds/*.json` files idempotently, audits DB/file projection drift, and persists `canonical_audit_state` scope `world_info` as the fail-closed read/write gate.
+- `src/canonical-world-info-shadow-import.ts` imports existing `worlds/*.json` files idempotently, audits DB/file projection drift, and persists `canonical_audit_state` scope `world_info` as the fail-closed read/write gate.
 - `src/endpoints/worldinfo.js` serves `/api/worldinfo/list` and `/get` from canonical SQLite; init-frozen or blocked slices return structured 503 `canonical_storage_unavailable` responses, and explicit operator file actions invalidate `world_info` audit state.
 - `/api/worldinfo/import`, `/edit`, and `/delete` can commit canonical SQLite first behind canonical write flags, then project compatibility JSON files; projection failure records `world_info_projection_repairs` rather than restoring JSON files as truth.
 - `src/canonical-sqlite-operator.js` can replay World Info projection repairs, resolve delete repairs without requiring a live canonical row, include `world_info_projection_repairs` in write rollback blockers, and resolve the repair row after the JSON projection state is restored.
@@ -367,12 +367,12 @@ asset subdirectories (sprites, live2d) stay file-backed media, and only root-lev
 5. `shadow import`
    - Depends on schema.
    - Reads existing PNG cards and chat directories; writes DB rows only.
-   - Current status: delivered in `src/canonical-sqlite-shadow-import.js` with focused import/idempotency tests.
+   - Current status: delivered in `src/canonical-sqlite-shadow-import.ts` with focused import/idempotency tests.
 
 6. `audit report`
    - Depends on shadow import.
    - Compares DB state and file projections; records drift without changing either side.
-   - Current status: delivered in `src/canonical-sqlite-shadow-import.js` with explicit `migration_not_applied` / `migration_blocked` fail-closed status, machine-readable drift output, and a persisted audit-summary gate for later read cutover.
+   - Current status: delivered in `src/canonical-sqlite-shadow-import.ts` with explicit `migration_not_applied` / `migration_blocked` fail-closed status, machine-readable drift output, and a persisted audit-summary gate for later read cutover.
 
 7. `read service cutover`
    - Depends on audit passing and read flag.
@@ -402,7 +402,7 @@ asset subdirectories (sprites, live2d) stay file-backed media, and only root-lev
 12. `full World Info canonical migration`
     - Depends on legacy-mode accelerator retirement.
     - Moves full World Info entries into canonical SQLite with compatibility-safe prompt, regex, import/export, and delete-cascade behavior.
-    - Current status: delivered via `src/endpoints/world-info-store.ts`, `src/canonical-world-info-shadow-import.js`, `src/endpoints/worldinfo.js`, World Info projection repair support in `src/canonical-sqlite-operator.js`, and World Info audit/repair commands in the canonical SQLite scripts.
+    - Current status: delivered via `src/endpoints/world-info-store.ts`, `src/canonical-world-info-shadow-import.ts`, `src/endpoints/worldinfo.js`, World Info projection repair support in `src/canonical-sqlite-operator.js`, and World Info audit/repair commands in the canonical SQLite scripts.
 
 13. `canonical storage control-plane generalization`
     - Depends on the delivered character and World Info patterns.
@@ -425,7 +425,7 @@ asset subdirectories (sprites, live2d) stay file-backed media, and only root-lev
     - Moves `settings.json`, revisions and snapshot/restore into canonical SQLite while
       preserving the current `/api/settings/get` and `/save` payload.
     - Current status: delivered via migration v4, `src/endpoints/settings-store.ts`,
-      `src/canonical-settings-shadow-import.js`, DB-first settings routes, snapshots, and
+      `src/canonical-settings-shadow-import.ts`, DB-first settings routes, snapshots, and
       revision conflict handling. Follow-ups removed every `settings.json` runtime role:
       no seeding, no projection writes, no file fallbacks, no import or audit surface,
       no backup materialization, no file-named snapshots. The only legacy input is
@@ -439,7 +439,7 @@ asset subdirectories (sprites, live2d) stay file-backed media, and only root-lev
       migration rules remain separate from settings.
     - Current status: delivered via migration v5 `secret_records`,
       `secret_migration_markers`, and `secret_projection_repairs`;
-      `src/canonical-secrets-shadow-import.js` performs idempotent flat/array import and
+      `src/canonical-secrets-shadow-import.ts` performs idempotent flat/array import and
       value-hash audit; `src/canonical-secrets-backend.ts` keeps `SecretManager` DB-first
       behind clean read/write gates; operator and CLI repair replay `secrets.json` from the
       database without exposing values in status or repair metadata.
@@ -452,7 +452,7 @@ asset subdirectories (sprites, live2d) stay file-backed media, and only root-lev
       while large content remains under a database-managed content root.
     - Current status: delivered through migration v6 (`managed_blobs`, `media_references`,
       `media_folders`, memberships, and `managed_media_repairs`),
-      `src/canonical-managed-media-shadow-import.js`,
+      `src/canonical-managed-media-shadow-import.ts`,
       `src/endpoints/canonical-managed-media-read-service.ts`, and
       `src/endpoints/canonical-managed-media-write-service.ts`. The independently gated
       `features.storage.canonicalSqlite.slices.managedMedia.*` slice shadows existing media

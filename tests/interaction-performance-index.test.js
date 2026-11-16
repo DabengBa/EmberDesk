@@ -25,11 +25,11 @@ import {
     getPersistedCanonicalAuditStatus,
     persistCanonicalAuditStatus,
     runCanonicalShadowImport,
-} from '../src/canonical-sqlite-shadow-import.js';
+} from '../src/canonical-sqlite-shadow-import.ts';
 import {
     auditCanonicalChatShadowImport,
     runCanonicalChatShadowImport,
-} from '../src/canonical-chat-shadow-import.js';
+} from '../src/canonical-chat-shadow-import.ts';
 import { parse as parseCharacterCard, write as writeCharacterCardPngData } from '../src/character-card-parser.ts';
 import {
     markCanonicalWorldInfoBookDeleted,

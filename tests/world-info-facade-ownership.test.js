@@ -36,7 +36,7 @@ test('panel event binding belongs to a dedicated UI adapter', () => {
     const facade = fs.readFileSync(path.join(root, 'public/scripts/world-info.js'), 'utf8');
     expect(facade).not.toContain("$('#world_import_file').on('change'");
     const ui = fs.readFileSync(path.join(root, 'public/scripts/world-info-panel-ui.js'), 'utf8');
-    expect(ui).toContain("$('#world_import_file').on('change'");
+    expect(ui).toContain("document.querySelector('#world_import_file').addEventListener('change'");
 });
 
 test('book list replay and deletion reference cleanup live outside the facade', () => {

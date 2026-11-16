@@ -1,15 +1,29 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
+import type { DatabaseSync } from 'node:sqlite';
 
 import { getCanonicalMigrationStatus, runCanonicalMigrations } from './canonical-sqlite-migrations.js';
-import { persistCanonicalAuditStatus } from './canonical-sqlite-shadow-import.js';
+import { persistCanonicalAuditStatus } from './canonical-sqlite-shadow-import.ts';
 import { recordImportLedgerEntry } from './canonical-import-ledger.js';
 import { importPresetFile, PRESETS_OPENAI_API_ID } from './endpoints/presets-store.ts';
 
 export const PRESETS_AUDIT_SCOPE = 'presets';
 
-function summarizeImportResult({ handle, skipped = false, reason = null, entries = [], migrationStatus = null }) {
+type MigrationStatus = ReturnType<typeof runCanonicalMigrations>;
+type PresetImportEntry = { status: string; path?: string; name?: string; errorClass?: string };
+type PresetDirectories = { root: string; storage?: string; openAI_Settings?: string };
+type PresetImportOptions = {
+    handle: string;
+    directories: PresetDirectories;
+    featureFlags: { enabled?: boolean; shadowImport?: boolean; strict?: boolean } | null | undefined;
+    manager: { open(options: { handle: string; directories: PresetDirectories; featureFlags: { enabled: boolean; strict: boolean } }): DatabaseSync | null };
+    nowMs?: number;
+};
+
+function summarizeImportResult({ handle, skipped = false, reason = null, entries = [], migrationStatus = null }: {
+    handle: string; skipped?: boolean; reason?: string | null; entries?: PresetImportEntry[]; migrationStatus?: MigrationStatus | null;
+}) {
     return {
         ok: skipped || (reason === null && !(migrationStatus && migrationStatus.ok === false)),
         handle,
@@ -37,7 +51,7 @@ export async function runCanonicalPresetsShadowImport({
     featureFlags,
     manager,
     nowMs = Date.now(),
-} = {}) {
+}: PresetImportOptions = {} as PresetImportOptions) {
     if (!featureFlags?.enabled) {
         return summarizeImportResult({ handle, skipped: true, reason: 'canonical_storage_disabled' });
     }
@@ -66,7 +80,7 @@ export async function runCanonicalPresetsShadowImport({
     }
 
     const presetDir = directories?.openAI_Settings;
-    const entries = [];
+    const entries: PresetImportEntry[] = [];
     if (presetDir && fs.existsSync(presetDir)) {
         let files = [];
         try {
@@ -78,7 +92,7 @@ export async function runCanonicalPresetsShadowImport({
                 handle,
                 reason: 'preset_dir_unreadable',
                 migrationStatus,
-                entries: [{ status: 'error', errorClass: error?.name || 'Error' }],
+                entries: [{ status: 'error', errorClass: (error as { name?: string } | null | undefined)?.name || 'Error' }],
             });
         }
 
@@ -89,7 +103,7 @@ export async function runCanonicalPresetsShadowImport({
             try {
                 raw = fs.readFileSync(filePath, 'utf8');
             } catch (error) {
-                entries.push({ status: 'error', path: markerKey, errorClass: error?.name || 'Error' });
+                entries.push({ status: 'error', path: markerKey, errorClass: (error as { name?: string } | null | undefined)?.name || 'Error' });
                 continue;
             }
             let payload;
@@ -134,7 +148,7 @@ export async function auditCanonicalPresetsShadowImport({
     handle,
     db,
     auditedAtMs = Date.now(),
-} = {}) {
+}: { handle: string; db: DatabaseSync; auditedAtMs?: number } = {} as { handle: string; db: DatabaseSync; auditedAtMs?: number }) {
     const migrationStatus = getCanonicalMigrationStatus(db);
     if (!migrationStatus.ok) {
         return {
@@ -163,7 +177,7 @@ export async function auditCanonicalPresetsShadowImport({
     try {
         db.prepare('SELECT 1 FROM preset_documents LIMIT 1').get();
     } catch (error) {
-        if (String(error?.message ?? '').includes('no such table: preset_documents')) {
+        if (String((error as { message?: unknown } | null | undefined)?.message ?? '').includes('no such table: preset_documents')) {
             return {
                 ok: false,
                 handle,

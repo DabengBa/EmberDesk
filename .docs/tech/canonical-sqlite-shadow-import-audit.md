@@ -1,5 +1,5 @@
 ---
-description: "src/canonical-sqlite-shadow-import.js owns the Phase 1 bridge between EmberDesk's file-backed character data and the canonical per-user SQLite store defined by the [storage roadmap](canonical-sqlite-storage-roadmap.md). It imports..."
+description: "src/canonical-sqlite-shadow-import.ts owns the Phase 1 bridge between EmberDesk's file-backed character data and the canonical per-user SQLite store defined by the [storage roadmap](canonical-sqlite-storage-roadmap.md). It imports..."
 kind: technical
 topic: canonical-sqlite-shadow-import-audit
 ---
@@ -8,11 +8,11 @@ topic: canonical-sqlite-shadow-import-audit
 
 ## Module Responsibility
 
-`src/canonical-sqlite-shadow-import.js` owns the Phase 1 bridge between EmberDesk's file-backed character data and the canonical per-user SQLite store defined by the [storage roadmap](canonical-sqlite-storage-roadmap.md). It imports character metadata plus chat stats into the canonical DB without changing runtime authority, and it provides a machine-readable audit that compares canonical rows against the current file-backed projection.
+`src/canonical-sqlite-shadow-import.ts` owns the Phase 1 bridge between EmberDesk's file-backed character data and the canonical per-user SQLite store defined by the [storage roadmap](canonical-sqlite-storage-roadmap.md). It imports character metadata plus chat stats into the canonical DB without changing runtime authority, and it provides a machine-readable audit that compares canonical rows against the current file-backed projection.
 
 Primary files:
 
-- `src/canonical-sqlite-shadow-import.js`
+- `src/canonical-sqlite-shadow-import.ts`
 - `src/endpoints/character-file-snapshot.js`
 - `src/endpoints/characters.js`
 - `tests/canonical-sqlite-shadow-import.test.js`

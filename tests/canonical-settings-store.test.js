@@ -22,10 +22,10 @@ import {
     SETTINGS_AUDIT_SCOPE,
     auditCanonicalSettingsShadowImport,
     runCanonicalSettingsShadowImport,
-} from '../src/canonical-settings-shadow-import.js';
+} from '../src/canonical-settings-shadow-import.ts';
 import {
     getPersistedCanonicalAuditStatus,
-} from '../src/canonical-sqlite-shadow-import.js';
+} from '../src/canonical-sqlite-shadow-import.ts';
 import { getDefaultCanonicalStorageSliceRegistry } from '../src/canonical-storage-slice-registry.js';
 
 const tempRoots = [];
@@ -523,7 +523,7 @@ describe('canonical settings route integration', () => {
         nowMs = 2000,
     } = {}) {
         const { canonicalSqliteManager } = await import('../src/canonical-sqlite.js');
-        const { persistCanonicalAuditStatus } = await import('../src/canonical-sqlite-shadow-import.js');
+        const { persistCanonicalAuditStatus } = await import('../src/canonical-sqlite-shadow-import.ts');
         const db = canonicalSqliteManager.open({
             handle,
             directories,
@@ -651,7 +651,7 @@ describe('canonical settings route integration', () => {
         expect(JSON.parse(response.body.settings)).toEqual({ firstRun: false, source: 'db' });
         expect(response.body.settings_revision).toBe(1);
 
-        const { persistCanonicalAuditStatus } = await import('../src/canonical-sqlite-shadow-import.js');
+        const { persistCanonicalAuditStatus } = await import('../src/canonical-sqlite-shadow-import.ts');
         persistCanonicalAuditStatus(db, {
             ok: false,
             handle: 'alice',
@@ -682,7 +682,7 @@ describe('canonical settings route integration', () => {
         // scan would produce an empty list while canonical storage has the row.
         const { canonicalSqliteManager } = await import('../src/canonical-sqlite.js');
         const { upsertCanonicalWorldInfoBook } = await import('../src/endpoints/world-info-store.ts');
-        const { persistCanonicalAuditStatus } = await import('../src/canonical-sqlite-shadow-import.js');
+        const { persistCanonicalAuditStatus } = await import('../src/canonical-sqlite-shadow-import.ts');
         const db = canonicalSqliteManager.open({
             handle: 'alice',
             directories,
@@ -1032,7 +1032,7 @@ describe('canonical settings snapshots and rollback', () => {
         await invokeRoute(router, '/get', { directories });
 
         const { canonicalSqliteManager } = await import('../src/canonical-sqlite.js');
-        const { persistCanonicalAuditStatus } = await import('../src/canonical-sqlite-shadow-import.js');
+        const { persistCanonicalAuditStatus } = await import('../src/canonical-sqlite-shadow-import.ts');
         const db = canonicalSqliteManager.open({
             handle: 'alice',
             directories,

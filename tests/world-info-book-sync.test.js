@@ -6,7 +6,8 @@ const { createWorldInfoBookSync } = await import('../public/scripts/world-info-b
 beforeEach(() => { state.setWorldNames(['A', 'B']); state.setSelectedWorldInfo(['A']); });
 const originalFetch = globalThis.fetch;
 const originalDollar = globalThis.$;
-afterEach(() => { globalThis.fetch = originalFetch; globalThis.$ = originalDollar; });
+const originalDocument = globalThis.document;
+afterEach(() => { globalThis.fetch = originalFetch; globalThis.$ = originalDollar; globalThis.document = originalDocument; });
 async function fixture() {
     const session = createWorldInfoWorkbenchSession({ worldNames: ['A', 'B'], selectedWorldInfo: ['A'], loadWorldInfo: async () => ({ entries: {} }) });
     await session.selectWorldName('B');
@@ -37,16 +38,9 @@ test.each(['http', 'reject'])('confirmed deletion still cleans up references whe
     const session = createWorldInfoWorkbenchSession({ worldNames: ['A', 'B'], selectedWorldInfo: ['A'], loadWorldInfo: async () => ({ entries: {} }) });
     await session.selectWorldName('A');
     state.worldInfoCache.set('A', { entries: {} });
-    let characterWorld = 'A';
     const change = jest.fn();
-    globalThis.$ = selector => {
-        expect(selector).toBe('#character_world');
-        return { val: (...args) => {
-            if (!args.length) return characterWorld;
-            characterWorld = args[0];
-            return { trigger: change };
-        } };
-    };
+    const characterWorld = { value: 'A', dispatchEvent: change };
+    globalThis.document = { getElementById: () => characterWorld };
     const saveCharacter = jest.fn(), saveSettings = jest.fn();
     const sync = createWorldInfoBookSync({
         getRequestHeaders: () => ({}), getSelectedWorldInfoEditorName: () => session.getSelectedWorldName(),
@@ -60,8 +54,8 @@ test.each(['http', 'reject'])('confirmed deletion still cleans up references whe
     expect(session.getSelectorSnapshot()).toEqual({ worldNames: ['B'], globalActiveNames: [], editorWorldName: '' });
     expect(state.world_names).toEqual(['B']);
     expect(state.worldInfoCache.has('A')).toBe(false);
-    expect(characterWorld).toBe('');
-    expect(change).toHaveBeenCalledWith('change');
+    expect(characterWorld.value).toBe('');
+    expect(change.mock.calls[0][0]).toMatchObject({ type: 'change', bubbles: true });
     expect(saveCharacter).toHaveBeenCalledTimes(1);
     expect(saveSettings).toHaveBeenCalledTimes(1);
 });

@@ -24,7 +24,7 @@ import { createCanonicalSqliteManager } from '../src/canonical-sqlite.js';
 import { runCanonicalMigrations } from '../src/canonical-sqlite-migrations.js';
 import {
     auditCanonicalManagedMediaShadowImport,
-} from '../src/canonical-managed-media-shadow-import.js';
+} from '../src/canonical-managed-media-shadow-import.ts';
 import {
     listCanonicalManagedMediaReferences,
 } from '../src/endpoints/canonical-managed-media-store.ts';

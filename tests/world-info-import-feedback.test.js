@@ -86,7 +86,7 @@ describe('world info import feedback', () => {
         const ui = read('public/scripts/world-info-import-ui.js');
         const changeHandler = extractBlock(
             panel,
-            '$(\'#world_import_file\').on(\'change\'',
+            "document.querySelector('#world_import_file').addEventListener('change'",
             '// More menu toggle',
         );
         const busyHelper = extractBlock(
@@ -107,9 +107,9 @@ describe('world info import feedback', () => {
         expect(changeHandler).toContain('finally {');
         expect(changeHandler).toContain('e.target.value = \'\';');
         expect(changeHandler).not.toContain('e.target.files[0]');
-        expect(busyHelper).toContain('$(\'#world_import_file\').prop(\'disabled\', worldInfoImportBusy);');
-        expect(busyHelper).toContain('.attr(\'aria-disabled\', String(worldInfoImportBusy));');
-        expect(busyHelper).toContain('fa-spinner fa-spin');
+        expect(busyHelper).toContain('importFile.disabled = worldInfoImportBusy');
+        expect(busyHelper).toContain("setAttribute('aria-disabled', String(worldInfoImportBusy))");
+        expect(busyHelper).toContain("'fa-spinner', 'fa-spin'");
         expect(busyHelper).toContain('toastr.clear(worldInfoImportToast');
     });
 
@@ -117,13 +117,13 @@ describe('world info import feedback', () => {
         const source = read('public/scripts/world-info-panel-ui.js');
         const clickHandler = extractBlock(
             source,
-            '$(\'#world_import_menu_item\').on(\'click\'',
-            '$(\'#world_import_file\').on(\'change\'',
+            "document.querySelector('#world_import_menu_item')?.addEventListener('click'",
+            "document.querySelector('#world_import_file').addEventListener('change'",
         );
 
         expect(clickHandler).toContain('if (isWorldInfoImportBusy()) {');
         expect(clickHandler).toContain('return;');
-        expect(clickHandler.indexOf('if (isWorldInfoImportBusy()) {')).toBeLessThan(clickHandler.indexOf('$(\'#world_import_file\').trigger(\'click\');'));
+        expect(clickHandler.indexOf('if (isWorldInfoImportBusy()) {')).toBeLessThan(clickHandler.indexOf("document.querySelector('#world_import_file')?.click();"));
     });
 
     test('embedded world import reports a selected character without embedded data', () => {
@@ -251,14 +251,14 @@ describe('world info import feedback', () => {
         const menuSource = extractBlock(
             source,
             '// More menu toggle',
-            '$(document).off(\'click.worldMoreMenu\')',
+            "document.addEventListener('click'",
         );
 
-        expect(menuSource).toContain('$(this).attr(\'aria-expanded\', String(isVisible));');
-        expect(menuSource).toContain('menu.find(\'[role="menuitem"]:visible\').first().trigger(\'focus\');');
-        expect(menuSource).toContain('$(\'#world_more_menu_dropdown .options-menu\').off(\'keydown.worldMoreMenuItem\').on(\'keydown.worldMoreMenuItem\'');
+        expect(menuSource).toContain("this.setAttribute('aria-expanded', String(isVisible));");
+        expect(menuSource).toContain("find(item => item.getClientRects().length)?.focus()");
+        expect(menuSource).toContain("document.querySelectorAll('#world_more_menu_dropdown .options-menu')");
         expect(menuSource).toContain('e.key !== \'Enter\' && e.key !== \' \'');
-        expect(menuSource).toContain('$(this).trigger(\'click\');');
+        expect(menuSource).toContain('this.click();');
     });
 
     test('world import feedback has zh-cn translations for batch and overwrite copy', () => {

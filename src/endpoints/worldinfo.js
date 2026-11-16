@@ -8,12 +8,12 @@ import { sync as writeFileAtomicSync } from 'write-file-atomic';
 import { invalidateDirectory } from './settings-cache.js';
 import { canonicalSqliteManager, withCanonicalTransaction } from '../canonical-sqlite.js';
 import { runCanonicalMigrations } from '../canonical-sqlite-migrations.js';
-import { getPersistedCanonicalAuditStatus } from '../canonical-sqlite-shadow-import.js';
+import { getPersistedCanonicalAuditStatus } from '../canonical-sqlite-shadow-import.ts';
 import { recordImportLedgerEntry } from '../canonical-import-ledger.js';
 import { getCanonicalStorageSlice } from '../canonical-storage-slice-registry.js';
 import { ensureCanonicalSliceBackend } from '../canonical-backend.js';
 import { coordinateWorkspaceWrite } from './coordinate-workspace-write.js';
-import { recordWorldProjectionIntent, replayWorldProjection } from '../canonical-world-info-projection.js';
+import { recordWorldProjectionIntent, replayWorldProjection } from '../canonical-world-info-projection.ts';
 import {
     getCanonicalWorldInfoBook,
     listCanonicalWorldInfoBooks,

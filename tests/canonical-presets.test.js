@@ -6,7 +6,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, test } from '@jest/gl
 
 import { createCanonicalSqliteManager, canonicalSqliteManager } from '../src/canonical-sqlite.js';
 import { runCanonicalMigrations } from '../src/canonical-sqlite-migrations.js';
-import { getPersistedCanonicalAuditStatus } from '../src/canonical-sqlite-shadow-import.js';
+import { getPersistedCanonicalAuditStatus } from '../src/canonical-sqlite-shadow-import.ts';
 import { setConfigFilePath } from '../src/util.js';
 
 // canReadCanonicalFeatureFlags() requires runtime args; without them the
@@ -33,7 +33,7 @@ const {
     PRESETS_AUDIT_SCOPE,
     auditCanonicalPresetsShadowImport,
     runCanonicalPresetsShadowImport,
-} = await import('../src/canonical-presets-shadow-import.js');
+} = await import('../src/canonical-presets-shadow-import.ts');
 const { router: presetsRouter } = await import('../src/endpoints/presets.js');
 const { router: settingsRouter } = await import('../src/endpoints/settings.js');
 const { exportCanonicalStorageToFiles } = await import('../src/canonical-sqlite-export.js');

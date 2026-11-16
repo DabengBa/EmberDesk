@@ -14,7 +14,7 @@ import {
     replayWorldProjection,
     resolveWorldProjectionPath,
     WORLD_PROJECTION_INTENT_PREFIX,
-} from '../src/canonical-world-info-projection.js';
+} from '../src/canonical-world-info-projection.ts';
 import {
     getCanonicalWorldInfoBook,
     markCanonicalWorldInfoBookDeleted,
@@ -25,12 +25,12 @@ import { explainCanonicalRolloutBlockers, getCanonicalStorageControlPlaneStatus 
 import { runCanonicalWorldInfoAudit, repairCanonicalWorldInfoProjection } from '../src/canonical-sqlite-operator.js';
 import { runCharacterTextReplace } from '../src/endpoints/character-text-replace-service.ts';
 import * as characterStore from '../src/endpoints/character-store.ts';
-import { runCanonicalWorldInfoShadowImport } from '../src/canonical-world-info-shadow-import.js';
+import { runCanonicalWorldInfoShadowImport } from '../src/canonical-world-info-shadow-import.ts';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const sqliteUrl = pathToFileURL(path.join(repoRoot, 'src/canonical-sqlite.js')).href;
 const storeUrl = pathToFileURL(path.join(repoRoot, 'src/endpoints/world-info-store.ts')).href;
-const projectionUrl = pathToFileURL(path.join(repoRoot, 'src/canonical-world-info-projection.js')).href;
+const projectionUrl = pathToFileURL(path.join(repoRoot, 'src/canonical-world-info-projection.ts')).href;
 
 const tempRoots = [];
 const managers = [];

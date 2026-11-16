@@ -2094,11 +2094,27 @@ export function deleteValueByPath(obj, path) {
 
 /**
  * Flashes the given HTML element via CSS flash animation for a defined period
- * @param {JQuery<HTMLElement>} element - The element to flash
+ * @param {JQuery<HTMLElement>|HTMLElement} element - The element to flash
  * @param {number} timespan - A number in milliseconds how the flash should last (default is 2000ms.  Multiples of 1000ms work best, as they end with the flash animation being at 100% opacity)
  */
 export function flashHighlight(element, timespan = 2000) {
     const flashDuration = 2000; // Duration of a single flash cycle in milliseconds
+
+    if (element?.nodeType === 1) {
+        element.classList.add('flash', 'animated');
+        element.style.setProperty('--animation-duration', `${flashDuration}ms`);
+        const intervalId = setInterval(() => {
+            element.classList.remove('flash', 'animated');
+            void element.offsetWidth;
+            element.classList.add('flash', 'animated');
+        }, flashDuration);
+        setTimeout(() => {
+            clearInterval(intervalId);
+            element.classList.remove('flash', 'animated');
+            element.style.setProperty('--animation-duration', '');
+        }, timespan);
+        return;
+    }
 
     element.addClass('flash animated');
     element.css('--animation-duration', `${flashDuration}ms`);

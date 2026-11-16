@@ -215,12 +215,14 @@ export class GenerationStreamSession {
             refresh: () => scheduleMainChatMessageListPanelRefresh(),
             mount: () => { void mountReactMainChatMessageListPanel(); },
             addCopyButtons: id => {
-                const element = isReactMainChatOwner() ? null : shell().state.chatElement.find(`.mes[mesid="${id}"]`);
+                const chatElement = shell().state.chatElement;
+                const root = chatElement?.jquery ? chatElement[0] : chatElement;
+                const element = isReactMainChatOwner() ? null : root?.querySelector(`.mes[mesid="${id}"]`);
                 if (element) addCopyToCodeBlocks(element);
             },
             processImages: (message, imageUrls, ownsRun) => processImageAttachment(message, { imageUrls, ownsRun }),
             renderImages: message => {
-                if (!isReactMainChatOwner()) appendMediaToMessage(message, $(this.messageDom));
+                if (!isReactMainChatOwner()) appendMediaToMessage(message, this.messageDom);
                 else scheduleMainChatMessageListPanelRefresh();
             },
             emitReceived: (id, type) => eventSource.emit(event_types.MESSAGE_RECEIVED, id, type),
@@ -529,7 +531,11 @@ async function executeOwnedGenerationRequestInShell(generationEnvelope, lease) {
                     regexOutput: text => getRegexedString(text, shell().state.regex_placement.AI_OUTPUT),
                     removeCardView: index => {
                         if (isReactMainChatOwner()) void mountReactMainChatMessageListPanel();
-                        else shell().state.chatElement.find(`.mes[mesid="${index}"]`).remove();
+                        else {
+                            const chatElement = shell().state.chatElement;
+                            const root = chatElement?.jquery ? chatElement[0] : chatElement;
+                            root?.querySelectorAll(`.mes[mesid="${index}"]`).forEach(row => row.remove());
+                        }
                     },
                     emitDeleted: length => eventSource.emit(event_types.MESSAGE_DELETED, length),
                     saveReply: reply => saveReply(reply),
@@ -792,21 +798,19 @@ export function updateEditArrowClasses() {
         return;
     }
 
-    const message = shell().state.chatElement.children('.mes').filter(`.mes[mesid="${shell().state.this_edit_mes_id}"]`);
+    const chatElement = shell().state.chatElement;
+    const root = chatElement?.jquery ? chatElement[0] : chatElement;
+    if (!root) return;
 
-    const downButton = message.find('.mes_edit_down');
-    const upButton = message.find('.mes_edit_up');
-    const copyButton = message.find('.mes_edit_copy');
-    const deleteButton = message.find('.mes_edit_delete');
-    const lastId = Number(shell().state.chatElement.find('.mes').last().attr('mesid'));
-    const firstId = Number(shell().state.chatElement.find('.mes').first().attr('mesid'));
-
-    copyButton.removeClass('disabled');
-    deleteButton.removeClass('disabled');
-
-    // The last message cannot be moved down.
-    downButton.toggleClass('disabled', lastId === Number(shell().state.this_edit_mes_id));
-    // The first message cannot be moved up.
-    upButton.toggleClass('disabled', firstId === Number(shell().state.this_edit_mes_id));
+    const rows = root.querySelectorAll('.mes');
+    const lastId = Number(rows[rows.length - 1]?.getAttribute('mesid') ?? undefined);
+    const firstId = Number(rows[0]?.getAttribute('mesid') ?? undefined);
+    const editId = shell().state.this_edit_mes_id;
+    for (const message of root.children) {
+        if (!message.matches('.mes') || message.getAttribute('mesid') !== String(editId)) continue;
+        message.querySelectorAll('.mes_edit_copy, .mes_edit_delete').forEach(button => button.classList.remove('disabled'));
+        message.querySelectorAll('.mes_edit_down').forEach(button => button.classList.toggle('disabled', lastId === Number(editId)));
+        message.querySelectorAll('.mes_edit_up').forEach(button => button.classList.toggle('disabled', firstId === Number(editId)));
+    }
 }
 

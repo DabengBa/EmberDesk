@@ -6,14 +6,14 @@ import {
     getCanonicalStorageSliceFeatureFlagSnapshot,
 } from './storage-feature-flags.js';
 import { getCanonicalMigrationStatus } from './canonical-sqlite-migrations.js';
-import { getPersistedCanonicalAuditStatus } from './canonical-sqlite-shadow-import.js';
-import { WORLD_INFO_AUDIT_SCOPE } from './canonical-world-info-shadow-import.js';
-import { WORLD_PROJECTION_INTENT_PREFIX } from './canonical-world-info-projection.js';
-import { SETTINGS_AUDIT_SCOPE } from './canonical-settings-shadow-import.js';
-import { CANONICAL_SECRETS_AUDIT_SCOPE } from './canonical-secrets-shadow-import.js';
-import { MANAGED_MEDIA_AUDIT_SCOPE } from './canonical-managed-media-shadow-import.js';
-import { CANONICAL_CHAT_AUDIT_SCOPE } from './canonical-chat-shadow-import.js';
-import { PRESETS_AUDIT_SCOPE } from './canonical-presets-shadow-import.js';
+import { getPersistedCanonicalAuditStatus } from './canonical-sqlite-shadow-import.ts';
+import { WORLD_INFO_AUDIT_SCOPE } from './canonical-world-info-shadow-import.ts';
+import { WORLD_PROJECTION_INTENT_PREFIX } from './canonical-world-info-projection.ts';
+import { SETTINGS_AUDIT_SCOPE } from './canonical-settings-shadow-import.ts';
+import { CANONICAL_SECRETS_AUDIT_SCOPE } from './canonical-secrets-shadow-import.ts';
+import { MANAGED_MEDIA_AUDIT_SCOPE } from './canonical-managed-media-shadow-import.ts';
+import { CANONICAL_CHAT_AUDIT_SCOPE } from './canonical-chat-shadow-import.ts';
+import { PRESETS_AUDIT_SCOPE } from './canonical-presets-shadow-import.ts';
 import {
     buildCanonicalSliceRollbackBlockers,
     getCanonicalSliceFlagContractStatus,

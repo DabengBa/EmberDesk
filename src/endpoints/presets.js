@@ -3,7 +3,7 @@ import sanitize from 'sanitize-filename';
 
 import { canonicalSqliteManager } from '../canonical-sqlite.js';
 import { runCanonicalMigrations } from '../canonical-sqlite-migrations.js';
-import { getPersistedCanonicalAuditStatus } from '../canonical-sqlite-shadow-import.js';
+import { getPersistedCanonicalAuditStatus } from '../canonical-sqlite-shadow-import.ts';
 import { ensureCanonicalSliceBackend } from '../canonical-backend.js';
 import { getCanonicalStorageSlice } from '../canonical-storage-slice-registry.js';
 import { getDefaultPresetFile, getDefaultPresets } from './content-manager.js';

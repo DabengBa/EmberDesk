@@ -10,13 +10,13 @@ import { runCanonicalMigrations } from './canonical-sqlite-migrations.js';
 import {
     getPersistedCanonicalAuditStatus,
     invalidateCanonicalAuditStatus,
-} from './canonical-sqlite-shadow-import.js';
+} from './canonical-sqlite-shadow-import.ts';
 import {
     auditCanonicalSecretsShadowImport,
     CANONICAL_SECRETS_AUDIT_SCOPE,
     getCanonicalSecretsProjection,
     runCanonicalSecretsShadowImport,
-} from './canonical-secrets-shadow-import.js';
+} from './canonical-secrets-shadow-import.ts';
 import { getCanonicalStorageSlice } from './canonical-storage-slice-registry.js';
 import { decideCanonicalBackendInitAction } from './canonical-backend.js';
 import {

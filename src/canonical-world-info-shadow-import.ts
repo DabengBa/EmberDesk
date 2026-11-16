@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
+import type { DatabaseSync } from 'node:sqlite';
 
 import {
     classifyImportCandidate,
@@ -8,13 +9,13 @@ import {
     resolveAuditDriftReason,
 } from './canonical-import-ledger.js';
 import { getCanonicalMigrationStatus, runCanonicalMigrations } from './canonical-sqlite-migrations.js';
-import { persistCanonicalAuditStatusInTransaction } from './canonical-sqlite-shadow-import.js';
+import { persistCanonicalAuditStatusInTransaction } from './canonical-sqlite-shadow-import.ts';
 import { withCanonicalTransaction } from './canonical-sqlite.js';
 import {
     WORLD_PROJECTION_INTENT_PREFIX,
     moveWorldFileToLocalQuarantine,
     resolveWorldProjectionPath,
-} from './canonical-world-info-projection.js';
+} from './canonical-world-info-projection.ts';
 import {
     getCanonicalWorldInfoBook,
     listCanonicalWorldInfoBookRows,
@@ -23,7 +24,14 @@ import {
 
 export const WORLD_INFO_AUDIT_SCOPE = 'world_info';
 
-function listWorldInfoJsonFiles(directories) {
+type Directories = { root: string; worlds: string; storage: string };
+type MigrationStatus = ReturnType<typeof runCanonicalMigrations>;
+type ImportEntry = { world_name: string; status: string; sourceHash?: string; errorMessage?: string };
+type AuditEntry = { handle: string; world_name: string; world_book_id: string | null; status: string; drift_types: string[]; details: { suppressed?: boolean; expected_projection_pending?: boolean; [key: string]: unknown }; audited_at_ms: number };
+type ImportOptions = { handle: string; directories: Directories; featureFlags: { enabled?: boolean; shadowImport?: boolean; strict?: boolean } | null | undefined; manager: { open(options: { handle: string; directories: Directories; featureFlags: { enabled: boolean; strict: boolean } }): DatabaseSync | null }; nowMs?: number };
+type AuditOptions = { handle: string; directories: Directories; db: DatabaseSync; auditedAtMs?: number; projection?: string; importResult?: { ok: boolean; reason: string | null; failedCount: number } | null };
+
+function listWorldInfoJsonFiles(directories: Directories) {
     if (!directories?.worlds) {
         return [];
     }
@@ -41,11 +49,11 @@ function listWorldInfoJsonFiles(directories) {
         .sort((left, right) => left.localeCompare(right));
 }
 
-function getWorldNameFromFilename(filename) {
+function getWorldNameFromFilename(filename: string) {
     return path.parse(filename).name;
 }
 
-function readWorldInfoProjection(directories, filename) {
+function readWorldInfoProjection(directories: Directories, filename: string) {
     const filePath = path.join(directories.worlds, filename);
     const stat = fs.statSync(filePath);
     const contents = fs.readFileSync(filePath, 'utf8');
@@ -62,11 +70,11 @@ function readWorldInfoProjection(directories, filename) {
     };
 }
 
-function stableJson(value) {
+function stableJson(value: unknown) {
     return JSON.stringify(value);
 }
 
-function summarizeImportResult({ handle, skipped = false, reason = null, entries, migrationStatus = null }) {
+function summarizeImportResult({ handle, skipped = false, reason = null, entries, migrationStatus = null }: { handle: string; skipped?: boolean; reason?: string | null; entries: ImportEntry[]; migrationStatus?: MigrationStatus | null }) {
     const importedCount = entries.filter(entry => entry.status === 'imported').length;
     const updatedCount = entries.filter(entry => entry.status === 'updated').length;
     const unchangedCount = entries.filter(entry => entry.status === 'unchanged').length;
@@ -85,7 +93,7 @@ function summarizeImportResult({ handle, skipped = false, reason = null, entries
     };
 }
 
-function buildAuditEntry({ handle, worldName, worldBookId = null, status, driftTypes, details, auditedAtMs }) {
+function buildAuditEntry({ handle, worldName, worldBookId = null, status, driftTypes, details, auditedAtMs }: { handle: string; worldName: string; worldBookId?: string | null; status: string; driftTypes: string[]; details: AuditEntry['details']; auditedAtMs: number }): AuditEntry {
     return {
         handle,
         world_name: worldName,
@@ -97,7 +105,7 @@ function buildAuditEntry({ handle, worldName, worldBookId = null, status, driftT
     };
 }
 
-function buildAuditSummary({ handle, migrationStatus, entries, ignoreSuppressed = false }) {
+function buildAuditSummary({ handle, migrationStatus, entries, ignoreSuppressed = false }: { handle: string; migrationStatus: MigrationStatus; entries: AuditEntry[]; ignoreSuppressed?: boolean }) {
     // Suppressed entries (projection off) and entries explained by a pending v1
     // intent are expected state: the authority transaction committed and the
     // shared worker has not settled the file yet. Legacy rows and drift without
@@ -118,7 +126,7 @@ function buildAuditSummary({ handle, migrationStatus, entries, ignoreSuppressed 
     };
 }
 
-function listPendingWriteIntents(db) {
+function listPendingWriteIntents(db: DatabaseSync) {
     const rows = db.prepare(`
         SELECT repair_key, world_book_id, world_name, details_json
         FROM world_info_projection_repairs
@@ -149,7 +157,7 @@ export async function runCanonicalWorldInfoShadowImport({
     featureFlags,
     manager,
     nowMs = Date.now(),
-}) {
+}: ImportOptions) {
     if (!featureFlags?.enabled) {
         return summarizeImportResult({
             handle,
@@ -197,14 +205,14 @@ export async function runCanonicalWorldInfoShadowImport({
         });
     }
 
-    const entries = [];
+    const entries: ImportEntry[] = [];
     for (const filename of listWorldInfoJsonFiles(directories)) {
         const worldName = getWorldNameFromFilename(filename);
         try {
             const canonicalFilename = `${worldName}.json`;
             const legacyFilename = filename !== canonicalFilename && path.extname(filename).toLowerCase() === '.json'
                 && filename.slice(0, -path.extname(filename).length) === worldName ? filename : null;
-            const entry = withCanonicalTransaction(db, txn => {
+            const entry = withCanonicalTransaction(db, (txn: DatabaseSync) => {
                 const resolved = resolveWorldProjectionPath(txn, directories, worldName, { legacyFilename });
                 if (legacyFilename && fs.readdirSync(directories.worlds).includes(canonicalFilename)) throw new Error('world_projection_filename_alias');
                 if (!legacyFilename && path.basename(resolved.target) !== filename) throw new Error('world_projection_filename_alias');
@@ -253,7 +261,7 @@ export async function runCanonicalWorldInfoShadowImport({
             if (legacyFilename) {
                 // The authority must be committed before moving the alias. A crash
                 // before this point leaves replay blocked by the original filename.
-                withCanonicalTransaction(db, txn => {
+                withCanonicalTransaction(db, (txn: DatabaseSync) => {
                     const resolved = resolveWorldProjectionPath(txn, directories, worldName, { legacyFilename });
                     if (fs.readdirSync(directories.worlds).includes(canonicalFilename)) throw new Error('world_projection_filename_alias');
                     const pending = txn.prepare('SELECT 1 FROM world_info_projection_repairs WHERE world_name = ? AND resolved_at_ms IS NULL').get(worldName);
@@ -277,7 +285,7 @@ export async function runCanonicalWorldInfoShadowImport({
             entries.push({
                 world_name: worldName,
                 status: 'error',
-                errorMessage: String(error?.message ?? error ?? ''),
+                errorMessage: String((error as { message?: unknown } | null | undefined)?.message ?? error ?? ''),
             });
         }
     }
@@ -289,7 +297,7 @@ export async function runCanonicalWorldInfoShadowImport({
     });
 }
 
-export async function auditCanonicalWorldInfoShadowImport(options) {
+export async function auditCanonicalWorldInfoShadowImport(options: AuditOptions) {
     return withCanonicalTransaction(options.db, () => auditWorldInfoInTransaction(options));
 }
 
@@ -300,7 +308,7 @@ function auditWorldInfoInTransaction({
     auditedAtMs = Date.now(),
     projection = 'sync',
     importResult = null,
-}) {
+}: AuditOptions) {
     const migrationStatus = getCanonicalMigrationStatus(db);
     if (!migrationStatus.ok) {
         return {
@@ -331,17 +339,17 @@ function auditWorldInfoInTransaction({
         ? { projection_mode: 'off', suppressed: true }
         : {};
     const pendingIntents = listPendingWriteIntents(db);
-    const pendingWriteForBook = worldBookId => pendingIntents.some(intent =>
+    const pendingWriteForBook = (worldBookId: unknown) => pendingIntents.some(intent =>
         intent.version === 1
         && intent.action === 'write'
         && intent.worldBookId != null
         && intent.worldBookId === String(worldBookId));
-    const pendingDeleteForName = worldName => pendingIntents.some(intent =>
+    const pendingDeleteForName = (worldName: string) => pendingIntents.some(intent =>
         intent.version === 1
         && intent.action === 'delete'
         && intent.worldName === worldName);
 
-    const entries = [];
+    const entries: AuditEntry[] = [];
     if (importResult && !importResult.ok) {
         entries.push(buildAuditEntry({
             handle,
@@ -407,7 +415,7 @@ function auditWorldInfoInTransaction({
                 status: 'error',
                 driftTypes: ['audit_error'],
                 details: {
-                    errorMessage: String(error?.message ?? error ?? ''),
+                    errorMessage: String((error as { message?: unknown } | null | undefined)?.message ?? error ?? ''),
                 },
                 auditedAtMs,
             }));

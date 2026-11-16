@@ -50,8 +50,8 @@ const { canonicalSqliteManager } = await import('../src/canonical-sqlite.js');
 const { resetCanonicalBackendsForTests } = await import('../src/canonical-backend.js');
 const { runCanonicalMigrations } = await import('../src/canonical-sqlite-migrations.js');
 const { upsertCanonicalSettingsDocument, getCanonicalSettingsDocument } = await import('../src/endpoints/settings-store.ts');
-const { persistCanonicalAuditStatus } = await import('../src/canonical-sqlite-shadow-import.js');
-const { SETTINGS_AUDIT_SCOPE } = await import('../src/canonical-settings-shadow-import.js');
+const { persistCanonicalAuditStatus } = await import('../src/canonical-sqlite-shadow-import.ts');
+const { SETTINGS_AUDIT_SCOPE } = await import('../src/canonical-settings-shadow-import.ts');
 
 const envKeys = [
     'EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_ENABLED',

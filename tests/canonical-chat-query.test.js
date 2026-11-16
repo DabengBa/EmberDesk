@@ -9,7 +9,7 @@ import { runCanonicalMigrations } from '../src/canonical-sqlite-migrations.js';
 import {
     auditCanonicalChatShadowImport,
     runCanonicalChatShadowImport,
-} from '../src/canonical-chat-shadow-import.js';
+} from '../src/canonical-chat-shadow-import.ts';
 import { setConfigFilePath } from '../src/util.js';
 import {
     readCanonicalRecentChatPayload,

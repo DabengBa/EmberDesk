@@ -453,13 +453,43 @@ test.describe('auxiliary workspace surfaces', () => {
     });
 
     test('avatar previews have a keyboard-reachable named close control', async ({ page }) => {
-        await page.locator('#chat .mes .avatar img').first().click();
+        await page.emulateMedia({ reducedMotion: 'reduce' });
+        await page.evaluate(() => {
+            const original = window.$;
+            window.avatarJqueryCalls = [];
+            window.$ = new Proxy(original, {
+                apply(target, receiver, args) {
+                    if (args[0] instanceof Element && args[0].matches('#chat .mes, #chat .mes .avatar')) window.avatarJqueryCalls.push(args[0].className);
+                    return Reflect.apply(target, receiver, args);
+                },
+            });
+            document.querySelector('#chat .mes .avatar').tabIndex = -1;
+        });
+        const avatar = page.locator('#chat .mes .avatar').first();
+        await avatar.locator('img').click();
         const close = page.getByRole('button', { name: '关闭头像预览', exact: true });
         await expect(close).toBeVisible();
         await expect(close).toBeFocused();
         await expect(page.locator('.zoomed_avatar:not(.template_element) img').last()).toHaveAttribute('alt', /.+/);
         await close.press('Enter');
         await expect(page.locator('.zoomed_avatar[forChar]')).toHaveCount(0);
+        await expect(avatar).toBeFocused();
+        await avatar.locator('img').click();
+        await expect(close).toBeFocused();
+        await close.press('Escape');
+        await expect(page.locator('.zoomed_avatar[forChar]')).toHaveCount(0);
+        await expect(avatar).toBeFocused();
+        await avatar.locator('img').click();
+        await expect(close).toBeVisible();
+        await avatar.locator('img').click();
+        await expect(page.locator('.zoomed_avatar[forChar]')).toHaveCount(0);
+        expect(await page.evaluate(() => window.avatarJqueryCalls)).toEqual([]);
+        await page.emulateMedia({ reducedMotion: 'no-preference' });
+        await avatar.locator('img').click();
+        await expect(close).toBeFocused();
+        await close.press('Escape');
+        await expect(page.locator('.zoomed_avatar[forChar]')).toHaveCount(0);
+        await expect(avatar).toBeFocused();
     });
 
     test('crop controls adjust the selection without pointer dragging', async ({ page }) => {

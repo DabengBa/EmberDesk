@@ -18,8 +18,8 @@ import {
 import {
     getPersistedCanonicalAuditStatus,
     invalidateCanonicalAuditStatus,
-} from '../src/canonical-sqlite-shadow-import.js';
-import { SETTINGS_AUDIT_SCOPE } from '../src/canonical-settings-shadow-import.js';
+} from '../src/canonical-sqlite-shadow-import.ts';
+import { SETTINGS_AUDIT_SCOPE } from '../src/canonical-settings-shadow-import.ts';
 
 
 const roots = [];
@@ -333,7 +333,7 @@ describe('lazy slice backend initialization', () => {
         const first = await ensureCanonicalSliceBackend('settings', directories, 'alice');
         expect(first.ok).toBe(true);
 
-        const { persistCanonicalAuditStatus } = await import('../src/canonical-sqlite-shadow-import.js');
+        const { persistCanonicalAuditStatus } = await import('../src/canonical-sqlite-shadow-import.ts');
         persistCanonicalAuditStatus(first.db, {
             ok: false,
             handle: 'alice',

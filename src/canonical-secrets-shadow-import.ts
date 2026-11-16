@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
+import type { DatabaseSync } from 'node:sqlite';
 
 import {
     classifyImportCandidate,
@@ -8,7 +9,7 @@ import {
     resolveAuditDriftReason,
 } from './canonical-import-ledger.js';
 import { getCanonicalMigrationStatus, runCanonicalMigrations } from './canonical-sqlite-migrations.js';
-import { persistCanonicalAuditStatus } from './canonical-sqlite-shadow-import.js';
+import { persistCanonicalAuditStatus } from './canonical-sqlite-shadow-import.ts';
 import {
     getCanonicalSecrets,
     getSecretMigrationMarker,
@@ -22,11 +23,20 @@ export const CANONICAL_SECRETS_AUDIT_SCOPE = 'secrets';
 export const CANONICAL_SECRETS_FILE = 'secrets.json';
 const MIGRATED_KEY = '_migrated';
 
-function getSecretsFilePath(directories) {
+type SecretDirectories = { root: string; storage?: string };
+type SecretRecord = { id: string; value: string; label: string; active: boolean; createdAtMs: number; updatedAtMs: number };
+type SecretRecords = Record<string, SecretRecord[]>;
+type MigrationStatus = ReturnType<typeof runCanonicalMigrations>;
+type ImportEntry = { key?: string; status: string; errorClass?: string };
+type AuditEntry = { key: string | null; status: string; drift_types: string[]; details: { suppressed?: boolean; [key: string]: unknown }; audited_at_ms: number };
+type ImportOptions = { handle: string; directories: SecretDirectories; featureFlags: { enabled?: boolean; shadowImport?: boolean; strict?: boolean; reads?: boolean } | null | undefined; manager: { open(options: { handle: string; directories: SecretDirectories; featureFlags: { enabled: boolean; strict: boolean } }): DatabaseSync | null }; nowMs?: number };
+type AuditOptions = { handle: string; directories: SecretDirectories; db: DatabaseSync; auditedAtMs?: number; projection?: string };
+
+function getSecretsFilePath(directories: SecretDirectories) {
     return path.join(directories.root, CANONICAL_SECRETS_FILE);
 }
 
-function readSecretsFile(directories) {
+function readSecretsFile(directories: SecretDirectories): { exists: boolean; payload: Record<string, unknown>; raw: string | null; error: unknown } {
     const filePath = getSecretsFilePath(directories);
     if (!fs.existsSync(filePath)) {
         return { exists: false, payload: {}, raw: null, error: null };
@@ -43,11 +53,11 @@ function readSecretsFile(directories) {
     }
 }
 
-function normalizeSecretRecords(payload, nowMs, existingByKey = {}) {
-    const recordsByKey = {};
-    const seenRecordIds = new Set();
+function normalizeSecretRecords(payload: Record<string, unknown>, nowMs: number, existingByKey: Record<string, { id: string; value: string; active: boolean; createdAtMs?: number }[]> = {}) {
+    const recordsByKey: SecretRecords = {};
+    const seenRecordIds = new Set<string>();
 
-    const registerRecordId = id => {
+    const registerRecordId = (id: string) => {
         if (seenRecordIds.has(id)) {
             const error = new Error('Secret record IDs must be unique.');
             error.name = 'DuplicateSecretRecordIdError';
@@ -103,7 +113,7 @@ function normalizeSecretRecords(payload, nowMs, existingByKey = {}) {
     return recordsByKey;
 }
 
-function getSnapshotHash(recordsByKey) {
+function getSnapshotHash(recordsByKey: SecretRecords) {
     const canonical = Object.keys(recordsByKey).sort().map(key => ({
         key,
         records: recordsByKey[key].map(record => ({
@@ -116,7 +126,7 @@ function getSnapshotHash(recordsByKey) {
     return hashCanonicalSecretValue(JSON.stringify(canonical));
 }
 
-function summarizeImport({ handle, entries, reason = null, migrationStatus = null, skipped = false }) {
+function summarizeImport({ handle, entries, reason = null, migrationStatus = null, skipped = false }: { handle: string; entries: ImportEntry[]; reason?: string | null; migrationStatus?: MigrationStatus | null; skipped?: boolean }) {
     const importedCount = entries.filter(entry => entry.status === 'imported').length;
     const updatedCount = entries.filter(entry => entry.status === 'updated').length;
     const unchangedCount = entries.filter(entry => entry.status === 'unchanged').length;
@@ -135,7 +145,7 @@ function summarizeImport({ handle, entries, reason = null, migrationStatus = nul
     };
 }
 
-function keysFromRecords(recordsByKey) {
+function keysFromRecords(recordsByKey: SecretRecords) {
     return Object.keys(recordsByKey).sort();
 }
 
@@ -145,7 +155,7 @@ export function runCanonicalSecretsShadowImport({
     featureFlags,
     manager,
     nowMs = Date.now(),
-} = {}) {
+}: ImportOptions = {} as ImportOptions) {
     if (!featureFlags?.enabled) {
         return summarizeImport({ handle, skipped: true, reason: 'canonical_storage_disabled', entries: [] });
     }
@@ -185,7 +195,7 @@ export function runCanonicalSecretsShadowImport({
         return summarizeImport({
             handle,
             migrationStatus,
-            entries: [{ status: 'error', errorClass: file.error.name || 'Error' }],
+            entries: [{ status: 'error', errorClass: (file.error as { name?: string }).name || 'Error' }],
         });
     }
 
@@ -198,12 +208,12 @@ export function runCanonicalSecretsShadowImport({
             handle,
             reason: 'invalid_secret_record_ids',
             migrationStatus,
-            entries: [{ status: 'error', errorClass: error.name || 'Error' }],
+            entries: [{ status: 'error', errorClass: (error as { name?: string }).name || 'Error' }],
         });
     }
     const snapshotHash = getSnapshotHash(recordsByKey);
     const marker = getSecretMigrationMarker(db);
-    const entries = [];
+    const entries: ImportEntry[] = [];
 
     if (featureFlags.reads && marker) {
         recordFileImport();
@@ -231,7 +241,7 @@ export function runCanonicalSecretsShadowImport({
     return summarizeImport({ handle, entries, migrationStatus });
 }
 
-function buildAuditEntry({ key, status, driftTypes, details, auditedAtMs }) {
+function buildAuditEntry({ key, status, driftTypes, details, auditedAtMs }: { key: string | null; status: string; driftTypes: string[]; details: AuditEntry['details']; auditedAtMs: number }): AuditEntry {
     return {
         key,
         status,
@@ -247,7 +257,7 @@ export function auditCanonicalSecretsShadowImport({
     db,
     auditedAtMs = Date.now(),
     projection = 'sync',
-} = {}) {
+}: AuditOptions = {} as AuditOptions) {
     const migrationStatus = getCanonicalMigrationStatus(db);
     if (!migrationStatus.ok || migrationStatus.currentVersion !== migrationStatus.targetVersion) {
         return {
@@ -263,7 +273,7 @@ export function auditCanonicalSecretsShadowImport({
     try {
         db.prepare('SELECT 1 FROM secret_records LIMIT 1').get();
     } catch (error) {
-        if (String(error?.message ?? '').includes('no such table: secret_records')) {
+        if (String((error as { message?: unknown } | null | undefined)?.message ?? '').includes('no such table: secret_records')) {
             return {
                 ok: false,
                 handle,
@@ -278,7 +288,7 @@ export function auditCanonicalSecretsShadowImport({
     }
 
     const file = readSecretsFile(directories);
-    const entries = [];
+    const entries: AuditEntry[] = [];
     const importClassification = file.exists && !file.error && file.raw != null
         ? classifyImportCandidate(db, {
             sliceKey: 'secrets',
@@ -293,8 +303,8 @@ export function auditCanonicalSecretsShadowImport({
             status: 'error',
             driftTypes: ['invalid_json'],
             details: suppressFileSide
-                ? { errorClass: file.error.name || 'Error', projection_mode: 'off', suppressed: true }
-                : { errorClass: file.error.name || 'Error' },
+                ? { errorClass: (file.error as { name?: string }).name || 'Error', projection_mode: 'off', suppressed: true }
+                : { errorClass: (file.error as { name?: string }).name || 'Error' },
             auditedAtMs,
         }));
     } else {
@@ -308,8 +318,8 @@ export function auditCanonicalSecretsShadowImport({
                 status: 'error',
                 driftTypes: ['invalid_secret_record_ids'],
                 details: suppressFileSide
-                    ? { errorClass: error.name || 'Error', projection_mode: 'off', suppressed: true }
-                    : { errorClass: error.name || 'Error' },
+                    ? { errorClass: (error as { name?: string }).name || 'Error', projection_mode: 'off', suppressed: true }
+                    : { errorClass: (error as { name?: string }).name || 'Error' },
                 auditedAtMs,
             }));
         }
@@ -409,7 +419,7 @@ export function auditCanonicalSecretsShadowImport({
     return result;
 }
 
-export function getCanonicalSecretsProjection(db) {
+export function getCanonicalSecretsProjection(db: DatabaseSync) {
     const secrets = getCanonicalSecrets(db);
     secrets[MIGRATED_KEY] = [];
     return secrets;

@@ -185,7 +185,7 @@ export async function bindLegacyShellHandlers() {
         state.selected_button = 'characters';
         select_rm_characters();
     });
-    $('#rm_button_create').on('click', function () {
+    document.getElementById('rm_button_create')?.addEventListener('click', function () {
         state.selected_button = 'create';
         select_rm_create();
         // This is also the React Character Library's New action. Selecting the
@@ -208,8 +208,12 @@ export async function bindLegacyShellHandlers() {
         }
     });
 
-    $(document).on('click', '.character_select', async function () {
-        const id = Number($(this).attr('data-chid'));
+    document.addEventListener('click', async function onCharacterSelect(event) {
+        if (event.button >= 1) return;
+        const target = event.target instanceof Element ? event.target : event.target?.parentElement;
+        const character = target?.closest('.character_select');
+        if (!character || character.disabled === true) return;
+        const id = Number(character.getAttribute('data-chid') ?? undefined);
         await selectCharacterById(id);
     });
 
@@ -267,10 +271,11 @@ export async function bindLegacyShellHandlers() {
     $(document).on('click', '.mes', function () {
         //when a 'delete message' parent div is clicked
         // and we are in delete mode and del_checkbox is visible
+        if (this.matches('[data-main-chat-message-row-owner="react"]')) return;
         const row = $(this);
         const deleteCheckbox = row.find('.del_checkbox').first();
 
-        if (row.is('[data-main-chat-message-row-owner="react"]') || !state.is_delete_mode || !deleteCheckbox.is(':visible')) {
+        if (!state.is_delete_mode || !deleteCheckbox.is(':visible')) {
             return;
         }
         globalThis.__emberDeskBulkDeleteController.selectLegacyRange(Number(row.attr('mesid')), state.chat.length, {
@@ -406,10 +411,15 @@ export async function bindLegacyShellHandlers() {
         return cancelDialoguePopup();
     });
 
-    $('#add_avatar_button').on('change', function () {
-        const inputElement = /** @type {HTMLInputElement} */ (this);
-        read_avatar_load(inputElement);
-    });
+    const avatarInput = /** @type {HTMLInputElement|null} */ (document.getElementById('add_avatar_button'));
+    if (avatarInput) {
+        avatarInput.addEventListener('change', () => read_avatar_load(avatarInput));
+        // jQuery's trigger/triggerHandler do not invoke native change listeners.
+        // Keep only the synthetic compatibility entrypoint, not a second native handler.
+        $(avatarInput).on('change', event => {
+            if (event.isTrigger) read_avatar_load(avatarInput);
+        });
+    }
 
     $('#form_create').on('submit', (e) => createOrEditCharacter(e.originalEvent));
 
@@ -531,7 +541,7 @@ export async function bindLegacyShellHandlers() {
         $('#creator_notes_spoiler').html(formatCreatorNotes(notes, avatar));
     });
 
-    $('#favorite_button').on('click', function () {
+    document.getElementById('favorite_button')?.addEventListener('click', function () {
         const newFavState = !state.fav_ch_checked;
         updateFavButtonState(newFavState);
         if (state.menu_type != 'create') {
@@ -1018,67 +1028,70 @@ export async function bindLegacyShellHandlers() {
     });
 
 
-    $(document).on('click', '.mes .avatar', function () {
-        const messageElement = $(this).closest('.mes');
-        const thumbURL = $(this).children('img').attr('src');
+    document.addEventListener('click', event => {
+        const target = event.target instanceof Element ? event.target : event.target?.parentElement;
+        const opener = target?.closest('.mes .avatar');
+        if (!opener) return;
+        const messageElement = opener.closest('.mes');
+        const image = opener.querySelector(':scope > img');
+        const thumbURL = image?.getAttribute('src');
+        if (thumbURL == null) return;
         const charsPath = '/characters/';
         const targetAvatarImg = thumbURL.substring(thumbURL.lastIndexOf('=') + 1);
         const charname = targetAvatarImg.replace('.png', '');
         const isValidCharacter = state.characters.some(x => x.avatar === decodeURIComponent(targetAvatarImg));
 
         // Remove existing zoomed avatars for characters that are not the clicked character
-        $('.zoomed_avatar').each(function () {
-            const currentForChar = $(this).attr('forChar');
-            if (currentForChar !== charname && typeof currentForChar !== 'undefined') {
+        const previews = Array.from(document.querySelectorAll('.zoomed_avatar[forChar]'));
+        previews.forEach(preview => {
+            const currentForChar = preview.getAttribute('forChar');
+            if (currentForChar !== charname) {
                 console.debug(`Removing zoomed avatar for character: ${currentForChar}`);
-                $(this).remove();
+                preview.remove();
             }
         });
 
         const avatarSrc = (isDataURL(thumbURL) || /^\/?img\/(?:.+)/.test(thumbURL)) ? thumbURL : charsPath + targetAvatarImg;
-        if ($(`.zoomed_avatar[forChar="${charname}"]`).length) {
+        const existing = previews.filter(preview => preview.getAttribute('forChar') === charname);
+        if (existing.length) {
             console.debug('removing container as it already existed');
-            $(`.zoomed_avatar[forChar="${charname}"]`).fadeOut(state.animation_duration, () => {
-                $(`.zoomed_avatar[forChar="${charname}"]`).remove();
-            });
+            existing.forEach(preview => transitionOpacity(preview, { opacity: 0, duration: state.animation_duration, complete: () => preview.remove() }));
         } else {
             console.debug('making new container from template');
-            const template = $('#zoomed_avatar_template').html();
-            const newElement = $(template);
-            newElement.attr('forChar', charname);
-            newElement.attr('id', `zoomFor_${charname}`);
-
-            $('body').append(newElement);
-            newElement.fadeIn(state.animation_duration);
-            const zoomedAvatarImgElement = $(`.zoomed_avatar[forChar="${charname}"] img`);
-            zoomedAvatarImgElement.attr('alt', $(this).children('img').attr('alt') || t`Avatar preview`);
-            const opener = this;
+            const newElement = document.querySelector('#zoomed_avatar_template .zoomed_avatar')?.cloneNode(true);
+            if (!newElement) return;
+            newElement.setAttribute('forChar', charname);
+            newElement.id = `zoomFor_${charname}`;
+            newElement.style.display = 'flex';
+            newElement.style.opacity = '0';
+            document.body.append(newElement);
+            transitionOpacity(newElement, { opacity: 1, duration: state.animation_duration });
+            const zoomedAvatarImgElement = newElement.querySelector('img');
+            if (!zoomedAvatarImgElement) return;
+            zoomedAvatarImgElement.setAttribute('alt', image.getAttribute('alt') || t`Avatar preview`);
             const closePreview = () => {
-                newElement.fadeOut(state.animation_duration, () => {
-                    newElement.remove();
-                    opener.focus();
-                });
+                transitionOpacity(newElement, { opacity: 0, duration: state.animation_duration, complete: () => { newElement.remove(); opener.focus(); } });
             };
-            newElement.find('.dragClose').on('click', closePreview).trigger('focus');
-            newElement.on('keydown', event => {
+            const close = newElement.querySelector('.dragClose');
+            close?.addEventListener('click', closePreview);
+            close?.focus();
+            newElement.addEventListener('keydown', event => {
                 if (event.key === 'Escape') {
                     event.preventDefault();
                     event.stopPropagation();
                     closePreview();
                 }
             });
-            if (messageElement.attr('is_user') == 'true' || (messageElement.attr('is_system') == 'true' && !isValidCharacter)) {
+            if (messageElement.getAttribute('is_user') == 'true' || (messageElement.getAttribute('is_system') == 'true' && !isValidCharacter)) {
                 //handle user and system avatars
-                zoomedAvatarImgElement.attr('src', thumbURL);
-            } else if (messageElement.attr('is_user') == 'false') { //handle char avatars
-                zoomedAvatarImgElement.attr('src', avatarSrc);
+                zoomedAvatarImgElement.setAttribute('src', thumbURL);
+            } else if (messageElement.getAttribute('is_user') == 'false') { //handle char avatars
+                zoomedAvatarImgElement.setAttribute('src', avatarSrc);
             }
-            $(`.zoomed_avatar[forChar="${charname}"]`).css('display', 'flex');
-
-            zoomedAvatarImgElement.on('dragstart', (e) => {
+            zoomedAvatarImgElement.addEventListener('dragstart', e => {
                 console.log('saw drag on avatar!');
                 e.preventDefault();
-                return false;
+                e.stopPropagation();
             });
         }
     });
@@ -1087,16 +1100,16 @@ export async function bindLegacyShellHandlers() {
     $(document).on('click', '.open_alternate_greetings', openAlternateGreetings);
     /* $('#set_character_world').on('click', openCharacterWorldPopup); */
 
-    $('#char-management-dropdown').on('change', async (e) => {
+    document.getElementById('char-management-dropdown')?.addEventListener('change', async (e) => {
         const targetElement = /** @type {HTMLSelectElement} */ (e.target);
-        const target = $(targetElement.selectedOptions).attr('id');
+        const target = targetElement.selectedOptions[0]?.id;
         switch (target) {
             case 'set_character_world':
                 await openCharacterWorldPopup();
                 break;
 
             case 'character_action_chat_lorebook':
-                $('.chat_lorebook_button').first().trigger('click');
+                document.querySelector('.chat_lorebook_button')?.click();
                 break;
             case 'set_chat_character_settings':
                 await setCharacterSettingsOverrides();
@@ -1196,7 +1209,7 @@ export async function bindLegacyShellHandlers() {
             default:
                 await eventSource.emit(event_types.CHARACTER_MANAGEMENT_DROPDOWN, target);
         }
-        $('#char-management-dropdown').prop('selectedIndex', 0);
+        targetElement.selectedIndex = 0;
     });
 
     $(window).on('beforeunload', () => {

@@ -161,7 +161,8 @@ export async function writeExtensionField(characterId, key, value, options = {})
 
             // Make sure the data doesn't get lost when saving the current character
             if (Number(characterId) === Number(context.characterId)) {
-                $('#character_json_data').val(character.json_data);
+                const field = document.getElementById('character_json_data');
+                if (field) field.value = character.json_data;
             }
         }
 
@@ -207,8 +208,9 @@ export async function writeExtensionField(characterId, key, value, options = {})
                         else delete currentParent[leaf];
                         character.json_data = currentJson === stagedJson ? previousJson : JSON.stringify(currentData);
                         const currentContext = getContext();
-                        if (currentContext.characters[currentContext.characterId] === character && $('#character_json_data').val() === currentJson) {
-                            $('#character_json_data').val(character.json_data);
+                        const field = document.getElementById('character_json_data');
+                        if (currentContext.characters[currentContext.characterId] === character && field?.value === currentJson) {
+                            field.value = character.json_data;
                         }
                     }
                 } catch {

@@ -2,6 +2,12 @@ import { test, expect } from '@playwright/test';
 import { testSetup } from './frontend/frontent-test-utils.js';
 import { readFile } from 'node:fs/promises';
 
+async function confirmHistoryDeletion(page, file) {
+    const dialog = page.locator('dialog[open]').filter({ has: page.locator('.chat-file-name') });
+    await expect(dialog.locator('.chat-file-name')).toHaveText(file);
+    await dialog.locator('.popup-button-ok').click();
+}
+
 test('a stale ordinary save preserves local edits for recovery after reload', async ({ page, context }) => {
     await testSetup.awaitST({ page });
     const second = await context.newPage();
@@ -408,13 +414,28 @@ test('creating a character preserves an unconfirmed chat save', async ({ page })
 
 test('renaming a character preserves an unconfirmed chat save', async ({ page }) => {
     await testSetup.awaitST({ page });
-    const identity = await page.evaluate(async () => {
+    // Rename a disposable card: later tests in this lane need the original seed.
+    const duplicateAvatar = await page.evaluate(async () => {
+        const original = window.SillyTavern.getContext().characters.find(character => character.name === 'Dev Character 038');
+        if (!original) throw new Error('Seed character for rename fixture is missing');
+        const { token } = await fetch('/csrf-token').then(response => response.json());
+        const response = await fetch('/api/characters/duplicate', {
+            method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': token },
+            body: JSON.stringify({ avatar_url: original.avatar }),
+        });
+        if (!response.ok) throw new Error(`Duplicate rename fixture failed: ${response.status}`);
+        const result = await response.json();
+        if (!result.path) throw new Error('Duplicate rename fixture did not return an avatar');
+        return result.path;
+    });
+    await expect.poll(() => page.evaluate(avatar => window.SillyTavern.getContext().characters.some(character => character.avatar === avatar), duplicateAvatar), { timeout: 15_000 }).toBe(true);
+    const identity = await page.evaluate(async avatar => {
         const state = window.SillyTavern.getContext();
         state.chatCompletionSettings.chat_memory_enabled = false;
-        const index = state.characters.findIndex(character => character.name === 'Dev Character 038');
+        const index = state.characters.findIndex(character => character.avatar === avatar);
         await state.selectCharacterById(index);
         return { avatar: state.characters[index].avatar, chat: state.characters[index].chat };
-    });
+    }, duplicateAvatar);
     await page.route('**/api/chats/save', route => route.abort('failed'));
     await page.evaluate(() => window.SillyTavern.getContext().chat.push({ name: 'You', is_user: true, mes: 'rename unconfirmed edit 7281' }));
     await page.locator('#send_textarea').fill('rename unconfirmed composer 7281');
@@ -743,9 +764,12 @@ test('one tab confirming deletion does not discard another tab when its checkpoi
             else { secondCommitted(); await secondHold; }
             await route.fulfill({ response });
         });
-        const start = tab => tab.evaluate(name => {
-            window.pendingDeleteTest = import('/scripts/dom-handlers.js').then(module => module.runHistoryRowCommand('deleteChat', name, { fromSlashCommand: true })).then(() => true, () => false);
-        }, file);
+        const start = async tab => {
+            await tab.evaluate(name => {
+                window.pendingDeleteTest = import('/scripts/dom-handlers.js').then(module => module.runHistoryRowCommand('deleteChat', name)).then(() => true, () => false);
+            }, file);
+            await confirmHistoryDeletion(tab, file);
+        };
         try {
             await start(page);
             await firstReady;
@@ -812,9 +836,12 @@ test('two tabs without Web Locks replay one durable operation after a concurrent
             } else if (requests.length === 2) await route.abort('failed');
             else await route.continue();
         });
-        const start = tab => tab.evaluate(name => {
-            window.pendingDeleteTest = import('/scripts/dom-handlers.js').then(module => module.runHistoryRowCommand('deleteChat', name, { fromSlashCommand: true })).then(() => true, () => false);
-        }, file);
+        const start = async tab => {
+            await tab.evaluate(name => {
+                window.pendingDeleteTest = import('/scripts/dom-handlers.js').then(module => module.runHistoryRowCommand('deleteChat', name)).then(() => true, () => false);
+            }, file);
+            await confirmHistoryDeletion(tab, file);
+        };
         await start(page);
         try {
             await firstCommitted;
@@ -861,16 +888,21 @@ test('two tabs protect a newer saved version from an older current-chat delete a
             statuses.push(response.status());
             await route.fulfill({ response });
         });
-        const remove = () => second.evaluate(async file => {
-            try { await (await import('/scripts/dom-handlers.js')).runHistoryRowCommand('deleteChat', file, { fromSlashCommand: true }); return true; }
-            catch { return false; }
-        }, first.file);
+        const remove = async () => {
+            const deletion = second.evaluate(async file => {
+                try { await (await import('/scripts/dom-handlers.js')).runHistoryRowCommand('deleteChat', file); return true; }
+                catch { return false; }
+            }, first.file);
+            await confirmHistoryDeletion(second, first.file);
+            return deletion;
+        };
         expect(await remove()).toBe(false);
         await expect(second.locator('#toast-container')).toContainText(/newer version/i);
         await expect(second.locator('#toast-container')).toContainText(/recovery drafts/i);
         expect(await remove()).toBe(false);
         expect(statuses).toEqual([409, 409]);
         expect(requests[1]).toEqual(requests[0]);
+        await second.locator('#select_chat_cross').click();
         const remote = await page.evaluate(async target => {
             const { getRequestHeaders } = await import('/script.js');
             const response = await fetch('/api/chats/get', { method: 'POST', headers: getRequestHeaders(), body: JSON.stringify({ avatar_url: target.avatar, file_name: target.file }) });
@@ -955,14 +987,14 @@ test('current chat retries a committed lost response without reading a new versi
         if (requests.length === 1) { const response = await route.fetch(); expect(response.status()).toBe(200); await route.abort('failed'); }
         else await route.continue();
     });
-    expect(await page.evaluate(async name => {
-        try { await (await import('/scripts/dom-handlers.js')).runHistoryRowCommand('deleteChat', name, { fromSlashCommand: true }); return true; }
+    const deletion = page.evaluate(async name => {
+        try { await (await import('/scripts/dom-handlers.js')).runHistoryRowCommand('deleteChat', name); return true; }
         catch { return false; }
-    }, file)).toBe(false);
+    }, file);
+    await confirmHistoryDeletion(page, file);
+    expect(await deletion).toBe(false);
     expect(gets).toBe(0);
     await page.evaluate(() => { window.SillyTavern.getContext().chat[0].mes = 'late edit before same-session retry'; });
-    await page.locator('#options_button').click();
-    await page.locator('#option_select_chat').click();
     const pending = page.getByTestId('pending-history-deletions');
     await expect(pending).toContainText(file);
     await pending.getByRole('button', { name: /retry deletion/i }).click();
@@ -991,9 +1023,11 @@ test('an old delete replay does not clear a newly loaded chat at the same name',
         if (requests.length === 1) { const response = await route.fetch(); expect(response.status()).toBe(200); await route.abort('failed'); }
         else await route.continue();
     });
-    await page.evaluate(async file => {
-        try { await (await import('/scripts/dom-handlers.js')).runHistoryRowCommand('deleteChat', file, { fromSlashCommand: true }); } catch { /* response lost */ }
+    const deletion = page.evaluate(async file => {
+        try { await (await import('/scripts/dom-handlers.js')).runHistoryRowCommand('deleteChat', file); } catch { /* response lost */ }
     }, target.file);
+    await confirmHistoryDeletion(page, target.file);
+    await deletion;
     const status = await page.evaluate(async ({ avatar, file }) => {
         const { getRequestHeaders } = await import('/script.js');
         const response = await fetch('/api/chats/save', { method: 'POST', headers: getRequestHeaders(), body: JSON.stringify({
@@ -1048,15 +1082,15 @@ test('confirmed current deletion stays retryable if its final recovery checkpoin
             await route.fulfill({ response });
         } else await route.continue();
     });
-    const error = await page.evaluate(async name => {
-        try { await (await import('/scripts/dom-handlers.js')).runHistoryRowCommand('deleteChat', name, { fromSlashCommand: true }); return 'unexpected success'; }
+    const deletion = page.evaluate(async name => {
+        try { await (await import('/scripts/dom-handlers.js')).runHistoryRowCommand('deleteChat', name); return 'unexpected success'; }
         catch (reason) { return reason.name; }
     }, file);
+    await confirmHistoryDeletion(page, file);
+    const error = await deletion;
     expect(error).toBe('QuotaExceededError');
     expect(await page.evaluate(() => window.SillyTavern.getContext().chat[0].mes)).toBe('late edit after deletion committed');
     await page.evaluate(() => { IDBObjectStore.prototype.put = window.originalRecoveryPut; });
-    await page.locator('#options_button').click();
-    await page.locator('#option_select_chat').click();
     const pending = page.getByTestId('pending-history-deletions');
     await expect(pending).toContainText(file);
     await pending.getByRole('button', { name: /retry deletion/i }).click();
@@ -1233,16 +1267,18 @@ test('a deletion with a lost response leaves the late edit discoverable after sw
         await route.abort('failed');
     });
     const deletion = page.evaluate(async file => {
-        try { await (await import('/scripts/dom-handlers.js')).runHistoryRowCommand('deleteChat', file, { fromSlashCommand: true }); }
+        try { await (await import('/scripts/dom-handlers.js')).runHistoryRowCommand('deleteChat', file); }
         catch { /* a lost response is expected */ }
     }, chat);
     try {
+        await confirmHistoryDeletion(page, chat);
         await deleted;
         await page.evaluate(() => { window.SillyTavern.getContext().chat[0].mes = 'late recovery edit 82731'; });
     } finally {
         release();
         await deletion;
     }
+    await page.locator('#select_chat_cross').click();
     const row = page.locator('#chat .mes').first();
     await row.locator('.mes_edit').evaluate(element => element.click());
     await row.locator('.edit_textarea').fill('unsubmitted message editor 82731');
@@ -1299,10 +1335,12 @@ test('storage failure prevents deleting the current chat', async ({ page }) => {
     });
     let requests = 0;
     await page.route('**/api/chats/delete', route => { requests++; return route.continue(); });
-    const outcome = await page.evaluate(async file => {
-        try { await (await import('/scripts/dom-handlers.js')).runHistoryRowCommand('deleteChat', file, { fromSlashCommand: true }); return 'resolved'; }
+    const deletion = page.evaluate(async file => {
+        try { await (await import('/scripts/dom-handlers.js')).runHistoryRowCommand('deleteChat', file); return 'resolved'; }
         catch (error) { return error.name; }
     }, chat);
+    await confirmHistoryDeletion(page, chat);
+    const outcome = await deletion;
     expect(outcome).toBe('QuotaExceededError');
     expect(requests).toBe(0);
     expect(await page.evaluate(() => window.SillyTavern.getContext().chat.length)).toBeGreaterThan(0);
@@ -1324,10 +1362,12 @@ test('an IndexedDB deletion transaction failure leaves the recovery draft and se
     });
     let requests = 0;
     await page.route('**/api/chats/delete', route => { requests++; return route.continue(); });
-    const error = await page.evaluate(async name => {
-        try { await (await import('/scripts/dom-handlers.js')).runHistoryRowCommand('deleteChat', name, { fromSlashCommand: true }); return ''; }
+    const deletion = page.evaluate(async name => {
+        try { await (await import('/scripts/dom-handlers.js')).runHistoryRowCommand('deleteChat', name); return ''; }
         catch (reason) { return reason.name; }
     }, file);
+    await confirmHistoryDeletion(page, file);
+    const error = await deletion;
     expect(error).toBe('QuotaExceededError');
     expect(requests).toBe(0);
     expect(await page.evaluate(async () => {
@@ -1348,10 +1388,12 @@ test('current deletion remains available without Web Locks', async ({ page }) =>
     });
     let requests = 0;
     await page.route('**/api/chats/delete', route => { requests++; return route.continue(); });
-    const result = await page.evaluate(async name => {
-        try { await (await import('/scripts/dom-handlers.js')).runHistoryRowCommand('deleteChat', name, { fromSlashCommand: true }); return 'ok'; }
+    const deletion = page.evaluate(async name => {
+        try { await (await import('/scripts/dom-handlers.js')).runHistoryRowCommand('deleteChat', name); return 'ok'; }
         catch (reason) { return reason.message; }
     }, file);
+    await confirmHistoryDeletion(page, file);
+    const result = await deletion;
     expect(result).toBe('ok');
     expect(requests).toBe(1);
 });
@@ -1365,11 +1407,13 @@ test('a failed checkpoint leaves the selected session and late edit in memory', 
         return context.characters[index].chat;
     });
     await page.route('**/api/chats/delete', route => route.abort('failed'));
-    await page.evaluate(async file => {
-        try { await (await import('/scripts/dom-handlers.js')).runHistoryRowCommand('deleteChat', file, { fromSlashCommand: true }); } catch {}
+    const deletion = page.evaluate(async file => {
+        try { await (await import('/scripts/dom-handlers.js')).runHistoryRowCommand('deleteChat', file); } catch {}
         window.SillyTavern.getContext().chat[0].mes = 'unsaved late edit';
         IDBObjectStore.prototype.put = function () { throw new DOMException('Storage full', 'QuotaExceededError'); };
     }, chat);
+    await confirmHistoryDeletion(page, chat);
+    await deletion;
     await expect.poll(() => page.evaluate(async () => (await import('/script.js')).isChatSaving)).toBe(false);
     const result = await page.evaluate(async () => {
         const context = window.SillyTavern.getContext();

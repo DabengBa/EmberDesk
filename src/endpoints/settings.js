@@ -9,7 +9,7 @@ import { getCanonicalWorldInfoReadState } from './worldinfo.js';
 import { listCanonicalWorldInfoBooks } from './world-info-store.ts';
 import { canonicalSqliteManager, withCanonicalTransaction } from '../canonical-sqlite.js';
 import { runCanonicalMigrations } from '../canonical-sqlite-migrations.js';
-import { getPersistedCanonicalAuditStatus } from '../canonical-sqlite-shadow-import.js';
+import { getPersistedCanonicalAuditStatus } from '../canonical-sqlite-shadow-import.ts';
 import { ensureCanonicalSliceBackend } from '../canonical-backend.js';
 import { getCanonicalStorageSlice } from '../canonical-storage-slice-registry.js';
 import {

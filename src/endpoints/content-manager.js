@@ -1,5 +1,5 @@
 import fs from 'node:fs';
-import { resolveWorldProjectionPath } from '../canonical-world-info-projection.js';
+import { resolveWorldProjectionPath } from '../canonical-world-info-projection.ts';
 import path from 'node:path';
 import zlib from 'node:zlib';
 import { Buffer } from 'node:buffer';

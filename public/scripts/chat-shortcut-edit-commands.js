@@ -33,7 +33,12 @@ export function dispatchChatEditShortcut({ event, snapshot, commands, modalOpen 
         return false;
     }
 
-    if (event.key !== 'ArrowUp' || editing.length || !composerAtStart || !snapshot.composer?.focused || snapshot.composer.value !== '') return false;
+    // Focus and input updates can precede the projected React snapshot by a frame.
+    // The caller has already verified the live composer's focus and selection.
+    const liveComposer = event.target?.id === 'send_textarea' && typeof event.target.value === 'string' ? event.target : null;
+    const composerFocused = liveComposer ? composerAtStart : snapshot.composer?.focused;
+    const composerValue = liveComposer ? liveComposer.value : snapshot.composer?.value;
+    if (event.key !== 'ArrowUp' || editing.length || !composerAtStart || !composerFocused || composerValue !== '') return false;
     const target = event.ctrlKey ? snapshot.lastUserMessageTarget : snapshot.lastMessageTarget;
     const editable = event.ctrlKey ? snapshot.lastUserMessageEditable : snapshot.lastMessageEditable;
     if (!target || editable === false || !commands?.loadMoreUntilMessage || !commands?.startMessageEdit) return false;

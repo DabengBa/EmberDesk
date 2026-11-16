@@ -101,15 +101,15 @@ describe('React runtime boundary', () => {
             /if \(isReactMainChatOwner\(\)\) \{\s*scheduleMainChatMessageListPanelRefresh\(\);\s*return;/,
         );
         const updateElementBlock = messageServiceSource.match(/export function updateMessageElement\([\s\S]*?\n\}/)?.[0] ?? '';
-        expect(updateElementBlock).toMatch(/closest\('\[data-main-chat-message-row-owner="react"\]'\)[\s\S]*?scheduleMainChatMessageListPanelRefresh\(\);[\s\S]*?return messageElement;/);
+        expect(updateElementBlock).toMatch(/closest(?:\?\.)?\('\[data-main-chat-message-row-owner="react"\]'\)[\s\S]*?\{\s*scheduleMainChatMessageListPanelRefresh\(\);\s*return messageElement;\s*\}/);
 
         const recoveryBlock = scriptSource.match(
             /function clearGenerationAutoRecoveryStatus[\s\S]*?export async function redisplayChat/,
         )?.[0] ?? '';
         expect(recoveryBlock).toContain('setMainChatMessageUiState');
         expect(recoveryBlock.indexOf('return;')).toBeLessThan(recoveryBlock.indexOf('const messageElement'));
-        expect(recoveryBlock).toContain("messageElement.find('.mes_text').after");
-        expect(recoveryBlock).toContain("messageElement.find('.generation_failure_notice').length");
+        expect(recoveryBlock).toContain("text.after(statusRow)");
+        expect(recoveryBlock).toContain("row.querySelectorAll('.generation_failure_notice').length");
 
         const editorBlock = scriptSource.match(
             /export async function messageEdit\([\s\S]*?async function messageEditDone\([\s\S]*?\n\}/,
