@@ -7,6 +7,26 @@ test.beforeEach(({ page }) => {
     page.on('pageerror', error => console.error('browser pageerror:', error.message));
 });
 
+test('startup uses the native singleton without requesting the legacy toastr script', async ({ page }) => {
+    const legacyRequests = [];
+    const startupErrors = [];
+    page.on('request', request => {
+        if (new URL(request.url()).pathname === '/lib/toastr.min.js') legacyRequests.push(request.url());
+    });
+    page.on('pageerror', error => startupErrors.push(error.message));
+    await testSetup.awaitST({ page });
+    const singleton = await page.evaluate(async () => {
+        const initialToastr = window.toastr;
+        const initialBridge = window.emberDeskNotifications;
+        const notifications = (await import('/scripts/notifications.js')).default;
+        return initialToastr === notifications && initialBridge === notifications
+            && typeof notifications.info === 'function';
+    });
+    expect(singleton).toBe(true);
+    expect(startupErrors).toEqual([]);
+    expect(legacyRequests).toEqual([]);
+});
+
 test('batch progress updates sanitize translated HTML and keep the cancel action', async ({ page }) => {
     await testSetup.awaitST({ page });
     const result = await page.evaluate(async () => {
