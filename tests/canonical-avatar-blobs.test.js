@@ -29,8 +29,8 @@ import {
     listCanonicalManagedMediaReferences,
 } from '../src/endpoints/canonical-managed-media-store.ts';
 import { readManagedMediaContent } from '../src/endpoints/canonical-managed-media-read-service.ts';
-import { extractImageData, write } from '../src/character-card-parser.js';
-import encode from '../src/png/encode.js';
+import { extractImageData, write } from '../src/character-card-parser.ts';
+import encode from '../src/png/encode.ts';
 import { getImportLedgerEntry } from '../src/canonical-import-ledger.js';
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');

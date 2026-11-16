@@ -1,3 +1,4 @@
+import toastr from './notifications.js';
 import { t } from './i18n.js';
 import { getFileExtension } from './utils.js';
 import { displayPastChats, importCharacterChat } from '/script.js';

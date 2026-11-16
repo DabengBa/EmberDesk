@@ -7,7 +7,7 @@ let tempRoot = '';
 let storeRoot = '';
 
 async function importRecorder() {
-    return import(`../src/wire-log-recorder.js?cacheBust=${Date.now()}-${Math.random()}`);
+    return import(`../src/wire-log-recorder.ts?cacheBust=${Date.now()}-${Math.random()}`);
 }
 
 beforeEach(async () => {

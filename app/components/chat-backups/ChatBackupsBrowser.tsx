@@ -31,7 +31,7 @@ type ToastrLike = {
 };
 
 function getToastr(): ToastrLike {
-    return (globalThis as { toastr?: ToastrLike }).toastr ?? {};
+    return (globalThis as { emberDeskNotifications?: ToastrLike }).emberDeskNotifications ?? {};
 }
 
 function formatTimestamp(timestamp: string | number): string {

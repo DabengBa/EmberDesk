@@ -1,3 +1,4 @@
+import toastr from './notifications.js';
 import { DOMPurify } from '../lib.js';
 
 import { addOneMessage, chat, getGeneratingApi, getGeneratingModel, main_api, saveChatConditional, system_avatar, systemUserName } from '../script.js';

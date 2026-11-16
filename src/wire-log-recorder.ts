@@ -9,8 +9,14 @@
  * the chat-completions endpoint already computed.
  */
 
-import { createWireRecord, purgeExpired, purgeExpiredRecords, truncateBody, writeRecord } from './wire-log-store.js';
-import { createRecordTrace, createSseAssembler, sanitizeUsage } from './wire-log-tap.js';
+import { createWireRecord, purgeExpired, purgeExpiredRecords, truncateBody, writeRecord } from './wire-log-store.ts';
+import { createRecordTrace, createSseAssembler, sanitizeUsage } from './wire-log-tap.ts';
+import type { WireLogResponse, WireRecord } from './wire-log-store.ts';
+
+type RecorderOptions = { storeRoot?: string; enabled?: boolean; captureBody?: boolean; maxFileBytes?: number;
+    retentionDays?: number; redact?: string[]; onError?: (message: string, error: unknown) => void };
+type BeginArgs = { url: string; headers: Record<string, unknown>; body: unknown; context?: unknown; chatId?: string };
+type ResponseDetails = { status?: number; statusText?: string; headers?: Record<string, unknown>; body?: unknown; durationMs?: number };
 
 /**
  * Reads the provider's token accounting out of a response body. Only an
@@ -20,8 +26,8 @@ import { createRecordTrace, createSseAssembler, sanitizeUsage } from './wire-log
  * @param {unknown} body Parsed response body
  * @returns {object|null} Usage block, or null when the provider sent none
  */
-export function extractUsage(body) {
-    const usage = body && typeof body === 'object' && !Array.isArray(body) ? body.usage : null;
+export function extractUsage(body: unknown) {
+    const usage = body && typeof body === 'object' && !Array.isArray(body) && 'usage' in body ? body.usage : null;
     return sanitizeUsage(usage);
 }
 
@@ -40,10 +46,10 @@ const DEFAULT_REDACT = ['authorization', 'x-api-key', 'cookie', 'set-cookie', 'p
  * @param {unknown} raw Stored settings fragment
  * @returns {{enabled: boolean, captureBody: boolean, maxFileBytes: number, retentionDays: number, redact: string[]}}
  */
-export function normalizeWireLogOptions(raw) {
-    const source = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
+export function normalizeWireLogOptions(raw: unknown) {
+    const source = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw as Record<string, unknown> : {};
     const extraRedactions = Array.isArray(source.redact)
-        ? source.redact.filter(name => typeof name === 'string' && name.trim()).map(name => name.trim().toLowerCase())
+        ? source.redact.filter((name: unknown): name is string => typeof name === 'string' && Boolean(name.trim())).map(name => name.trim().toLowerCase())
         : [];
     const maxFileBytes = Number(source.maxFileBytes);
     const retentionDays = Number(source.retentionDays);
@@ -81,10 +87,10 @@ export function createWireLogRecorder({
     retentionDays = DEFAULT_RETENTION_DAYS,
     redact = [],
     onError = defaultOnError,
-} = {}) {
+}: RecorderOptions = {}) {
     const options = normalizeWireLogOptions({ enabled, captureBody, maxFileBytes, retentionDays, redact });
     /** @type {Promise<void>[]} */
-    const pending = [];
+    const pending: Promise<void>[] = [];
     /** Retention is swept once per recorder, not per entry. */
     let purgeScheduled = false;
 
@@ -102,8 +108,9 @@ export function createWireLogRecorder({
      * generation. Failures are reported once per record via `onError`.
      * @param {object} record Record to persist
      */
-    function scheduleWrite(record) {
-        const task = writeRecord(storeRoot, record).then(
+    function scheduleWrite(record: WireRecord) {
+        // Missing roots retain the existing asynchronous write-error behaviour.
+        const task = writeRecord(storeRoot as string, record).then(
             () => {},
             error => { onError(`wire log write failed for ${record.id}`, error); },
         );
@@ -124,8 +131,8 @@ export function createWireLogRecorder({
      * @param {string} [args.chatId] Active chat id, when the endpoint knows it
      * @returns {{record: object, stream: Function, complete: Function, completeStream: Function, fail: Function}|null}
      */
-    function begin({ url, headers, body, context = {}, chatId }) {
-        let record;
+    function begin({ url, headers, body, context = {}, chatId }: BeginArgs) {
+        let record: WireRecord;
         try {
             record = createWireRecord({
                 url,
@@ -138,8 +145,9 @@ export function createWireLogRecorder({
             if (!options.captureBody) {
                 // Keep the size evidence even when the body itself is withheld.
                 record.request.bytes = truncateBody(body, Number.POSITIVE_INFINITY).bytes;
-                record.request.messageCount = Array.isArray(body?.messages) ? body.messages.length : 0;
-                record.request.toolCount = Array.isArray(body?.tools) ? body.tools.length : 0;
+                const requestBody = body as { messages?: unknown; tools?: unknown } | null | undefined;
+                record.request.messageCount = Array.isArray(requestBody?.messages) ? requestBody.messages.length : 0;
+                record.request.toolCount = Array.isArray(requestBody?.tools) ? requestBody.tools.length : 0;
             }
         } catch (error) {
             onError('wire log record creation failed', error);
@@ -152,15 +160,15 @@ export function createWireLogRecorder({
         let settled = false;
         /** @type {null | (() => object)} Set once streaming starts, so a
          * failure can still preserve everything captured before the abort. */
-        let snapshotPartial = null;
+        let snapshotPartial: null | (() => WireLogResponse) = null;
         /** @type {null | (() => void)} Set once streaming starts. */
-        let streamFinisher = null;
+        let streamFinisher: null | (() => void) = null;
 
         /**
          * @param {string} status Terminal status
          * @param {object} response Response projection
          */
-        function settle(status, response) {
+        function settle(status: string, response: WireLogResponse) {
             if (settled) {
                 return;
             }
@@ -180,7 +188,7 @@ export function createWireLogRecorder({
          * @param {number} [details.durationMs] Observed duration
          * @returns {object} Non-stream response projection
          */
-        function buildNonStreamResponse(details = {}) {
+        function buildNonStreamResponse(details: ResponseDetails = {}): WireLogResponse {
             const { status, statusText = '', headers = {}, durationMs } = details;
             const hasBody = Object.hasOwn(details, 'body');
             const responseBody = hasBody ? details.body : null;
@@ -210,7 +218,7 @@ export function createWireLogRecorder({
          * @param {unknown} [args.body] Parsed response body
          * @param {number} [args.durationMs] Observed duration
          */
-        function complete({ status, statusText = '', headers = {}, body: responseBody = null, durationMs }) {
+        function complete({ status, statusText = '', headers = {}, body: responseBody = null, durationMs }: ResponseDetails) {
             try {
                 settle('completed', buildNonStreamResponse({ status, statusText, headers, body: responseBody, durationMs }));
             } catch (error) {
@@ -228,13 +236,13 @@ export function createWireLogRecorder({
          * @param {Record<string, unknown>} [args.headers] Response headers
          * @returns {{onChunk: (chunk: Buffer|string) => void}}
          */
-        function stream({ status, statusText = '', headers = {} }) {
+        function stream({ status, statusText = '', headers = {} }: ResponseDetails) {
             const assembler = options.captureBody ? createSseAssembler() : null;
-            const chunks = [];
+            const chunks: Buffer[] = [];
             let capturedBytes = 0;
             let bytes = 0;
             let count = 0;
-            let ttftMs = null;
+            let ttftMs: number | null = null;
             const responseMeta = {
                 status: Number.isFinite(status) ? status : null,
                 statusText: String(statusText ?? ''),
@@ -244,7 +252,7 @@ export function createWireLogRecorder({
             /**
              * @param {Buffer|string} chunk Raw response bytes
              */
-            function onChunk(chunk) {
+            function onChunk(chunk: Buffer | string) {
                 try {
                     const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(String(chunk ?? ''), 'utf8');
                     bytes += buffer.byteLength;
@@ -318,7 +326,7 @@ export function createWireLogRecorder({
          * stream is preserved as evidence.
          * @param {Error|unknown} error Failure cause
          */
-        function fail(error, responseDetails = null) {
+        function fail(error: unknown, responseDetails: ResponseDetails | null = null) {
             try {
                 if (settled) {
                     return;
@@ -329,9 +337,10 @@ export function createWireLogRecorder({
                         ? buildNonStreamResponse(responseDetails)
                         : buildNonStreamResponse();
                 settle('error', response);
+                const failure = error as { message?: unknown; code?: unknown } | null | undefined;
                 record.error = {
-                    message: String(error?.message ?? error ?? 'unknown error').slice(0, 2000),
-                    code: typeof error?.code === 'string' ? error.code : null,
+                    message: String(failure?.message ?? error ?? 'unknown error').slice(0, 2000),
+                    code: typeof failure?.code === 'string' ? failure.code : null,
                 };
             } catch (innerError) {
                 onError('wire log failure recording failed', innerError);
@@ -371,12 +380,12 @@ export function createWireLogRecorder({
         const task = (async () => {
             const now = new Date();
             try {
-                await purgeExpiredRecords(storeRoot, { retentionDays, now });
+                await purgeExpiredRecords(storeRoot as string, { retentionDays, now });
             } catch (error) {
                 onError('wire log record purge failed', error);
             }
             try {
-                await purgeExpired(storeRoot, { retentionDays, now });
+                await purgeExpired(storeRoot as string, { retentionDays, now });
             } catch (error) {
                 onError('wire log partition purge failed', error);
             }
@@ -402,12 +411,12 @@ export function createWireLogRecorder({
  * @param {string[]} redact Lowercase names to mask
  * @returns {Record<string, string>} Header map
  */
-function redactResponseHeaders(headers, redact) {
+function redactResponseHeaders(headers: unknown, redact: string[]): Record<string, string> {
     if (!headers || typeof headers !== 'object') {
         return {};
     }
     /** @type {Record<string, string>} */
-    const result = {};
+    const result: Record<string, string> = {};
     const masked = new Set(redact);
     for (const [key, value] of Object.entries(headers)) {
         result[key] = masked.has(key.toLowerCase()) ? '***redacted***' : String(value);
@@ -415,6 +424,6 @@ function redactResponseHeaders(headers, redact) {
     return result;
 }
 
-function defaultOnError(message, error) {
+function defaultOnError(message: string, error: unknown) {
     console.warn(`[wire-log] ${message}`, error instanceof Error ? error.message : error);
 }

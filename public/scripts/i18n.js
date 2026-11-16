@@ -1,3 +1,4 @@
+import toastr from './notifications.js';
 import { registerDebugFunction } from './power-user.js';
 import { applyI18nTranslations, parseI18nAttributeSpecs } from './i18n-data.js';
 import {

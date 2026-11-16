@@ -1,3 +1,4 @@
+import toastr from '../../notifications.js';
 import { characters, getCurrentChatId, messageFormatting, reloadCurrentChat, saveSettingsDebounced, this_chid } from '../../../script.js';
 import { eventSource, event_types } from '../../events.js';
 import { feature_settings, renderFeatureTemplateAsync } from '../../feature-settings.js';

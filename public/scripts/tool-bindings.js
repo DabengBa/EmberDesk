@@ -1,3 +1,4 @@
+import toastr from './notifications.js';
 /** User tool bindings: shell ports and popup/chip compatibility adapters. */
 import { saveSettingsDebounced } from '../script.js';
 import { eventSource, event_types } from './events.js';

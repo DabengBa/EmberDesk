@@ -1,7 +1,7 @@
 /**
  * Wire log viewer API.
  *
- * Exposes the diagnostic records written by `wire-log-recorder.js` for the
+ * Exposes the diagnostic records written by `wire-log-recorder.ts` for the
  * in-app viewer. The store root is always derived from the authenticated
  * user's directories; a client can filter, read and delete, but can never
  * name a path.
@@ -13,10 +13,11 @@
  */
 
 import express from 'express';
+import type { Request, Response } from 'express';
 import path from 'node:path';
 
-import { deleteRecord, listRecords, readRecord } from '../wire-log-store.js';
-import { normalizeWireLogOptions } from '../wire-log-recorder.js';
+import { deleteRecord, listRecords, readRecord } from '../wire-log-store.ts';
+import { normalizeWireLogOptions } from '../wire-log-recorder.ts';
 import { canonicalSqliteManager } from '../canonical-sqlite.js';
 import { getCanonicalStorageSlice } from '../canonical-storage-slice-registry.js';
 import { runCanonicalMigrations } from '../canonical-sqlite-migrations.js';
@@ -39,12 +40,13 @@ const MAX_LIST_LIMIT = 500;
  * @param {import('express').Request} request Express request
  * @returns {string} Absolute wire log root
  */
-function getStoreRoot(request) {
+function getStoreRoot(request: Request) {
     return path.join(request.user.directories.root, 'wire-logs');
 }
 
-function getRequestHandle(request) {
-    return request.user?.profile?.handle ?? request.user?.handle ?? 'default-user';
+function getRequestHandle(request: Request) {
+    const user = request.user as (Request['user'] & { handle?: string }) | undefined;
+    return user?.profile?.handle ?? user?.handle ?? 'default-user';
 }
 
 /**
@@ -65,7 +67,7 @@ function canReadCanonicalFeatureFlags() {
  * @param {{enabled: boolean, strict: boolean}} featureFlags Settings slice flags
  * @returns {object|null} Database handle, or null when unavailable
  */
-function openSettingsDb(request, featureFlags, phase = 'reads') {
+function openSettingsDb(request: Request, featureFlags: { enabled: boolean; strict: boolean }, phase = 'reads') {
     const handle = getRequestHandle(request);
     try {
         const db = canonicalSqliteManager.open({
@@ -96,7 +98,7 @@ function openSettingsDb(request, featureFlags, phase = 'reads') {
  * @param {import('express').Request} request Express request
  * @returns {Promise<{ok: true, raw: object} | {ok: false, reason: string}>} Stored fragment
  */
-export async function readWireLogSettings(request) {
+export async function readWireLogSettings(request: Request) {
     if (!canReadCanonicalFeatureFlags()) {
         return { ok: false, reason: 'canonical_flags_unavailable' };
     }
@@ -120,9 +122,10 @@ export async function readWireLogSettings(request) {
     if (!ensured.ok || !ensured.document) {
         return { ok: false, reason: ensured.reason ?? 'settings_document_missing' };
     }
-    const featureSettings = ensured.document.payload?.[SETTINGS_FEATURE_KEY];
+    const payload = ensured.document.payload as Record<string, unknown> | null | undefined;
+    const featureSettings = payload?.[SETTINGS_FEATURE_KEY];
     const raw = featureSettings && typeof featureSettings === 'object' && !Array.isArray(featureSettings)
-        ? featureSettings[WIRE_LOG_SETTINGS_KEY]
+        ? (featureSettings as Record<string, unknown>)[WIRE_LOG_SETTINGS_KEY]
         : undefined;
     return { ok: true, raw: raw && typeof raw === 'object' ? raw : {} };
 }
@@ -135,7 +138,7 @@ export async function readWireLogSettings(request) {
  * @param {unknown} patch Requested settings fragment
  * @returns {Promise<object>} Normalized options, or a failure descriptor
  */
-async function writeWireLogSettings(request, patch) {
+async function writeWireLogSettings(request: Request, patch: object) {
     if (!canReadCanonicalFeatureFlags()) {
         return { ok: false, reason: 'canonical_flags_unavailable' };
     }
@@ -165,16 +168,16 @@ async function writeWireLogSettings(request, patch) {
     if (!current) {
         return { ok: false, reason: 'settings_document_missing' };
     }
-    const payload = current.payload && typeof current.payload === 'object' && !Array.isArray(current.payload)
-        ? current.payload
+    const payload: Record<string, unknown> = current.payload && typeof current.payload === 'object' && !Array.isArray(current.payload)
+        ? current.payload as Record<string, unknown>
         : {};
     const featureSettings = payload[SETTINGS_FEATURE_KEY] && typeof payload[SETTINGS_FEATURE_KEY] === 'object'
         && !Array.isArray(payload[SETTINGS_FEATURE_KEY])
-        ? { ...payload[SETTINGS_FEATURE_KEY] }
+        ? { ...payload[SETTINGS_FEATURE_KEY] as Record<string, unknown> }
         : {};
     const existing = featureSettings[WIRE_LOG_SETTINGS_KEY] && typeof featureSettings[WIRE_LOG_SETTINGS_KEY] === 'object'
         && !Array.isArray(featureSettings[WIRE_LOG_SETTINGS_KEY])
-        ? featureSettings[WIRE_LOG_SETTINGS_KEY]
+        ? featureSettings[WIRE_LOG_SETTINGS_KEY] as object
         : {};
     const merged = { ...existing, ...patch };
     const normalized = normalizeWireLogOptions(merged);
@@ -197,14 +200,14 @@ async function writeWireLogSettings(request, patch) {
  * @param {unknown} error Thrown value
  * @returns {boolean} Whether the failure was a rejected id or date
  */
-function isInvalidInputError(error) {
-    return /invalid/.test(String(error?.message ?? ''));
+function isInvalidInputError(error: unknown) {
+    return /invalid/.test(String((error as { message?: unknown } | null | undefined)?.message ?? ''));
 }
 
-function sendBadRequest(response, error) {
+function sendBadRequest(response: Response, error: unknown) {
     return response.status(400).json({
         error: true,
-        message: String(error?.message ?? 'invalid request'),
+        message: String((error as { message?: unknown } | null | undefined)?.message ?? 'invalid request'),
     });
 }
 
@@ -213,7 +216,7 @@ function sendBadRequest(response, error) {
  * @param {unknown} raw Raw query value
  * @returns {number} Effective limit
  */
-function parseLimit(raw) {
+function parseLimit(raw: unknown) {
     if (raw == null || raw === '') {
         return DEFAULT_LIST_LIMIT;
     }
@@ -224,7 +227,7 @@ function parseLimit(raw) {
     return Math.min(Math.floor(value), MAX_LIST_LIMIT);
 }
 
-function firstQueryValue(raw) {
+function firstQueryValue(raw: unknown) {
     const value = Array.isArray(raw) ? raw[0] : raw;
     if (value == null || value === '') {
         return undefined;

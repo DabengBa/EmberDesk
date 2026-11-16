@@ -1,5 +1,5 @@
 import { expect, jest, test } from '@jest/globals';
-import { TavernCardValidator } from '../src/validator/TavernCardValidator.js';
+import { TavernCardValidator } from '../src/validator/TavernCardValidator.ts';
 
 jest.unstable_mockModule('../src/endpoints/worldinfo.js', () => ({
     readWorldInfoFile: jest.fn(() => ({
@@ -7,7 +7,7 @@ jest.unstable_mockModule('../src/endpoints/worldinfo.js', () => ({
     })),
 }));
 
-const { charaFormatData } = await import('../src/endpoints/character-card-v2.js');
+const { charaFormatData } = await import('../src/endpoints/character-card-v2.ts');
 
 test('a native character edit with a linked world remains valid for the next scoped Regex merge', () => {
     const card = charaFormatData({

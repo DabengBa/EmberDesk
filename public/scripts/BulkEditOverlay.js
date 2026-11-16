@@ -1,4 +1,5 @@
 'use strict';
+import toastr from './notifications.js';
 
 import { requireCharacterLifecycleShellContext } from './character-lifecycle-shell-context.js';
 

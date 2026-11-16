@@ -86,6 +86,26 @@ During `public/script.js` evaluation:
 
 `public-api.js` has no module-evaluation side effect. The root calls `installPublicBrowserApi()` explicitly, which keeps public-global installation testable and prevents an imported helper from unexpectedly mutating the browser global.
 
+### Tokenizers and notifications
+
+`public/scripts/tokenizers.js` owns tokenizer requests and caching. Its
+`getTokenCount`, `countTokensOpenAI`, `getTextTokens` and `decodeTextTokens`
+return Promises; callers, including consumers of the `st-context.js` API,
+must await them. Requests use asynchronous fetch and current request-context
+headers. OpenAI counting captures the model for the request and cache key;
+failed counts keep their existing fallback and are not cached as successful
+OpenAI results. `tests/tokenizers-async.test.js` covers these contracts.
+
+`public/scripts/notifications.js` is the single stateful notification owner.
+First-party modules import it; its `globalThis.toastr` and
+`globalThis.emberDeskNotifications` aliases point to the same instance used by
+the React bridge. HTML strings are sanitized with DOMPurify; DOM and jQuery
+nodes are trusted and moved intact, including their existing listeners. This
+does not establish a third-party extension runtime.
+`tests/notifications.test.js` covers the notification API and lifecycle;
+`tests/notifications-integration.e2e.js` covers the browser singleton,
+modal, action loader and lifecycle integration.
+
 ### React popup ownership and retained resources
 
 `public/scripts/popup.js` retains the public constructor, synchronous `dlg`/content/button references, result helpers and utilities. It forwards construction and lifecycle to the installed React factory and fails explicitly if that factory is missing. React creates the native dialog and owns open/close/cancel, focus restoration, asynchronous confirmation, custom controls and Cropper effects. HTML, DOM and jQuery content are opaque consumer subtrees; their callers may still mount an existing editor or dropdown inside the React-owned dialog. There is no legacy dialog-controller fallback or hidden popup template.

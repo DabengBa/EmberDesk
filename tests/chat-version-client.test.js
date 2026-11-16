@@ -1,5 +1,7 @@
 import { beforeEach, expect, jest, test } from '@jest/globals';
 
+jest.unstable_mockModule('../public/scripts/notifications.js', () => ({ default: new Proxy({}, { get: (_target, key) => globalThis.toastr?.[key] }) }));
+
 const state = { chat: [], chat_metadata: {}, characters: [{ chat: 'first', name: 'Alice', avatar: 'a.png' }], this_chid: 0, system_message_types: { NARRATOR: 'narrator' } };
 const shell = {
     state, unshallowCharacter: async () => {}, uuidv4: () => 'integrity',

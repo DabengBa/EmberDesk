@@ -1,3 +1,4 @@
+import toastr from './notifications.js';
 import { eventSource, event_types } from './events.js';
 import { TOKEN_PADDING, inject_ids } from './constants.js';
 import { executeGenerationAttempts, createGenerationCommandPlan, createGenerationRequestEnvelope } from './chat-generation-command-service.js';

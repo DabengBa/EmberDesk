@@ -1,12 +1,15 @@
 import { crc32 } from 'crc';
 
+// crc's runtime passes Uint8Array to Buffer.from, although its declaration omits it.
+const crc32Bytes = crc32 as typeof crc32 & ((data: Uint8Array, previous?: number) => number);
+
 /**
  * Encodes PNG chunks into a PNG file format buffer.
  * @param {Array<{ name: string; data: Uint8Array }>} chunks Array of PNG chunks
  * @returns {Uint8Array} Encoded PNG data
  * @copyright Based on https://github.com/hughsk/png-chunks-encode (MIT)
  */
-export default function encode(chunks) {
+export default function encode(chunks: Array<{ name: string; data: Uint8Array }>): Uint8Array {
     const uint8 = new Uint8Array(4);
     const int32 = new Int32Array(uint8.buffer);
     const uint32 = new Uint32Array(uint8.buffer);
@@ -55,7 +58,7 @@ export default function encode(chunks) {
             output[idx++] = data[j++];
         }
 
-        const crc = crc32(data, crc32(new Uint8Array(nameChars)));
+        const crc = crc32Bytes(data, crc32Bytes(new Uint8Array(nameChars)));
 
         int32[0] = crc;
         output[idx++] = uint8[3];

@@ -1,6 +1,8 @@
 import { expect, jest, test } from '@jest/globals';
 import { loadTsModule } from './helpers/load-ts-module.mjs';
 
+jest.unstable_mockModule('../public/scripts/notifications.js', () => ({ default: new Proxy({}, { get: (_target, key) => globalThis.toastr?.[key] }) }));
+
 const worldInfo = jest.fn(() => { throw new Error('WI must not be re-evaluated'); });
 const attempts = jest.fn(async () => undefined);
 jest.unstable_mockModule('../public/scripts/world-info-service.js', () => ({ getWorldInfoPrompt: worldInfo }));

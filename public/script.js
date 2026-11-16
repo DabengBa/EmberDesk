@@ -1,3 +1,4 @@
+import toastr from './scripts/notifications.js';
 import {
     generation_started, generatingAttemptModel, scrollLock, streamingProcessor, is_send_press, abortController,
     setGenerationStarted, setGeneratingAttemptModel, setScrollLock, setStreamingProcessor, setSending, setAbortController,

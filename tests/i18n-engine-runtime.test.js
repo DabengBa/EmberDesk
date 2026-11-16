@@ -14,6 +14,9 @@ const localesDir = path.join(repoRoot, 'public', 'locales');
 await jest.unstable_mockModule('../public/scripts/power-user.js', () => ({
     registerDebugFunction: () => {},
 }));
+await jest.unstable_mockModule('../public/scripts/notifications.js', () => ({
+    default: { success: () => {}, info: () => {}, warning: () => {} },
+}));
 
 const browserGlobals = ['localStorage', 'fetch', 'document', 'Document', 'DOMParser', 'CustomEvent', 'MutationObserver', '$', 'toastr', 'location'];
 

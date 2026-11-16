@@ -3,6 +3,7 @@ import archiver from 'archiver';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { spawnSync } from 'node:child_process';
 
 import {
     extractFileFromZipBuffer,
@@ -75,6 +76,44 @@ async function createZipFile(entries, fileName = 'archive.zip') {
 }
 
 describe('archive utils', () => {
+    test('native Node resolves the format TypeScript and real caller graph without a loader', () => {
+        const root = fs.mkdtempSync(path.join(os.tmpdir(), 'emberdesk-format-native-'));
+        tmpRoots.push(root);
+        const config = path.join(root, 'config.yaml');
+        fs.writeFileSync(config, 'backups:\n  chat:\n    enabled: false\n');
+        const url = name => new URL(`../src/${name}`, import.meta.url).href;
+        const result = spawnSync(process.execPath, ['--input-type=module', '--eval', `
+            import assert from 'node:assert/strict';
+            const util = await import(process.argv[1]);
+            util.setConfigFilePath(process.argv[2]);
+            globalThis.DATA_ROOT = process.argv[3];
+            const archive = await import(process.argv[4]);
+            const encode = await import(process.argv[5]);
+            const parser = await import(process.argv[6]);
+            const card = await import(process.argv[7]);
+            const validator = await import(process.argv[8]);
+            const router = await import(process.argv[9]);
+            const byaf = await import(process.argv[10]);
+            const charx = await import(process.argv[11]);
+            assert.equal(util.normalizeZipEntryPath, archive.normalizeZipEntryPath);
+            assert.equal(archive.normalizeZipEntryPath('../bad'), null);
+            assert.equal(typeof encode.default, 'function');
+            const png = Buffer.from(encode.default([{name:'IHDR', data:new Uint8Array(13)}, {name:'IEND', data:new Uint8Array()}]));
+            assert.equal(JSON.parse(parser.read(parser.write(png, '{"name":"Native"}'))).name, 'Native');
+            assert.equal(typeof card.getCharaCardV2, 'function');
+            assert.equal(new validator.TavernCardValidator({name:'x', description:'', scenario:'', first_mes:'', mes_example:''}).validate(), 1);
+            assert.equal(typeof router.router, 'function');
+            assert.equal(typeof byaf.ByafParser, 'function');
+            assert.equal(typeof charx.CharXParser, 'function');
+        `, url('util.js'), config, root, url('archive-utils.ts'), url('png/encode.ts'),
+        url('character-card-parser.ts'), url('endpoints/character-card-v2.ts'),
+        url('validator/TavernCardValidator.ts'), url('endpoints/characters.js'), url('byaf.js'), url('charx.js')], {
+            encoding: 'utf8', timeout: 10_000,
+        });
+        expect({ status: result.status, stderr: result.status === 0 ? '' : result.stderr })
+            .toEqual({ status: 0, stderr: '' });
+    });
+
     test('extractFileFromZipBuffer finds the requested archive entry through both modules', async () => {
         const archiveBuffer = await createZipBuffer([
             { name: '__MACOSX/ignored/card.json', data: '{"ignored":true}' },

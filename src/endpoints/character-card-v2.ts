@@ -3,6 +3,13 @@ import _ from 'lodash';
 import { deepMerge, humanizedDateTime, tryParse } from '../util.js';
 import { normalizeTalkativeness } from './character-card-helpers.js';
 import { readWorldInfoFile } from './worldinfo.js';
+import type { UserDirectoryList } from '../users.js';
+
+type Card = Record<string, unknown> & { name: string; world?: string };
+type CardForm = Record<string, unknown> & { ch_name: string; json_data?: string; world?: string; extensions?: string };
+type WorldEntry = Record<string, unknown>;
+// A type-only view of the unvalidated JSON returned by readWorldInfoFile.
+type WorldInfo = { originalData?: unknown; entries?: Record<string, WorldEntry> };
 
 /**
  * Convert a character object to Spec V2 format.
@@ -11,7 +18,7 @@ import { readWorldInfoFile } from './worldinfo.js';
  * @param {boolean} hoistDate Will set the chat and create_date fields to the current date if they are missing
  * @returns {object} Character object in Spec V2 format
  */
-export function getCharaCardV2(jsonObject, directories, hoistDate = true) {
+export function getCharaCardV2(jsonObject: Card, directories: UserDirectoryList, hoistDate = true) {
     if (jsonObject.spec === undefined) {
         jsonObject = convertToV2(jsonObject, directories);
 
@@ -30,7 +37,7 @@ export function getCharaCardV2(jsonObject, directories, hoistDate = true) {
  * @param {import('../users.js').UserDirectoryList} directories User directories
  * @returns {object} Character object in Spec V2 format
  */
-export function convertToV2(char, directories) {
+export function convertToV2(char: Card, directories: UserDirectoryList) {
     // Simulate incoming data from frontend form
     const result = charaFormatData({
         json_data: JSON.stringify(char),
@@ -56,7 +63,7 @@ export function convertToV2(char, directories) {
     return result;
 }
 
-export function readFromV2(char) {
+export function readFromV2(char: Card) {
     if (_.isUndefined(char.data)) {
         console.warn(`Char ${char.name} has Spec v2 data missing`);
         return char;
@@ -95,7 +102,7 @@ export function readFromV2(char) {
         const v2Value = _.get(char.data, v2Path);
         let normalizedValue = v2Value;
         if (_.isUndefined(v2Value)) {
-            let defaultValue = undefined;
+            let defaultValue: number | boolean | undefined = undefined;
 
             // Backfill default values for missing ST extension fields
             if (v2Path === 'extensions.talkativeness') {
@@ -136,7 +143,7 @@ export function readFromV2(char) {
  * @param {import('../users.js').UserDirectoryList} directories User directories
  * @returns
  */
-export function charaFormatData(data, directories) {
+export function charaFormatData(data: CardForm, directories: UserDirectoryList) {
     // This is supposed to save all the foreign keys that ST doesn't care about
     const char = tryParse(data.json_data) || {};
 
@@ -149,7 +156,7 @@ export function charaFormatData(data, directories) {
     _.unset(char, 'data.personality');
 
     // Checks if data.alternate_greetings is an array, a string, or neither, and acts accordingly. (expected to be an array of strings)
-    const getAlternateGreetings = data => {
+    const getAlternateGreetings = (data: CardForm) => {
         if (Array.isArray(data.alternate_greetings)) return data.alternate_greetings;
         if (typeof data.alternate_greetings === 'string') return [data.alternate_greetings];
         return [];
@@ -196,7 +203,7 @@ export function charaFormatData(data, directories) {
 
     if (data.world) {
         try {
-            const file = readWorldInfoFile(directories, data.world, false);
+            const file = readWorldInfoFile(directories, data.world, false) as WorldInfo | null;
 
             // File was imported - save it to the character book
             if (file && file.originalData) {
@@ -229,9 +236,9 @@ export function charaFormatData(data, directories) {
  * @param {string} name Name of World Info file
  * @param {object} entries Entries object
  */
-export function convertWorldInfoToCharacterBook(name, entries) {
+export function convertWorldInfoToCharacterBook(name: string, entries: Record<string, WorldEntry>) {
     /** @type {{ entries: object[]; name: string; extensions: object }} */
-    const result = { entries: [], name, extensions: {} };
+    const result: { entries: object[]; name: string; extensions: object } = { entries: [], name, extensions: {} };
 
     for (const index in entries) {
         const entry = entries[index];
@@ -249,7 +256,8 @@ export function convertWorldInfoToCharacterBook(name, entries) {
             position: entry.position == 0 ? 'before_char' : 'after_char',
             use_regex: true, // ST keys are always regex
             extensions: {
-                ...entry.extensions,
+                // Unchecked persisted JSON: retain JavaScript's existing spread behavior.
+                ...(entry.extensions as object),
                 position: entry.position,
                 exclude_recursion: entry.excludeRecursion,
                 display_index: entry.displayIndex,

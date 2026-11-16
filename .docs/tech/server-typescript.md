@@ -8,6 +8,28 @@ topic: server-typescript
 
 `src/canonical-secrets-backend.ts` is the synchronous canonical Secrets backend. The existing SecretManager remains the public boundary; initialization, audit, SQLite authority and projection repair behavior are unchanged.
 
+## Wire log and archive/card formats
+
+`src/wire-log-store.ts` owns the on-disk records (one file per record under
+`<user root>/wire-logs/<YYYY-MM-DD>/`, written temp-then-rename) and their
+listing, reading, deletion and purge. `src/wire-log-tap.ts` owns passive SSE
+observation and session trace context; `src/wire-log-recorder.ts` owns the
+session lifecycle, normalized options and retention sweep. The chat-completions
+backend drives the recorder; `src/endpoints/wire-log.ts` provides the viewer
+and settings API. `tests/wire-log-native.test.js` imports the actual module
+graph in Node without a loader. Product behavior is documented in
+`feature.wire_log`.
+
+`src/archive-utils.ts` owns archive helpers; `src/archive-utils.js` is a
+compatibility re-export, also used by `src/util.js`. The format chain includes
+`src/png/encode.ts`, `src/character-card-parser.ts`,
+`src/endpoints/character-card-v2.ts` and
+`src/validator/TavernCardValidator.ts`. Existing callers use actual `.ts`
+paths where migrated. `tests/archive-utils.test.js` exercises archive
+behavior and imports the real format and caller graph in Node without a
+loader, including the shared re-export identity. These migrations preserve the
+existing formats and product behavior.
+
 ## Runtime and module boundary
 
 The supported runtime is Node.js 26.12.1 (`>=26.12.1 <27`). The server uses

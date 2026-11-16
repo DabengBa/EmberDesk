@@ -5,13 +5,17 @@
  *
  * @link https://github.com/malfoyslastname/character-card-spec-v2
  */
+type CardData = { alternate_greetings?: unknown; tags?: unknown; extensions?: unknown; character_book?: { entries?: unknown; extensions?: unknown } };
+type Card = { spec?: unknown; spec_version?: unknown; data?: CardData; [key: string]: unknown };
+
 export class TavernCardValidator {
     /**
      * @type {string|null}
      */
-    #lastValidationError = null;
+    #lastValidationError: string | null = null;
+    card: Card;
 
-    constructor(card) {
+    constructor(card: Card) {
         this.card = card;
     }
 
@@ -124,7 +128,8 @@ export class TavernCardValidator {
     }
 
     #validateCharacterBookV2() {
-        const characterBook = this.card.data.character_book;
+        // Only reached after #validateDataV2 has confirmed data is present.
+        const characterBook = this.card.data!.character_book;
 
         if (!characterBook) {
             return true;

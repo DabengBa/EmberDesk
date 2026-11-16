@@ -7,7 +7,7 @@ let tempRoot = '';
 let storeRoot = '';
 
 async function importStore() {
-    return import(`../src/wire-log-store.js?cacheBust=${Date.now()}-${Math.random()}`);
+    return import(`../src/wire-log-store.ts?cacheBust=${Date.now()}-${Math.random()}`);
 }
 
 beforeEach(async () => {

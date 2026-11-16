@@ -1,3 +1,4 @@
+import toastr from './notifications.js';
 import { DOMPurify, Bowser } from '../lib.js';
 import { runDialoguePopupCommand, runDeleteMessageCommand } from './workspace-interaction-commands.js';
 

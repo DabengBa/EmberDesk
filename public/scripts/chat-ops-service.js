@@ -1,3 +1,4 @@
+import toastr from './notifications.js';
 import { eventSource, event_types } from './events.js';
 import { CHAT_TRUNCATION, debounce_timeout } from './constants.js';
 import { getRequestHeaders } from './request-context.js';

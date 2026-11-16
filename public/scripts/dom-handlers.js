@@ -1,3 +1,4 @@
+import toastr from './notifications.js';
 import { throttle } from './utils.js';
 import { debounce_timeout } from './constants.js';
 import { eventSource, event_types } from './events.js';

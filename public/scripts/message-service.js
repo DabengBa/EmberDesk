@@ -1,3 +1,4 @@
+import toastr from './notifications.js';
 import { buildChatMessageRenderDescriptor, buildChatMessageRowPopulation } from './chat-message-render-descriptor.js';
 import { buildChatMessageRichBodyRender } from './chat-message-render-service.js';
 import { MEDIA_DISPLAY, MEDIA_TYPE, REASONING_PREFIX, REASONING_SUFFIX, SCROLL_BEHAVIOR, debounce_timeout } from './constants.js';

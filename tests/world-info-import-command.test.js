@@ -1,6 +1,8 @@
 import { expect, jest, test } from '@jest/globals';
 
 jest.unstable_mockModule('../public/scripts/i18n.js', () => ({ translate: text => text }));
+const notifications = { info: jest.fn(), warning: jest.fn(), error: jest.fn(), success: jest.fn() };
+jest.unstable_mockModule('../public/scripts/notifications.js', () => ({ default: notifications, setNotificationHtml: jest.fn() }));
 
 test('batch cancellation leaves the remaining files unprocessed in selection order', async () => {
     const { runWorldInfoImportQueue } = await import('../public/scripts/world-info-import-command.js');
@@ -127,13 +129,13 @@ test('owner cancellation stops a batch after the current file without opening th
 
 test.each(['confirm', 'overwrite'])('World Info %s waits for deletion and stops on deletion failure', async mode => {
     const { createWorldInfoImportUi } = await import('../public/scripts/world-info-import-ui.js');
-    const previous = { fetch: globalThis.fetch, FormData: globalThis.FormData, toastr: globalThis.toastr };
+    const previous = { fetch: globalThis.fetch, FormData: globalThis.FormData };
     const post = jest.fn();
     let resolveDelete;
     const deleteWorldInfo = jest.fn(() => new Promise(resolve => { resolveDelete = resolve; }));
     globalThis.fetch = post;
     globalThis.FormData = class { append() {} };
-    globalThis.toastr = { info: jest.fn(), warning: jest.fn(), error: jest.fn(), success: jest.fn() };
+    notifications.error.mockClear();
     const t = (parts, ...values) => String.raw({ raw: parts }, ...values);
     const ui = createWorldInfoImportUi({
         getWorldNames: () => ['book'], deleteWorldInfo, getSanitizedFilename: async name => name,
@@ -150,7 +152,7 @@ test.each(['confirm', 'overwrite'])('World Info %s waits for deletion and stops 
         resolveDelete(false);
         expect(await result).toMatchObject({ status: 'failed' });
         expect(post).not.toHaveBeenCalled();
-        expect(globalThis.toastr.error).toHaveBeenCalled();
+        expect(notifications.error).toHaveBeenCalled();
     } finally {
         Object.assign(globalThis, previous);
     }

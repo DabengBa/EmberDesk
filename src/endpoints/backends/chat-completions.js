@@ -25,8 +25,8 @@ import {
 } from '../../prompt-converters.js';
 
 import { readSecret, SECRET_KEYS } from '../secrets.js';
-import { normalizeWireLogOptions, createWireLogRecorder } from '../../wire-log-recorder.js';
-import { readWireLogSettings } from '../wire-log.js';
+import { normalizeWireLogOptions, createWireLogRecorder } from '../../wire-log-recorder.ts';
+import { readWireLogSettings } from '../wire-log.ts';
 
 const API_OPENAI = 'https://api.openai.com/v1';
 

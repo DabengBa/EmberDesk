@@ -1,3 +1,4 @@
+import toastr from './notifications.js';
 import { DOMPurify } from '../lib.js';
 
 import { requireCharacterTagsShellContext } from './character-tags-shell-context.js';

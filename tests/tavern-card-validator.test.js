@@ -1,5 +1,5 @@
 import { describe, test, expect } from '@jest/globals';
-import { TavernCardValidator } from '../src/validator/TavernCardValidator';
+import { TavernCardValidator } from '../src/validator/TavernCardValidator.ts';
 
 const V1_FIELDS = ['name', 'description', 'scenario', 'first_mes', 'mes_example'];
 

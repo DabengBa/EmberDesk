@@ -1,3 +1,4 @@
+import toastr from './notifications.js';
 import { lodash } from '../lib.js';
 
 import { eventSource, event_types } from './events.js';
