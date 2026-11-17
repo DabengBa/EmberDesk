@@ -229,9 +229,9 @@ retention rules, synchronous API, and backup data format are preserved.
 
 ## Chat import and route helpers
 
-The next slice migrates `chat-import-converters.ts`, `chat-import-service.ts`,
-and `chat-route-service.ts`, in that order. Each replaces its JavaScript
-implementation. `chats.js` imports the typed import planner, and
+`chat-import-converters.ts`, `chat-import-service.ts`, and
+`chat-route-service.ts` replace their JavaScript implementations. The chat
+router imports the typed import planner, and
 `canonical-chat-query-service.ts` imports the typed matcher and preview helper.
 All consumers use the actual `.ts` extension; there is no JavaScript shim.
 
@@ -255,6 +255,26 @@ and the benchmark import it with its actual `.ts` extension. Canonical chat
 reads are owned by the independent TypeScript read service. Existing SQLite query
 tests and native Node imports of both routers cover the migrated boundary.
 
+## HTTP route boundaries
+
+`src/endpoints/chats.js` constructs the router and shared route context;
+`chat-read-routes.ts`, `chat-write-routes.ts`, `chat-import-routes.ts`, and
+`chat-compatibility.ts` register the corresponding handlers. The context type
+is in `chat-route-context.ts`. `src/endpoints/characters.js` retains router
+registration and middleware, while `character-*-routes.ts` modules implement
+the read, write, edit, merge, import, transfer, delete-preflight and text-replace
+handlers. Existing service and canonical storage boundaries remain separate.
+
+The public, private and admin account JavaScript endpoints re-export routers
+from their matching `users-*-routes.ts` modules. `secrets.js` retains
+`SecretManager` and exports the router created by `secrets-routes.ts`;
+`content-manager.js` retains the downloader table and exports the router from
+`content-import-routes.ts`. These are internal ownership changes, not new
+product semantics. `tests/chat-backup-native.test.js` and
+`tests/account-secrets-content-http-native.test.js` exercise production router
+graphs in native Node without a loader; focused character route tests cover
+import and text replacement.
+
 `src/endpoints/canonical-chat-read-service.ts` is the sole canonical chat read
 implementation. It preserves raw JSONL rows, opaque object payloads, and the
 nullable version read with its payload in one SQLite transaction. The chats
@@ -271,7 +291,7 @@ dependency ports, canonical outcomes, and projection repairs. The character
 router and text-replace service use explicit `.ts` imports; their dependency
 factories and import callbacks consume these types through JSDoc. The import
 coordinator is `src/endpoints/character-import-service.ts`, imported by the
-router with its actual extension and using the existing route callbacks. Its
+router with its actual extension and used by the import handler. Its
 types describe the existing handler and result contracts without new runtime
 validation; format dispatch, failure normalization and route cleanup are unchanged.
 

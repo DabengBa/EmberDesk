@@ -4,7 +4,7 @@ import path from 'node:path';
 import zlib from 'node:zlib';
 import { Buffer } from 'node:buffer';
 
-import express from 'express';
+import { createContentImportRouter } from './content-import-routes.ts';
 import sanitize from 'sanitize-filename';
 import { sync as writeFileAtomicSync } from 'write-file-atomic';
 
@@ -23,9 +23,6 @@ import { runCanonicalMigrations } from '../canonical-sqlite-migrations.ts';
 import { getCanonicalStorageSlice } from '../canonical-storage-slice-registry.ts';
 import { ensureCanonicalPreset, PRESETS_OPENAI_API_ID } from './presets-store.ts';
 import {
-    classifyExternalContentId,
-    classifyExternalContentUrl,
-    downloadExternalContentArtifact,
     fetchExternalResource,
     getHostFromUrl as getExternalHostFromUrl,
     isHostWhitelisted as isExternalHostWhitelisted,
@@ -1146,85 +1143,4 @@ export const EXTERNAL_CONTENT_DOWNLOADERS = {
     generic_png: (descriptor, dependencies) => downloadGenericPng(descriptor.id, dependencies),
 };
 
-function sendExternalContentArtifact(response, artifact, { encodeFileName = true } = {}) {
-    if (artifact.fileType) {
-        response.set('Content-Type', artifact.fileType);
-    }
-
-    const fileName = encodeFileName ? encodeURI(artifact.fileName) : artifact.fileName;
-    response.set('Content-Disposition', `attachment; filename="${fileName}"`);
-    response.set('X-Custom-Content-Type', artifact.type);
-    return response.send(artifact.buffer);
-}
-
-function sendExternalContentFailure(response, failure) {
-    if (failure?.kind === 'invalid_artifact' || failure?.kind === 'unsupported_host' || failure?.kind === 'invalid_url' || failure?.kind === 'unsupported_source') {
-        return response.sendStatus(404);
-    }
-
-    return response.sendStatus(500);
-}
-
-export const router = express.Router();
-
-router.post('/importURL', async (request, response) => {
-    if (!request.body.url) {
-        return response.sendStatus(400);
-    }
-
-    try {
-        const url = request.body.url;
-        const classification = classifyExternalContentUrl(url, WHITELIST_GENERIC_URL_DOWNLOAD_SOURCES);
-        if (!classification.ok) {
-            if (classification.failure?.kind === 'unsupported_host') {
-                console.error(`Received an import for "${classification.failure.host}", but site is not whitelisted. This domain must be added to the config key "whitelistImportDomains" to allow import from this source.`);
-            }
-            return sendExternalContentFailure(response, classification.failure);
-        }
-
-        const result = await downloadExternalContentArtifact({
-            descriptor: classification.descriptor,
-            downloaders: EXTERNAL_CONTENT_DOWNLOADERS,
-        });
-
-        if (!result.ok) {
-            return sendExternalContentFailure(response, result.failure);
-        }
-
-        return sendExternalContentArtifact(response, result.artifact, { encodeFileName: true });
-    } catch (error) {
-        console.error('Importing custom content failed', error);
-        return response.sendStatus(500);
-    }
-});
-
-router.post('/importUUID', async (request, response) => {
-    if (!request.body.url) {
-        return response.sendStatus(400);
-    }
-
-    try {
-        const uuid = request.body.url;
-        const classification = classifyExternalContentId(uuid);
-        if (!classification.ok) {
-            return sendExternalContentFailure(response, classification.failure);
-        }
-
-        const result = await downloadExternalContentArtifact({
-            descriptor: classification.descriptor,
-            downloaders: EXTERNAL_CONTENT_DOWNLOADERS,
-        });
-
-        if (!result.ok) {
-            if (result.failure?.kind === 'invalid_artifact') {
-                throw new Error('Failed to download content');
-            }
-            return sendExternalContentFailure(response, result.failure);
-        }
-
-        return sendExternalContentArtifact(response, result.artifact, { encodeFileName: false });
-    } catch (error) {
-        console.error('Importing custom content failed', error);
-        return response.sendStatus(500);
-    }
-});
+export const router = createContentImportRouter(WHITELIST_GENERIC_URL_DOWNLOAD_SOURCES, EXTERNAL_CONTENT_DOWNLOADERS);

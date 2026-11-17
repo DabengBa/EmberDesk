@@ -16,10 +16,59 @@ const textReplace = new URL('../src/endpoints/character-text-replace-service.ts'
 const util = new URL('../src/util.js', import.meta.url).href;
 const migrations = new URL('../src/canonical-sqlite-migrations.ts', import.meta.url).href;
 const writes = new URL('../src/endpoints/canonical-chat-write-service.ts', import.meta.url).href;
+const chatReadRoutes = new URL('../src/endpoints/chat-read-routes.ts', import.meta.url).href;
 
 function runNode(source, ...args) {
     return spawnSync(process.execPath, ['--input-type=module', '--eval', source, ...args], { encoding: 'utf8' });
 }
+
+test('Node loads all production chat route slices and serves the compatibility router without a loader', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'emberdesk-chat-route-native-'));
+    try {
+        const config = path.join(root, 'config.yaml');
+        fs.writeFileSync(config, 'backups:\n  chat:\n    enabled: false\n', 'utf8');
+        const source = `
+            import assert from 'node:assert/strict';
+            import express from 'express';
+            const { setConfigFilePath } = await import(process.argv[1]);
+            setConfigFilePath(process.argv[2]);
+            const { registerChatGetRoute } = await import(process.argv[3]);
+            const { router } = await import(process.argv[4]);
+            assert.equal(typeof registerChatGetRoute, 'function');
+            const paths = router.stack.filter(layer => layer.route).map(layer => layer.route.path);
+            assert.deepEqual(paths, ['/save', '/get', '/rename', '/delete', '/export', '/import', '/search', '/recent']);
+            const app = express();
+            app.use(express.json());
+            app.use('/chats', router);
+            const server = await new Promise(resolve => { const instance = app.listen(0, '127.0.0.1', () => resolve(instance)); });
+            try {
+                const response = await fetch('http://127.0.0.1:' + server.address().port + '/chats/get', {
+                    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ is_group: true }),
+                });
+                assert.equal(response.status, 400);
+                assert.deepEqual(await response.json(), { error: 'group chats are not supported' });
+                for (const route of ['save', 'rename', 'delete', 'export']) {
+                    const rejected = await fetch('http://127.0.0.1:' + server.address().port + '/chats/' + route, {
+                        method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ is_group: true }),
+                    });
+                    assert.equal(rejected.status, 400, route);
+                    assert.deepEqual(await rejected.json(), { error: 'group chats are not supported' });
+                }
+                const invalidImport = await fetch('http://127.0.0.1:' + server.address().port + '/chats/import', {
+                    method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}',
+                });
+                assert.equal(invalidImport.status, 400);
+                assert.deepEqual(await invalidImport.json(), { error: 'invalid_chat_operation_id' });
+            } finally { await new Promise(resolve => server.close(resolve)); }
+            console.log('chat-read-route:ok');
+        `;
+        const result = runNode(source, util, config, chatReadRoutes, chats);
+        expect({ status: result.status, stderr: result.status === 0 ? '' : result.stderr }).toEqual({ status: 0, stderr: '' });
+        expect(result.stdout.trim()).toBe('chat-read-route:ok');
+    } finally {
+        fs.rmSync(root, { recursive: true, force: true });
+    }
+});
 
 test('Node imports the real TypeScript backup helper without a loader', () => {
     const result = runNode('const helper = await import(process.argv[1]); console.log(typeof helper.createChatBackupPlan);', helper);

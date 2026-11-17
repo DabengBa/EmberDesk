@@ -23,7 +23,7 @@ It does not change import UI feedback, canonical file writes, asset category rul
 
 ## Architecture And Constraints
 
-`src/endpoints/external-content-import-service.ts` is the shared service. `src/endpoints/content-manager.js` and `src/endpoints/assets.js` delegate source classification, allowlist checks, and external fetch behavior to that service while keeping their route-owned validation, headers, temp-file handling, stream copying, and legacy response shapes.
+`src/endpoints/external-content-import-service.ts` is the shared service. `src/endpoints/content-manager.js` retains the downloader table and exports the router created by `src/endpoints/content-import-routes.ts`; `src/endpoints/assets.js` owns the asset routes. These boundaries delegate source classification, allowlist checks, and external fetch behavior to the shared service while retaining route validation, headers, temp-file handling, stream copying, and legacy response shapes.
 
 Important constraints:
 

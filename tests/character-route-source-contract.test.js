@@ -15,9 +15,24 @@ function readRepoFile(relativePath) {
 describe('character route source contract', () => {
     test('keeps rename route response shape stable after command delegation', () => {
         const source = readRepoFile('src/endpoints/characters.js');
+        const handlers = readRepoFile('src/endpoints/character-write-routes.ts');
 
         expect(source).toContain('router.post(\'/rename\', validateAvatarUrlMiddleware');
-        expect(source).toContain('const result = await renameCharacterCard({');
-        expect(source).toContain('return response.send({ avatar: result.avatarName, mediaAuthorization: result.mediaAuthorization, settings_revision: result.settingsRevision });');
+        expect(source).toContain('router.post(\'/rename\', validateAvatarUrlMiddleware, writeHandlers.rename)');
+        expect(handlers).toContain('const result = await renameCharacterCard({');
+        expect(handlers).toContain('return response.send({ avatar: result.avatarName, mediaAuthorization: result.mediaAuthorization, settings_revision: result.settingsRevision });');
+    });
+
+    test('keeps production route registration and coordination in the facade', () => {
+        const source = readRepoFile('src/endpoints/characters.js');
+        const registrations = [...source.matchAll(/router\.post\('([^']+)'/g)].map(match => match[1]);
+        expect(registrations).toEqual([
+            '/create', '/rename', '/edit', '/edit-avatar', '/edit-attribute', '/merge-attributes',
+            '/text-replace/preview', '/text-replace/apply', '/delete-preflight', '/delete',
+            '/all', '/list', '/get', '/chats', '/import', '/duplicate', '/export',
+        ]);
+        expect(source).not.toMatch(/router\.post\([^\n]*async function/);
+        expect(source).toContain('coordinateWorkspaceWrite(\'card\', request => request.body?.avatar_url, writeHandlers.edit)');
+        expect(source).toContain('router.post(\'/text-replace/apply\', validateAvatarUrlMiddleware, coordinateReplaceIntent(textReplaceHandlers.apply))');
     });
 });
