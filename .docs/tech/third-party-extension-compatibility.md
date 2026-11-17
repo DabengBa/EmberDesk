@@ -15,6 +15,26 @@ topic: third-party-extension-compatibility
 - **Message cards**: first-party frontend frames (`frontend-frame.js` / `frontend-frame-controller.js` / `EmberDeskFrame`) render fenced complete HTML documents as same-origin iframes. `createFrameIframe()` (`public/scripts/frontend-frame.js:704`) sets no `sandbox` attribute, and `buildFrontendFrameDocument()` (`public/scripts/frontend-frame.js:396`) injects host globals into the frame, so frame markup, CSS, and media bypass the message CSS policy and the per-character CSS-resource authorization entirely and run with the page's privileges. Treat a mounted frame as trusted page code, not as a restricted message body.
 - **Character-card metadata**: `data.extensions.*` fields (`regex_scripts`, `world`, etc.) are feature data and must not be deleted.
 
+### Migrating older jQuery message cards
+
+The current workspace still loads and uses jQuery. The frame predefine script
+best-effort copies `$`, `jQuery`, and other available globals from its parent;
+it does not install them or guarantee that a future host supplies them. Frame
+mounting, the `EmberDeskFrame` event/context bridge, and host-side height and
+teardown do not require a parent jQuery. A card that calls `$` or a jQuery
+plugin still requires those dependencies, even when the frame itself mounts.
+
+For portable cards, replace applicable jQuery DOM selection, manipulation,
+and event handlers with native DOM APIs, checking plugin-specific behavior
+individually. Alternatively, trusted card authors can provide and maintain the
+needed library and plugins within their own card; do not assume plugins can be
+mechanically replaced or that loading arbitrary scripts is safe. This does not
+change the security contract above: frames are unsandboxed same-origin page
+code. The isolated no-jQuery browser test is designed to exercise the real
+frame module, not the full workspace's React/controller/event-bus integration;
+the separate workspace frame E2E covers that integration while the workspace
+uses jQuery.
+
 ## Internal Contracts
 
 The following are internal contracts consumed by EmberDesk's own modules; breaking them is an internal refactor concern.

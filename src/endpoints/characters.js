@@ -9,16 +9,15 @@ import sanitize from 'sanitize-filename';
 import { sync as writeFileAtomicSync } from 'write-file-atomic';
 import yaml from 'yaml';
 import _ from 'lodash';
-import mime from 'mime-types';
+
 import { avatarToPng } from '../image-processing.js';
 import storage from 'node-persist';
 
 import { DEFAULT_AVATAR_PATH } from '../constants.js';
-import { default as validateAvatarUrlMiddleware, getFileNameValidationFunction, forbiddenRegExp } from '../middleware/validateFileName.js';
-import { deepMerge, humanizedDateTime, tryParse, MemoryLimitedMap, getConfigValue, mutateJsonString, clientRelativePath, getUniqueName, sanitizeSafeCharacterReplacements } from '../util.js';
-import { TavernCardValidator } from '../validator/TavernCardValidator.ts';
+import { default as validateAvatarUrlMiddleware, getFileNameValidationFunction } from '../middleware/validateFileName.js';
+import { humanizedDateTime, MemoryLimitedMap, getConfigValue, clientRelativePath, getUniqueName, sanitizeSafeCharacterReplacements } from '../util.js';
 import { parse, write } from '../character-card-parser.ts';
-import { processUnsetSentinels, toShallow, unsetPrivateFields } from './character-card-helpers.js';
+import { toShallow, unsetPrivateFields } from './character-card-helpers.js';
 import {
     buildCharacterFileSnapshotRow,
     processCharacterFileSnapshot,
@@ -33,8 +32,7 @@ import {
 } from './character-card-v2.ts';
 import {
     CanonicalReadBlockedError,
-    readCharacterFullPayload,
-    readCharacterListPayload,
+
     readCharacterSummaryPayload,
 } from './character-read-service.ts';
 import { getCanonicalStorageSlice } from '../canonical-storage-slice-registry.js';
@@ -55,18 +53,13 @@ import {
     markCanonicalCharacterDeleted,
     recordProjectionRepair as persistProjectionRepair,
     renameCanonicalCharacter,
-    scanCanonicalCharacterWorldBindings,
+
     upsertCanonicalCharacter,
     assertCanonicalCharacterCardCurrent,
 } from './character-store.ts';
-import { getCanonicalWorldInfoBook, normalizeCanonicalWorldInfoName } from './world-info-store.ts';
+import { getCanonicalWorldInfoBook } from './world-info-store.ts';
 import { mutateCharacterMediaAuthorizationInTransaction } from './settings-store.ts';
-import {
-    createCharacterCard,
-    deleteCharacterCard,
-    editCharacterCard,
-    renameCharacterCard,
-} from './character-write-service.ts';
+import { createCharacterCard } from './character-write-service.ts';
 import { listCanonicalCharacterChatPayload } from './canonical-chat-query-service.ts';
 import { reconcileCanonicalChatSources } from '../canonical-chat-shadow-import.ts';
 import {
@@ -79,7 +72,14 @@ import {
 } from './canonical-chat-write-service.ts';
 import { writeCanonicalManagedMedia } from './canonical-managed-media-write-service.ts';
 import { createCharacterImportCoordinator } from './character-import-service.ts';
-import { runCharacterTextReplace } from './character-text-replace-service.ts';
+import { createCharacterImportHandler } from './character-import-routes.ts';
+import { createCharacterWriteHandlers } from './character-write-routes.ts';
+import { createCharacterReadHandlers } from './character-read-routes.ts';
+import { createCharacterTransferHandlers } from './character-transfer-routes.ts';
+import { createCharacterEditHandlers } from './character-edit-routes.ts';
+import { createCharacterMergeHandler } from './character-merge-routes.ts';
+import { createCharacterDeletePreflightHandler } from './character-delete-preflight-routes.ts';
+import { createCharacterTextReplaceHandlers } from './character-replace-routes.ts';
 import { coordinateWorkspaceWrite } from './coordinate-workspace-write.js';
 import { coordinateReplaceIntent } from './coordinate-workspace-write.js';
 
@@ -90,7 +90,6 @@ import { CharXParser, persistCharXAssets } from '../charx.js';
 import cacheBuster from '../middleware/cacheBuster.js';
 import { characterLibraryEventsHandler } from './character-library-events.js';
 
-const DELETE_PREFLIGHT_AVATAR_LIMIT = 500;
 
 // With 100 MB limit it would take roughly 3000 characters to reach this limit
 const memoryCacheCapacity = getConfigValue('performance.memoryCacheCapacity', '100mb');
@@ -1550,605 +1549,44 @@ async function importFromPng(uploadPath, { request }, preservedFileName) {
 export const router = express.Router();
 router.get('/events', characterLibraryEventsHandler);
 
-router.post('/create', getFileNameValidationFunction('file_name'), async function (request, response) {
-    try {
-        if (!request.body) return response.sendStatus(400);
-
-        const result = await createCharacterCard({
-            request,
-            body: request.body,
-            file: request.file ?? null,
-            crop: request.file ? tryParse(request.query.crop) : undefined,
-            dependencies: createCharacterWriteDependencies(),
-        });
-
-        if (!result.ok) {
-            return response.status(500).send(result.message);
-        }
-
-        return response.send(result.avatarName);
-    } catch (err) {
-        console.error(err);
-        response.sendStatus(500);
-    }
+const writeHandlers = createCharacterWriteHandlers({
+    createWriteDependencies: createCharacterWriteDependencies,
+    getBustCache: () => cacheBuster.bust.bind(cacheBuster),
 });
+router.post('/create', getFileNameValidationFunction('file_name'), writeHandlers.create);
+router.post('/rename', validateAvatarUrlMiddleware, writeHandlers.rename);
+router.post('/edit', validateAvatarUrlMiddleware, coordinateWorkspaceWrite('card', request => request.body?.avatar_url, writeHandlers.edit));
 
-router.post('/rename', validateAvatarUrlMiddleware, async function (request, response) {
-    if (!request.body.avatar_url || !request.body.new_name) {
-        return response.sendStatus(400);
-    }
+const editHandlers = createCharacterEditHandlers({ canonicalCharacterExistsSafe, getCanonicalCharacterCardJsonSafe, createCharacterWriteDependencies, cacheBuster });
+router.post('/edit-avatar', validateAvatarUrlMiddleware, editHandlers.editAvatar);
+router.post('/edit-attribute', validateAvatarUrlMiddleware, editHandlers.editAttribute);
 
-    try {
-        const result = await renameCharacterCard({
-            request,
-            body: request.body,
-            dependencies: createCharacterWriteDependencies(),
-        });
+router.post('/merge-attributes', getFileNameValidationFunction('avatar'), createCharacterMergeHandler({ getCanonicalCharacterCardJsonSafe, listCanonicalAvatarFilenamesSafe, createCharacterWriteDependencies }));
 
-        if (!result.ok) {
-            return response.status(500).send(result.message);
-        }
-
-        // Return new avatar name to ST
-        return response.send({ avatar: result.avatarName, mediaAuthorization: result.mediaAuthorization, settings_revision: result.settingsRevision });
-    } catch (err) {
-        console.error(err);
-        return response.sendStatus(500);
-    }
+const textReplaceHandlers = createCharacterTextReplaceHandlers({
+    getCanonicalCharacterCardJson: getCanonicalCharacterCardJsonSafe,
+    getCharacterWriteDependencies: () => createCharacterWriteDependencies({ bustCache: cacheBuster.bust.bind(cacheBuster) }),
 });
+router.post('/text-replace/preview', validateAvatarUrlMiddleware, textReplaceHandlers.preview);
+router.post('/text-replace/apply', validateAvatarUrlMiddleware, coordinateReplaceIntent(textReplaceHandlers.apply));
 
-router.post('/edit', validateAvatarUrlMiddleware, coordinateWorkspaceWrite('card', request => request.body?.avatar_url, async function (request, response) {
-    if (!request.body) {
-        console.warn('Error: no response body detected');
-        response.status(400).send('Error: no response body detected');
-        return;
-    }
+router.post('/delete-preflight', createCharacterDeletePreflightHandler(getCanonicalWorldBindingScanState));
 
-    if (request.body.ch_name === '' || request.body.ch_name === undefined || request.body.ch_name === '.') {
-        console.warn('Error: invalid name.');
-        response.status(400).send('Error: invalid name.');
-        return;
-    }
+router.post('/delete', validateAvatarUrlMiddleware, writeHandlers.delete);
 
-    if (!request.body.avatar_url) {
-        console.warn('Error: no avatar_url in request body');
-        response.status(400).send('Error: no avatar_url in request body');
-        return;
-    }
-
-    try {
-        const result = await editCharacterCard({
-            request,
-            response,
-            body: request.body,
-            file: request.file ?? null,
-            crop: request.file ? tryParse(request.query.crop) : undefined,
-            dependencies: createCharacterWriteDependencies({
-                bustCache: cacheBuster.bust.bind(cacheBuster),
-            }),
-        });
-
-        if (result.reason === 'missing_avatar') {
-            console.warn(result.message, result.avatarPath);
-            return response.status(400).send(result.message);
-        }
-
-        if (!result.ok) {
-            return response.status(500).send(result.message);
-        }
-
-        return response.sendStatus(200);
-    } catch (err) {
-        console.error('An error occurred, character edit invalidated.', err);
-        return response.sendStatus(500);
-    }
-}));
-
-router.post('/edit-avatar', validateAvatarUrlMiddleware, async function (request, response) {
-    try {
-        if (!request.file) {
-            return response.status(400).send('Error: no file uploaded');
-        }
-
-        if (!request.body || !request.body.avatar_url) {
-            return response.status(400).send('Error: no avatar_url in request body');
-        }
-
-        const uploadPath = path.join(request.file.destination, request.file.filename);
-        if (!fs.existsSync(uploadPath)) {
-            return response.status(400).send('Error: uploaded file does not exist');
-        }
-        const characterExists = await canonicalCharacterExistsSafe(request.user.profile?.handle ?? null, request.user.directories, request.body.avatar_url);
-        if (!characterExists) {
-            return response.status(400).send('Error: character file does not exist');
-        }
-        const data = await getCanonicalCharacterCardJsonSafe(request.user.profile?.handle ?? null, request.user.directories, request.body.avatar_url);
-        if (!data) {
-            return response.status(400).send('Error: failed to read character data');
-        }
-
-        const crop = tryParse(request.query.crop);
-        const fileName = request.body.avatar_url.replace('.png', '');
-        const result = await editCharacterCard({
-            request,
-            response,
-            avatarUrl: request.body.avatar_url,
-            targetFile: fileName,
-            characterData: data,
-            file: request.file,
-            crop,
-            dependencies: createCharacterWriteDependencies({ bustCache: cacheBuster.bust.bind(cacheBuster) }),
-        });
-
-        if (!result.ok) {
-            return response.status(500).send(result.message);
-        }
-
-        return response.sendStatus(200);
-    } catch (err) {
-        console.error('An error occurred while editing avatar', err);
-        return response.sendStatus(500);
-    }
+const readHandlers = createCharacterReadHandlers({
+    shallow: useShallowCharacters,
+    createReadDependencies: createCharacterReadDependencies,
+    sendCanonicalReadUnavailable,
+    canonicalReadErrorReason,
+    applyInteractionPerfHeaders,
+    sendCharacterListResponse,
+    listCanonicalCharacterChats: listCanonicalCharacterChatsSafe,
 });
-
-/**
- * Handle a POST request to edit a character attribute.
- *
- * This function reads the character data from a file, updates the specified attribute,
- * and writes the updated data back to the file.
- *
- * @param {Object} request - The HTTP request object.
- * @param {Object} response - The HTTP response object.
- * @returns {void}
- */
-router.post('/edit-attribute', validateAvatarUrlMiddleware, async function (request, response) {
-    console.debug(request.body);
-    if (!request.body) {
-        console.warn('Error: no response body detected');
-        return response.status(400).send('Error: no response body detected');
-    }
-
-    if (request.body.ch_name === '' || request.body.ch_name === undefined || request.body.ch_name === '.') {
-        console.warn('Error: invalid name.');
-        return response.status(400).send('Error: invalid name.');
-    }
-
-    if (request.body.field === 'json_data') {
-        console.warn('Error: cannot edit json_data field.');
-        return response.status(400).send('Error: cannot edit json_data field.');
-    }
-
-    try {
-        const charJSON = await getCanonicalCharacterCardJsonSafe(request.user.profile?.handle ?? null, request.user.directories, request.body.avatar_url);
-        if (typeof charJSON !== 'string') throw new Error('Failed to read character file');
-
-        const char = JSON.parse(charJSON);
-        //check if the field exists
-        if (char[request.body.field] === undefined && char.data[request.body.field] === undefined) {
-            console.warn('Error: invalid field.');
-            response.status(400).send('Error: invalid field.');
-            return;
-        }
-        char[request.body.field] = request.body.value;
-        char.data[request.body.field] = request.body.value;
-        const newCharJSON = JSON.stringify(char);
-        const targetFile = (request.body.avatar_url).replace('.png', '');
-        const result = await editCharacterCard({
-            request,
-            avatarUrl: request.body.avatar_url,
-            targetFile,
-            characterData: newCharJSON,
-            dependencies: createCharacterWriteDependencies(),
-        });
-
-        if (!result.ok) {
-            return response.status(500).send(result.message);
-        }
-
-        return response.sendStatus(200);
-    } catch (err) {
-        console.error('An error occurred, character edit invalidated.', err);
-        return response.sendStatus(500);
-    }
-});
-
-/** Maximum number of characters processed in parallel during bulk merge */
-const BULK_MERGE_CONCURRENCY = 10;
-
-/**
- * Reads a character card, applies a merge update (with sentinel-based
- * unsetting), validates the result, and writes it back.
- * @param {string} avatarPath Full path to the character PNG
- * @param {string} avatar     Avatar filename (e.g. "char.png")
- * @param {object} updateData The merge payload to apply
- * @param {import("express").Request} request Express request object
- * @param {((data: any) => boolean) | null} [shouldSkip] Optional function to determine if a character should be skipped based on its original data (used for bulk merge filtering)
- * @returns {Promise<{ok: boolean, error?: string, skipped?: boolean}>} Result of the merge operation, including any validation error
- */
-async function mergeCharacterUpdate(avatarPath, avatar, updateData, request, shouldSkip = null) {
-    const pngStringData = await getCanonicalCharacterCardJsonSafe(request.user.profile?.handle ?? null, request.user.directories, avatar);
-    if (!pngStringData) {
-        return { ok: false, error: 'Invalid character file' };
-    }
-
-    let character = JSON.parse(pngStringData);
-
-    if (typeof shouldSkip === 'function' && shouldSkip(character)) {
-        return { ok: false, skipped: true };
-    }
-
-    const update = _.cloneDeep(updateData);
-    _.unset(update, 'json_data');
-    _.unset(character, 'json_data');
-
-    character = deepMerge(character, update);
-    processUnsetSentinels(character, update);
-
-    const validator = new TavernCardValidator(character);
-    //Accept either V1 or V2.
-    if (!validator.validate()) {
-        return { ok: false, error: validator.lastValidationError ?? 'Validation failed' };
-    }
-
-    const targetImg = avatar.replace('.png', '');
-    const result = await editCharacterCard({
-        request,
-        avatarUrl: avatar,
-        targetFile: targetImg,
-        characterData: JSON.stringify(character),
-        dependencies: createCharacterWriteDependencies(),
-    });
-
-    if (!result.ok) {
-        return { ok: false, error: result.message ?? 'Failed to write character data' };
-    }
-
-    return { ok: true };
-}
-
-/**
- * Handle a POST request to edit character properties.
- *
- * Operates in two modes depending on the request body:
- *
- * **Single mode** (default behavior) — when `avatar` (string) is present:
- *   Merges the request body with the selected character and validates the
- *   result against TavernCard V2 specification.
- *
- * **Bulk mode** — when `avatars` (array) is present:
- *   Applies the same merge to multiple characters in parallel. Supports:
- *   - An explicit list of avatars, or all characters when the array is empty
- *   - An optional server-side `filter` so only characters where a given
- *     JSON path exists and is non-null are updated
- *
- * In both modes, any value equal to the sentinel `__@@UNSET@@__` will cause
- * that key to be **deleted** from the character card instead of being set.
- *
- * @param {import("express").Request} request - The HTTP request object
- * @param {import("express").Response} response - The HTTP response object
- * @returns {void}
- */
-router.post('/merge-attributes', getFileNameValidationFunction('avatar'), async function (request, response) {
-    try {
-        // ── Bulk mode: avatars array is present ──────────────────
-        if (Array.isArray(request.body.avatars)) {
-            const { avatars, data, filter } = request.body;
-
-            if (!_.isPlainObject(data)) {
-                return response.status(400).send({ message: 'No valid update data provided.' });
-            }
-
-            // Determine which avatar files to process
-            let targetAvatars;
-            if (avatars.length > 0) {
-                for (const avatar of avatars) {
-                    if (typeof avatar !== 'string' || forbiddenRegExp.test(avatar) || path.extname(avatar).toLowerCase() !== '.png') {
-                        return response.status(400).send({ message: `Invalid avatar filename: ${avatar}` });
-                    }
-                }
-                targetAvatars = avatars;
-            } else {
-                // Empty array → all characters: directory scan ∪ canonical rows
-                // (projection 'off' may leave live characters fileless).
-                const files = fs.readdirSync(request.user.directories.characters);
-                const fileAvatars = files.filter(file => path.extname(file).toLowerCase() === '.png');
-                targetAvatars = [...new Set([
-                    ...fileAvatars,
-                    ...listCanonicalAvatarFilenamesSafe(request.user.profile?.handle ?? null, request.user.directories),
-                ])];
-            }
-
-            const updated = [];
-            const skipped = [];
-            const failed = [];
-
-            /**
-             * Process a single character in bulk: read, filter, merge, validate, write.
-             * @param {string} avatar Avatar filename
-             */
-            const processOne = async (avatar) => {
-                const avatarPath = path.join(request.user.directories.characters, avatar);
-
-                try {
-                    /** @type {(character: object) => boolean} */
-                    let shouldSkip = () => false;
-
-                    // Apply optional server-side filter before updating the card
-                    if (filter && typeof filter.path === 'string') {
-                        shouldSkip = (character) => {
-                            const value = _.get(character, filter.path);
-                            return value === undefined;
-                        };
-                    }
-
-                    const result = await mergeCharacterUpdate(avatarPath, avatar, data, request, shouldSkip);
-                    if (result.ok) {
-                        updated.push(avatar);
-                    } else if (result.skipped) {
-                        skipped.push(avatar);
-                    } else {
-                        console.warn(`Bulk merge failed for ${avatar}:`, result.error);
-                        failed.push(avatar);
-                    }
-                } catch (error) {
-                    console.error(`Bulk merge failed for ${avatar}:`, error);
-                    failed.push(avatar);
-                }
-            };
-
-            // Process in parallel with a concurrency limit
-            for (let i = 0; i < targetAvatars.length; i += BULK_MERGE_CONCURRENCY) {
-                const batch = targetAvatars.slice(i, i + BULK_MERGE_CONCURRENCY);
-                await Promise.allSettled(batch.map(processOne));
-            }
-
-            return response.send({ updated, skipped, failed });
-        }
-
-        // ── Single mode (default behavior) ───────────────────────
-        const update = request.body;
-        const avatarPath = path.join(request.user.directories.characters, update.avatar);
-
-        const result = await mergeCharacterUpdate(avatarPath, update.avatar, update, request);
-        if (result.ok) {
-            response.sendStatus(200);
-        } else {
-            console.warn(result.error);
-            response.status(400).send({ message: `Validation failed for ${update.avatar}`, error: result.error });
-        }
-    } catch (exception) {
-        response.status(500).send({ message: 'Unexpected error while saving character.', error: exception.toString() });
-    }
-});
-
-router.post('/text-replace/preview', validateAvatarUrlMiddleware, async function (request, response) {
-    try {
-        const result = await runCharacterTextReplace({
-            request,
-            apply: false,
-            dependencies: {
-                getCanonicalCharacterCardJson: getCanonicalCharacterCardJsonSafe,
-                getCharacterWriteDependencies: () => createCharacterWriteDependencies({ bustCache: cacheBuster.bust.bind(cacheBuster) }),
-            },
-        });
-        if (!result.ok) {
-            return response.status(result.status ?? 500).json(result);
-        }
-        return response.json(result);
-    } catch (exception) {
-        console.error('Text replace preview error:', exception);
-        return response.status(500).send({ error: 'Text replace preview failed.' });
-    }
-});
-
-router.post('/text-replace/apply', validateAvatarUrlMiddleware, coordinateReplaceIntent(async function (request, response) {
-    try {
-        const result = await runCharacterTextReplace({
-            request,
-            apply: true,
-            dependencies: {
-                getCanonicalCharacterCardJson: getCanonicalCharacterCardJsonSafe,
-                getCharacterWriteDependencies: () => createCharacterWriteDependencies({ bustCache: cacheBuster.bust.bind(cacheBuster) }),
-            },
-        });
-        if (!result.ok) {
-            return response.status(result.status ?? 500).json(result);
-        }
-        return response.json(result);
-    } catch (exception) {
-        console.error('Text replace apply error:', exception);
-        return response.status(500).send({ error: 'Text replace apply failed.' });
-    }
-}));
-
-router.post('/delete-preflight', async function (request, response) {
-    try {
-        const avatars = request.body?.avatars;
-        if (!Array.isArray(avatars) || avatars.length === 0) {
-            return response.send({ worldInfos: [] });
-        }
-
-        if (avatars.length > DELETE_PREFLIGHT_AVATAR_LIMIT) {
-            return response.status(400).send({ error: 'Too many avatars requested.' });
-        }
-
-        const canonicalBindings = await getCanonicalWorldBindingScanState(request);
-        if (!canonicalBindings.ok) {
-            return response.status(503).send({ error: 'canonical_storage_unavailable' });
-        }
-        const worldNameToAvatars = new Map();
-        const { worldNameToCharacters, avatarToWorldName } = scanCanonicalCharacterWorldBindings(canonicalBindings.db);
-
-        for (const avatar of avatars) {
-            const safeName = sanitize(avatar);
-            if (!safeName || safeName !== avatar) continue;
-
-            const worldName = avatarToWorldName.get(avatar);
-            if (!worldName) continue;
-
-            if (!worldNameToAvatars.has(worldName)) {
-                worldNameToAvatars.set(worldName, []);
-            }
-            worldNameToAvatars.get(worldName).push(avatar);
-        }
-
-        if (worldNameToAvatars.size === 0) {
-            return response.send({ worldInfos: [] });
-        }
-
-        const worldInfos = [];
-
-        for (const [worldName, deleteCandidateAvatars] of worldNameToAvatars) {
-            const book = getCanonicalWorldInfoBook(canonicalBindings.db, normalizeCanonicalWorldInfoName(worldName));
-            if (!book) continue;
-            const entryCount = book?.entries ? Object.keys(book.entries).length : 0;
-            const boundCharacters = worldNameToCharacters.get(worldName) ?? [];
-
-            worldInfos.push({
-                name: worldName,
-                entryCount,
-                boundCharacters,
-                deleteCandidateAvatars,
-            });
-        }
-
-        return response.send({ worldInfos });
-    } catch (error) {
-        console.error('Delete preflight error:', error);
-        return response.status(500).send({ error: 'Failed to gather world info metadata.' });
-    }
-});
-
-router.post('/delete', validateAvatarUrlMiddleware, async function (request, response) {
-    if (!request.body || !request.body.avatar_url) {
-        return response.sendStatus(400);
-    }
-
-    if (request.body.avatar_url !== sanitize(request.body.avatar_url)) {
-        console.error('Malicious filename prevented');
-        return response.sendStatus(403);
-    }
-
-    const dir_name = (request.body.avatar_url.replace('.png', ''));
-    if (!dir_name.length) {
-        console.error('Malicious dirname prevented');
-        return response.sendStatus(403);
-    }
-
-    try {
-        const result = await deleteCharacterCard({
-            request,
-            avatarName: request.body.avatar_url,
-            deleteChats: request.body.delete_chats == true,
-            dependencies: createCharacterWriteDependencies(),
-        });
-
-        if (result.reason === 'missing_avatar') {
-            return response.sendStatus(400);
-        }
-
-        if (!result.ok) {
-            return response.status(500).send(result.message);
-        }
-    } catch (error) {
-        console.error(error);
-        return response.sendStatus(500);
-    }
-
-    return response.sendStatus(200);
-});
-
-/**
- * HTTP POST endpoint for the "/api/characters/all" route.
- *
- * This endpoint is responsible for reading character files from the `charactersPath` directory,
- * parsing character data, calculating stats for each character and responding with the data.
- * Stats are calculated only on the first run, on subsequent runs the stats are fetched from
- * the `charStats` variable.
- * The stats are calculated by the `calculateStats` function.
- * The characters are processed by the `processCharacter` function.
- *
- * @param  {import("express").Request} request The HTTP request object.
- * @param  {import("express").Response} response The HTTP response object.
- * @return {void}
- */
-router.post('/all', async function (request, response) {
-    const startedAt = performance.now();
-    try {
-        const payload = await readCharacterListPayload({
-            handle: request.user.profile?.handle ?? null,
-            directories: request.user.directories,
-            shallow: useShallowCharacters,
-            dependencies: createCharacterReadDependencies(),
-        });
-
-        if (payload.canonicalUnavailable) return sendCanonicalReadUnavailable(response, payload.canonicalUnavailable);
-        applyInteractionPerfHeaders(response, payload.interactionPath, startedAt, request.user.directories);
-        return response.send(payload.result.data);
-    } catch (err) {
-        const reason = canonicalReadErrorReason(err);
-        if (reason !== null) return sendCanonicalReadUnavailable(response, reason);
-        console.error(err);
-        const isRangeError = err instanceof RangeError;
-        applyInteractionPerfHeaders(response, 'characters_all:error', startedAt, request.user?.directories);
-        response.status(500).send({ overflow: isRangeError, error: true });
-    }
-});
-
-router.post('/list', async function (request, response) {
-    await sendCharacterListResponse(request, response);
-});
-
-router.post('/get', validateAvatarUrlMiddleware, async function (request, response) {
-    const startedAt = performance.now();
-    try {
-        if (!request.body) return response.sendStatus(400);
-        const item = request.body.avatar_url;
-
-        const payload = await readCharacterFullPayload({
-            handle: request.user.profile?.handle ?? null,
-            directories: request.user.directories,
-            avatarUrl: item,
-            dependencies: createCharacterReadDependencies(),
-        });
-
-        if (payload.canonicalUnavailable) return sendCanonicalReadUnavailable(response, payload.canonicalUnavailable);
-        if (payload.status === 'not_found') {
-            return response.sendStatus(404);
-        }
-
-        applyInteractionPerfHeaders(response, payload.interactionPath, startedAt, request.user.directories);
-        return response.send(payload.result.data);
-    } catch (err) {
-        const reason = canonicalReadErrorReason(err);
-        if (reason !== null) return sendCanonicalReadUnavailable(response, reason);
-        console.error(err);
-        applyInteractionPerfHeaders(response, 'characters_get:error', startedAt, request.user?.directories);
-        response.sendStatus(500);
-    }
-});
-
-router.post('/chats', validateAvatarUrlMiddleware, async function (request, response) {
-    try {
-        if (!request.body) return response.sendStatus(400);
-
-        const characterDirectory = (request.body.avatar_url).replace('.png', '');
-
-        // Canonical chat sessions are the listing authority; JSONL files are
-        // export surfaces and never read back at runtime.
-        const canonicalChats = await listCanonicalCharacterChatsSafe(request, characterDirectory);
-        if (canonicalChats === null) {
-            return response.send({ error: true });
-        }
-        if (request.body.simple) {
-            return response.send(canonicalChats.map(chat => ({ file_name: chat.file_name, file_id: chat.file_id })));
-        }
-        return response.send(canonicalChats);
-    } catch (error) {
-        console.error(error);
-        return response.send({ error: true });
-    }
-});
+router.post('/all', readHandlers.all);
+router.post('/list', readHandlers.list);
+router.post('/get', validateAvatarUrlMiddleware, readHandlers.get);
+router.post('/chats', validateAvatarUrlMiddleware, readHandlers.chats);
 
 /**
  * Gets the name for the uploaded PNG file.
@@ -2166,16 +1604,6 @@ function getPngName(file, directories) {
     { nameBuilder: (base, i) => i === 0 ? base : `${base}${i}`, startIndex: 0, maxTries: 10000 }) ?? file;
 }
 
-/**
- * Gets the preserved name for the uploaded file if the request is valid.
- * @param {import("express").Request} request - Express request object
- * @returns {string | undefined} - The preserved name if the request is valid, otherwise undefined
- */
-function getPreservedName(request) {
-    return typeof request.body.preserved_name === 'string' && request.body.preserved_name.length > 0
-        ? path.parse(request.body.preserved_name).name
-        : undefined;
-}
 
 /**
  * @param {object} options
@@ -2220,159 +1648,11 @@ async function persistImportedCharacter({ request, fileName, characterData, sour
     };
 }
 
-router.post('/import', async function (request, response) {
-    if (!request.body || !request.file) return response.sendStatus(400);
+router.post('/import', createCharacterImportHandler(importCharacterUpload));
 
-    const uploadPath = path.join(request.file.destination, request.file.filename);
-    const format = request.body.file_type;
-    const preservedFileName = getPreservedName(request);
-    const removeUploadedFile = () => {
-        if (fs.existsSync(uploadPath)) {
-            fs.unlinkSync(uploadPath);
-        }
-    };
-
-    try {
-        const result = await importCharacterUpload({
-            uploadPath,
-            format,
-            preservedFileName,
-            request,
-            response,
-        });
-
-        if (!result.ok) {
-            console.warn('Failed to import character');
-            removeUploadedFile();
-            return response.sendStatus(400);
-        }
-
-        response.send({ file_name: result.fileName });
-    } catch (err) {
-        console.error(err);
-        try {
-            removeUploadedFile();
-        } catch (cleanupError) {
-            console.warn('Failed to remove uploaded character import file:', cleanupError);
-        }
-        response.status(400).send({ error: true });
-    }
+const transferHandlers = createCharacterTransferHandlers({
+    canonicalCharacterExistsSafe, listCanonicalAvatarFilenamesSafe, getCanonicalCharacterCardJsonSafe,
+    getCharacterAvatarBlobContentsSafe, createCharacterWriteDependencies,
 });
-
-router.post('/duplicate', validateAvatarUrlMiddleware, async function (request, response) {
-    try {
-        if (!request.body.avatar_url) {
-            console.warn('avatar URL not found in request body');
-            console.debug(request.body);
-            return response.sendStatus(400);
-        }
-        const filename = path.join(request.user.directories.characters, sanitize(request.body.avatar_url));
-        const canonicalExists = await canonicalCharacterExistsSafe(request.user.profile?.handle ?? null, request.user.directories, request.body.avatar_url);
-        if (!canonicalExists) {
-            console.error('character for dupe not found', filename);
-            return response.sendStatus(404);
-        }
-        let suffix = 1;
-        let newFilename = filename;
-
-        // If filename ends with a _number, increment the number
-        const nameParts = path.basename(filename, path.extname(filename)).split('_');
-        const lastPart = nameParts[nameParts.length - 1];
-
-        let baseName;
-
-        if (!isNaN(Number(lastPart)) && nameParts.length > 1) {
-            suffix = parseInt(lastPart) + 1;
-            baseName = nameParts.slice(0, -1).join('_'); // construct baseName without suffix
-        } else {
-            baseName = nameParts.join('_'); // original filename is completely the baseName
-        }
-
-        // Uniqueness spans projected PNGs and canonical rows.
-        const canonicalNames = listCanonicalAvatarFilenamesSafe(request.user.profile?.handle ?? null, request.user.directories);
-        newFilename = path.join(request.user.directories.characters, `${baseName}_${suffix}${path.extname(filename)}`);
-
-        while (fs.existsSync(newFilename) || canonicalNames.has(path.basename(newFilename))) {
-            let suffixStr = '_' + suffix;
-            newFilename = path.join(request.user.directories.characters, `${baseName}${suffixStr}${path.extname(filename)}`);
-            suffix++;
-        }
-
-        const rawCharacterData = await getCanonicalCharacterCardJsonSafe(request.user.profile?.handle ?? null, request.user.directories, request.body.avatar_url);
-        if (rawCharacterData == null) {
-            throw new Error(`Failed to read character file for duplicate: ${filename}`);
-        }
-
-        // The canonical avatar blob is the image source (the projected PNG is
-        // an export surface and may be absent or stale).
-        const sourceImage = (await getCharacterAvatarBlobContentsSafe(request.user.directories, request.body.avatar_url))?.contents ?? null;
-
-        const duplicateInternalName = path.parse(newFilename).name;
-        const result = await createCharacterCard({
-            request,
-            internalName: duplicateInternalName,
-            characterData: rawCharacterData,
-            sourceImage: sourceImage ?? undefined,
-            ensureChatsDirectory: false,
-            dependencies: createCharacterWriteDependencies(),
-        });
-
-        if (!result.ok) {
-            return response.status(500).send(result.message);
-        }
-
-        console.info(`${filename} was copied to ${newFilename}`);
-        response.send({ path: result.avatarName });
-    } catch (error) {
-        console.error(error);
-        return response.send({ error: true });
-    }
-});
-
-router.post('/export', validateAvatarUrlMiddleware, async function (request, response) {
-    try {
-        if (!request.body.format || !request.body.avatar_url) {
-            return response.sendStatus(400);
-        }
-
-        const filename = path.join(request.user.directories.characters, sanitize(request.body.avatar_url));
-        const handle = request.user.profile?.handle ?? null;
-
-        // Canonical card_json + avatar blob are the authority; a projected
-        // PNG file is only an export artifact and is never read back.
-        const canonicalJson = await getCanonicalCharacterCardJsonSafe(handle, request.user.directories, request.body.avatar_url);
-        if (canonicalJson === null) {
-            return response.sendStatus(404);
-        }
-
-        switch (request.body.format) {
-            case 'png': {
-                const blob = await getCharacterAvatarBlobContentsSafe(request.user.directories, request.body.avatar_url);
-                if (!blob?.contents) {
-                    return response.sendStatus(404);
-                }
-                const mutatedData = mutateJsonString(String(canonicalJson), unsetPrivateFields);
-                const mutatedBuffer = write(blob.contents, mutatedData);
-                const contentType = mime.lookup(filename) || 'image/png';
-                response.setHeader('Content-Type', contentType);
-                response.setHeader('Content-Disposition', `attachment; filename="${encodeURI(path.basename(filename))}"`);
-                return response.send(mutatedBuffer);
-            }
-            case 'json': {
-                try {
-                    const json = canonicalJson;
-                    const jsonObject = getCharaCardV2(JSON.parse(json), request.user.directories);
-                    unsetPrivateFields(jsonObject);
-                    return response.type('json').send(JSON.stringify(jsonObject, null, 4));
-                } catch {
-                    return response.sendStatus(400);
-                }
-            }
-        }
-
-        return response.sendStatus(400);
-    } catch (err) {
-        console.error('Character export failed', err);
-        response.sendStatus(500);
-    }
-});
+router.post('/duplicate', validateAvatarUrlMiddleware, transferHandlers.duplicate);
+router.post('/export', validateAvatarUrlMiddleware, transferHandlers.exportCharacter);
