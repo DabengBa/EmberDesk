@@ -76,16 +76,16 @@ test('HTML notifications sanitize attacker markup in message and title while ret
             '<u>title</u><img src=x onerror="window.notificationAttack++">',
             { escapeHtml: false, timeOut: 0, tapToDismiss: false },
         );
-        const button = toast[0].querySelector('button');
+        const button = toast.querySelector('button');
         let clicked = 0;
         button?.addEventListener('click', () => clicked++);
         button?.click();
         await new Promise(resolve => setTimeout(resolve, 250));
         const result = {
             attack: window.notificationAttack,
-            dangerous: toast[0].querySelectorAll('[onerror], [onload], [href^="javascript:"]').length,
-            bold: toast[0].querySelector('.toast-message b')?.textContent,
-            title: toast[0].querySelector('.toast-title u')?.textContent,
+            dangerous: toast.querySelectorAll('[onerror], [onload], [href^="javascript:"]').length,
+            bold: toast.querySelector('.toast-message b')?.textContent,
+            title: toast.querySelector('.toast-title u')?.textContent,
             button: button?.getAttribute('aria-label'), clicked,
         };
         notifications.remove();
@@ -101,16 +101,19 @@ test('the application uses the native notification singleton and preserves conte
         const shared = window.toastr === notifications;
         notifications.clear();
         const safe = notifications.info('<img src=x onerror="window.toastXss=1">', '<b>title</b>', { timeOut: 0 });
-        const escaped = safe.find('.toast-message img').length === 0 && safe.find('.toast-message').text().includes('<img');
+        const escaped = !safe.querySelector('.toast-message img') && safe.querySelector('.toast-message').textContent.includes('<img');
         const html = notifications.success('<b>trusted</b>', '', { timeOut: 0, escapeHtml: false });
-        const trusted = html.find('.toast-message b').text();
-        html.find('.toast-message b').text('updated').attr('data-status', 'done').css('color', 'red');
-        const updated = html.find('[data-status=done]').text();
+        const bold = html.querySelector('.toast-message b');
+        const trusted = bold.textContent;
+        bold.textContent = 'updated';
+        bold.setAttribute('data-status', 'done');
+        bold.style.color = 'red';
+        const updated = html.querySelector('[data-status=done]').textContent;
         let clicked = 0;
         const button = document.createElement('button');
         button.textContent = 'original listener';
         button.addEventListener('click', () => clicked++);
-        const node = notifications.info(window.jQuery(button), '', { timeOut: 0, extendedTimeOut: 0, tapToDismiss: false });
+        const node = notifications.info(button, '', { timeOut: 0, extendedTimeOut: 0, tapToDismiss: false });
         button.click();
         const connected = button.isConnected;
         notifications.clear(node, { force: true });
@@ -171,7 +174,7 @@ test('persistent notifications expose the shared container and publish click lif
         });
         return {
             sameBridge: window.emberDeskNotifications === notifications,
-            inContainer: notifications.getContainer({}, false).find(toast).length === 1,
+            inContainer: notifications.getContainer({}, false).contains(toast),
         };
     });
     expect(initial).toEqual({ sameBridge: true, inContainer: true });
@@ -224,7 +227,7 @@ test('the configured fades visibly animate and lifecycle callbacks follow the an
             timeOut: 0,
             onShown: () => { shownAt = performance.now() - start; events.push('shown'); },
             onHidden: () => { hiddenAt = performance.now(); events.push('onHidden'); },
-        })[0];
+        });
         const sampleAfter = async ms => {
             const end = performance.now() + ms;
             while (performance.now() < end) await new Promise(requestAnimationFrame);

@@ -150,25 +150,11 @@ describe('request context runtime contract', () => {
         await expect(module.loadCsrfToken()).rejects.toThrow('csrf unavailable');
     });
 
-    test('installs a jQuery prefilter that injects the current token', async () => {
+    test('provides the current token for multipart requests without setting a content type', async () => {
         const module = await importRequestContextModule();
-        const prefilters = [];
-        globalThis.$ = {
-            ajaxPrefilter: jest.fn(callback => prefilters.push(callback)),
-        };
-
-        module.installAjaxCsrfPrefilter();
-
-        expect(globalThis.$.ajaxPrefilter).toHaveBeenCalledTimes(1);
-        const xhr = { setRequestHeader: jest.fn() };
-        prefilters[0]({}, {}, xhr);
-        expect(xhr.setRequestHeader).toHaveBeenCalledWith('X-CSRF-Token', undefined);
-
-        globalThis.fetch = jest.fn(async () => ({ json: async () => ({ token: 'loaded-after-install' }) }));
+        globalThis.fetch = jest.fn(async () => ({ json: async () => ({ token: 'loaded-token' }) }));
         await module.loadCsrfToken();
-        prefilters[0]({}, {}, xhr);
-        expect(xhr.setRequestHeader).toHaveBeenLastCalledWith('X-CSRF-Token', 'loaded-after-install');
-        expect(module.getRequestHeaders()['X-CSRF-Token']).toBe('loaded-after-install');
+        expect(module.getRequestHeaders({ omitContentType: true })).toEqual({ 'X-CSRF-Token': 'loaded-token' });
     });
 });
 
@@ -280,7 +266,7 @@ describe('workspace bootstrap contract', () => {
         const source = read('public/script.js');
 
         expect(source).toContain('async function bootstrapWorkspace()');
-        expect(source).toContain('await bindLegacyShellHandlers();');
+        expect(source).toContain("document.addEventListener('DOMContentLoaded', bindLegacyShellHandlers, { once: true })");
         expect(read('public/scripts/dom-handlers.js')).toContain('await bootstrapWorkspace();');
         expect(source).toContain('export { getRequestHeaders } from \'./scripts/request-context.js\';');
         expect(source).toContain('installPublicBrowserApi({ libs, getContext });');

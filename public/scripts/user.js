@@ -67,10 +67,16 @@ async function extendUserSession() {
     }
 }
 
-jQuery(() => {
+function startSessionTimer() {
     setInterval(async () => {
         if (currentUser) {
             await extendUserSession();
         }
     }, SESSION_EXTEND_INTERVAL);
-});
+}
+
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => setTimeout(startSessionTimer), { once: true });
+} else {
+    setTimeout(startSessionTimer);
+}

@@ -92,7 +92,7 @@ async function installGenerateStub(page) {
 
 /**
  * Stubs the generate endpoint for reply-pipeline turns: each round answers with
- * the current logical step via submit_story; requests without a step
+ * the current step's named tool; requests without a step
  * prompt (or with every step already called) get a plain-text reply.
  */
 async function installPipelineStub(page, { steps, closingText = 'PIPELINE_FINAL_REPLY', emptyFinal = false }) {
@@ -110,7 +110,7 @@ async function installPipelineStub(page, { steps, closingText = 'PIPELINE_FINAL_
                     tool_calls: [{
                         id: `call_e2e_${step}`,
                         type: 'function',
-                        function: { name: 'submit_story', arguments: JSON.stringify(args) },
+                        function: { name: step, arguments: JSON.stringify(args) },
                     }],
                 },
                 finish_reason: 'tool_calls',
@@ -161,7 +161,7 @@ async function installPipelineStub(page, { steps, closingText = 'PIPELINE_FINAL_
 test.describe.configure({ mode: 'serial' });
 
 test.describe('tool bindings', () => {
-    test('sanitized respond and copy chips handle native and synthetic clicks once', async ({ page }) => {
+    test('sanitized respond and copy chips handle user and programmatic native clicks once', async ({ page }) => {
         await testSetup.awaitST({ page });
         await expect(page.locator('#RegexPanel')).toHaveAttribute('data-tool-bindings-init', 'true');
         await page.evaluate(async () => {
@@ -188,10 +188,10 @@ test.describe('tool bindings', () => {
         await respond.click();
         await expect(page.locator('#send_textarea')).toHaveValue('Pick the path');
         await page.locator('#send_textarea').fill('');
-        await page.evaluate(() => window.$('#tool-chip-test-host [data-respond-option]').trigger('click'));
+        await page.evaluate(() => document.querySelector('#tool-chip-test-host [data-respond-option]').click());
         await expect(page.locator('#send_textarea')).toHaveValue('Pick the path');
         await copy.click();
-        await page.evaluate(() => window.$('#tool-chip-test-host [data-copy-option]').trigger('click'));
+        await page.evaluate(() => document.querySelector('#tool-chip-test-host [data-copy-option]').click());
         await expect.poll(() => page.evaluate(() => window.__toolChipCopies)).toEqual(['Copy this', 'Copy this']);
     });
 
@@ -675,10 +675,11 @@ test.describe('tool bindings', () => {
         expect(turnRequests[0].messages.some(message => String(message?.content ?? '').includes('[Reply pipeline 1/3]') && String(message?.content ?? '').includes('analyze'))).toBe(true);
         expect(turnRequests[1].messages.some(message => String(message?.content ?? '').includes('[Reply pipeline 2/3]') && String(message?.content ?? '').includes('review'))).toBe(true);
         expect(turnRequests[2].messages.some(message => String(message?.content ?? '').includes('[Reply pipeline 3/3]') && String(message?.content ?? '').includes('respond'))).toBe(true);
-        expect(turnRequests[2].tools?.some(tool => tool?.function?.name === 'submit_story')).toBe(true);
-        // Tools and all previously sent messages are an immutable run prefix.
+        // Each round forces its own named tool; previous messages remain immutable.
         expect(turnRequests.map(request => (request.tools ?? []).map(tool => tool?.function?.name)))
-            .toEqual(Array(3).fill(['submit_story']));
+            .toEqual([['analyze'], ['review'], ['respond']]);
+        expect(turnRequests.map(request => request.tool_choice?.function?.name))
+            .toEqual(['analyze', 'review', 'respond']);
         for (let index = 1; index < turnRequests.length; index++) {
             const previous = turnRequests[index - 1].messages;
             expect(turnRequests[index].messages.slice(0, previous.length)).toEqual(previous);
@@ -877,7 +878,10 @@ test.describe('tool bindings', () => {
         expect(turnRequests.map(request => request.model)).toEqual(['gpt-4.1-mini', 'gpt-4.1', 'gpt-4o-mini']);
         expect(await page.evaluate(() => window.SillyTavern.getContext().chat.findLast(message => message.mes === 'FALLBACK_REPLY_TEXT')?.extra?.model)).toBe('gpt-4o-mini');
         const fallbackRequest = turnRequests[2];
-        expect(fallbackRequest.tools).toEqual(turnRequests[0].tools);
+        expect(turnRequests.slice(0, 2).map(request => request.tools.map(tool => tool.function.name)))
+            .toEqual([['analyze'], ['respond']]);
+        expect(fallbackRequest.tools.map(tool => tool.function.name)).toEqual(['submit_story']);
+        expect(fallbackRequest.tools[0].function.parameters).toEqual(turnRequests[0].tools[0].function.parameters);
         expect(fallbackRequest.tool_choice).toBe('none');
         expect(fallbackRequest.messages.some(message => String(message?.content ?? '').includes('Do not call any tools'))).toBe(true);
         // The fallback prompt replaces the step prompt — a numbered

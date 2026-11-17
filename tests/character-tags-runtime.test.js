@@ -199,6 +199,7 @@ test('plain tag list appends and removes a rendered tag without jQuery', async (
             const isolated = await import('../public/scripts/tags.js');
             const host = new Node(), remove = jest.fn(() => true);
             isolated.appendTagToList(host, { id: 't', name: 'Tag', color: 'red', color2: 'white' }, { removable: true, removeAction: remove });
+
             expect(host.children).toHaveLength(1);
             const node = host.children[0];
             expect(node.id).toBe('t'); expect(node.parts['.tag_name'].textContent).toBe('Tag');
@@ -213,6 +214,65 @@ test('plain tag list appends and removes a rendered tag without jQuery', async (
             expect(host.children).toHaveLength(1); expect(other.children).toHaveLength(1);
             other.children[0].parts['.tag_remove'].dispatchEvent(new Event('click'));
             expect(other.children).toHaveLength(1);
+        });
+    } finally { globalThis.document = original.document; globalThis.$ = original.$; }
+});
+
+test('interactive tag invokes its action and renders in the native list without jQuery', async () => {
+    const original = { document: globalThis.document, $: globalThis.$ };
+    class Node extends EventTarget {
+        constructor() { super(); this.style = {}; this.children = []; this.classList = { add: jest.fn() }; }
+        setAttribute() {}
+        getAttribute(name) { return name === 'id' ? this.id : null; }
+        querySelector(selector) { return this.parts?.[selector] ?? null; }
+        querySelectorAll() { return this.children; }
+        append(node) { this.children.push(node); }
+    }
+    const template = { cloneNode() { const node = new Node(); node.parts = { '.tag_name': new Node(), '.tag_remove': new Node() }; return node; } };
+    globalThis.document = { querySelector: selector => selector === '#tag_template .tag' ? template : null };
+    globalThis.$ = () => { throw new Error('interactive tag must not use jQuery'); };
+    try {
+        await jest.isolateModulesAsync(async () => {
+            const isolated = await import('../public/scripts/tags.js');
+            const context = await import('../public/scripts/character-tags-shell-context.js');
+            const helper = {};
+            context.registerCharacterTagsShellContext({ state: { entitiesFilter: helper } });
+
+            const host = new Node(), action = jest.fn();
+            isolated.appendTagToList(host, { id: 'a', name: 'Action' }, { action });
+            expect(host.children).toHaveLength(1);
+            const event = new Event('click');
+            host.children[0].dispatchEvent(event);
+            expect(action).toHaveBeenCalledWith(helper, event);
+        });
+    } finally { globalThis.document = original.document; globalThis.$ = original.$; }
+});
+
+test('folder rendering preserves identity, colors, counters and avatar target without jQuery', async () => {
+    const original = { document: globalThis.document, $: globalThis.$ };
+    class Node {
+        constructor() { this.style = {}; this.attrs = {}; this.classList = { add: jest.fn() }; }
+        setAttribute(key, value) { this.attrs[key] = value; }
+        querySelector(key) { return this.parts[key]; }
+        querySelectorAll(key) { return [this.parts[key]]; }
+    }
+    const folder = new Node();
+    folder.parts = Object.fromEntries(['.avatar', '.ch_name', '.bogus_folder_hidden_counter', '.bogus_folder_counter', '.bogus_folder_icon', '.bogus_folder_avatars_block'].map(key => [key, new Node()]));
+    globalThis.document = { querySelector: selector => selector === '#bogus_folder_template .bogus_folder_select' ? { cloneNode: () => folder } : null };
+    globalThis.$ = () => { throw new Error('folder must not use jQuery'); };
+    try {
+        await jest.isolateModulesAsync(async () => {
+            const isolated = await import('../public/scripts/tags.js');
+            const context = await import('../public/scripts/character-tags-shell-context.js');
+            const build = jest.fn();
+            context.registerCharacterTagsShellContext({ buildAvatarList: build });
+            const entities = [{ id: 1 }];
+            expect(isolated.getTagBlock({ id: 'a', name: 'Folder', folder_type: 'OPEN', color: 'red' }, entities, 2)).toBe(folder);
+            expect(folder.id).toBe('BogusFoldera');
+            expect(folder.attrs.tagid).toBe('a');
+            expect(folder.parts['.avatar'].style.backgroundColor).toBe('red');
+            expect(folder.parts['.bogus_folder_hidden_counter'].textContent).toBe('2 hidden');
+            expect(build).toHaveBeenCalledWith([folder.parts['.bogus_folder_avatars_block']], entities);
         });
     } finally { globalThis.document = original.document; globalThis.$ = original.$; }
 });
@@ -248,9 +308,13 @@ test('assigning a tag reprints a native list without jQuery', async () => {
             const legacyHost = new Node();
             const wrapper = { jquery: '3.5.1', 0: legacyHost, length: 1, empty: jest.fn(() => legacyHost.replaceChildren()), hasClass: jest.fn(() => false) };
             isolated.printTagList(wrapper, { tags: [tag], forEntityOrKey: 'a.png', sort: false });
-            expect(wrapper.empty).toHaveBeenCalledTimes(1);
-            expect(wrapper.hasClass).toHaveBeenCalledWith('tags-expanded');
+            expect(wrapper.empty).not.toHaveBeenCalled();
+            expect(wrapper.hasClass).not.toHaveBeenCalled();
             expect(legacyHost.children[0].id).toBe('t');
+            globalThis.document.querySelectorAll = () => [host, legacyHost];
+            isolated.printTagList('.tags', { tags: [tag], forEntityOrKey: 'a.png', sort: false });
+            expect(host.children).toHaveLength(1);
+            expect(legacyHost.children).toHaveLength(1);
         });
     } finally { globalThis.document = original.document; globalThis.$ = original.$; }
 });
@@ -577,6 +641,46 @@ test('invalid tag list selectors fail natively without invoking jQuery', () => {
     } finally { globalThis.document = original.document; globalThis.$ = original.$; }
 });
 
+test('native filter tag cycles selection and exclusion and updates the model', async () => {
+    const original = { document: globalThis.document, $: globalThis.$ };
+    class Node extends EventTarget {
+        constructor() {
+            super(); this.style = {}; this.children = []; this.attrs = {};
+            const classes = new Set();
+            this.classList = { add: (...items) => items.forEach(item => classes.add(item)), toggle: (item, enabled) => enabled ? classes.add(item) : classes.delete(item), contains: item => classes.has(item) };
+        }
+        setAttribute(key, value) { this.attrs[key] = String(value); }
+        getAttribute(key) { return key === 'id' ? this.id : this.attrs[key] ?? null; }
+        querySelector(selector) { return this.parts?.[selector] ?? null; }
+        querySelectorAll(selector) {
+            if (selector === '.tag') return this.children;
+            if (selector.includes('.selected')) return this.children.filter(node => node.classList.contains('selected'));
+            if (selector.includes('.excluded')) return this.children.filter(node => node.classList.contains('excluded'));
+            return [];
+        }
+        closest() { return null; }
+        append(node) { this.children.push(node); node.parentElement = this; }
+    }
+    const template = { cloneNode() { const node = new Node(); node.parts = { '.tag_name': new Node(), '.tag_remove': new Node() }; return node; } };
+    globalThis.document = { querySelector: selector => selector === '#tag_template .tag' ? template : null };
+    globalThis.$ = () => { throw new Error('filter must not use jQuery'); };
+    try {
+        await jest.isolateModulesAsync(async () => {
+            const isolated = await import('../public/scripts/tags.js');
+            const context = await import('../public/scripts/character-tags-shell-context.js');
+            const helper = { getFilterData: () => ({ selected: [], excluded: [] }), setFilterData: jest.fn() };
+            context.registerCharacterTagsShellContext({ state: { entitiesFilter: helper, DEFAULT_PRINT_TIMEOUT: 0 }, saveSettingsDebounced: jest.fn() });
+            const tag = { id: 't', name: 'Tag' }, host = new Node();
+            isolated.loadTagsSettings({ tags: [tag], tag_map: {} });
+            isolated.appendTagToList(host, tag, { isFilter: true, isGeneralList: true });
+            host.children[0].dispatchEvent(new Event('click'));
+            expect(helper.setFilterData).toHaveBeenLastCalledWith('tag', { selected: ['t'], excluded: [] });
+            host.children[0].dispatchEvent(new Event('click'));
+            expect(helper.setFilterData).toHaveBeenLastCalledWith('tag', { selected: [], excluded: ['t'] });
+        });
+    } finally { globalThis.document = original.document; globalThis.$ = original.$; }
+});
+
 test('private legacy three-state toggler retains state transitions without an unused synthetic-click branch', () => {
     const source = fs.readFileSync(new URL('../public/scripts/tags.js', import.meta.url), 'utf8');
     const body = source.slice(source.indexOf('function toggleTagThreeState('), source.indexOf('\nfunction runTagFilters('));
@@ -584,7 +688,7 @@ test('private legacy three-state toggler retains state transitions without an un
     const FILTER_STATES = Object.fromEntries(['SELECTED', 'EXCLUDED', 'UNDEFINED'].map(key => [key, { class: key.toLowerCase() }]));
     const toggle = vm.runInNewContext(`(${body})`, { FILTER_STATES, DEFAULT_FILTER_STATE: 'UNDEFINED', console });
     const classes = new Set(); let state;
-    const element = { attr(_key, value) { if (value !== undefined) state = value; return state; }, toggleClass(name, enabled) { if (enabled) classes.add(name); else classes.delete(name); } };
+    const element = { getAttribute() { return state; }, setAttribute(_key, value) { state = value; }, classList: { toggle(name, enabled) { if (enabled) classes.add(name); else classes.delete(name); } } };
     expect(toggle(element)).toBe('SELECTED'); expect([...classes]).toEqual(['selected']);
     expect(toggle(element)).toBe('EXCLUDED'); expect([...classes]).toEqual(['excluded']);
     expect(toggle(element, { stateOverride: 'UNDEFINED' })).toBe('UNDEFINED'); expect([...classes]).toEqual(['undefined']);

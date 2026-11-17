@@ -5,6 +5,14 @@ import { expect, test } from '@playwright/test';
 // This isolated same-origin host proves the frame module itself, not the
 // production workspace's React/controller/event-bus integration.
 test('production frame module works in a parent without jQuery', async ({ page }) => {
+    await exerciseFrame(page, false);
+});
+
+test('production frame module does not copy parent jQuery', async ({ page }) => {
+    await exerciseFrame(page, true);
+});
+
+async function exerciseFrame(page, withParentJQuery) {
     const moduleSource = await readFile(new URL('../public/scripts/frontend-frame.js', import.meta.url), 'utf8');
     let moduleRequests = 0;
     await page.route('**/__u001_frame_host__', route => route.fulfill({
@@ -16,7 +24,11 @@ test('production frame module works in a parent without jQuery', async ({ page }
         return route.fulfill({ contentType: 'text/javascript', body: moduleSource });
     });
     await page.goto('/__u001_frame_host__');
-    expect(await page.evaluate(() => [typeof window.$, typeof window.jQuery])).toEqual(['undefined', 'undefined']);
+    if (withParentJQuery) {
+        await page.evaluate(() => { window.$ = window.jQuery = function parentJQuery() {}; });
+    }
+    const parentType = withParentJQuery ? 'function' : 'undefined';
+    expect(await page.evaluate(() => [typeof window.$, typeof window.jQuery])).toEqual([parentType, parentType]);
 
     const mounted = await page.evaluate(async () => {
         const frameModule = await import('/__u001_frame_module__.js');
@@ -75,7 +87,7 @@ test('production frame module works in a parent without jQuery', async ({ page }
         };
     });
     expect(bridge).toEqual({
-        globals: ['undefined', 'undefined', 'undefined', 'undefined'],
+        globals: ['undefined', 'undefined', parentType, parentType],
         frameId: 'ed-frame--stable-7--0',
         messageId: '7',
         snapshot: { frameId: 'ed-frame--stable-7--0', chatId: 'test-chat' },
@@ -121,6 +133,6 @@ test('production frame module works in a parent without jQuery', async ({ page }
         observerReleased: true,
         sourceRestored: true,
         slots: 0,
-        globals: ['undefined', 'undefined'],
+        globals: [parentType, parentType],
     });
-});
+}

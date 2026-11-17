@@ -488,14 +488,14 @@ function chooseBogusFolder(source, tagId, remove = false) {
 
 /**
  * Writes tag colors without invoking jQuery color hooks. Missing values leave the template unchanged.
- * @param {JQuery<HTMLElement>} elements
+ * @param {Iterable<HTMLElement>} elements
  * @param {Tag} tag
  */
 function applyTagColors(elements, tag) {
-    elements.each(function () {
-        if (tag.color != null) this.style.backgroundColor = tag.color;
-        if (tag.color2 != null) this.style.color = tag.color2;
-    });
+    for (const element of elements) {
+        if (tag.color != null) element.style.backgroundColor = tag.color;
+        if (tag.color2 != null) element.style.color = tag.color2;
+    }
 }
 
 /**
@@ -512,20 +512,23 @@ function getTagBlock(tag, entities, hidden = 0, isUseless = false) {
 
     const tagFolder = TAG_FOLDER_TYPES[tag.folder_type];
 
-    const template = $(FOLDER_TEMPLATE).clone();
-    template.addClass(tagFolder.class);
-    template.attr({ 'tagid': tag.id, 'id': `BogusFolder${tag.id}` });
-    const avatars = template.find('.avatar');
+    const template = FOLDER_TEMPLATE.cloneNode(true);
+    template.classList.add(...tagFolder.class.split(/\s+/).filter(Boolean));
+    template.setAttribute('tagid', tag.id);
+    template.id = `BogusFolder${tag.id}`;
+    const avatars = template.querySelectorAll('.avatar');
     applyTagColors(avatars, tag);
-    avatars.attr('title', `[Folder] ${tag.name}`);
-    template.find('.ch_name').text(tag.name).attr('title', `[Folder] ${tag.name}`);
-    template.find('.bogus_folder_hidden_counter').text(hidden > 0 ? `${hidden} hidden` : '');
-    template.find('.bogus_folder_counter').text(`${count} ` + (count != 1 ? t`characters` : t`character`));
-    template.find('.bogus_folder_icon').addClass(tagFolder.fa_icon);
-    if (isUseless) template.addClass('useless');
+    for (const avatar of avatars) avatar.setAttribute('title', `[Folder] ${tag.name}`);
+    const name = template.querySelector('.ch_name');
+    name.textContent = tag.name;
+    name.setAttribute('title', `[Folder] ${tag.name}`);
+    template.querySelector('.bogus_folder_hidden_counter').textContent = hidden > 0 ? `${hidden} hidden` : '';
+    template.querySelector('.bogus_folder_counter').textContent = `${count} ` + (count != 1 ? t`characters` : t`character`);
+    template.querySelector('.bogus_folder_icon').classList.add(...tagFolder.fa_icon.split(/\s+/).filter(Boolean));
+    if (isUseless) template.classList.add('useless');
 
     // Fill inline character images
-    requireCharacterTagsShellContext().buildAvatarList(template.find('.bogus_folder_avatars_block').toArray(), entities);
+    requireCharacterTagsShellContext().buildAvatarList(Array.from(template.querySelectorAll('.bogus_folder_avatars_block')), entities);
 
     return template;
 }
@@ -613,7 +616,7 @@ function resolveTagListElements(element) {
         return Array.from(document.querySelectorAll(element));
     }
     if (!element) return [];
-    if (element.jquery || Array.isArray(element) || (typeof element.length === 'number' && !element.nodeType && !element.querySelectorAll)) return Array.from(element);
+    if (Array.isArray(element) || (typeof element.length === 'number' && !element.nodeType && !element.querySelectorAll)) return Array.from(element);
     return [element];
 }
 
@@ -1108,8 +1111,7 @@ function newTag(tagName) {
  * @param {PrintTagListOptions} [options] - Optional parameters for printing the tag list.
  */
 function printTagList(element, { tags = undefined, addTag = undefined, forEntityOrKey = undefined, empty = true, sort = true, tagActionSelector = undefined, tagOptions = {}, inactiveTags = [] } = {}) {
-    const $element = (typeof element === 'string') ? $(element) : element;
-    const nativeElement = !$element?.jquery && typeof $element?.replaceChildren === 'function';
+    const elements = resolveTagListElements(element);
     const key = forEntityOrKey !== undefined ? getTagKeyForEntity(forEntityOrKey) : getTagKey();
     let printableTags = tags ? (typeof tags === 'function' ? tags() : tags) : getTagsList(key, sort);
 
@@ -1118,8 +1120,7 @@ function printTagList(element, { tags = undefined, addTag = undefined, forEntity
     }
 
     if (empty === 'always' || (empty && (printableTags?.length > 0 || key))) {
-        if (nativeElement) $element.replaceChildren();
-        else $element.empty();
+        for (const container of elements) container.replaceChildren();
     }
 
     if (addTag) {
@@ -1133,7 +1134,7 @@ function printTagList(element, { tags = undefined, addTag = undefined, forEntity
     const customAction = typeof tagActionSelector === 'function' ? tagActionSelector : null;
 
     // Well, lets check if the tag list was expanded. Based on either a css class, or when any expand was clicked yet, then we search whether this element id matches
-    const expanded = (nativeElement ? $element.classList.contains('tags-expanded') : $element.hasClass('tags-expanded')) || (expanded_tags_cache.length && expanded_tags_cache.indexOf(key ?? getTagKeyForEntityElement(element)) >= 0);
+    const expanded = elements.some(container => container.classList.contains('tags-expanded')) || (expanded_tags_cache.length && expanded_tags_cache.indexOf(key ?? getTagKeyForEntityElement(element)) >= 0);
 
     // We prepare some stuff. No matter which list we have, there is a maximum value of tags we are going to display
     // Constants to define tag printing limits
@@ -1167,7 +1168,7 @@ function printTagList(element, { tags = undefined, addTag = undefined, forEntity
         if (shouldPrintTag(tag) || additionalTagsPrinted++ < availableSlotsForAdditionalTags) {
             // Check if this tag is in the inactive list
             const isInactive = inactiveTags.includes(tag.id);
-            appendTagToList($element, tag, { ...tagOptions, isInactive });
+            appendTagToList(elements, tag, { ...tagOptions, isInactive });
         } else {
             tagsSkipped++;
         }
@@ -1180,17 +1181,16 @@ function printTagList(element, { tags = undefined, addTag = undefined, forEntity
 
         // Add click event
         const showHiddenTags = (_, event) => {
-            const elementKey = key ?? getTagKeyForEntityElement($element);
+            const elementKey = key ?? getTagKeyForEntityElement(elements);
             console.log(`Hidden tags shown for element ${elementKey}`);
 
             // Mark the current character as expanded. This will be kept in memory until reload
-            if (nativeElement) $element.classList.add('tags-expanded');
-            else $element.addClass('tags-expanded');
+            for (const container of elements) container.classList.add('tags-expanded');
             expanded_tags_cache.push(elementKey);
 
             // Do not bubble further, we are just expanding
             event.stopPropagation();
-            printTagList($element, { tags: tags, addTag: addTag, forEntityOrKey: forEntityOrKey, empty: empty, tagActionSelector: tagActionSelector, tagOptions: tagOptions, inactiveTags: inactiveTags });
+            printTagList(elements, { tags: tags, addTag: addTag, forEntityOrKey: forEntityOrKey, empty: empty, tagActionSelector: tagActionSelector, tagOptions: tagOptions, inactiveTags: inactiveTags });
         };
 
         // Print the placeholder object with its styling and action to show the remaining tags
@@ -1199,7 +1199,7 @@ function printTagList(element, { tags = undefined, addTag = undefined, forEntity
         // It should never be marked as a removable tag, because it's just an expander action
         /** @type {TagOptions} */
         const placeholderTagOptions = { ...tagOptions, removable: false };
-        appendTagToList($element, placeholderTag, placeholderTagOptions);
+        appendTagToList(elements, placeholderTag, placeholderTagOptions);
     }
 }
 
@@ -1215,9 +1215,8 @@ function appendTagToList(listElement, tag, { removable = false, isFilter = false
     if (!listElement) {
         return;
     }
-    // Plain tags have no filter/click bridge and can be rendered without the
-    // legacy wrapper; interactive tags still retain their existing contract.
-    if (!isFilter && !(action ?? tag.action)) {
+    const nativeAction = action ?? tag.action;
+    {
         const containers = resolveTagListElements(listElement);
         if (!skipExistsCheck && containers.some(container => Array.from(container.querySelectorAll('.tag')).some(node => node.getAttribute('id') === String(tag.id)))) return;
         for (const container of containers) {
@@ -1245,80 +1244,34 @@ function appendTagToList(listElement, tag, { removable = false, isFilter = false
                 node.classList.add('actionable');
             }
             if (isInactive) node.classList.add('tag-absent');
+            if ((isFilter || nativeAction) && isGeneralList) {
+                const helper = getFilterHelper(listElement);
+                const isFilterActionable = nativeAction && 'filter_state' in tag;
+                if (isFilter || isFilterActionable) toggleTagThreeState(node, { stateOverride: determineTagFilterState(helper, tag, isFilterActionable) });
+            }
+            if (isFilter) {
+                node.addEventListener('click', () => onTagFilterClick.call(node, listElement));
+                node.classList.add(INTERACTABLE_CONTROL_CLASS);
+            }
+            if (nativeAction) {
+                const filter = getFilterHelper(listElement);
+                node.addEventListener('click', event => nativeAction.call(node, filter, event));
+                node.classList.add('clickable-action', INTERACTABLE_CONTROL_CLASS);
+            }
             container.append(node);
         }
         return;
     }
-    if (!skipExistsCheck && $(listElement).find(`.tag[id="${tag.id}"]`).length > 0) {
-        return;
-    }
-
-    let tagElement = $(TAG_TEMPLATE).clone();
-    tagElement.attr('id', tag.id);
-
-    applyTagColors(tagElement, tag);
-
-    tagElement.find('.tag_name').text(tag.name);
-    const removeButton = tagElement.find('.tag_remove');
-    if (removable) removeButton.show(); else removeButton.hide();
-    if (removable && removeAction) {
-        tagElement.attr('custom-remove-action', String(true));
-        removeButton.on('click', () => {
-            const result = removeAction(tag);
-            if (result !== false) tagElement.remove();
-        });
-    }
-
-    if (tag.class) {
-        tagElement.addClass(tag.class);
-    }
-    if (tag.title) {
-        tagElement.attr('title', tag.title);
-    }
-    if (tag.icon) {
-        tagElement.find('.tag_name').text('').attr('title', `${translate(tag.name)} ${tag.title || ''}`.trim()).addClass(tag.icon);
-        tagElement.addClass('actionable');
-    }
-    if (isInactive) {
-        tagElement.addClass('tag-absent');
-    }
-
-    // We could have multiple ways of actions passed in. The manual arguments have precendence in front of a specified tag action
-    const clickableAction = action ?? tag.action;
-
-    // If this is a tag for a general list and its either a filter or actionable, lets mark its current state
-    if ((isFilter || clickableAction) && isGeneralList) {
-        const filterHelper = getFilterHelper($(listElement));
-        const isFilterActionable = clickableAction && 'filter_state' in tag;
-
-        if (isFilter || isFilterActionable) {
-            const filterState = determineTagFilterState(filterHelper, tag, isFilterActionable);
-            toggleTagThreeState(tagElement, { stateOverride: filterState });
-        }
-    }
-
-    if (isFilter) {
-        tagElement.on('click', () => onTagFilterClick.bind(tagElement)(listElement));
-        tagElement.addClass(INTERACTABLE_CONTROL_CLASS);
-    }
-
-    if (clickableAction) {
-        const filter = getFilterHelper($(listElement));
-        tagElement.on('click', (e) => clickableAction.bind(tagElement)(filter, e));
-        tagElement.addClass('clickable-action').addClass(INTERACTABLE_CONTROL_CLASS);
-    }
-
-    $(listElement).append(tagElement);
 }
 
 function onTagFilterClick(listElement) {
-    const tagId = $(this).attr('id');
+    const tagId = this.getAttribute('id');
     const existingTag = tags.find((tag) => tag.id === tagId);
-    const parent = $(this).parents('.tags');
+    const parent = this.closest('.tags');
 
-    let state = toggleTagThreeState($(this));
+    let state = toggleTagThreeState(this);
 
-    const filterHelper = getFilterHelper($(listElement));
+    const filterHelper = getFilterHelper(listElement);
 
     // Update the tag's filter_state for the main character list (backward compatibility)
     if (existingTag && isMainCharacterList(filterHelper)) {
@@ -1337,7 +1290,7 @@ function onTagFilterClick(listElement) {
     runTagFilters(listElement);
 
     // Focus the tag again we were at, if possible. To improve keyboard navigation
-    setTimeout(() => parent.find(`.tag[id="${tagId}"]`).trigger('focus'), requireCharacterTagsShellContext().state.DEFAULT_PRINT_TIMEOUT + 1);
+    setTimeout(() => Array.from(parent?.querySelectorAll('.tag') ?? []).find(node => node.getAttribute('id') === tagId)?.focus(), requireCharacterTagsShellContext().state.DEFAULT_PRINT_TIMEOUT + 1);
 
     updateTagFilterIndicator(listElement);
 }
@@ -1563,14 +1516,14 @@ function toggleTagThreeState(element, { stateOverride = undefined } = {}) {
 
     const overrideKey = typeof stateOverride == 'string' && states.includes(stateOverride) ? stateOverride : Object.keys(FILTER_STATES).find(key => FILTER_STATES[key] === stateOverride);
 
-    const currentStateIndex = getStateIndex(element.attr('data-toggle-state'), DEFAULT_FILTER_STATE);
+    const currentStateIndex = getStateIndex(element.getAttribute('data-toggle-state'), DEFAULT_FILTER_STATE);
     const targetStateIndex = overrideKey !== undefined ? getStateIndex(overrideKey, DEFAULT_FILTER_STATE) : (currentStateIndex + 1) % states.length;
 
-    element.attr('data-toggle-state', states[targetStateIndex]);
+    element.setAttribute('data-toggle-state', states[targetStateIndex]);
 
     // Update css class and remove all others
     states.forEach(state => {
-        element.toggleClass(FILTER_STATES[state].class, state === states[targetStateIndex]);
+        element.classList.toggle(FILTER_STATES[state].class, state === states[targetStateIndex]);
     });
 
     if (states[currentStateIndex] !== states[targetStateIndex]) {
@@ -1582,9 +1535,10 @@ function toggleTagThreeState(element, { stateOverride = undefined } = {}) {
 }
 
 function runTagFilters(listElement) {
-    const tagIds = $(listElement).find('.tag.selected:not(.actionable)').map((_, el) => $(el).attr('id')).get();
-    const excludedTagIds = $(listElement).find('.tag.excluded:not(.actionable)').map((_, el) => $(el).attr('id')).get();
-    const filterHelper = getFilterHelper($(listElement));
+    const containers = resolveTagListElements(listElement);
+    const tagIds = containers.flatMap(el => Array.from(el.querySelectorAll('.tag.selected:not(.actionable)'), tag => tag.getAttribute('id')));
+    const excludedTagIds = containers.flatMap(el => Array.from(el.querySelectorAll('.tag.excluded:not(.actionable)'), tag => tag.getAttribute('id')));
+    const filterHelper = getFilterHelper(listElement);
     filterHelper.setFilterData(FILTER_TYPES.TAG, { excluded: excludedTagIds, selected: tagIds });
 }
 
@@ -1598,10 +1552,11 @@ function printTagFilters(_type = tag_filter_type.character) {
  */
 function updateTagFilterIndicator(filterSelector) {
     const selector = filterSelector || CHARACTER_FILTER_SELECTOR;
-    const tagFilter = typeof selector === 'string' ? $(selector) : selector;
-    const showTagListButton = tagFilter.closest('.rm_tag_controls').find('.showTagList');
-    const hasActiveTags = tagFilter.find('.tag:not(.actionable)').is('.selected, .excluded');
-    showTagListButton.toggleClass('indicator', hasActiveTags);
+    const tagFilters = resolveTagListElements(selector);
+    const hasActiveTags = tagFilters.some(filter => filter.querySelector('.tag:not(.actionable).selected, .tag:not(.actionable).excluded'));
+    for (const filter of tagFilters) {
+        for (const button of filter.closest('.rm_tag_controls')?.querySelectorAll('.showTagList') ?? []) button.classList.toggle('indicator', hasActiveTags);
+    }
 }
 
 

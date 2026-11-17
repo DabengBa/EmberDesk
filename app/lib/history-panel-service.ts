@@ -173,7 +173,7 @@ export function createOptionsMenuController(ports: { show(): void; hide(): void;
         close,
         attach(button: EventTarget, documentTarget: EventTarget, inside: () => boolean) {
             const click = () => controller.toggle();
-            const outside = () => { if (visible && !inside()) close(); };
+            const outside = (event: Event) => { if (visible && !event.composedPath().includes(button) && !inside()) close(); };
             const keydown = (event: Event) => {
                 const keyEvent = event as KeyboardEvent;
                 if (keyEvent.key === 'Escape' && !keyEvent.isComposing) close(true);

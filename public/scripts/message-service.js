@@ -253,21 +253,21 @@ export function updateMessageBlock(messageId, message, { rerenderMessage = true 
         return;
     }
 
-    const chatElement = state.chatElement;
-    const root = chatElement?.jquery ? chatElement[0] : chatElement;
+    const root = state.chatElement;
     const matches = root?.querySelectorAll(`[mesid="${messageId}"]`) ?? [];
     const rows = Array.from(matches);
-    const messageElement = rows.length === 1 ? rows[0] : rows;
+
     if (rerenderMessage) {
         const text = message?.extra?.display_text ?? message.mes;
         const html = messageFormatting(text, message.name, message.is_system, message.is_user, messageId, {}, false);
         rows.forEach(row => row.querySelectorAll('.mes_text').forEach(element => { element.innerHTML = html; }));
     }
 
-    updateReasoningUI(messageElement);
-
-    addCopyToCodeBlocks(messageElement);
-    appendMediaToMessage(message, messageElement);
+    rows.forEach(messageElement => {
+        updateReasoningUI(messageElement);
+        addCopyToCodeBlocks(messageElement);
+        appendMediaToMessage(message, messageElement);
+    });
 }
 
 /**
@@ -437,7 +437,7 @@ export function getMediaIndex(mes) {
 /**
  * Appends image or file to the message element.
  * @param {ChatMessage} mes Message object
- * @param {JQuery<HTMLElement>|HTMLElement|null} messageElement Message element
+ * @param {HTMLElement|null} messageElement Message element
  * @param {string} [scrollBehavior] Scroll behavior when adjusting scroll position
  */
 export function appendMediaToMessage(mes, messageElement, scrollBehavior = SCROLL_BEHAVIOR.ADJUST) {
@@ -447,9 +447,7 @@ export function appendMediaToMessage(mes, messageElement, scrollBehavior = SCROL
         return;
     }
 
-    // Legacy callers still supply jQuery collections; operate on their rows
-    // directly rather than creating a second owner for their contents.
-    const rows = messageElement?.querySelectorAll ? [messageElement] : Array.from(messageElement ?? []);
+    const rows = messageElement ? [messageElement] : [];
     const findInRows = selector => [...new Set(rows.flatMap(row => Array.from(row.querySelectorAll(selector))))];
     const fileWrapper = findInRows('.mes_file_wrapper');
     const mediaWrapper = findInRows('.mes_media_wrapper');
@@ -473,7 +471,7 @@ export function appendMediaToMessage(mes, messageElement, scrollBehavior = SCROL
     const mediaBlocks = [];
     const mediaPromises = [];
 
-    const chatRoot = (hasMedia || hasFiles) ? (state.chatElement?.nodeType === 1 ? state.chatElement : state.chatElement[0]) : undefined;
+    const chatRoot = (hasMedia || hasFiles) ? state.chatElement : undefined;
     const chatHeight = (hasMedia || hasFiles) ? chatRoot?.scrollHeight : 0;
     const scrollPosition = (hasMedia || hasFiles) ? chatRoot?.scrollTop : 0;
     const doAdjustScroll = () => {
@@ -492,7 +490,6 @@ export function appendMediaToMessage(mes, messageElement, scrollBehavior = SCROL
         if (chatRoot) chatRoot.scrollTop = scrollPosition + diff;
     };
 
-    // Keep the legacy collection boundary while updating each row natively.
     for (const row of rows) {
         if (mediaDisplay === null) row.removeAttribute('data-media-display');
         else row.setAttribute('data-media-display', mediaDisplay);
@@ -749,17 +746,7 @@ export function appendMediaToMessage(mes, messageElement, scrollBehavior = SCROL
 
 export function addCopyToCodeBlocks(messageElement) {
     const skipFrontend = state.power_user?.frontend_frames?.skip_highlight !== false;
-    // Legacy template callers still pass collections; traverse their DOM roots
-    // directly and retain jQuery find's de-duplication and document order.
-    const roots = messageElement?.querySelectorAll ? [messageElement] : Array.from(messageElement ?? []);
-    const codeBlocks = [...new Set(roots.flatMap(root => Array.from(root?.querySelectorAll?.('pre code') ?? [])))];
-    if (roots.length > 1) {
-        codeBlocks.sort((left, right) => {
-            const position = left.compareDocumentPosition(right);
-            if (position & 1) return 0; // Disconnected nodes retain their input order.
-            return position & 4 ? -1 : position & 2 ? 1 : 0;
-        });
-    }
+    const codeBlocks = messageElement?.querySelectorAll('pre code') ?? [];
     for (const codeElement of codeBlocks) {
         if (skipFrontend && isFrontendContent(codeElement.closest('pre')?.textContent)) {
             continue;
@@ -816,7 +803,7 @@ function buildChatMessageRichBody(message, { messageId = state.chat.indexOf(mess
  * @param {boolean} [options.scroll=true] Whether to scroll to the new message
  * @param {number} [options.insertBefore=null] Message ID to insert the new message before
  * @param {number} [options.forceId=null] Force the message ID
- * @returns {JQuery<HTMLElement>|undefined} The legacy message element, or undefined when React owns rendering
+ * @returns {HTMLElement|undefined} The message element, or undefined when React owns rendering
  */
 export function addOneMessage(mes, { insertAfter = null, scroll = true, insertBefore = null, forceId = null } = {}) {
     // Callers push the new message to chat before calling addOneMessage
@@ -848,27 +835,22 @@ export function addOneMessage(mes, { insertAfter = null, scroll = true, insertBe
     let messageElement;
 
     messageElement = updateMessageElement(mes, { messageId, adjustMediaScroll: scroll ? SCROLL_BEHAVIOR.ADJUST : SCROLL_BEHAVIOR.NONE });
-    const nodes = messageElement?.querySelectorAll ? [messageElement] : Array.from(messageElement);
-    const roots = state.chatElement?.nodeType === 1 ? [state.chatElement] : Array.from(state.chatElement);
+    const root = state.chatElement;
     if ((typeof insertAfter === 'number' && insertAfter >= 0) || (typeof insertBefore === 'number' && insertBefore >= 0)) {
         const after = typeof insertAfter === 'number' && insertAfter >= 0;
         const id = after ? insertAfter : insertBefore;
-        const targets = roots[0].querySelectorAll(`.mes[mesid="${id}"]`);
+        const targets = root.querySelectorAll(`.mes[mesid="${id}"]`);
         targets.forEach((target, index) => {
             const reference = after ? target.nextSibling : target;
-            for (const node of nodes) {
-                target.parentNode?.insertBefore(index === targets.length - 1 ? node : node.cloneNode(true), reference);
-            }
+            target.parentNode?.insertBefore(index === targets.length - 1 ? messageElement : messageElement.cloneNode(true), reference);
         });
     } else {
-        roots.forEach((root, index) => {
-            root.append(...nodes.map(node => index === roots.length - 1 ? node : node.cloneNode(true)));
-        });
+        root.append(messageElement);
     }
 
 
     //last_mes should always be updated.
-    const rows = roots[0].querySelectorAll('.mes');
+    const rows = root.querySelectorAll('.mes');
     rows.forEach(row => row.classList.remove('last_mes'));
     rows[rows.length - 1]?.classList.add('last_mes');
 
@@ -887,21 +869,15 @@ export function addOneMessage(mes, { insertAfter = null, scroll = true, insertBe
  * @param {ChatMessage} mes Message object
  * @param {object} [options] Options
  * @param {number} [options.messageId=chat.length - 1] Force the message ID
- * @param {JQuery<HTMLElement>|HTMLElement} [options.messageElement] This message element will be updated with the ChatMessage object.
+ * @param {HTMLElement} [options.messageElement] This message element will be updated with the ChatMessage object.
  * @param {SCROLL_BEHAVIOR} [options.adjustMediaScroll=SCROLL_BEHAVIOR.NONE] Scroll behavior option passed to appendMediaToMessage.
- * @returns {JQuery<HTMLElement>} Rendered HTMLElement.
+ * @returns {HTMLElement} Rendered HTMLElement.
  */
 export function updateMessageElement(mes, { messageId = state.chat.length - 1, messageElement, adjustMediaScroll = SCROLL_BEHAVIOR.NONE } = {}) {
     if (messageElement === undefined) {
-        const template = state.messageTemplate;
-        if (template?.querySelectorAll) {
-            messageElement = template.cloneNode(true);
-        } else {
-            // Preserve the legacy collection return contract for shared callers.
-            messageElement = template.pushStack(Array.from(template, row => row.cloneNode(true)));
-        }
+        messageElement = state.messageTemplate.cloneNode(true);
     }
-    const rows = messageElement?.querySelectorAll ? [messageElement] : Array.from(messageElement ?? []);
+    const rows = [messageElement];
     if (rows.some(row => row.closest?.('[data-main-chat-message-row-owner="react"]'))) {
         scheduleMainChatMessageListPanelRefresh();
         return messageElement;
@@ -1059,9 +1035,8 @@ export function formatGenerationTimer(gen_started, gen_finished, tokenCount, rea
  */
 export function scrollChatToBottom({ waitForFrame } = {}) {
     const doScroll = () => {
-        const elements = state.chatElement?.nodeType === 1 ? [state.chatElement] : state.chatElement;
-        const position = elements[0].scrollHeight;
-        for (const element of elements) element.scrollTop = position;
+        const element = state.chatElement;
+        element.scrollTop = element.scrollHeight;
         requestId = null;
     };
 

@@ -89,6 +89,13 @@ afterEach(() => {
 });
 
 describe('native notifications compatibility', () => {
+    test('public handles are native even when jQuery is present', () => {
+        const toast = notifications.info('native', '', { timeOut: 0 });
+        expect(toast.nodeType).toBe(1);
+        expect(notifications.getContainer()).toBe(toast.parentNode);
+        notifications.native.clear(toast, { force: true });
+        expect(toast.parentNode).toBeNull();
+    });
     test('DOM double lastElementChild tracks empty, appended and removed children', () => {
         const parent = new Element(), first = new Element(), last = new Element();
         expect(parent.lastElementChild).toBeNull();
@@ -268,11 +275,11 @@ describe('native notifications compatibility', () => {
         expect(first.nodeType).toBe(1);
         expect(notifications.info('same', '', { timeOut: 0, preventDuplicates: true })).toBeUndefined();
         const legacy = notifications.warning('legacy', '', { timeOut: 0 });
-        expect(legacy[0].parentNode).toBe(first.parentNode);
-        expect(notifications.getContainer()[0]).toBe(native.getContainer());
+        expect(legacy.parentNode).toBe(first.parentNode);
+        expect(notifications.getContainer()).toBe(native.getContainer());
         native.clear(legacy, { force: true });
         notifications.clear(first, { force: true });
-        expect(legacy[0].parentNode).toBeNull();
+        expect(legacy.parentNode).toBeNull();
         expect(first.parentNode).toBeNull();
         expect(globalThis.toastr).toBe(notifications);
         expect(globalThis.emberDeskNotifications).toBe(notifications);
@@ -325,67 +332,67 @@ describe('native notifications compatibility', () => {
         const toast = notifications.info(message, title, { timeOut: 0 });
         expect(sanitize).toHaveBeenCalledWith(message, { RETURN_DOM_FRAGMENT: true });
         expect(sanitize).toHaveBeenCalledWith(title, { RETURN_DOM_FRAGMENT: true });
-        expect(toast[0].querySelector('.toast-message').children[0].textContent).toBe(`sanitized: ${message}`);
-        expect(toast[0].querySelector('.toast-title').children[0].textContent).toBe(`sanitized: ${title}`);
+        expect(toast.querySelector('.toast-message').children[0].textContent).toBe(`sanitized: ${message}`);
+        expect(toast.querySelector('.toast-title').children[0].textContent).toBe(`sanitized: ${title}`);
     });
 
     test('exposes a notification API and escapes strings by default, with explicit trusted HTML', () => {
         expect(notifications).toBeDefined();
         const safe = notifications.info('<img src=x onerror=bad()>', '<b>title</b>', { timeOut: 0 });
-        expect(safe[0].querySelector('.toast-message').textContent).toBe('<img src=x onerror=bad()>');
-        expect(safe[0].querySelector('.toast-title').textContent).toBe('<b>title</b>');
+        expect(safe.querySelector('.toast-message').textContent).toBe('<img src=x onerror=bad()>');
+        expect(safe.querySelector('.toast-title').textContent).toBe('<b>title</b>');
         const trusted = notifications.success('<b>ok</b>', '', { escapeHtml: false, timeOut: 0 });
-        expect(trusted[0].querySelector('.toast-message').children[0].textContent).toBe('sanitized: <b>ok</b>');
+        expect(trusted.querySelector('.toast-message').children[0].textContent).toBe('sanitized: <b>ok</b>');
     });
 
     test('preserves supplied DOM and listeners, sticky progress, and force clear with focus', () => {
         const button = globalThis.document.createElement('button');
         const clicked = jest.fn();
         button.addEventListener('click', clicked);
-        const toast = notifications.info(fakeJQuery(button), 'Loading', { timeOut: 0, extendedTimeOut: 0, tapToDismiss: false, progressBar: true });
-        expect(toast[0].querySelector('.toast-message').children[0]).toBe(button);
-        expect(toast[0].querySelector('.toast-progress')).not.toBeNull();
+        const toast = notifications.info(button, 'Loading', { timeOut: 0, extendedTimeOut: 0, tapToDismiss: false, progressBar: true });
+        expect(toast.querySelector('.toast-message').children[0]).toBe(button);
+        expect(toast.querySelector('.toast-progress')).not.toBeNull();
         button.dispatch('click');
         expect(clicked).toHaveBeenCalledTimes(1);
         jest.advanceTimersByTime(20000);
-        expect(toast[0].parentNode).not.toBeNull();
+        expect(toast.parentNode).not.toBeNull();
         globalThis.document.activeElement = button;
         notifications.clear(toast);
-        expect(toast[0].parentNode).not.toBeNull();
+        expect(toast.parentNode).not.toBeNull();
         notifications.clear(toast, { force: true });
-        expect(toast[0].parentNode).toBeNull();
+        expect(toast.parentNode).toBeNull();
     });
 
     test('click and close callbacks dismiss once; close does not invoke onclick', () => {
         const onclick = jest.fn(); const onCloseClick = jest.fn(); const onHidden = jest.fn();
         const clicked = notifications.warning('retry', '', { timeOut: 0, onclick, onHidden });
-        clicked[0].dispatch('click');
+        clicked.dispatch('click');
         expect(onclick).toHaveBeenCalledTimes(1);
         expect(onHidden).toHaveBeenCalledTimes(1);
-        expect(clicked[0].parentNode).toBeNull();
+        expect(clicked.parentNode).toBeNull();
         const closed = notifications.error('error', '', { timeOut: 0, closeButton: true, onclick, onCloseClick, onHidden });
-        closed[0].querySelector('.toast-close-button').dispatch('click');
+        closed.querySelector('.toast-close-button').dispatch('click');
         expect(onCloseClick).toHaveBeenCalledTimes(1);
         expect(onclick).toHaveBeenCalledTimes(1);
         expect(onHidden).toHaveBeenCalledTimes(2);
-        expect(closed[0].parentNode).toBeNull();
+        expect(closed.parentNode).toBeNull();
     });
 
     test('click dismisses a focused toast but preserves a focused descendant', () => {
         const self = notifications.info('focused toast', '', { timeOut: 0 });
-        globalThis.document.activeElement = self[0];
-        self[0].dispatch('click');
-        expect(self[0].parentNode).toBeNull();
+        globalThis.document.activeElement = self;
+        self.dispatch('click');
+        expect(self.parentNode).toBeNull();
 
         const input = globalThis.document.createElement('input');
         const containing = notifications.info(input, '', { timeOut: 0 });
         globalThis.document.activeElement = input;
         input.dispatch('click');
-        expect(containing[0].parentNode).not.toBeNull();
+        expect(containing.parentNode).not.toBeNull();
         notifications.clear(containing);
-        expect(containing[0].parentNode).not.toBeNull();
+        expect(containing.parentNode).not.toBeNull();
         notifications.clear(containing, { force: true });
-        expect(containing[0].parentNode).toBeNull();
+        expect(containing.parentNode).toBeNull();
     });
 
     test('clearing a stale or empty specified handle does not clear other notifications', () => {
@@ -393,11 +400,11 @@ describe('native notifications compatibility', () => {
         notifications.clear(stale);
         const active = notifications.info('B', '', { timeOut: 0 });
         notifications.clear(stale);
-        expect(active[0].parentNode).not.toBeNull();
+        expect(active.parentNode).not.toBeNull();
         notifications.clear(fakeJQuery(null));
-        expect(active[0].parentNode).not.toBeNull();
+        expect(active.parentNode).not.toBeNull();
         notifications.clear(undefined);
-        expect(active[0].parentNode).toBeNull();
+        expect(active.parentNode).toBeNull();
     });
 
     test('publishes visibility with options and reuses a container moved inside a dialog', () => {
@@ -409,8 +416,8 @@ describe('native notifications compatibility', () => {
         container.setAttribute('id', 'toast-container');
         dialog.append(container);
         const toast = notifications.info('hello', '', { timeOut: 10 });
-        expect(toast[0].parentNode).toBe(container);
-        expect(notifications.getContainer(undefined, false)[0]).toBe(container);
+        expect(toast.parentNode).toBe(container);
+        expect(notifications.getContainer(undefined, false)).toBe(container);
         expect(subscriber.mock.calls[0][0]).toMatchObject({ state: 'visible', options: { timeOut: 10 } });
         jest.advanceTimersByTime(10);
         expect(subscriber.mock.calls[1][0].state).toBe('hidden');
@@ -421,23 +428,23 @@ describe('native notifications compatibility', () => {
         expect(notifications.info('same', '', { timeOut: 0, preventDuplicates: true })).toBeUndefined();
         const other = notifications.info('other', '', { timeOut: 0 });
         notifications.clear(undefined);
-        expect(first[0].parentNode).toBeNull();
-        expect(other[0].parentNode).toBeNull();
+        expect(first.parentNode).toBeNull();
+        expect(other.parentNode).toBeNull();
     });
 
     test('hover pauses a timeout and the extended timeout starts on leave', () => {
         const hidden = jest.fn();
         const toast = notifications.info('timed', '', { timeOut: 100, extendedTimeOut: 80, progressBar: true, onHidden: hidden });
         jest.advanceTimersByTime(50);
-        expect(Number.parseFloat(toast[0].querySelector('.toast-progress').style.width)).toBeLessThanOrEqual(50);
-        toast[0].dispatch('mouseenter');
+        expect(Number.parseFloat(toast.querySelector('.toast-progress').style.width)).toBeLessThanOrEqual(50);
+        toast.dispatch('mouseenter');
         jest.advanceTimersByTime(1000);
-        expect(toast[0].parentNode).not.toBeNull();
-        toast[0].dispatch('mouseleave');
+        expect(toast.parentNode).not.toBeNull();
+        toast.dispatch('mouseleave');
         jest.advanceTimersByTime(79);
-        expect(toast[0].parentNode).not.toBeNull();
+        expect(toast.parentNode).not.toBeNull();
         jest.advanceTimersByTime(1);
-        expect(toast[0].parentNode).toBeNull();
+        expect(toast.parentNode).toBeNull();
         expect(hidden).toHaveBeenCalledTimes(1);
     });
 
@@ -446,11 +453,11 @@ describe('native notifications compatibility', () => {
         const first = notifications.success('first');
         const second = notifications.error('second');
         const newest = notifications.warning('newest', '', { newestOnTop: true });
-        const container = notifications.getContainer(undefined, false)[0];
+        const container = notifications.getContainer(undefined, false);
         expect(container.className).toBe('toast-top-center');
-        expect(container.children).toEqual([newest[0], first[0], second[0]]);
-        expect(first[0].attributes['aria-live']).toBe('polite');
-        expect(second[0].attributes['aria-live']).toBe('assertive');
+        expect(container.children).toEqual([newest, first, second]);
+        expect(first.attributes['aria-live']).toBe('polite');
+        expect(second.attributes['aria-live']).toBe('assertive');
     });
 
     test('fades with configured durations and publishes lifecycle after animation completes', () => {
@@ -461,18 +468,18 @@ describe('native notifications compatibility', () => {
             onShown: () => lifecycle.push('shown'), onHidden: () => lifecycle.push('onHidden'),
         });
         expect(lifecycle).toEqual(['visible']);
-        expect(toast[0].style.transition).toContain('250ms linear');
+        expect(toast.style.transition).toContain('250ms linear');
         jest.advanceTimersByTime(249);
         expect(lifecycle).toEqual(['visible']);
         jest.advanceTimersByTime(1);
         expect(lifecycle).toEqual(['visible', 'shown']);
-        toast[0].dispatch('click');
-        expect(toast[0].parentNode).not.toBeNull();
-        expect(toast[0].style.transition).toContain('180ms linear');
+        toast.dispatch('click');
+        expect(toast.parentNode).not.toBeNull();
+        expect(toast.style.transition).toContain('180ms linear');
         jest.advanceTimersByTime(179);
         expect(lifecycle).toEqual(['visible', 'shown']);
         jest.advanceTimersByTime(1);
-        expect(toast[0].parentNode).toBeNull();
+        expect(toast.parentNode).toBeNull();
         expect(lifecycle).toEqual(['visible', 'shown', 'onHidden', 'hidden']);
     });
 
@@ -482,22 +489,22 @@ describe('native notifications compatibility', () => {
             timeOut: 0, closeButton: true, showDuration: 100, hideDuration: 200, closeDuration: 50,
             onShown: () => lifecycle.push('shown'), onHidden: () => lifecycle.push('hidden'),
         });
-        toast[0].querySelector('.toast-close-button').dispatch('click');
+        toast.querySelector('.toast-close-button').dispatch('click');
         jest.advanceTimersByTime(99);
         expect(lifecycle).toEqual([]);
         jest.advanceTimersByTime(1);
         expect(lifecycle).toEqual(['shown']);
         jest.advanceTimersByTime(49);
-        expect(toast[0].parentNode).not.toBeNull();
+        expect(toast.parentNode).not.toBeNull();
         jest.advanceTimersByTime(1);
         expect(lifecycle).toEqual(['shown', 'hidden']);
-        expect(toast[0].parentNode).toBeNull();
+        expect(toast.parentNode).toBeNull();
 
         const cleared = notifications.info('clear', '', { timeOut: 0, hideDuration: 80, onHidden: () => lifecycle.push('unexpected') });
         notifications.clear(cleared);
-        expect(cleared[0].parentNode).not.toBeNull();
+        expect(cleared.parentNode).not.toBeNull();
         jest.advanceTimersByTime(80);
-        expect(cleared[0].parentNode).toBeNull();
+        expect(cleared.parentNode).toBeNull();
         expect(lifecycle).toEqual(['shown', 'hidden']);
     });
 
@@ -509,17 +516,17 @@ describe('native notifications compatibility', () => {
         });
         jest.advanceTimersByTime(100);
         expect(events).toEqual(['shown']);
-        expect(timed[0].parentNode).not.toBeNull();
+        expect(timed.parentNode).not.toBeNull();
         jest.advanceTimersByTime(80);
         expect(events).toEqual(['shown', 'hidden']);
-        expect(timed[0].parentNode).toBeNull();
+        expect(timed.parentNode).toBeNull();
 
         const removed = notifications.info('removed', '', {
             timeOut: 0, showDuration: 100, onShown: () => events.push('unexpected'),
         });
         notifications.remove(removed);
         jest.advanceTimersByTime(100);
-        expect(removed[0].parentNode).toBeNull();
+        expect(removed.parentNode).toBeNull();
         expect(events).toEqual(['shown', 'hidden']);
     });
 });

@@ -1,5 +1,5 @@
 import libs from './lib';
-import type {} from 'jquery';
+
 import getContext from './scripts/st-context';
 import { getThemeObject } from './scripts/power-user';
 import { oai_settings } from './scripts/openai';

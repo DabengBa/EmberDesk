@@ -1,5 +1,21 @@
+// Associate a synchronous strict-save invocation with its optimistic rollback.
+// The wrapper restores the previous handler immediately, before any await.
+let strictSaveFailureHandler;
+export function withStrictSettingsSaveFailureHandler(onFailure, save) {
+    const previous = strictSaveFailureHandler;
+    strictSaveFailureHandler = onFailure;
+    try {
+        return save();
+    } finally {
+        strictSaveFailureHandler = previous;
+    }
+}
+
 /** Runtime settings payload and guarded persistence over the existing settings owner. */
 export function createRuntimeSettingsPersistence(ports) {
+    // Construct each payload only after the previous local write has committed
+    // its revision. Genuine writes from other pages still receive a 409.
+    let pendingSave = Promise.resolve();
     function buildRuntimeSettingsPayload() {
         const persistedCurrentVersion = ports.persistedCurrentVersion();
         return {
@@ -20,7 +36,7 @@ export function createRuntimeSettingsPersistence(ports) {
         };
     }
 
-    async function saveSettings(loopCounter = 0, options) {
+    async function saveSettingsCore(loopCounter = 0, options) {
         const strict = options?.strict === true;
         if (ports.conflict.hasConflict()) {
             if (strict) ports.conflict.assertWritable();
@@ -72,13 +88,31 @@ export function createRuntimeSettingsPersistence(ports) {
                 ports.finishSnapshot(sortSaveSnapshot, savedRevision);
                 sortSaveFinished = true;
             }
-            await ports.emitUpdated();
+            return true;
         } catch (error) {
             console.error('Error saving settings:', error);
             if (!ports.conflict.hasConflict()) ports.onError();
             if (strict && savedRevision === undefined) throw error;
         } finally {
             if (!sortSaveFinished) ports.finishSnapshot(sortSaveSnapshot, savedRevision);
+        }
+    }
+    async function saveSettings(loopCounter = 0, options) {
+        const onFailure = options?.strict === true ? strictSaveFailureHandler : undefined;
+        const operation = pendingSave.then(() => saveSettingsCore(loopCounter, options)).catch(error => {
+            onFailure?.();
+            throw error;
+        });
+        // Do not hold the write queue while notifying subscribers: a subscriber
+        // may itself await a settings save. Failed writes must not poison it.
+        pendingSave = operation.then(() => undefined, () => undefined);
+        if (await operation) {
+            try {
+                await ports.emitUpdated();
+            } catch (error) {
+                console.error('Error saving settings:', error);
+                if (!ports.conflict.hasConflict()) ports.onError();
+            }
         }
     }
     return { buildRuntimeSettingsPayload, saveSettings };

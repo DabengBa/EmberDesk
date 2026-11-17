@@ -30,10 +30,9 @@ export const shiftDownByOne = (e, i, a) => a[i] = e - 1;
 export const PAGINATION_TEMPLATE = '<%= rangeStart %>-<%= rangeEnd %> .. <%= totalNumber %>';
 
 export const localizePagination = function (container) {
-    container.find('[title="Next page"]').attr('title', t`Next page`);
-    container.find('[title="Previous page"]').attr('title', t`Previous page`);
-    container.find('[title="First page"]').attr('title', t`First page`);
-    container.find('[title="Last page"]').attr('title', t`Last page`);
+    for (const [title, translated] of [['Next page', t`Next page`], ['Previous page', t`Previous page`], ['First page', t`First page`], ['Last page', t`Last page`]]) {
+        container.querySelectorAll(`[title="${title}"]`).forEach(element => { element.title = translated; });
+    }
 };
 
 /**
@@ -89,9 +88,9 @@ export const renderPaginationDropdown = function (pageSize, sizeChangerOptions) 
 };
 
 export const paginationDropdownChangeHandler = function (event, size) {
-    let dropdown = $(event?.originalEvent?.currentTarget || event.delegateTarget).find('select');
-    dropdown.find('[selected]').removeAttr('selected');
-    dropdown.find(`[value=${size}]`).attr('selected', '');
+    const dropdown = event.currentTarget.querySelector('select');
+    dropdown?.querySelectorAll('[selected]').forEach(option => option.removeAttribute('selected'));
+    Array.from(dropdown?.options ?? []).filter(option => option.value === String(size)).forEach(option => option.setAttribute('selected', ''));
 };
 
 /**
@@ -664,15 +663,13 @@ export function isElementInViewport(el) {
     if (!el) {
         return false;
     }
-    if (typeof jQuery === 'function' && el instanceof jQuery) {
-        el = el[0];
-    }
+
     var rect = el.getBoundingClientRect();
     return (
         rect.top >= 0 &&
         rect.left >= 0 &&
-        rect.bottom <= (window.innerHeight || document.documentElement.clientHeight) && /* or $(window).height() */
-        rect.right <= (window.innerWidth || document.documentElement.clientWidth) /* or $(window).width() */
+        rect.bottom <= (window.innerHeight || document.documentElement.clientHeight) &&
+        rect.right <= (window.innerWidth || document.documentElement.clientWidth)
     );
 }
 
@@ -813,28 +810,28 @@ export function restoreCaretPosition(element, position) {
 }
 
 export async function resetScrollHeight(element) {
-    $(element).css('height', '0px');
-    $(element).css('height', $(element).prop('scrollHeight') + 3 + 'px');
+    element.style.height = '0px';
+    element.style.height = element.scrollHeight + 3 + 'px';
 }
 
 /**
  * Sets the height of an element to its scroll height.
- * @param {JQuery<HTMLElement>} element The element to initialize the scroll height of.
+ * @param {HTMLElement} element The element to initialize the scroll height of.
  * @returns {Promise<void>} A promise that resolves when the scroll height has been initialized.
  */
 export async function initScrollHeight(element) {
     await delay(1);
 
-    const curHeight = Number($(element).css('height').replace('px', ''));
-    const curScrollHeight = Number($(element).prop('scrollHeight'));
+    const curHeight = Number(getComputedStyle(element).height.replace('px', ''));
+    const curScrollHeight = Number(element.scrollHeight);
     const diff = curScrollHeight - curHeight;
 
     if (diff < 3) { return; } //happens when the div isn't loaded yet
 
     const newHeight = curHeight + diff + 3; //the +3 here is to account for padding/line-height on text inputs
     //console.log(`init height to ${newHeight}`);
-    $(element).css('height', '');
-    $(element).css('height', `${newHeight}px`);
+    element.style.height = '';
+    element.style.height = `${newHeight}px`;
     //resetScrollHeight(element);
 }
 
@@ -845,8 +842,8 @@ export async function initScrollHeight(element) {
  * @returns {number} A negative number if a is before b, a positive number if a is after b, or 0 if they are equal.
  */
 export function sortByCssOrder(a, b) {
-    const _a = Number($(a).css('order'));
-    const _b = Number($(b).css('order'));
+    const _a = Number(getComputedStyle(a).order);
+    const _b = Number(getComputedStyle(b).order);
     return _a - _b;
 }
 
@@ -2094,42 +2091,26 @@ export function deleteValueByPath(obj, path) {
 
 /**
  * Flashes the given HTML element via CSS flash animation for a defined period
- * @param {JQuery<HTMLElement>|HTMLElement} element - The element to flash
+ * @param {HTMLElement} element - The element to flash
  * @param {number} timespan - A number in milliseconds how the flash should last (default is 2000ms.  Multiples of 1000ms work best, as they end with the flash animation being at 100% opacity)
  */
 export function flashHighlight(element, timespan = 2000) {
     const flashDuration = 2000; // Duration of a single flash cycle in milliseconds
 
-    if (element?.nodeType === 1) {
-        element.classList.add('flash', 'animated');
-        element.style.setProperty('--animation-duration', `${flashDuration}ms`);
-        const intervalId = setInterval(() => {
-            element.classList.remove('flash', 'animated');
-            void element.offsetWidth;
-            element.classList.add('flash', 'animated');
-        }, flashDuration);
-        setTimeout(() => {
-            clearInterval(intervalId);
-            element.classList.remove('flash', 'animated');
-            element.style.setProperty('--animation-duration', '');
-        }, timespan);
-        return;
-    }
-
-    element.addClass('flash animated');
-    element.css('--animation-duration', `${flashDuration}ms`);
+    element.classList.add('flash', 'animated');
+    element.style.setProperty('--animation-duration', `${flashDuration}ms`);
 
     // Repeat the flash animation
     const intervalId = setInterval(() => {
-        element.removeClass('flash animated');
-        void element[0].offsetWidth; // Trigger reflow to restart animation
-        element.addClass('flash animated');
+        element.classList.remove('flash', 'animated');
+        void element.offsetWidth; // Trigger reflow to restart animation
+        element.classList.add('flash', 'animated');
     }, flashDuration);
 
     setTimeout(() => {
         clearInterval(intervalId);
-        element.removeClass('flash animated');
-        element.css('--animation-duration', '');
+        element.classList.remove('flash', 'animated');
+        element.style.setProperty('--animation-duration', '');
     }, timespan);
 }
 
@@ -2720,16 +2701,13 @@ export const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
 
 /**
  * Shakes the targetElement.
- * @param {HTMLElement|JQuery<HTMLElement>} targetElement
+ * @param {HTMLElement} targetElement
  * @param {number} distance Distance in pixels.
  * @param {number} duration Duration in milliseconds.
  * @param {string} easing CSS easing function.
  */
 export function shakeElement(targetElement, distance = 10, duration = 100, easing = 'ease-in-out') {
-    // Don't call the JQuery animation.
     // https://developer.mozilla.org/en-US/docs/Web/API/Element/animate
-    if (targetElement instanceof jQuery) targetElement = targetElement[0];
-
     return targetElement.animate([
         { transform: 'translateX(0)' },
         { transform: `translateX(${distance}px)` },

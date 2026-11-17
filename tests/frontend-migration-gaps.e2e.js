@@ -156,7 +156,7 @@ test('Popup crop keeps image selection and confirmed result', async ({ page }) =
     await selectCharacter(page, 'Dev Character 044');
     await page.evaluate(async () => {
         const context = window.SillyTavern.getContext();
-        window.$('#set_character_world').data('chid', context.characterId);
+        document.getElementById('set_character_world').dataset.chid = String(context.characterId);
         window.lorebookPopup = (await import('/scripts/character-lifecycle-service.js')).openCharacterWorldPopup();
     });
     await expect(page.locator('dialog[data-react-popup]').getByRole('searchbox')).toBeVisible();

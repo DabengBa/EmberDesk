@@ -92,7 +92,7 @@ export class ActionLoaderHandle {
     /** @type {string|null} Unique slug for the loader */
     #slug = null;
 
-    /** @type {JQuery<HTMLElement>|null} The toast element for this loader */
+    /** @type {HTMLElement|null} The toast element for this loader */
     #toast = null;
 
     /** @type {(() => void)|null} Custom stop handler */
@@ -207,7 +207,7 @@ export class ActionLoaderHandle {
         }
 
         // Show toast with no timeout (sticky)
-        this.#toast = toastr.info($(toastContent), title, {
+        this.#toast = toastr.info(toastContent, title, {
             timeOut: 0,
             extendedTimeOut: 0,
             tapToDismiss: false,
@@ -582,27 +582,33 @@ async function hideOverlay({ immediate = false } = {}) {
     }
 
     return new Promise((resolve) => {
-        const loaderElement = $('#loader');
-        const spinner = $('#load-spinner');
+        const loaderElement = document.getElementById('loader');
+        const spinner = document.getElementById('load-spinner');
 
-        if (!loaderElement.length) {
+        if (!loaderElement) {
             console.warn('Loader element not found, skipping animation');
             cleanup();
             return;
         }
 
         // Check if transitions are enabled on spinner (which has the transition property)
-        const transitionDuration = spinner.length && spinner[0] ? getComputedStyle(spinner[0]).transitionDuration : '0s';
+        const transitionDuration = spinner ? getComputedStyle(spinner).transitionDuration : '0s';
         const hasTransitions = shouldAnimateOverlayHide({
             transitionDuration,
             immediate,
         });
 
         if (hasTransitions) {
-            Promise.race([
-                new Promise((r) => setTimeout(r, 500)), // Fallback timeout
-                new Promise((r) => loaderElement.one('transitionend webkitTransitionEnd oTransitionEnd MSTransitionEnd', r)),
-            ]).finally(cleanup);
+            const events = ['transitionend', 'webkitTransitionEnd', 'oTransitionEnd', 'MSTransitionEnd'];
+            new Promise(resolve => {
+                const finish = () => {
+                    clearTimeout(timeout);
+                    for (const event of events) loaderElement.removeEventListener(event, finish);
+                    resolve();
+                };
+                const timeout = setTimeout(finish, 500);
+                for (const event of events) loaderElement.addEventListener(event, finish);
+            }).finally(cleanup);
         } else {
             cleanup();
         }
@@ -622,8 +628,8 @@ async function hideOverlay({ immediate = false } = {}) {
         }
 
         // Apply the blur styles to the entire loader element
-        loaderElement[0].style.filter = 'blur(15px)';
-        loaderElement[0].style.opacity = '0';
+        loaderElement.style.filter = 'blur(15px)';
+        loaderElement.style.opacity = '0';
     });
 }
 

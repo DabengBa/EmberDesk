@@ -1,6 +1,6 @@
 import { DOMPurify } from '../lib.js';
 
-// DOM rendering is native; jQuery is retained only for legacy toast handles.
+// DOM rendering and toast handles are native.
 const defaults = {
     tapToDismiss: true,
     toastClass: 'toast',
@@ -37,9 +37,6 @@ let subscriber;
 let previousMessage;
 let nextId = 0;
 
-function wrap(element) {
-    return typeof globalThis.jQuery === 'function' ? globalThis.jQuery(element) : element;
-}
 
 function getNativeContainer(options, create = false) {
     const settings = { ...defaults, ...notifications.options, ...options };
@@ -64,12 +61,9 @@ export function setNotificationHtml(parent, value) {
 }
 
 function appendContent(parent, value, escapeHtml) {
-    // A jQuery collection or DOM node is already explicit trusted DOM. Move the
-    // original nodes so their event listeners and mutable state survive.
+    // Move explicit DOM nodes so their event listeners and mutable state survive.
     if (value?.nodeType) {
         parent.append(value);
-    } else if (value?.jquery) {
-        for (const node of Array.from(value)) parent.append(node);
     } else if (escapeHtml) {
         parent.textContent = String(value);
     } else {
@@ -222,11 +216,6 @@ function show(type, message, title, override) {
     return element;
 }
 
-function showLegacy(type, message, title, options) {
-    const element = show(type, message, title, options);
-    return element === undefined ? undefined : wrap(element);
-}
-
 const notifications = {
     options: {},
     clear,
@@ -238,12 +227,12 @@ const notifications = {
             for (const item of [...active.keys()]) finishRemoval(item, false);
         }
     },
-    getContainer(options, create = false) { return wrap(getNativeContainer(options, create)); },
+    getContainer: getNativeContainer,
     subscribe(callback) { subscriber = callback; },
-    error(message, title, options) { return showLegacy('error', message, title, options); },
-    info(message, title, options) { return showLegacy('info', message, title, options); },
-    success(message, title, options) { return showLegacy('success', message, title, options); },
-    warning(message, title, options) { return showLegacy('warning', message, title, options); },
+    error(message, title, options) { return show('error', message, title, options); },
+    info(message, title, options) { return show('info', message, title, options); },
+    success(message, title, options) { return show('success', message, title, options); },
+    warning(message, title, options) { return show('warning', message, title, options); },
 };
 
 // The native facade shares all state with the legacy public singleton.

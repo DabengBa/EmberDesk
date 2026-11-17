@@ -35,17 +35,11 @@ function makeRow() {
     row.nodes['.avatar img'][0].parentElement = new Node();
     return row;
 }
-function collection(nodes) {
-    const result = [...nodes]; result.jquery = '3.5.1';
-    result.pushStack = items => collection(items);
-    for (const method of ['clone', 'closest', 'attr', 'find', 'addClass']) result[method] = () => { throw Error(`template ${method} must not use jQuery`); };
-    return result;
-}
 let state, reasoning, refresh, root, template;
 beforeEach(() => {
     template = makeRow(); root = new Node();
     root.nodes['.mes'] = root.children;
-    state = { chat: [], chatElement: collection([root]), messageTemplate: collection([template]), default_user_avatar: '/user', characters: [], hljs: {} };
+    state = { chat: [], chatElement: root, messageTemplate: template, default_user_avatar: '/user', characters: [], hljs: {} };
     reasoning = jest.fn(); refresh = jest.fn();
     registerMessageShellContext({ state, isReactMainChatOwner: () => false, updateReasoningUI: reasoning,
         scheduleMainChatMessageListPanelRefresh: refresh, timestampToMoment: () => ({ isValid: () => true, format: () => 'date' }),
@@ -54,12 +48,11 @@ beforeEach(() => {
 });
 afterEach(() => { delete globalThis.$; });
 
-test('real addOneMessage clones and populates a legacy template, returning the compatible collection', () => {
+test('real addOneMessage clones and populates a native template, returning its row', () => {
     const message = { name: 'User', is_user: true, mes: 'hello', title: 'title', extra: { isSmallSys: true, tool_invocations: [], reply_pipeline_display: 'hidden' } };
     state.chat.push(message);
     const result = addOneMessage(message, { scroll: false });
-    expect(result.jquery).toBe('3.5.1'); expect(result).toHaveLength(1);
-    const row = result[0];
+    const row = result;
     expect(row).not.toBe(template); expect(root.children).toEqual([row]);
     expect(row.getAttribute('mesid')).toBe('0'); expect(row.getAttribute('ch_name')).toBe('User');
     expect(row.getAttribute('title')).toBe('title');
@@ -72,11 +65,11 @@ test('real addOneMessage clones and populates a legacy template, returning the c
     expect(reasoning).toHaveBeenCalledTimes(1);
 });
 
-test('real recovery update preserves the supplied collection identity and handles every row', () => {
-    const rows = [makeRow(), makeRow()]; const existing = collection(rows);
+test('real recovery update preserves each supplied row identity and handles every row', () => {
+    const rows = [makeRow(), makeRow()];
     const message = { name: 'User', is_user: true, mes: 'hello', extra: {} }; state.chat.push(message);
-    expect(updateMessageElement(message, { messageId: 0, messageElement: existing })).toBe(existing);
     for (const row of rows) {
+        expect(updateMessageElement(message, { messageId: 0, messageElement: row })).toBe(row);
         expect(row.getAttribute('mesid')).toBe('0');
         expect(row.querySelectorAll('.mes_text')[0].innerHTML).toBe('<p>rendered</p>');
         const avatar = row.querySelectorAll('.avatar img')[0]; avatar.listeners.error();
@@ -94,14 +87,14 @@ test('real addOneMessage can insert a native template without a collection', () 
     expect(row.getAttribute('mesid')).toBe('0');
 });
 
-test('legacy addOneMessage inserts and marks a row with a native chat root', () => {
+test('addOneMessage inserts and marks a row with a native chat root', () => {
     root.nodeType = 1;
     state.chatElement = root;
     const message = { name: 'User', is_user: true, mes: 'hello', extra: {} };
     state.chat.push(message);
     const result = addOneMessage(message, { scroll: false });
-    expect(root.children).toEqual([result[0]]);
-    expect(result[0].classes.has('last_mes')).toBe(true);
+    expect(root.children).toEqual([result]);
+    expect(result.classes.has('last_mes')).toBe(true);
 });
 
 test('native recovery row preserves input identity and populates a generation timer', () => {
@@ -116,24 +109,24 @@ test('native recovery row preserves input identity and populates a generation ti
     expect(reasoning).toHaveBeenCalledWith(row);
 });
 
-test('empty recovery collection remains empty and keeps its identity', () => {
-    const existing = collection([]);
+test('recovery with no supplied row clones and populates the native template', () => {
     const message = { name: 'User', is_user: true, mes: 'hello', extra: {} }; state.chat.push(message);
-    expect(updateMessageElement(message, { messageElement: existing })).toBe(existing);
-    expect(existing).toHaveLength(0);
-    expect(reasoning).toHaveBeenCalledWith(existing);
+    const row = updateMessageElement(message, {});
+    expect(row).not.toBe(template);
+    expect(row.getAttribute('mesid')).toBe('0');
+    expect(reasoning).toHaveBeenCalledWith(row);
 });
 
-test.each(['collection', 'native'])('React-owned %s refreshes without legacy DOM writes', (kind) => {
+test('React-owned native row refreshes without legacy DOM writes', () => {
     const row = makeRow(); row.reactOwned = true;
-    const existing = kind === 'native' ? row : collection([row]);
+
     const closest = jest.spyOn(row, 'closest');
     const query = jest.spyOn(row, 'querySelectorAll');
     const setAttribute = jest.spyOn(row, 'setAttribute');
     const addClass = jest.spyOn(row.classList, 'add');
     row.nodes['.mes_text'][0].innerHTML = 'React-owned content';
 
-    expect(updateMessageElement({}, { messageElement: existing })).toBe(existing);
+    expect(updateMessageElement({}, { messageElement: row })).toBe(row);
     expect(closest).toHaveBeenCalledWith('[data-main-chat-message-row-owner="react"]');
     expect(refresh).toHaveBeenCalledTimes(1);
     expect(reasoning).not.toHaveBeenCalled();

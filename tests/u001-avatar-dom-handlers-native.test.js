@@ -3,19 +3,29 @@ import { readFileSync } from 'node:fs';
 
 const source = readFileSync(new URL('../public/scripts/dom-handlers.js', import.meta.url), 'utf8');
 
-test('React message click returns before accessing jQuery', () => {
-    const start = source.indexOf("    $(document).on('click', '.mes', function () {");
+test('message row delegate ignores React-owned rows and selects visible legacy rows without jQuery', () => {
+    const oldStart = source.indexOf("    $(document).on('click', '.mes', function () {");
+    const newStart = source.indexOf("    delegate('click', '.mes', function () {");
+    const start = newStart >= 0 ? newStart : oldStart;
     const end = source.indexOf('\n    function closeSelectChatPopup()', start);
     expect(start).toBeGreaterThanOrEqual(0);
     let click;
-    const register = (_root) => ({ on: (_event, _selector, handler) => { click = handler; } });
-    new Function('$', 'document', 'state', 'selectMessageForDeletion', source.slice(start, end))(register, {}, {}, () => {});
-    click.call({ matches: selector => selector === '[data-main-chat-message-row-owner="react"]' });
+    const selectLegacyRange = jest.fn();
+    const controller = { __emberDeskBulkDeleteController: { selectLegacyRange } };
+    const document = { querySelectorAll: () => [] };
+    new Function('delegate', 'document', 'state', 'selectMessageForDeletion', 'globalThis', source.slice(start, end))(
+        (_event, _selector, handler) => { click = handler; }, document, { is_delete_mode: true, chat: [{}, {}] }, () => {}, controller,
+    );
+    click.call({ matches: () => true });
+    expect(selectLegacyRange).not.toHaveBeenCalled();
+    const checkbox = { offsetWidth: 10, offsetHeight: 10, getClientRects: () => [1] };
+    click.call({ matches: () => false, querySelector: () => checkbox, getAttribute: () => '1' });
+    expect(selectLegacyRange).toHaveBeenCalledWith(1, 2, expect.any(Object));
 });
 
 test('native avatar delegate opens and closes after animation', () => {
     const start = source.indexOf("    document.addEventListener('click', event => {\n        const target = event.target instanceof Element", source.indexOf('handleWorkspaceDrawerOutsidePointer(target);'));
-    const end = source.indexOf("\n    $(document).on('click', '.open_alternate_greetings'", start);
+    const end = source.indexOf("\n    delegate('click', '.open_alternate_greetings'", start);
     expect(start).toBeGreaterThanOrEqual(0);
     let listener;
     const previews = [];

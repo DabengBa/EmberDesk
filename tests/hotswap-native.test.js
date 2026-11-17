@@ -10,7 +10,8 @@ class Node {
     getAttribute(name) { return this.attributes[name] ?? null; }
     append(...nodes) { nodes.forEach(node => { node.parent = this; this.children.push(node); }); }
     replaceChildren(...nodes) { this.children = []; this.append(...nodes); }
-    querySelectorAll(selector) { return this.children.flatMap(child => [...(selector === 'img' && child.tag === 'img' || selector === '.ch_fav' && child.classes.has('ch_fav') ? [child] : []), ...child.querySelectorAll(selector)]); }
+    querySelectorAll(selector) { return this.children.flatMap(child => [...(selector === child.tag || selector.startsWith('.') && child.classes.has(selector.slice(1)) ? [child] : []), ...child.querySelectorAll(selector)]); }
+    querySelector(selector) { return this.querySelectorAll(selector)[0] ?? null; }
     cloneNode(deep) { const node = new Node(this.tag); node.attributes = { ...this.attributes }; node.classes = new Set(this.classes); if (deep) this.children.forEach(child => node.append(child.cloneNode(true))); return node; }
 }
 
@@ -50,22 +51,26 @@ test('real favourite caller uses the shared renderer without jQuery for multiple
 });
 
 test('actual tag folder consumer passes native targets to the shared avatar renderer', () => {
-    const s = setup([]), folder = new Node();
-    const wrapper = { addClass: () => wrapper, attr: () => wrapper, text: () => wrapper, each: () => wrapper,
-        toArray: () => [folder], clone: () => wrapper, find: () => wrapper };
-    const tagContext = { $: () => wrapper, FOLDER_TEMPLATE: {}, TAG_FOLDER_TYPES: { open: { class: 'open', fa_icon: 'icon' } },
+    const s = setup([]), template = new Node();
+    for (const name of ['avatar', 'ch_name', 'bogus_folder_hidden_counter', 'bogus_folder_counter', 'bogus_folder_icon', 'bogus_folder_avatars_block']) {
+        const node = new Node(); node.classes.add(name); template.append(node);
+    }
+    const tagContext = { $: () => { throw Error('folder must not use jQuery'); }, FOLDER_TEMPLATE: template, TAG_FOLDER_TYPES: { open: { class: 'open', fa_icon: 'icon' } },
         requireCharacterTagsShellContext: () => ({ buildAvatarList: s.context.buildAvatarList }), applyTagColors: () => {}, t: parts => parts.join('') };
     const getTagBlock = extract('public/scripts/tags.js', 'function getTagBlock(', '\n/**', tagContext);
-    expect(getTagBlock({ folder_type: 'open', name: 'Folder', id: 'f' }, [{ id: 2, type: 'character', item: { name: 'Two', fav: true } }])).toBe(wrapper);
+    const result = getTagBlock({ folder_type: 'open', name: 'Folder', id: 'f' }, [{ id: 2, type: 'character', item: { name: 'Two', fav: true } }]);
+    const folder = result.querySelector('.bogus_folder_avatars_block');
+    expect(result).not.toBe(template);
+    expect(result.getAttribute('tagid')).toBe('f');
     expect(s.context.buildAvatarList.mock.calls[0][0]).toEqual([folder]);
     expect(folder.children[0].getAttribute('data-chid')).toBe('2');
 });
 
-test('shared renderer accepts an existing jquery-like collection and preserves favourite and append options', () => {
+test('shared renderer accepts native targets and preserves favourite and append options', () => {
     const s = setup([]), first = new Node(), second = new Node();
     first.append(new Node('old'));
     const entities = [{ id: 1, type: 'character', item: { name: 'One', fav: true } }, { id: 2, type: 'tag', item: { name: 'Two', fav: false } }];
-    s.context.buildAvatarList({ 0: first, 1: second, length: 2, jquery: '3.5.1' }, entities, { empty: false, interactable: true });
+    s.context.buildAvatarList([first, second], entities, { empty: false, interactable: true });
     expect(first.children).toHaveLength(3);
     expect(second.children).toHaveLength(2);
     expect(first.children[1].classList.contains('is_fav')).toBe(true);

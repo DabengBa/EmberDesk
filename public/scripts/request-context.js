@@ -13,12 +13,6 @@ export function getRequestHeaders({ omitContentType = false } = {}) {
     return headers;
 }
 
-export function installAjaxCsrfPrefilter() {
-    $.ajaxPrefilter((options, originalOptions, xhr) => {
-        xhr.setRequestHeader('X-CSRF-Token', token);
-    });
-}
-
 export async function loadCsrfToken() {
     const tokenResponse = await fetch('/csrf-token');
     const tokenData = await tokenResponse.json();

@@ -89,22 +89,19 @@ export function collapseNewlines(x) {
 // no shadows). Reduced motion still follows the OS preference.
 function switchReducedMotion() {
     const osReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    jQuery.fx.off = osReduced;
     setAnimationDuration(osReduced ? 0 : ANIMATION_DURATION_DEFAULT);
-    $('body').toggleClass('reduced-motion', osReduced);
+    document.body.classList.toggle('reduced-motion', osReduced);
 }
 
 function switchFixedInterfaceClasses() {
-    $('body').removeClass('no-timestamps');
-    $('#send_form').addClass('compact');
-    $('body').addClass('no-blur');
-    $('body').addClass('noShadows');
+    document.body.classList.remove('no-timestamps');
+    document.getElementById('send_form')?.classList.add('compact');
+    document.body.classList.add('no-blur', 'noShadows');
     scrollChatToBottom();
 }
 
 function applyChatDisplay() {
-    $('body').removeClass('bubblechat');
-    $('body').removeClass('documentstyle');
+    document.body.classList.remove('bubblechat', 'documentstyle');
     document.body.removeAttribute('data-bubblechat');
 }
 
@@ -546,16 +543,13 @@ export function getCustomStoppingStrings(limit = undefined) {
 }
 
 export function forceCharacterEditorTokenize() {
-    $('[data-token-counter]').each(function () {
-        $(document.getElementById($(this).data('token-counter'))).data('last-value-hash', '');
+    document.querySelectorAll('[data-token-counter]').forEach(counter => {
+        const input = document.getElementById(counter.dataset.tokenCounter);
+        if (input) delete input.dataset.lastValueHash;
     });
-    $('#rm_ch_create_block').trigger('input');
-    $('#character_popup').trigger('input');
+    document.getElementById('rm_ch_create_block')?.dispatchEvent(new Event('input', { bubbles: true }));
+    document.getElementById('character_popup')?.dispatchEvent(new Event('input', { bubbles: true }));
 }
 
-jQuery(() => {
-    $(window).on('resize', async () => {
-        setHotswapsDebounced();
-    });
-});
+window.addEventListener('resize', () => setHotswapsDebounced());
 

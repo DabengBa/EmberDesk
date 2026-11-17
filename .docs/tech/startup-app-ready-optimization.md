@@ -27,7 +27,7 @@ Primary files:
 ## Architecture And Constraints
 
 - `APP_READY` still means the main shell is visible and usable.
-- Startup keeps the current jQuery architecture and event names.
+- Startup preserves the readiness event names while using native DOM-ready wiring.
 - The optimization strategy is to remove non-first-screen work from the critical path, not to rename readiness events or change framework stack.
 - Daily-use measurement is browser-first and uses the `existing_server_browser_only` mode.
 
@@ -41,7 +41,7 @@ Primary files:
 - `getSettings.applyCore`
 - post-ready deferred tasks
 
-Before that sequence begins, module composition installs `globalThis.SillyTavern` explicitly, registers the World Info shell context, and installs the jQuery CSRF prefilter. `bootstrapWorkspace()` then loads the CSRF token as its first measured stage. Request-context failure is propagated to the bootstrap owner and shows a persistent refresh error; no readiness event is emitted on that path.
+Before that sequence begins, module composition installs `globalThis.SillyTavern` explicitly and registers the World Info shell context. DOM-ready shell binding invokes `bootstrapWorkspace()`, which loads the CSRF token as its first measured stage; request headers come from `getRequestHeaders()`, not a jQuery prefilter. Request-context failure is propagated to the bootstrap owner and shows a persistent refresh error; no readiness event is emitted on that path.
 
 Critical path work still includes:
 
@@ -73,7 +73,7 @@ The former deferred background catalog warmup and Background Library panel loadi
 - `getCachedPayload(dirPath, rebuild)` implements single-flight rebuild: concurrent callers for the same uncached directory await one shared rebuild promise instead of triggering duplicate work.
 - Cache freshness is driven by explicit invalidation from EmberDesk-controlled write paths, not by per-request directory stat polling.
 - Invalidated write paths include: presets save/delete, themes save/delete, quick-replies save/delete, world-info delete/import/edit, and content-manager seeding into user directories.
-- The route handler in `src/endpoints/settings.js` now executes all independent directory reads concurrently via `Promise.all` instead of serially blocking the event loop.
+- The route handler in `src/endpoints/settings-routes.ts` executes independent directory reads concurrently via `Promise.all`; `src/endpoints/settings.js` is its compatibility re-export.
 
 ### Deferred panels
 

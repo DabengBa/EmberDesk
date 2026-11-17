@@ -3,6 +3,7 @@ import { feature_settings, writeExtensionField } from '../../feature-settings.js
 import { getPresetManager, saveSettingsStrict } from '../../preset-manager.js';
 import { regexFromString } from '../../utils.js';
 import { lodash } from '../../../lib.js';
+import { withStrictSettingsSaveFailureHandler } from '../../runtime-settings-persistence.js';
 
 /**
  * @readonly
@@ -210,9 +211,8 @@ export async function authorizeRegexTarget(target, allowed = true) {
     pendingRegexAuthorizations.set(key, token);
     if (allowed && !before) list.push(id);
     if (!allowed && before) list.splice(list.indexOf(id), 1);
-    try {
-        await saveSettingsStrict();
-    } catch (error) {
+    const rollback = () => {
+        if (token.failed) return;
         token.failed = true;
         const current = getList();
         if (pendingRegexAuthorizations.get(key) === token) {
@@ -230,6 +230,11 @@ export async function authorizeRegexTarget(target, allowed = true) {
                 pendingRegexAuthorizations.delete(key);
             }
         }
+    };
+    try {
+        await withStrictSettingsSaveFailureHandler(rollback, saveSettingsStrict);
+    } catch (error) {
+        rollback(); // Also handle failures before a save reaches the owner.
         throw error;
     }
     token.committed = true;

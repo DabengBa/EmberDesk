@@ -217,7 +217,7 @@ export class GenerationStreamSession {
             mount: () => { void mountReactMainChatMessageListPanel(); },
             addCopyButtons: id => {
                 const chatElement = shell().state.chatElement;
-                const root = chatElement?.jquery ? chatElement[0] : chatElement;
+                const root = chatElement;
                 const element = isReactMainChatOwner() ? null : root?.querySelector(`.mes[mesid="${id}"]`);
                 if (element) addCopyToCodeBlocks(element);
             },
@@ -534,7 +534,7 @@ async function executeOwnedGenerationRequestInShell(generationEnvelope, lease) {
                         if (isReactMainChatOwner()) void mountReactMainChatMessageListPanel();
                         else {
                             const chatElement = shell().state.chatElement;
-                            const root = chatElement?.jquery ? chatElement[0] : chatElement;
+                            const root = chatElement;
                             root?.querySelectorAll(`.mes[mesid="${index}"]`).forEach(row => row.remove());
                         }
                     },
@@ -793,7 +793,7 @@ export function updateEditArrowClasses() {
     }
 
     const chatElement = shell().state.chatElement;
-    const root = chatElement?.jquery ? chatElement[0] : chatElement;
+    const root = chatElement;
     if (!root) return;
 
     const rows = root.querySelectorAll('.mes');
