@@ -38,7 +38,7 @@ export function normalizeCanonicalWorldInfoName(name: unknown) {
 
 function getExistingWorldBookRow(db: DatabaseSync, name: string) {
     return db.prepare(`
-        SELECT id, name, payload_json, metadata_json, deleted_at_ms
+        SELECT id, name, payload_json, metadata_json, deleted_at_ms, revision
         FROM world_books
         WHERE name = ?
     `).get(name);
@@ -167,6 +167,7 @@ export function upsertCanonicalWorldInfoBookInTransaction(db: DatabaseSync, {
                 source_mtime_ms = excluded.source_mtime_ms,
                 source_size_bytes = excluded.source_size_bytes,
                 updated_at_ms = excluded.updated_at_ms,
+                revision = world_books.revision + 1,
                 deleted_at_ms = NULL
         `).run(
         worldBookId,
@@ -184,7 +185,12 @@ export function upsertCanonicalWorldInfoBookInTransaction(db: DatabaseSync, {
         entries: normalizedPayload.entries,
         nowMs,
     });
-    return { id: worldBookId, name: normalizedName };
+    return { id: worldBookId, name: normalizedName, revision: Number(existing?.revision ?? 0) + 1 };
+}
+
+export function getCanonicalWorldInfoRevision(db: DatabaseSync, name: unknown) {
+    const row = getExistingWorldBookRow(db, normalizeCanonicalWorldInfoName(name));
+    return row && row.deleted_at_ms == null ? Number(row.revision) : 0;
 }
 
 export function upsertCanonicalWorldInfoBook(db: DatabaseSync, options: UpsertOptions) {

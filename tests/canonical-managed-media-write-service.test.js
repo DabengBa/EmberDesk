@@ -94,6 +94,24 @@ afterEach(() => {
 });
 
 describe('canonical managed media write service', () => {
+    test('cleans staging files when installing media fails', async () => {
+        const directories = makeDirectories();
+        const manager = createManager();
+        const db = seedCleanAudit(manager, directories);
+        const rename = jest.spyOn(fs, 'renameSync').mockImplementation(() => { throw new Error('injected install failure'); });
+        try {
+            await expect(writeCanonicalManagedMedia({
+                handle: 'alice', directories, dependencies: dependencies(manager), projection: 'off',
+                compatibilityPath: 'assets/sky.png', ownerType: 'asset', ownerId: 'sky',
+                role: 'asset', displayName: 'sky.png', contents: Buffer.from('new bytes'),
+            })).rejects.toThrow('injected install failure');
+            expect(fs.readdirSync(path.join(directories.storage, 'managed-media', '.staging'))).toEqual([]);
+            expect(listCanonicalManagedMediaReferences(db)).toHaveLength(0);
+        } finally {
+            rename.mockRestore();
+        }
+    });
+
     test('records a media intent before projecting the file', async () => {
         const directories = makeDirectories();
         const manager = createManager();

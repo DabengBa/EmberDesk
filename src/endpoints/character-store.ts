@@ -8,6 +8,7 @@ type CharacterPayload = {
     data?: { name?: unknown; extensions?: { world?: unknown } };
     avatar?: SQLOutputValue;
     canonical_id?: SQLOutputValue;
+    canonical_card_version?: SQLOutputValue;
     chat_size?: number;
     date_last_chat?: number;
 };
@@ -73,6 +74,7 @@ function mapCanonicalRowToPayload(row: CharacterRow, useShallowPayload: boolean,
 
     payload.avatar = row.avatar_filename;
     payload.canonical_id = row.id;
+    if (!useShallowPayload) payload.canonical_card_version = row.card_json;
     return options.includeChatStats === false
         ? clearCanonicalChatStats(payload)
         : applyCanonicalChatStats(payload, row);

@@ -19,6 +19,7 @@ import { coordinateWorkspaceWrite } from './coordinate-workspace-write.js';
 import { recordWorldProjectionIntent, replayWorldProjection } from '../canonical-world-info-projection.ts';
 import {
     getCanonicalWorldInfoBook,
+    getCanonicalWorldInfoRevision,
     listCanonicalWorldInfoBooks,
     markCanonicalWorldInfoBookDeleted,
     normalizeCanonicalWorldInfoName,
@@ -210,6 +211,7 @@ router.post('/get', async (request, response) => {
     }
 
     const canonicalBook = getCanonicalWorldInfoBook(canonicalReadState.db, request.body.name);
+    response.set('X-World-Info-Revision', String(getCanonicalWorldInfoRevision(canonicalReadState.db, request.body.name)));
     return response.send(canonicalBook ?? { entries: {} });
 });
 
@@ -362,20 +364,27 @@ router.post('/edit', coordinateWorkspaceWrite('world', (request: Request) => req
     const canonicalWriteState = await getCanonicalWorldInfoWriteState(request);
     if (canonicalWriteState.ok) {
         const mode = getCanonicalStorageSlice('world_info').getProjectionMode();
-        const repairKey = withCanonicalTransaction(canonicalWriteState.db, txn => {
-            upsertCanonicalWorldInfoBookInTransaction(txn, { name: worldName, payload: request.body.data });
-            return recordWorldProjectionIntent(txn, { directories: request.user.directories, name: worldName, action: 'write', mode });
+        const result = withCanonicalTransaction(canonicalWriteState.db, txn => {
+            const revision = getCanonicalWorldInfoRevision(txn, worldName);
+            if (request.body.expectedRevision != null && request.body.expectedRevision !== revision) {
+                return { ok: false as const, revision };
+            }
+            const saved = upsertCanonicalWorldInfoBookInTransaction(txn, { name: worldName, payload: request.body.data });
+            const repairKey = recordWorldProjectionIntent(txn, { directories: request.user.directories, name: worldName, action: 'write', mode });
+            return { ok: true as const, revision: saved.revision, repairKey };
         });
+        if (!result.ok) return response.status(409).send({ error: 'world_info_conflict', revision: result.revision });
+        const { repairKey } = result;
 
         try {
             replayWorldProjection(canonicalWriteState.db, { directories: request.user.directories, repairKey });
             invalidateDirectory(request.user.directories.worlds);
         } catch (error) {
             console.warn('World projection failed:', error);
-            return response.status(500).send({ error: 'Failed to project canonical World Info file.', repairKey });
+            return response.status(500).send({ error: 'Failed to project canonical World Info file.', repairKey, committed: true, revision: result.revision });
         }
 
-        return response.send({ ok: true });
+        return response.send({ ok: true, revision: result.revision });
     }
 
     return sendCanonicalWorldInfoUnavailable(response, canonicalWriteState);

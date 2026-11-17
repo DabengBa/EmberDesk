@@ -1,11 +1,12 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import express from 'express';
 
 import { afterAll, afterEach, beforeAll, describe, expect, test } from '@jest/globals';
 
 import { createCanonicalSqliteManager, canonicalSqliteManager } from '../src/canonical-sqlite.ts';
-import { runCanonicalMigrations } from '../src/canonical-sqlite-migrations.ts';
+import { CANONICAL_SQLITE_MIGRATIONS, runCanonicalMigrations } from '../src/canonical-sqlite-migrations.ts';
 import { getPersistedCanonicalAuditStatus } from '../src/canonical-sqlite-shadow-import.ts';
 import { setConfigFilePath } from '../src/util.js';
 
@@ -146,7 +147,7 @@ describe('presets canonical store', () => {
         expect(JSON.parse(getCanonicalPreset(db, { name: 'Default' }).payloadJson)).toEqual({ v: 1 });
     });
 
-    test('delete removes the row and reports whether anything was deleted', () => {
+    test('delete hides the preset and reports whether anything was deleted', () => {
         const directories = makeDirectories();
         const db = openDb(directories);
 
@@ -154,6 +155,27 @@ describe('presets canonical store', () => {
         expect(deleteCanonicalPreset(db, { name: 'Alpha' }).deleted).toBe(true);
         expect(getCanonicalPreset(db, { name: 'Alpha' })).toBeNull();
         expect(deleteCanonicalPreset(db, { name: 'Alpha' }).deleted).toBe(false);
+    });
+
+    test('v18 preset survives upgrade and revisions advance across repeated deletes and recreations', () => {
+        const directories = makeDirectories();
+        const db = canonicalSqliteManager.open({ handle: 'tester', directories, featureFlags: { enabled: true, strict: false } });
+        runCanonicalMigrations(db, { migrations: CANONICAL_SQLITE_MIGRATIONS.slice(0, 18) });
+        db.prepare("INSERT INTO preset_documents (api_id, name, payload_json, revision, content_hash, source, created_at_ms, updated_at_ms) VALUES ('openai', 'Alpha', '{\"v\":1}', 7, 'hash', 'user', 1, 1)").run();
+        expect(runCanonicalMigrations(db).ok).toBe(true);
+        expect(getCanonicalPreset(db, { name: 'Alpha' }).revision).toBe(7);
+        for (let oldRevision = 7; oldRevision < 10; oldRevision++) {
+            expect(deleteCanonicalPreset(db, { name: 'Alpha' }).deleted).toBe(true);
+            expect(listCanonicalPresets(db)).toEqual([]);
+            expect(upsertCanonicalPreset(db, { name: 'Alpha', payload: { v: 'stale' }, expectedRevision: oldRevision }).ok).toBe(false);
+            const recreated = upsertCanonicalPreset(db, { name: 'Alpha', payload: { v: oldRevision }, expectedRevision: 0 });
+            expect(recreated.created).toBe(true);
+            expect(recreated.revision).toBe(oldRevision + 1);
+        }
+        expect(deleteCanonicalPreset(db, { name: 'Alpha' }).deleted).toBe(true);
+        const reseeded = ensureCanonicalPreset(db, { name: 'Alpha', payload: { seeded: true } });
+        expect(reseeded.inserted).toBe(true);
+        expect(reseeded.preset.revision).toBe(11);
     });
 
     test('list sorts names like the retired directory read', () => {
@@ -287,6 +309,66 @@ describe('presets routes', () => {
 });
 
 describe('settings /get preset integration', () => {
+    test('HTTP stale editor cannot overwrite a preset deleted and recreated under the same name', async () => {
+        const directories = makeDirectories();
+        const db = openDb(directories);
+        upsertCanonicalPreset(db, { name: 'Alpha', payload: { value: 'original' } });
+        const app = express();
+        app.use(express.json(), (req, _res, next) => { req.user = { profile: { handle: 'tester' }, directories }; next(); });
+        app.use('/settings', settingsRouter);
+        app.use('/presets', presetsRouter);
+        const server = app.listen(0, '127.0.0.1');
+        try {
+            await new Promise(resolve => server.once('listening', resolve));
+            const post = (route, body = {}) => fetch(`http://127.0.0.1:${server.address().port}${route}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+            const before = await (await post('/settings/get')).json();
+            const staleRevision = before.openai_setting_revisions.Alpha;
+            expect(staleRevision).toBe(1);
+            expect((await post('/presets/delete', { apiId: 'openai', name: 'Alpha' })).status).toBe(200);
+            const deleted = await (await post('/settings/get')).json();
+            expect(deleted.openai_setting_names).not.toContain('Alpha');
+            const recreated = await post('/presets/save', { apiId: 'openai', name: 'Alpha', preset: { value: 'recreated' }, expectedRevision: 0 });
+            expect(recreated.status).toBe(200);
+            const recreatedRevision = (await recreated.json()).revision;
+            const stale = await post('/presets/save', { apiId: 'openai', name: 'Alpha', preset: { value: 'stale' }, expectedRevision: staleRevision });
+            expect(stale.status).toBe(409);
+            expect(recreatedRevision).toBeGreaterThan(staleRevision);
+            expect(JSON.parse(getCanonicalPreset(db, { name: 'Alpha' }).payloadJson)).toEqual({ value: 'recreated' });
+        } finally {
+            await new Promise(resolve => server.close(resolve));
+        }
+    });
+
+    test('HTTP preset revisions match the loaded values and reject a stale editor', async () => {
+        const directories = makeDirectories();
+        const db = openDb(directories);
+        upsertCanonicalPreset(db, { name: 'Alpha', payload: { value: 'original' } });
+        const app = express();
+        app.use(express.json(), (req, _res, next) => { req.user = { profile: { handle: 'tester' }, directories }; next(); });
+        app.use('/settings', settingsRouter);
+        app.use('/presets', presetsRouter);
+        const server = app.listen(0, '127.0.0.1');
+        try {
+            await new Promise(resolve => server.once('listening', resolve));
+            const post = (route, body = {}) => fetch(`http://127.0.0.1:${server.address().port}${route}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+            const a = await (await post('/settings/get')).json();
+            const b = await (await post('/settings/get')).json();
+            expect(a.openai_settings).toEqual(b.openai_settings);
+            const revision = a.openai_setting_revisions.Alpha;
+            const first = await post('/presets/save', { apiId: 'openai', name: 'Alpha', preset: { value: 'first' }, expectedRevision: revision });
+            expect(first.status).toBe(200);
+            const firstResult = await first.json();
+            const stale = await post('/presets/save', { apiId: 'openai', name: 'Alpha', preset: { value: 'stale' }, expectedRevision: revision });
+            expect(stale.status).toBe(409);
+            expect(await stale.json()).toMatchObject({ error: 'preset_conflict', revision: revision + 1 });
+            expect(a.openai_setting_revisions.Alpha).toBe(revision);
+            expect(b.openai_setting_revisions.Alpha).toBe(revision);
+            expect(firstResult.revision).toBe(revision + 1);
+            expect(JSON.parse(getCanonicalPreset(db, { name: 'Alpha' }).payloadJson)).toEqual({ value: 'first' });
+        } finally {
+            await new Promise(resolve => server.close(resolve));
+        }
+    });
     test('first /get migrates files into canonical rows and serves them', async () => {
         const directories = makeDirectories();
         fs.writeFileSync(path.join(directories.openAI_Settings, 'openai.json'), JSON.stringify({ name: 'OpenAI' }), 'utf8');

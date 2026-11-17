@@ -33,7 +33,7 @@ Important constraints:
 - clear deletes only the fallback secret and clears only the fallback input
 - selector drift should fail focused tests instead of silently skipping key clearing or status updates
 - masked state, labels, and active selection continue to come from the existing secret endpoints; frontend code does not query canonical secret tables
-- SQLite authority does not imply encryption at rest, and browser state must never cache the raw secret returned by privileged exposure routes
+- SQLite authority does not imply encryption at rest; the browser must not cache raw provider secrets
 
 ## Core Implementation
 
@@ -50,6 +50,8 @@ Important constraints:
 `public/scripts/secrets.js` maps `SECRET_KEYS.OPENAI_FALLBACK` to `#fallback_provider_api_key`. `public/scripts/openai.js` delegates fallback status, save, clear, and mask behavior to the state module while keeping current event binding and visible drawer structure.
 
 On the server, `src/endpoints/secrets.js` remains the public manager/router boundary and exports the router created by `src/endpoints/secrets-routes.ts`. When canonical storage flags and the `secrets` audit gate pass, `SecretManager` reads and writes `secret_records` through `src/canonical-secrets-backend.ts`; writes commit SQLite first. When projection is enabled, they then atomically project `secrets.json`; projection is off by default. Projection failures record only record identifiers, operation, error class, and timestamps, keep DB reads authoritative, and block later writes until operator repair and re-audit.
+
+The secret read state masks non-exportable values. `/view` returns 403, `/find` returns values only for `EXPORTABLE_KEYS`, and `/settings` reports `allowKeysExposure: false`, regardless of the configured exposure flag.
 
 The file backend remains available when canonical flags are off. Rollback after canonical writes is valid only when the `secrets` audit is clean, the compatibility projection is current, and no `secret_projection_repairs` row remains open.
 

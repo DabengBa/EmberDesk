@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { readFile } from 'node:fs/promises';
 
 import { testSetup } from './frontend/frontent-test-utils.js';
 
@@ -187,6 +188,199 @@ test.describe('character text replace', () => {
         expect(assistant.extra.reasoning).toContain(markerAfter);
         expect(assistant.name).toBe(characterName);
     });
+});
+
+test('export stops on failed presave and advances the version after a successful presave', async ({ page }) => {
+    await testSetup.awaitST({ page });
+    await openCharacterLibrary(page);
+    await page.getByRole('searchbox', { name: /Search characters|搜索角色/ }).fill(characterName);
+    await page.locator('#rm_print_characters_block .character_select').filter({ hasText: characterName }).first().click();
+    const authoring = page.locator('[data-react-authoring-owner="characterAuthoring"]');
+    const description = authoring.locator('[data-react-authoring-field="description"] textarea');
+    await expect(description).toBeVisible();
+    const now = Date.now();
+    await page.clock.install({ time: now });
+    await page.clock.pauseAt(now + 1000);
+    await description.fill('Export presave draft');
+    await page.route('**/api/characters/edit', route => route.fulfill({ status: 500 }));
+    const failed = page.waitForResponse(response => response.url().endsWith('/api/characters/edit'));
+    await authoring.locator('[data-character-export-trigger]').click();
+    expect((await failed).status()).toBe(500);
+    await expect(page.locator('#export_format_popup')).toBeHidden();
+    await page.unroute('**/api/characters/edit');
+    const saved = page.waitForResponse(response => response.url().endsWith('/api/characters/edit'));
+    await authoring.locator('[data-character-export-trigger]').click();
+    expect((await saved).status()).toBe(200);
+    await expect(page.locator('#export_format_popup')).toBeVisible();
+    const extraWrites = [];
+    const recordExtraWrites = request => {
+        if (request.url().endsWith('/api/characters/edit')) extraWrites.push(request);
+    };
+    page.on('request', recordExtraWrites);
+    const downloaded = page.waitForEvent('download');
+    await page.locator('#export_format_popup .export_format[data-format="json"]').click();
+    const download = await downloaded;
+    const exported = JSON.parse(await readFile(await download.path(), 'utf8'));
+    expect(exported.data.description).toBe('Export presave draft');
+    page.off('request', recordExtraWrites);
+    expect(extraWrites).toHaveLength(0);
+    const nextSave = page.waitForResponse(response => response.url().endsWith('/api/characters/edit'));
+    await description.fill('Edit after export');
+    await page.clock.runFor(1000);
+    expect((await nextSave).status()).toBe(200);
+    const stored = await fetchWithCsrf(page, '/api/characters/get', { avatar_url: avatarUrl });
+    expect(stored.json.data.description).toBe('Edit after export');
+    await authoring.locator('[data-character-export-trigger]').click();
+    await expect(page.locator('#export_format_popup')).toBeVisible();
+    const secondDownload = page.waitForEvent('download');
+    await page.locator('#export_format_popup .export_format[data-format="json"]').click();
+    const secondExport = JSON.parse(await readFile(await (await secondDownload).path(), 'utf8'));
+    expect(secondExport.data.description).toBe('Edit after export');
+    await authoring.getByRole('button', { name: '查找替换', exact: true }).click();
+    const dialog = page.locator('dialog[aria-label="查找替换"]');
+    await dialog.getByPlaceholder('要查找的文本').fill('Edit after export');
+    await dialog.getByPlaceholder('替换文本（可为空）').fill('Export verified');
+    const previewSave = page.waitForResponse(response => response.url().endsWith('/api/characters/edit'));
+    await dialog.getByRole('button', { name: '预览', exact: true }).click();
+    expect((await previewSave).status()).toBe(200);
+    await expect(dialog.getByText(/「Edit after export」/).first()).toBeVisible();
+});
+
+test('a committed projection failure advances the version without losing newer edits', async ({ page }) => {
+    await testSetup.awaitST({ page });
+    await openCharacterLibrary(page);
+    await page.getByRole('searchbox', { name: /Search characters|搜索角色/ }).fill(characterName);
+    await page.locator('#rm_print_characters_block .character_select').filter({ hasText: characterName }).first().click();
+    const description = page.locator('[data-react-authoring-field="description"] textarea');
+    await expect(description).toBeVisible();
+    const now = Date.now();
+    await page.clock.install({ time: now });
+    await page.clock.pauseAt(now + 1000);
+    let release;
+    const blocked = new Promise(resolve => { release = resolve; });
+    let started;
+    const ready = new Promise(resolve => { started = resolve; });
+    let count = 0;
+    await page.route('**/api/characters/edit', async route => {
+        if (++count !== 1) return route.continue();
+        const response = await route.fetch();
+        const saved = await response.json();
+        started();
+        await blocked;
+        await route.fulfill({ status: 500, json: { error: 'projection_failed', authority_committed: true, canonical_card_version: saved.canonical_card_version } });
+    });
+    await description.fill('Committed before projection failure');
+    await page.clock.runFor(1000);
+    await ready;
+    await description.fill('New edit during projection failure');
+    const failed = page.waitForResponse(response => response.url().endsWith('/api/characters/edit') && response.status() === 500);
+    release();
+    await failed;
+    await expect(description).toHaveValue('New edit during projection failure');
+    await expect(page.locator('#toast-container')).toContainText(/兼容性投影失败|compatibility projection failed/);
+    const nextSave = page.waitForResponse(response => response.url().endsWith('/api/characters/edit') && response.status() === 200);
+    await page.clock.runFor(1000);
+    expect((await nextSave).status()).toBe(200);
+    await expect(description).toHaveValue('New edit during projection failure');
+});
+
+test('preview waits for in-flight autosave and uses its committed version', async ({ page }) => {
+    await testSetup.awaitST({ page });
+    await openCharacterLibrary(page);
+    await page.getByRole('searchbox', { name: /Search characters|搜索角色/ }).fill(characterName);
+    await page.locator('#rm_print_characters_block .character_select').filter({ hasText: characterName }).first().click();
+    const authoring = page.locator('[data-react-authoring-owner="characterAuthoring"]');
+    const description = authoring.locator('[data-react-authoring-field="description"] textarea');
+    await expect(description).toBeVisible();
+    const now = Date.now();
+    await page.clock.install({ time: now });
+    await page.clock.pauseAt(now + 1000);
+    await description.fill('InFlightPreview draft');
+    let release;
+    const blocked = new Promise(resolve => { release = resolve; });
+    let started;
+    const ready = new Promise(resolve => { started = resolve; });
+    let edits = 0;
+    let secondRequest;
+    await page.route('**/api/characters/edit', async route => {
+        if (++edits === 1) { started(); await blocked; }
+        else secondRequest = route.request();
+        await route.continue();
+    });
+    await authoring.evaluate(element => {
+        element.dispatchEvent(new KeyboardEvent('keydown', { key: 's', ctrlKey: true, bubbles: true }));
+        [...element.querySelectorAll('button')].find(button => button.textContent.trim() === '查找替换')?.click();
+    });
+    await ready;
+    const dialog = page.locator('dialog[aria-label="查找替换"]');
+    await expect(dialog).toBeVisible();
+    await dialog.getByPlaceholder('要查找的文本').fill('InFlightPreview');
+    await dialog.getByPlaceholder('替换文本（可为空）').fill('Replaced');
+    await dialog.getByRole('button', { name: '预览', exact: true }).click();
+    const secondSave = page.waitForResponse(response => response.request() === secondRequest);
+    release();
+    expect((await secondSave).status()).toBe(200);
+    await expect(dialog.getByText(/「InFlightPreview」/).first()).toBeVisible();
+    expect(edits).toBe(2);
+});
+
+test('a failed preview still advances the saved draft for retry', async ({ page }) => {
+    await testSetup.awaitST({ page });
+    await openCharacterLibrary(page);
+    await page.getByRole('searchbox', { name: /Search characters|搜索角色/ }).fill(characterName);
+    await page.locator('#rm_print_characters_block .character_select').filter({ hasText: characterName }).first().click();
+    const description = page.locator('[data-react-authoring-field="description"] textarea');
+    await expect(description).toBeVisible();
+    const now = Date.now();
+    await page.clock.install({ time: now });
+    await page.clock.pauseAt(now + 1000);
+    await description.fill('RetryPreview draft');
+    await page.getByRole('button', { name: '查找替换', exact: true }).click();
+    const dialog = page.locator('dialog[aria-label="查找替换"]');
+    await dialog.getByPlaceholder('要查找的文本').fill('RetryPreview');
+    await dialog.getByPlaceholder('替换文本（可为空）').fill('RetrySuccess');
+    await page.route('**/api/characters/text-replace/preview', route => route.fulfill({ status: 500 }));
+    const failedPreview = page.waitForResponse(response => response.url().endsWith('/api/characters/text-replace/preview'));
+    await dialog.getByRole('button', { name: '预览', exact: true }).click();
+    expect((await failedPreview).status()).toBe(500);
+    await page.unroute('**/api/characters/text-replace/preview');
+    const retrySave = page.waitForResponse(response => response.url().endsWith('/api/characters/edit'));
+    await dialog.getByRole('button', { name: '预览', exact: true }).click();
+    expect((await retrySave).status()).toBe(200);
+    await expect(dialog.getByText(/「RetryPreview」/).first()).toBeVisible();
+});
+
+test('preview advances the draft version before apply and subsequent editing', async ({ page }) => {
+    await testSetup.awaitST({ page });
+    await openCharacterLibrary(page);
+    await page.getByRole('searchbox', { name: /Search characters|搜索角色/ }).fill(characterName);
+    await page.locator('#rm_print_characters_block .character_select').filter({ hasText: characterName }).first().click();
+    const authoring = page.locator('[data-react-authoring-owner="characterAuthoring"]');
+    const description = authoring.locator('[data-react-authoring-field="description"] textarea');
+    await expect(description).toBeVisible();
+    const now = Date.now();
+    await page.clock.install({ time: now });
+    await page.clock.pauseAt(now + 1000);
+    await description.fill('VersionPreviewBefore draft');
+    await authoring.getByRole('button', { name: '查找替换', exact: true }).click();
+    const dialog = page.locator('dialog[aria-label="查找替换"]');
+    await dialog.getByPlaceholder('要查找的文本').fill('VersionPreviewBefore');
+    await dialog.getByPlaceholder('替换文本（可为空）').fill('VersionPreviewAfter');
+    await dialog.getByRole('button', { name: '预览', exact: true }).click();
+    await expect(dialog.getByText(/「VersionPreviewBefore」/).first()).toBeVisible();
+    const applySave = page.waitForResponse(response => response.url().endsWith('/api/characters/edit'));
+    page.once('dialog', confirm => void confirm.accept());
+    await dialog.getByRole('button', { name: /^应用 .* 处替换$/ }).click();
+    expect((await applySave).status()).toBe(200);
+    await expect(dialog.getByText('✓ 角色卡已更新')).toBeVisible();
+    await dialog.getByRole('button', { name: '完成', exact: true }).click();
+    await expect(description).toHaveValue('VersionPreviewAfter draft');
+    const nextSave = page.waitForResponse(response => response.url().endsWith('/api/characters/edit'));
+    await description.fill('Normal edit after replacement');
+    await page.clock.runFor(1000);
+    expect((await nextSave).status()).toBe(200);
+    const card = await fetchWithCsrf(page, '/api/characters/get', { avatar_url: avatarUrl });
+    expect(card.json?.data?.description).toBe('Normal edit after replacement');
 });
 
 test('a pending autosave cannot overwrite an applied replacement while the dialog is open', async ({ page }) => {
@@ -385,4 +579,40 @@ test('cancelling the dialog keeps the unsaved draft', async ({ page }) => {
         const card = await fetchWithCsrf(page, '/api/characters/get', { avatar_url: avatarUrl });
         return card.json?.data?.description ?? card.json?.description;
     }).toBe('CancelDraft draft');
+});
+
+test('a concurrent card edit rejects the tool presave and keeps the draft', async ({ page }) => {
+    await testSetup.awaitST({ page });
+    await openCharacterLibrary(page);
+    await page.getByRole('searchbox', { name: /Search characters|搜索角色/ }).fill(characterName);
+    await page.locator('#rm_print_characters_block .character_select').filter({ hasText: characterName }).first().click();
+    const description = page.locator('[data-react-authoring-field="description"] textarea');
+    await expect(description).toBeVisible();
+    const now = Date.now();
+    await page.clock.install({ time: now });
+    await page.clock.pauseAt(now + 1000);
+    await description.fill('Local conflict draft');
+    const snapshot = (await fetchWithCsrf(page, '/api/characters/get', { avatar_url: avatarUrl })).json;
+    const external = await fetchWithCsrf(page, '/api/characters/edit', {
+        avatar_url: avatarUrl, ch_name: characterName, description: 'Concurrent remote edit',
+        json_data: snapshot.json_data, expected_card_json: snapshot.canonical_card_version,
+    });
+    expect(external.status).toBe(200);
+    await page.getByRole('button', { name: '查找替换', exact: true }).click();
+    const dialog = page.locator('dialog[aria-label="查找替换"]');
+    await dialog.getByPlaceholder('要查找的文本').fill('Local');
+    const conflict = page.waitForResponse(response => response.url().endsWith('/api/characters/edit'));
+    await dialog.getByRole('button', { name: '预览', exact: true }).click();
+    expect((await conflict).status()).toBe(409);
+    await dialog.getByRole('button', { name: /^(Close|关闭)$/ }).click();
+    await expect(description).toHaveValue('Local conflict draft');
+    const autosaveConflict = page.waitForResponse(response => response.url().endsWith('/api/characters/edit'));
+    await page.clock.runFor(1000);
+    expect((await autosaveConflict).status()).toBe(409);
+    await page.clock.runFor(100);
+    await expect(page.getByText(/^(保存失败|Save failed)$/)).toBeVisible();
+    await expect(page.locator('[data-react-authoring-owner="characterAuthoring"]')).not.toContainText(/下次修改时重试|next change retries/);
+    await expect(page.locator('#toast-container')).toContainText(/重新加载前复制|copy your changes before reloading/);
+    const stored = await fetchWithCsrf(page, '/api/characters/get', { avatar_url: avatarUrl });
+    expect(stored.json?.data?.description).toBe('Concurrent remote edit');
 });

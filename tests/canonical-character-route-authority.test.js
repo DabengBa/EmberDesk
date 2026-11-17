@@ -4,6 +4,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import archiver from 'archiver';
+import express from 'express';
+import multer from 'multer';
 import { afterEach, describe, expect, jest, test } from '@jest/globals';
 
 import { humanizedDateTime, setConfigFilePath } from '../src/util.js';
@@ -228,6 +230,52 @@ afterEach(() => {
 });
 
 describe('characters projection off', () => {
+    test('independent HTTP reads protect a character from a stale edit', async () => {
+        const directories = makeDirectories();
+        const { db } = await seedCanonicalCharacter(directories);
+        const app = express();
+        app.use(express.json());
+        app.use(multer({ dest: directories.root, limits: { fieldSize: 500 * 1024 * 1024 } }).single('avatar'));
+        app.use((request, _response, next) => {
+            request.user = { directories, profile: { handle: 'alice' } };
+            next();
+        });
+        app.use('/api/characters', router);
+        const server = await new Promise(resolve => {
+            const instance = app.listen(0, '127.0.0.1', () => resolve(instance));
+        });
+        try {
+            const url = `http://127.0.0.1:${server.address().port}/api/characters`;
+            const post = (route, body) => fetch(url + route, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+            });
+            const firstResponse = await post('/get', { avatar_url: 'alice.png' });
+            const secondResponse = await post('/get', { avatar_url: 'alice.png' });
+            expect(firstResponse.status).toBe(200);
+            expect(secondResponse.status).toBe(200);
+            const first = await firstResponse.json();
+            const second = await secondResponse.json();
+            expect(typeof first.canonical_card_version).toBe('string');
+            expect(second.canonical_card_version).toBe(first.canonical_card_version);
+            const edit = (snapshot, description) => {
+                const form = new FormData();
+                for (const [key, value] of Object.entries({
+                    avatar_url: 'alice.png', ch_name: 'Alice', description,
+                    json_data: snapshot.json_data, expected_card_json: snapshot.canonical_card_version,
+                })) form.set(key, value);
+                return fetch(url + '/edit', { method: 'POST', body: form });
+            };
+            const saved = await edit(first, 'first edit');
+            expect(saved.status).toBe(200);
+            const savedVersion = (await saved.json()).canonical_card_version;
+            expect(savedVersion).toBe(db.prepare('SELECT card_json FROM characters WHERE avatar_filename = ?').get('alice.png').card_json);
+            expect((await edit(second, 'stale edit')).status).toBe(409);
+            expect(JSON.parse(db.prepare('SELECT card_json FROM characters WHERE avatar_filename = ?').get('alice.png').card_json).description).toBe('first edit');
+        } finally {
+            await new Promise(resolve => server.close(resolve));
+        }
+    });
+
     test('BYAF import does not overwrite a colliding canonical chat or assign it as the imported character default', async () => {
         const directories = makeDirectories();
         const db = openDb(directories);

@@ -15,7 +15,7 @@ type RenameBody = CharacterBody & { avatar_url: string; new_name: string };
 type FormattedCharacter = Record<string, unknown>;
 export type CanonicalWriteOperation = 'create' | 'edit' | 'rename' | 'delete';
 export type CanonicalWritePayload = { directories: UserDirectoryList; request: Request; avatarName?: string; internalName?: string; characterData?: string; expectedCardJson?: string; response?: Response | null; oldAvatarName?: string; oldInternalName?: string; newAvatarName?: string; newInternalName?: string; deleteChats?: boolean };
-export type CanonicalWriteResult = { enabled: boolean; authorityCommitted: boolean; repairKey: string | null; projection?: string; mediaAuthorization?: unknown; settingsRevision?: number };
+export type CanonicalWriteResult = { enabled: boolean; authorityCommitted: boolean; repairKey: string | null; projection?: string; mediaAuthorization?: unknown; settingsRevision?: number; cardVersion?: string };
 export type ProjectionRepair = { repairKey: string | null; repairType: 'character_projection'; avatarName: string; operation: CanonicalWriteOperation; reason: 'projection_failed'; directories: UserDirectoryList; handle: string | null; details: Record<string, unknown> };
 type ProjectionOptions = { shouldRegenerateThumbnail?: boolean; skipCanonicalAuditInvalidation?: boolean; projection?: string };
 type FileOperations =
@@ -50,7 +50,7 @@ export type EditCharacterOptions = CommonWriteOptions & FileWriteOptions & { res
 type PreparedRename = { directories: UserDirectoryList; oldAvatarName: string; oldInternalName: string; newAvatarName: string; newInternalName: string; characterData: string; body?: null };
 export type RenameCharacterOptions = CommonWriteOptions & ({ body: RenameBody } | PreparedRename);
 export type DeleteCharacterOptions = Omit<CommonWriteOptions, 'dependencies'> & { dependencies: CharacterWriteDependencies & { removeDirectory: (target: string) => MaybePromise<unknown> }; avatarName?: string | null; deleteChats?: boolean };
-export type CharacterWriteResult = { ok: boolean; avatarName?: string; internalName?: string; reason?: string; message?: string; avatarPath?: string; authorityCommitted?: boolean; repairKey?: string | null; mediaAuthorization?: unknown; settingsRevision?: number };
+export type CharacterWriteResult = { ok: boolean; avatarName?: string; internalName?: string; reason?: string; message?: string; avatarPath?: string; authorityCommitted?: boolean; repairKey?: string | null; mediaAuthorization?: unknown; settingsRevision?: number; cardVersion?: string };
 
 function getDirectories({ request, directories }: Pick<CommonWriteOptions, 'request' | 'directories'>): UserDirectoryList {
     return directories ?? request.user.directories;
@@ -367,15 +367,21 @@ export async function editCharacterCard({
         };
     }
 
-    const canonicalResult = await maybeCommitCanonicalWrite(dependencies, 'edit', {
-        avatarName: prepared.avatarUrl,
-        internalName: prepared.targetFile,
-        characterData: prepared.characterData,
-        expectedCardJson,
-        directories: userDirectories,
-        request,
-        response,
-    });
+    let canonicalResult: CanonicalWriteResult;
+    try {
+        canonicalResult = await maybeCommitCanonicalWrite(dependencies, 'edit', {
+            avatarName: prepared.avatarUrl,
+            internalName: prepared.targetFile,
+            characterData: prepared.characterData,
+            expectedCardJson,
+            directories: userDirectories,
+            request,
+            response,
+        });
+    } catch (error) {
+        if (uploadPath) unlinkFile(dependencies, uploadPath);
+        throw error;
+    }
 
     if (!canonicalResult.authorityCommitted) {
         if (uploadPath) {
@@ -408,7 +414,7 @@ export async function editCharacterCard({
                     sourceImage: avatarPath,
                 }),
             });
-            return projectionFailedResult(prepared.avatarUrl, canonicalResult.repairKey);
+            return { ...projectionFailedResult(prepared.avatarUrl, canonicalResult.repairKey), cardVersion: canonicalResult.cardVersion };
         }
     } else {
         const result = await dependencies.writeCharacterData(
@@ -435,13 +441,13 @@ export async function editCharacterCard({
                     sourceImage: uploadPath,
                 }),
             });
-            return projectionFailedResult(prepared.avatarUrl, canonicalResult.repairKey);
+            return { ...projectionFailedResult(prepared.avatarUrl, canonicalResult.repairKey), cardVersion: canonicalResult.cardVersion };
         }
 
         dependencies.bustCache?.(request, response);
     }
 
-    return okResult(prepared.avatarUrl);
+    return okResult(prepared.avatarUrl, { cardVersion: canonicalResult.cardVersion });
 }
 
 /**

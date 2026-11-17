@@ -107,6 +107,7 @@ function normalizeProjectedCharacterAuthoringDraft(draft = {}, options = {}) {
         mode: options.mode ?? draft.mode ?? (draft.avatar ? 'edit' : 'create'),
         name: normalizeString(draft.name),
         avatar: normalizeString(draft.avatar),
+        canonicalCardVersion: typeof draft.canonicalCardVersion === 'string' ? draft.canonicalCardVersion : undefined,
         description: normalizeString(draft.description),
         scenario: normalizeString(draft.scenario),
         firstMessage: normalizeString(draft.firstMessage),
@@ -158,6 +159,7 @@ export function createCharacterAuthoringDraft(character = {}, options = {}) {
         mode,
         name: normalizeString(data.name || character?.name || CHARACTER_FIELD_DEFAULTS.name),
         avatar: normalizeString(character?.avatar || CHARACTER_FIELD_DEFAULTS.avatar),
+        canonicalCardVersion: typeof character?.canonical_card_version === 'string' ? character.canonical_card_version : undefined,
         description: normalizeString(data.description || character?.description || CHARACTER_FIELD_DEFAULTS.description),
         scenario: normalizeString(data.scenario || character?.scenario || CHARACTER_FIELD_DEFAULTS.scenario),
         firstMessage: normalizeString(data.first_mes || character?.first_mes || CHARACTER_FIELD_DEFAULTS.firstMessage),
@@ -249,6 +251,7 @@ export function getCharacterAuthoringDirtyFields(initialDraft, nextDraft) {
 
 export function createCharacterAuthoringSaveModel(draft) {
     return {
+        expectedCardJson: draft?.canonicalCardVersion,
         fields: {
             name: normalizeString(draft?.name),
             avatar: normalizeString(draft?.avatar),
@@ -346,7 +349,7 @@ export function createCharacterAuthoringSession(character = {}, options = {}) {
             rebase(savedDraft) {
                 // Advance the clean baseline to the just-saved draft while keeping
                 // edits made in this session after the save request was issued.
-                return createCharacterAuthoringSession(savedDraft, options).update(nextDraft);
+                return createCharacterAuthoringSession(savedDraft, options).update({ ...nextDraft, canonicalCardVersion: savedDraft.canonicalCardVersion });
             },
             submit() {
                 return createCharacterSubmitResult(nextDraft);
@@ -372,6 +375,10 @@ export function buildCharacterAuthoringFormData(saveModel, meta = {}) {
         ? extensions.depth_prompt
         : { prompt: '', depth: null, role: null };
     const formData = new FormData();
+
+    if (meta.mode === 'edit' && typeof saveModel?.expectedCardJson === 'string') {
+        formData.set('expected_card_json', saveModel.expectedCardJson);
+    }
 
     formData.set('ch_name', normalizeString(fields.name));
     formData.set('description', normalizeString(fields.description));

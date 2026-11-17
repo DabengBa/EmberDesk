@@ -233,6 +233,10 @@ export async function saveCharacterAuthoringFromPayload(saveModel = {}) {
     if (!finishSave) return { ok: false, mode };
     let transition;
     try {
+        if (mode === 'edit' && sourceCharacter?.shallow && typeof saveModel?.expectedCardJson !== 'string') {
+            toastr.error(t`The character has not finished loading. Your draft has been kept; reload the character before saving.`);
+            throw new Error('Character not loaded');
+        }
         const expectedName = String(saveModel?.fields?.name || '').trim();
         if (!expectedName) {
             toastr.error(t`Name is required`);
@@ -284,13 +288,32 @@ export async function saveCharacterAuthoringFromPayload(saveModel = {}) {
             cache: 'no-cache',
         });
 
-        if (!fetchResult.ok) {
-            const message = mode === 'create'
+        let committedProjectionVersion;
+        if (!fetchResult.ok && fetchResult.status === 500 && mode === 'edit' && typeof saveModel?.expectedCardJson === 'string') {
+            const failure = await fetchResult.json().catch(() => null);
+            if (failure?.error === 'projection_failed' && failure.authority_committed === true && typeof failure.canonical_card_version === 'string') {
+                committedProjectionVersion = failure.canonical_card_version;
+            }
+        }
+        if (!fetchResult.ok && committedProjectionVersion === undefined) {
+            const message = fetchResult.status === 409
+                ? t`This character changed elsewhere. Your draft has been kept; copy your changes before reloading.`
+                : mode === 'create'
                 ? t`Failed to create character`
                 : t`Something went wrong while saving the character, or the image file provided was in an invalid format. Double check that the image is not a webp.`;
             toastr.error(message);
             throw new Error(`Character authoring ${mode} failed with status ${fetchResult.status}`);
         }
+
+        if (committedProjectionVersion !== undefined) {
+            toastr.warning(t`The character was saved, but its compatibility projection failed. Some exports may be outdated until it is repaired.`, '', { timeOut: 0 });
+            state.crop_data = undefined;
+            return { ok: true, mode, canonicalCardVersion: committedProjectionVersion, projectionFailed: true };
+        }
+
+        const savedVersion = mode === 'edit' && typeof saveModel?.expectedCardJson === 'string'
+            ? (await fetchResult.json()).canonical_card_version
+            : undefined;
 
         if (mode === 'create') {
             const avatarId = await fetchResult.text();
@@ -298,6 +321,7 @@ export async function saveCharacterAuthoringFromPayload(saveModel = {}) {
             await getCharacters();
             const createdIndex = state.characters.findIndex(character => character?.avatar === avatarId);
             if (createdIndex >= 0) {
+                await unshallowCharacter(String(createdIndex));
                 try {
                     await shell().prepareChatTransition(transition);
                 } catch {
@@ -380,6 +404,7 @@ export async function saveCharacterAuthoringFromPayload(saveModel = {}) {
             ok: true,
             mode,
             avatar: editedAvatar,
+            canonicalCardVersion: savedVersion,
             character: state.this_chid !== undefined ? state.characters[state.this_chid] : null,
         };
     } finally {

@@ -2424,7 +2424,7 @@ function applyCharacterAuthoringSaveModel(saveModel = {}, { submit: _submit = tr
 
 /**
  * Makes the pending React draft visible to a legacy action. In edit mode the
- * draft is persisted outright (returns true) so that actions which read or
+ * draft is persisted outright (returns the save result) so that actions which read or
  * mutate the server-side card — rename, export, duplicate, lore import — work
  * on current data, and a fresh remount won't regress them. On failure the
  * draft is only mirrored into the hidden form as before.
@@ -2439,8 +2439,8 @@ async function persistAuthoringDraftBeforeLegacyAction(payload) {
         return false;
     }
     try {
-        await saveCharacterAuthoringFromPayload(payload);
-        return true;
+        const result = await saveCharacterAuthoringFromPayload(payload);
+        return result?.ok ? result : false;
     } catch {
         applyCharacterAuthoringSaveModel(payload, { submit: false });
         return false;
@@ -2671,9 +2671,12 @@ function getCharacterAuthoringReactCommands() {
             },
             exportAuthoring: async payload => {
                 // Export reads the saved card — persist pending edits first.
-                await persistAuthoringDraftBeforeLegacyAction(payload);
-                toggleCharacterExportPopup(getVisibleCharacterExportTrigger());
-                return false;
+                const result = await persistAuthoringDraftBeforeLegacyAction(payload);
+                if (result && !result.projectionFailed) {
+                    toggleCharacterExportPopup(getVisibleCharacterExportTrigger());
+                    exportPopupPresaved = true;
+                }
+                return result;
             },
             openWorldInfo: async payload => {
                 const identity = characterWorldDraftIdentity;
@@ -2773,10 +2776,12 @@ function getCharacterAuthoringReactCommands() {
             previewTextReplace: async payload => {
                 // Preview reads the saved card — persist pending edits first so the
                 // match list reflects what the user sees in the draft.
-                if (!await persistAuthoringDraftBeforeLegacyAction(payload)) {
+                const saved = await persistAuthoringDraftBeforeLegacyAction(payload);
+                if (!saved) {
                     return { ok: false, reason: 'character_save_failed' };
                 }
-                return await requestCharacterTextReplace('/api/characters/text-replace/preview', payload);
+                const result = await requestCharacterTextReplace('/api/characters/text-replace/preview', payload);
+                return { ...result, authoringSave: saved };
             },
             applyTextReplace: async payload => {
                 // A generation in flight would race the chat rewrite — the in-memory
@@ -2786,7 +2791,8 @@ function getCharacterAuthoringReactCommands() {
                     toastr.warning('Generation is in progress — wait for it to finish (or stop it) before applying replacements.');
                     return { ok: false, reason: 'generation_in_flight' };
                 }
-                if (!await persistAuthoringDraftBeforeLegacyAction(payload)) {
+                const saved = await persistAuthoringDraftBeforeLegacyAction(payload);
+                if (!saved) {
                     return { ok: false, reason: 'character_save_failed' };
                 }
                 // Flush any pending chat and metadata debounce saves so that
@@ -2813,6 +2819,7 @@ function getCharacterAuthoringReactCommands() {
                 const coordination = await createReplaceCoordinationIntent({ avatarUrl, chatFile, worldName, card, chatSelected, worldSelected });
                 const payloadWithCoord = coordination ? { ...payload, coordination } : payload;
                 const result = await requestCharacterTextReplace('/api/characters/text-replace/apply', payloadWithCoord);
+                result.authoringSave = saved;
                 // Attach coordination context to the result so the dialog can
                 // poll intent status on an unknown response.
                 if (coordination) {
@@ -4064,6 +4071,7 @@ function getExportPopper() {
     return exportPopper;
 }
 let exportPopupController = null;
+let exportPopupPresaved = false;
 
 function getExportPopupController() {
     if (!exportPopupController) {
@@ -4101,6 +4109,7 @@ function toggleCharacterExportPopup(referenceElement = document.getElementById('
         return;
     }
 
+    exportPopupPresaved = false;
     getExportPopupController().toggle(referenceElement);
 }
 
@@ -9463,7 +9472,7 @@ async function mountExportFormatPopup() {
 
     try {
         const module = await loadWorkspacePanelsModule();
-        module.mountExportFormatPopup(host, format => runCharacterExportCommand(format));
+        module.mountExportFormatPopup(host, format => runCharacterExportCommand(format, { presaved: exportPopupPresaved }));
         popup.dataset.reactExportFormatMounted = 'true';
     } catch (error) {
         console.error('Failed to mount export format popup:', error);

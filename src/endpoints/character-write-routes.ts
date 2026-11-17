@@ -57,9 +57,13 @@ export function createCharacterWriteHandlers({ createWriteDependencies, getBustC
                 response.status(400).send('Error: no avatar_url in request body');
                 return;
             }
+            if (request.body.expected_card_json !== undefined && typeof request.body.expected_card_json !== 'string') {
+                return response.sendStatus(400);
+            }
             try {
                 const result = await editCharacterCard({
                     request, response, body: request.body, file: uploadRequest.file ?? null,
+                    expectedCardJson: request.body.expected_card_json,
                     crop: uploadRequest.file ? tryParse(request.query.crop) : undefined,
                     dependencies: createWriteDependencies({ bustCache: getBustCache() }),
                 });
@@ -67,9 +71,17 @@ export function createCharacterWriteHandlers({ createWriteDependencies, getBustC
                     console.warn(result.message, result.avatarPath);
                     return response.status(400).send(result.message);
                 }
+                if (!result.ok && request.body.expected_card_json !== undefined && result.reason === 'projection_failed'
+                    && result.authorityCommitted && typeof result.cardVersion === 'string') {
+                    return response.status(500).send({ error: 'projection_failed', authority_committed: true, canonical_card_version: result.cardVersion });
+                }
                 if (!result.ok) return response.status(500).send(result.message);
+                if (request.body.expected_card_json !== undefined) return response.send({ canonical_card_version: result.cardVersion });
                 return response.sendStatus(200);
             } catch (err) {
+                if (err && typeof err === 'object' && 'code' in err && err.code === 'CHARACTER_CARD_CONFLICT') {
+                    return response.status(409).send({ error: 'character_card_conflict' });
+                }
                 console.error('An error occurred, character edit invalidated.', err);
                 return response.sendStatus(500);
             }

@@ -254,6 +254,7 @@ const oai_settings = structuredClone(default_settings);
 
 export let openai_setting_names;
 export let openai_settings;
+let openai_setting_revisions = {};
 
 // Installed once from the cached workspace bundle when the prompt panel mounts.
 // The state objects remain owned here and can be replaced during settings load.
@@ -269,10 +270,15 @@ export function installOpenAIPresetService(factory) {
         persist: async (name, preset) => {
             const response = await fetch('/api/presets/save', {
                 method: 'POST', headers: getRequestHeaders(),
-                body: JSON.stringify({ apiId: 'openai', name, preset }),
+                body: JSON.stringify({ apiId: 'openai', name, preset, expectedRevision: openai_setting_revisions[name] ?? (Object.hasOwn(openai_setting_names ?? {}, name) ? undefined : 0) }),
             });
-            if (!response.ok) throw new Error('Failed to save preset');
-            return (await response.json()).name;
+            if (!response.ok) {
+                if (response.status === 409) throw new Error('预设保存冲突（HTTP 409）：此预设已在其他会话中修改，请重新加载后再保存。');
+                throw new Error(`Failed to save preset (HTTP ${response.status})`);
+            }
+            const result = await response.json();
+            openai_setting_revisions[result.name] = result.revision;
+            return result.name;
         },
         remove: async name => {
             const response = await fetch('/api/presets/delete', {
@@ -280,6 +286,7 @@ export function installOpenAIPresetService(factory) {
                 body: JSON.stringify({ apiId: 'openai', name }),
             });
             if (!response.ok) throw new Error('Failed to delete preset');
+            delete openai_setting_revisions[name];
         },
         emit: async (event, payload) => {
             if (event === 'before') {
@@ -2722,6 +2729,7 @@ function migrateChatCompletionSettings(settings) {
 function loadOpenAISettings(data, settings) {
     const previousModel = oai_settings.openai_model;
     openai_setting_names = data.openai_setting_names;
+    openai_setting_revisions = { ...data.openai_setting_revisions };
     openai_settings = data.openai_settings;
     openai_settings.forEach(function (item, i) {
         openai_settings[i] = JSON.parse(item);

@@ -43,6 +43,14 @@ async function presetMenu(page, selector) {
     await page.locator(selector).click();
 }
 
+test('preset save reports a revision conflict in the panel', async ({ page }) => {
+    await testSetup.awaitST({ page });
+    await openPrompt(page);
+    await page.route('**/api/presets/save', route => route.fulfill({ status: 409, json: { error: 'preset_conflict', revision: 2 } }));
+    await page.locator('#update_oai_preset').click();
+    await expect(page.locator('#openai_api-presets [role="alert"]')).toContainText('预设保存冲突（HTTP 409）：此预设已在其他会话中修改，请重新加载后再保存。');
+});
+
 test('preset textareas resize without field-sizing support', async ({ page }) => {
 
     await page.addInitScript(() => {

@@ -233,6 +233,7 @@ export function AuthoringWorkspacePanel({
     const [liveManagementActions, setLiveManagementActions] = useState<AuthoringManagementAction[] | null>(null);
     const saveGenerationRef = useRef(0);
     const saveInFlightRef = useRef<Promise<boolean> | null>(null);
+    const canonicalVersionRef = useRef(initialSession.draft.canonicalCardVersion);
 
     const authoringCommandMutation = useMutation({
         mutationFn: async (payload: Record<string, unknown>) => await commands?.saveCharacterAuthoring?.(payload),
@@ -259,6 +260,7 @@ export function AuthoringWorkspacePanel({
 
     useEffect(() => {
         saveGenerationRef.current += 1;
+        canonicalVersionRef.current = initialSession.draft.canonicalCardVersion;
     }, [initialSession]);
 
     const [previousManagementActionDefs, setPreviousManagementActionDefs] = useState(managementActionDefs);
@@ -272,13 +274,29 @@ export function AuthoringWorkspacePanel({
         setFieldErrors({});
     }, []);
 
+    const rebaseSavedDraft = useCallback((submittedDraft: typeof initialSession.draft, result: unknown, generation: number) => {
+        if (!shouldApplyCharacterAuthoringSaveResult({ generation, activeGeneration: saveGenerationRef.current, ok: true })) return;
+        if (result && typeof result === 'object' && 'canonicalCardVersion' in result && typeof result.canonicalCardVersion === 'string') {
+            canonicalVersionRef.current = result.canonicalCardVersion;
+        }
+        setAuthoringSession((currentSession: typeof initialSession) => {
+            const savedDraft = result && typeof result === 'object' && 'canonicalCardVersion' in result
+                && typeof result.canonicalCardVersion === 'string'
+                ? { ...submittedDraft, canonicalCardVersion: result.canonicalCardVersion }
+                : submittedDraft;
+            if (currentSession.draft === submittedDraft) {
+                return createCharacterAuthoringSession(savedDraft, { mode: authoringMode });
+            }
+            return currentSession.rebase(savedDraft);
+        });
+    }, [authoringMode, setAuthoringSession]);
+
     const submitDraft = useCallback(async (): Promise<boolean> => {
         if (textReplaceOpen) {
             return false;
         }
-        if (authoringCommandMutation.isPending) {
-            return await (saveInFlightRef.current ?? Promise.resolve(false));
-        }
+        if (saveInFlightRef.current) return await saveInFlightRef.current;
+        if (authoringCommandMutation.isPending) return false;
         const submitResult = authoringSession.submit();
         if (!submitResult.ok) {
             setFieldErrors((submitResult.fieldErrors ?? {}) as Record<string, string>);
@@ -302,17 +320,7 @@ export function AuthoringWorkspacePanel({
                 })) {
                     return ok;
                 }
-                setAuthoringSession((currentSession: typeof initialSession) => {
-                    if (currentSession.draft === submittedDraft) {
-                        return createCharacterAuthoringSession(submittedDraft, { mode: authoringMode });
-                    }
-                    // The user kept typing while the save was in flight — keep the
-                    // live draft and only advance the clean baseline so the
-                    // remaining diff stays dirty for the next autosave pass.
-                    return typeof currentSession.rebase === 'function'
-                        ? currentSession.rebase(submittedDraft)
-                        : createCharacterAuthoringSession(currentSession.draft, { mode: authoringMode });
-                });
+                rebaseSavedDraft(submittedDraft, result, saveGeneration);
                 return ok;
             })
             .catch(() => {
@@ -325,7 +333,7 @@ export function AuthoringWorkspacePanel({
             saveInFlightRef.current = null;
         }
         return ok;
-    }, [authoringCommandMutation, authoringSession, authoringMode, textReplaceOpen]);
+    }, [authoringCommandMutation, authoringSession, rebaseSavedDraft, textReplaceOpen]);
     const submitDraftRef = useRef(submitDraft);
     useEffect(() => {
         submitDraftRef.current = submitDraft;
@@ -355,6 +363,13 @@ export function AuthoringWorkspacePanel({
     const characterToolPayload = authoringSession.submit();
     const characterActionPayload = characterToolPayload.ok ? characterToolPayload.payload : undefined;
     const characterToolActionPayload = characterActionPayload ? { ...characterActionPayload, draft } : undefined;
+    const withCurrentVersion = (request: Record<string, unknown>) => ({
+        ...request,
+        expectedCardJson: canonicalVersionRef.current,
+        ...(request.draft && typeof request.draft === 'object'
+            ? { draft: { ...request.draft, canonicalCardVersion: canonicalVersionRef.current } }
+            : {}),
+    });
     const isCreateMode = authoringMode === 'create';
     const isActionPending = authoringCommandMutation.isPending;
     const boundWorldInfoBookName = resolveBoundWorldInfoBookName(stringDraft('characterWorld'), worldNames);
@@ -531,7 +546,7 @@ export function AuthoringWorkspacePanel({
                                             {authoringCommandMutation.isPending
                                                 ? translate('Saving…')
                                                 : authoringCommandMutation.isError
-                                                    ? translate('Save failed — next change retries')
+                                                    ? translate('Save failed')
                                                     : authoringSession.dirty
                                                         ? translate('${0} unsaved').replace('${0}', String(dirtyFieldSet.size))
                                                         : translate('Saved')}
@@ -989,7 +1004,23 @@ export function AuthoringWorkspacePanel({
                                 className={`menu_button ${stylex.props(authoringStyles.toolAction).className ?? ''}`}
                                 disabled={isActionPending}
                                 data-character-export-trigger=""
-                                onClick={() => void commands?.exportAuthoring?.(characterToolActionPayload)}
+                                onClick={() => void (async () => {
+                                    if (!characterToolActionPayload) return;
+                                    const generation = saveGenerationRef.current;
+                                    if (saveInFlightRef.current && !await saveInFlightRef.current) return;
+                                    if (generation !== saveGenerationRef.current) return;
+                                    const exportSave = (async () => {
+                                        try {
+                                            const result = await commands?.exportAuthoring?.(withCurrentVersion(characterToolActionPayload));
+                                            if (!result || typeof result !== 'object' || !('ok' in result) || result.ok !== true) return false;
+                                            rebaseSavedDraft(authoringSession.draft, result, generation);
+                                            return true;
+                                        } catch { return false; }
+                                    })();
+                                    saveInFlightRef.current = exportSave;
+                                    await exportSave;
+                                    if (saveInFlightRef.current === exportSave) saveInFlightRef.current = null;
+                                })()}
                             >
                                 {translate('Export')}
                             </button>
@@ -1018,12 +1049,24 @@ export function AuthoringWorkspacePanel({
                         commands={{
                             ...commands,
                             previewTextReplace: async request => {
+                                const generation = saveGenerationRef.current;
                                 if (saveInFlightRef.current && !await saveInFlightRef.current) return { ok: false, reason: 'character_save_failed' };
-                                return commands?.previewTextReplace?.(request);
+                                if (generation !== saveGenerationRef.current) return { ok: false, reason: 'character_save_failed' };
+                                const result = await commands?.previewTextReplace?.(withCurrentVersion(request));
+                                if (result && typeof result === 'object' && 'authoringSave' in result && request?.draft) {
+                                    rebaseSavedDraft(request.draft, result.authoringSave, generation);
+                                }
+                                return result;
                             },
                             applyTextReplace: async request => {
+                                const generation = saveGenerationRef.current;
                                 if (saveInFlightRef.current && !await saveInFlightRef.current) return { ok: false, reason: 'character_save_failed' };
-                                return commands?.applyTextReplace?.(request);
+                                if (generation !== saveGenerationRef.current) return { ok: false, reason: 'character_save_failed' };
+                                const result = await commands?.applyTextReplace?.(withCurrentVersion(request));
+                                if (result && typeof result === 'object' && 'authoringSave' in result && request?.draft) {
+                                    rebaseSavedDraft(request.draft, result.authoringSave, generation);
+                                }
+                                return result;
                             },
                         }}
                         payload={characterToolActionPayload}

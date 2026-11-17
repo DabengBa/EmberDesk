@@ -425,7 +425,8 @@ describe('React workspace panels bridge helpers', () => {
         expect(workspacePanelSource).toContain('const isActionPending = authoringCommandMutation.isPending;');
         expect(workspacePanelSource).toContain('submitDraftRef.current()');
         expect(workspacePanelSource).toContain("bridgeState.mode !== 'edit'");
-        expect(workspacePanelSource).toContain('rebase(submittedDraft)');
+        expect(workspacePanelSource).toContain('? { ...submittedDraft, canonicalCardVersion: result.canonicalCardVersion }');
+        expect(workspacePanelSource).toContain('return currentSession.rebase(savedDraft)');
         expect(workspacePanelSource).not.toContain("id: 'retry-authoring-save'");
         expect(workspacePanelSource).not.toContain('actions={shellActions}');
         expect(workspacePanelSource).not.toContain('recoveryActions={[]}');

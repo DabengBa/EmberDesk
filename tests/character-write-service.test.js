@@ -1,4 +1,5 @@
 import { describe, expect, jest, test } from '@jest/globals';
+import { createCharacterWriteHandlers } from '../src/endpoints/character-write-routes.ts';
 
 import {
     createCharacterCard,
@@ -81,6 +82,32 @@ function makeDependencies({
 }
 
 describe('character write service', () => {
+    test.each([true, false])('edit route reports projection failure with compatible response (conditional=%s)', async conditional => {
+        const directories = { characters: 'user/characters', chats: 'user/chats' };
+        const { dependencies } = makeDependencies({
+            existingPaths: ['user/characters/Alice.png'], writeResult: false,
+            canonicalResult: { enabled: true, authorityCommitted: true, repairKey: 'repair:edit', cardVersion: 'committed-version' },
+        });
+        const handlers = createCharacterWriteHandlers({ createWriteDependencies: () => dependencies, getBustCache: () => () => {} });
+        const response = { statusCode: 200, status(code) { this.statusCode = code; return this; }, send(body) { this.body = body; return this; }, sendStatus(code) { this.statusCode = code; return this; } };
+        await handlers.edit({ ...makeRequest(directories), body: { ch_name: 'Alice', avatar_url: 'Alice.png', ...(conditional ? { expected_card_json: 'old-version' } : {}) }, query: {} }, response);
+        expect(response.statusCode).toBe(500);
+        if (conditional) expect(response.body).toEqual({ error: 'projection_failed', authority_committed: true, canonical_card_version: 'committed-version' });
+        else expect(response.body).toBe('Error: character data committed to canonical storage but compatibility projection failed');
+    });
+    test.each([false, true])('edit projection failure returns committed version (upload=%s)', async upload => {
+        const directories = { characters: 'user/characters', chats: 'user/chats' };
+        const { dependencies } = makeDependencies({
+            existingPaths: ['user/characters/Alice.png'], writeResult: false,
+            canonicalResult: { enabled: true, authorityCommitted: true, repairKey: 'repair:edit', cardVersion: 'committed-version' },
+        });
+        const result = await editCharacterCard({
+            request: makeRequest(directories), directories, avatarUrl: 'Alice.png', targetFile: 'Alice',
+            characterData: '{}', expectedCardJson: 'old-version',
+            file: upload ? { destination: 'tmp', filename: 'avatar' } : null, dependencies,
+        });
+        expect(result).toEqual(expect.objectContaining({ ok: false, reason: 'projection_failed', authorityCommitted: true, cardVersion: 'committed-version' }));
+    });
     test('creates a default-avatar character card without touching the retired index', async () => {
         const directories = {
             characters: 'user/characters',
