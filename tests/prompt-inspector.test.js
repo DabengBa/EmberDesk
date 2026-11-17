@@ -17,16 +17,18 @@ async function importFreshCore() {
 }
 
 describe('pipeline request shaping shared by live send and preview', () => {
-    test('applyStepRequestOverrides pins tool_choice only in forced mode with tools present', async () => {
+    test('applyStepRequestOverrides pins the current step regardless of legacy mode', async () => {
         const { applyStepRequestOverrides } = await importFreshCore();
 
         const forced = { messages: [], tools: [{ type: 'function' }] };
         applyStepRequestOverrides(forced, { tool: 'analyze' }, { enforceMode: 'forced' });
-        expect(forced.tool_choice).toEqual({ type: 'function', function: { name: 'submit_story' } });
+        expect(forced.tool_choice).toEqual({ type: 'function', function: { name: 'analyze' } });
+        expect(forced.tools[0].function.name).toBe('analyze');
 
         const soft = { messages: [], tools: [{ type: 'function' }] };
         applyStepRequestOverrides(soft, { tool: 'analyze' }, { enforceMode: 'soft' });
-        expect(soft.tool_choice).toBeUndefined();
+        expect(soft.tool_choice).toEqual({ type: 'function', function: { name: 'analyze' } });
+        expect(soft.tools[0].function.name).toBe('analyze');
 
         const noTools = { messages: [] };
         applyStepRequestOverrides(noTools, { tool: 'analyze' }, { enforceMode: 'forced' });
