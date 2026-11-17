@@ -6,8 +6,8 @@ import process from 'node:process';
 import { DatabaseSync } from 'node:sqlite';
 import { pathToFileURL } from 'node:url';
 
-import { applyCanonicalPragmas, createCanonicalSqliteManager, resolveCanonicalDatabasePath } from '../src/canonical-sqlite.js';
-import { CANONICAL_SQLITE_MIGRATIONS, runCanonicalMigrations } from '../src/canonical-sqlite-migrations.js';
+import { applyCanonicalPragmas, createCanonicalSqliteManager, resolveCanonicalDatabasePath } from '../src/canonical-sqlite.ts';
+import { CANONICAL_SQLITE_MIGRATIONS, runCanonicalMigrations } from '../src/canonical-sqlite-migrations.ts';
 import {
     explainCanonicalRolloutBlockers,
     getCanonicalStorageControlPlaneStatus,
@@ -25,8 +25,8 @@ import {
     runCanonicalSliceAudit,
     runCanonicalSliceRepair,
     runCanonicalWorldInfoAudit,
-} from '../src/canonical-sqlite-operator.js';
-import { exportCanonicalStorageToFiles } from '../src/canonical-sqlite-export.js';
+} from '../src/canonical-sqlite-operator.ts';
+import { exportCanonicalStorageToFiles } from '../src/canonical-sqlite-export.ts';
 import { collectCanonicalManagedMediaGarbage } from '../src/endpoints/canonical-managed-media-write-service.ts';
 import {
     createCanonicalChatBackup,

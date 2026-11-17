@@ -9,7 +9,7 @@ import ipMatching from 'ip-matching';
 import { getEnableAccounts, toKey, getAllUserHandles, getAccountVersion } from './user-storage.ts';
 import { getConfigValue, color } from './util.js';
 import { readSecret, writeSecret } from './endpoints/secrets.js';
-import { filterValidIpPatterns, getIpFromRequest } from './express-common.js';
+import { filterValidIpPatterns, getIpFromRequest } from './express-common.ts';
 import type { Request } from 'express';
 
 const AUTHELIA_AUTH = getConfigValue('sso.autheliaAuth', false, 'boolean');

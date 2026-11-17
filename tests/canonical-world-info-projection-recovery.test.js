@@ -6,8 +6,8 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import { afterEach, beforeEach, describe, expect, jest, test } from '@jest/globals';
 
-import { createCanonicalSqliteManager, withCanonicalTransaction } from '../src/canonical-sqlite.js';
-import { runCanonicalMigrations } from '../src/canonical-sqlite-migrations.js';
+import { createCanonicalSqliteManager, withCanonicalTransaction } from '../src/canonical-sqlite.ts';
+import { runCanonicalMigrations } from '../src/canonical-sqlite-migrations.ts';
 import {
     commitWorldBookWithProjectionIntent,
     recordWorldProjectionIntent,
@@ -21,14 +21,14 @@ import {
     recordWorldInfoProjectionRepair,
     upsertCanonicalWorldInfoBook,
 } from '../src/endpoints/world-info-store.ts';
-import { explainCanonicalRolloutBlockers, getCanonicalStorageControlPlaneStatus } from '../src/canonical-sqlite-operator.js';
-import { runCanonicalWorldInfoAudit, repairCanonicalWorldInfoProjection } from '../src/canonical-sqlite-operator.js';
+import { explainCanonicalRolloutBlockers, getCanonicalStorageControlPlaneStatus } from '../src/canonical-sqlite-operator.ts';
+import { runCanonicalWorldInfoAudit, repairCanonicalWorldInfoProjection } from '../src/canonical-sqlite-operator.ts';
 import { runCharacterTextReplace } from '../src/endpoints/character-text-replace-service.ts';
 import * as characterStore from '../src/endpoints/character-store.ts';
 import { runCanonicalWorldInfoShadowImport } from '../src/canonical-world-info-shadow-import.ts';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const sqliteUrl = pathToFileURL(path.join(repoRoot, 'src/canonical-sqlite.js')).href;
+const sqliteUrl = pathToFileURL(path.join(repoRoot, 'src/canonical-sqlite.ts')).href;
 const storeUrl = pathToFileURL(path.join(repoRoot, 'src/endpoints/world-info-store.ts')).href;
 const projectionUrl = pathToFileURL(path.join(repoRoot, 'src/canonical-world-info-projection.ts')).href;
 

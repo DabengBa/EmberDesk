@@ -24,7 +24,7 @@ fs.writeFileSync(tmpConfigPath, 'port: 8000\n', 'utf8');
 setConfigFilePath(tmpConfigPath);
 
 const { writeRecord } = await import('../src/wire-log-store.ts');
-const { canonicalSqliteManager } = await import('../src/canonical-sqlite.js');
+const { canonicalSqliteManager } = await import('../src/canonical-sqlite.ts');
 const { router: wireLogRouter } = await import('../src/endpoints/wire-log.ts');
 
 const HANDLE = 'test-user';

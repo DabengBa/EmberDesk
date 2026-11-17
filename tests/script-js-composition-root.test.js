@@ -2,6 +2,7 @@ import { afterEach, describe, expect, jest, test } from '@jest/globals';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import vm from 'node:vm';
 import { fileURLToPath } from 'node:url';
 
 import {
@@ -162,6 +163,101 @@ describe('request context runtime contract', () => {
         const xhr = { setRequestHeader: jest.fn() };
         prefilters[0]({}, {}, xhr);
         expect(xhr.setRequestHeader).toHaveBeenCalledWith('X-CSRF-Token', undefined);
+
+        globalThis.fetch = jest.fn(async () => ({ json: async () => ({ token: 'loaded-after-install' }) }));
+        await module.loadCsrfToken();
+        prefilters[0]({}, {}, xhr);
+        expect(xhr.setRequestHeader).toHaveBeenLastCalledWith('X-CSRF-Token', 'loaded-after-install');
+        expect(module.getRequestHeaders()['X-CSRF-Token']).toBe('loaded-after-install');
+    });
+});
+
+describe('standalone mode runtime contract', () => {
+    test.each([true, false])('preserves body classes when standalone is %s', standalone => {
+        const source = read('public/script.js');
+        const start = source.indexOf('function initStandaloneMode() {');
+        const end = source.indexOf('\nexport function cancelStatusCheck', start);
+        expect(start).toBeGreaterThanOrEqual(0);
+        expect(end).toBeGreaterThan(start);
+
+        const classes = new Set(['existing']);
+        const body = { classList: { add: value => classes.add(value) } };
+        const matchMedia = jest.fn(() => ({ matches: standalone }));
+        const jquery = jest.fn(() => ({ addClass: value => body.classList.add(value) }));
+        vm.runInNewContext(`${source.slice(start, end)}\ninitStandaloneMode();`, {
+            window: { matchMedia }, document: { body }, $: jquery,
+        });
+
+        expect(matchMedia).toHaveBeenCalledWith('(display-mode: standalone)');
+        expect([...classes]).toEqual(standalone ? ['existing', 'PWA'] : ['existing']);
+    });
+});
+
+describe('native-ready entry DOM contracts', () => {
+
+    function classList(initial) {
+        const values = new Set(initial);
+        return {
+            values,
+            toggle(name, force) { if (force) values.add(name); else values.delete(name); },
+            remove(name) { values.delete(name); },
+        };
+    }
+
+    function runtime(elements, extra = {}) {
+        const document = { getElementById: id => elements[id] ?? null };
+        const $ = selector => {
+            const element = elements[selector.slice(1)];
+            return {
+                toggleClass(name, force) { element?.classList.toggle(name, force); return this; },
+                removeClass(name) { element?.classList.remove(name); return this; },
+                css(property, value) { if (element) element.style[property] = value; return this; },
+                text(value) { if (element) element.textContent = value; return this; },
+            };
+        };
+        return { document, $, ...extra };
+    }
+
+    test.each(['cover', 'contain', 'stretch', 'center', 'classic'])('background fitting %s preserves unrelated classes', fitting => {
+        const source = read('public/script.js');
+        const start = source.indexOf('function setFittingClass(fitting) {');
+        const end = source.indexOf('\nexport function applyActiveBackground()', start);
+        expect(start).toBeGreaterThanOrEqual(0);
+        expect(end).toBeGreaterThan(start);
+        const background = { classList: classList(['existing', 'cover', 'stretch']) };
+        const context = runtime({ bg1: background }, { fitting });
+        vm.runInNewContext(`${source.slice(start, end)}\nsetFittingClass(fitting);`, context);
+        expect([...background.classList.values].sort()).toEqual(['existing', ...(['cover', 'contain', 'stretch', 'center'].includes(fitting) ? [fitting] : [])].sort());
+        expect(() => vm.runInNewContext(`${source.slice(start, end)}\nsetFittingClass(fitting);`, runtime({}, { fitting }))).not.toThrow();
+    });
+
+    test.each(['confirm', 'cancel'])('dialogue hide %s retains its class and display contract', kind => {
+        const source = read('public/script.js');
+        const start = source.indexOf('hide: kind => {', source.indexOf('async function mountDialoguePopupControls()'));
+        const end = source.indexOf('schedule: callback =>', start);
+        expect(start).toBeGreaterThanOrEqual(0);
+        expect(end).toBeGreaterThan(start);
+        const shadow = { style: { display: 'block' } };
+        const popup = { classList: classList(['existing', 'large_dialogue_popup', 'wide_dialogue_popup', 'wider_dialogue_popup']) };
+        const expression = `({${source.slice(start, end)}}).hide(kind)`;
+        vm.runInNewContext(expression, runtime({ shadow_popup: shadow, dialogue_popup: popup }, { kind }));
+        expect(shadow.style.display).toBe('none');
+        expect([...popup.classList.values].sort()).toEqual(['existing', 'wider_dialogue_popup', ...(kind === 'cancel' ? ['wide_dialogue_popup'] : [])].sort());
+        expect(() => vm.runInNewContext(expression, runtime({}, { kind }))).not.toThrow();
+    });
+
+    test.each(['no_connection', 'connected'])('connection hint updates for %s', onlineStatus => {
+        const source = read('public/script.js');
+        const start = source.indexOf('export function displayOnlineStatus() {');
+        const end = source.indexOf('\n/**\n * Sets the duration of JS animations.', start);
+        expect(start).toBeGreaterThanOrEqual(0);
+        expect(end).toBeGreaterThan(start);
+        const hint = { textContent: 'old' };
+        const expression = `${source.slice(start, end).replace('export function', 'function')}\ndisplayOnlineStatus();`;
+        const context = runtime({ send_textarea_hint: hint }, { online_status: onlineStatus, t: strings => strings[0] });
+        vm.runInNewContext(expression, context);
+        expect(hint.textContent).toBe(onlineStatus === 'no_connection' ? 'Send requires an API connection.' : '');
+        expect(() => vm.runInNewContext(expression, runtime({}, { online_status: onlineStatus, t: strings => strings[0] }))).not.toThrow();
     });
 });
 

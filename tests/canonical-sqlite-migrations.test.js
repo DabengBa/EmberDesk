@@ -4,13 +4,13 @@ import path from 'node:path';
 
 import { afterEach, describe, expect, jest, test } from '@jest/globals';
 
-import { createCanonicalSqliteManager } from '../src/canonical-sqlite.js';
+import { createCanonicalSqliteManager } from '../src/canonical-sqlite.ts';
 import {
     CanonicalMigrationBlockedError,
     CANONICAL_SQLITE_MIGRATIONS,
     getCanonicalMigrationStatus,
     runCanonicalMigrations,
-} from '../src/canonical-sqlite-migrations.js';
+} from '../src/canonical-sqlite-migrations.ts';
 import { expectCanonicalDomainSchema } from './helpers/canonical-domain-schema.js';
 
 const tempRoots = [];

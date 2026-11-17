@@ -5,12 +5,12 @@ import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, test } from '@jest/globals';
 
 import { setConfigFilePath } from '../src/util.js';
-import { canonicalSqliteManager } from '../src/canonical-sqlite.js';
+import { canonicalSqliteManager } from '../src/canonical-sqlite.ts';
 import {
     ensureCanonicalSliceBackend,
     resetCanonicalBackendsForTests,
 } from '../src/canonical-backend.js';
-import { closeCanonicalDatabase } from '../src/canonical-sqlite.js';
+import { closeCanonicalDatabase } from '../src/canonical-sqlite.ts';
 import {
     getCanonicalSettingsDocument,
     upsertCanonicalSettingsDocument,
@@ -94,7 +94,7 @@ describe('canonical sqlite flag defaults', () => {
     });
 
     test('every registered slice inherits the enabled defaults', async () => {
-        const { getDefaultCanonicalStorageSliceRegistry } = await import('../src/canonical-storage-slice-registry.js');
+        const { getDefaultCanonicalStorageSliceRegistry } = await import('../src/canonical-storage-slice-registry.ts');
         const registry = getDefaultCanonicalStorageSliceRegistry();
         for (const key of ['characters', 'world_info', 'settings', 'secrets', 'managed_media', 'chats']) {
             const flags = registry.get(key).getFeatureFlags();
@@ -109,7 +109,7 @@ describe('canonical sqlite flag defaults', () => {
     test('retired staged-rollout flags are forced on while kept overrides still win', async () => {
         process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_SLICES_CHATS_READS = 'false';
         process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_SLICES_CHATS_SHADOWIMPORT = 'false';
-        const { getDefaultCanonicalStorageSliceRegistry } = await import('../src/canonical-storage-slice-registry.js');
+        const { getDefaultCanonicalStorageSliceRegistry } = await import('../src/canonical-storage-slice-registry.ts');
         const registry = getDefaultCanonicalStorageSliceRegistry();
         // 'reads' is retired: the explicit 'false' warns and is ignored.
         expect(registry.get('chats').getFeatureFlags().reads).toBe(true);

@@ -5,7 +5,7 @@ import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, test } from '@jest/globals';
 import express from 'express';
 
-import { disposeCanonicalDatabases } from '../src/canonical-sqlite.js';
+import { disposeCanonicalDatabases } from '../src/canonical-sqlite.ts';
 import { setConfigFilePath } from '../src/util.js';
 
 let root;

@@ -4,14 +4,14 @@ import path from 'node:path';
 import type { DatabaseSync } from 'node:sqlite';
 
 import mime from 'mime-types';
-import { canonicalSqliteManager, withCanonicalTransaction } from '../canonical-sqlite.js';
-import { runCanonicalMigrations } from '../canonical-sqlite-migrations.js';
+import { canonicalSqliteManager, withCanonicalTransaction } from '../canonical-sqlite.ts';
+import { runCanonicalMigrations } from '../canonical-sqlite-migrations.ts';
 import { getPersistedCanonicalAuditStatus, invalidateCanonicalAuditStatus } from '../canonical-sqlite-shadow-import.ts';
 import {
     recordImportLedgerEntry,
     removeImportLedgerEntry,
 } from '../canonical-import-ledger.js';
-import { getCanonicalStorageSlice } from '../canonical-storage-slice-registry.js';
+import { getCanonicalStorageSlice } from '../canonical-storage-slice-registry.ts';
 import { uuidv4 } from '../util.js';
 import {
     getCanonicalManagedMediaReference,

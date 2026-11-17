@@ -22,7 +22,7 @@ test.each([false, true])('native Node preserves config and account behavior (acc
             const moduleUrl = name => new URL('src/' + name, repo).href;
             const user = await import(moduleUrl('user-storage.ts'));
             const config = await import(moduleUrl('config-init.ts'));
-            const cli = await import(moduleUrl('command-line.js'));
+            const cli = await import(moduleUrl('command-line.ts'));
             const { getConfig, getConfigValue } = await import(moduleUrl('util.js'));
             const configPath = path.join(root, 'config.yaml');
             cli.prepareConfigFilesystem(configPath, false);

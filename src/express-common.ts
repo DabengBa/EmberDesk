@@ -1,9 +1,10 @@
 import ipaddr from 'ipaddr.js';
 import ipMatching from 'ip-matching';
 import { RateLimiterRes } from 'rate-limiter-flexible';
+import type { Request, Response, NextFunction } from 'express';
 import { getConfigValue } from './util.js';
 
-const noopMiddleware = (_req, _res, next) => next();
+const noopMiddleware = (_req: Request, _res: Response, next: NextFunction) => next();
 /** @deprecated Do not use. A global middleware is provided at the application level. */
 export const jsonParser = noopMiddleware;
 /** @deprecated Do not use. A global middleware is provided at the application level. */
@@ -14,7 +15,7 @@ export const urlencodedParser = noopMiddleware;
  * @param {import('express').Request} req Request object
  * @returns {string} IP address of the client
  */
-export function getIpFromRequest(req) {
+export function getIpFromRequest(req: Request): string {
     let clientIp = req.socket.remoteAddress;
     if (!clientIp) {
         return 'unknown';
@@ -35,7 +36,7 @@ export function getIpFromRequest(req) {
  * @param {import('express').Request} req Express request object
  * @returns {string|undefined} The client IP address
  */
-export function getRealOrForwardedIp(req) {
+export function getRealOrForwardedIp(req: Request): string | undefined {
     const xRealIpEnabled = !!getConfigValue('forwardedHeaders.xRealIp', true, 'boolean');
     const cfConnectingIpEnabled = !!getConfigValue('forwardedHeaders.cfConnectingIp', false, 'boolean');
     const xForwardedForEnabled = !!getConfigValue('forwardedHeaders.xForwardedFor', true, 'boolean');
@@ -67,7 +68,7 @@ export function getRealOrForwardedIp(req) {
  * @param {boolean} includeHeaderIp Whether to include the real/forwarded IP from headers
  * @returns {string} IP address of the client (will include "forwarded" info if includeHeaderIp is true and headers are present)
  */
-export function getIpAddress(request, includeHeaderIp) {
+export function getIpAddress(request: Request, includeHeaderIp: boolean): string {
     const socketIp = getIpFromRequest(request);
     const forwardedIp = includeHeaderIp && getRealOrForwardedIp(request);
     return forwardedIp ? `${socketIp} (forwarded: ${forwardedIp})` : socketIp;
@@ -78,7 +79,7 @@ export function getIpAddress(request, includeHeaderIp) {
  * @param {import('express').Request} req Request object
  * @returns {boolean} True if the request is from Firefox, false otherwise.
  */
-export function isFirefox(req) {
+export function isFirefox(req: Request): boolean {
     const userAgent = req.headers['user-agent'] || '';
     return /firefox/i.test(userAgent);
 }
@@ -89,8 +90,8 @@ export function isFirefox(req) {
  * @param {(entry: string, message: string) => string} formatLog - The function to format the warning message for invalid entries
  * @returns {string[]} The list of valid IP patterns
  */
-export function filterValidIpPatterns(entries, formatLog) {
-    const validEntries = [];
+export function filterValidIpPatterns(entries: string[], formatLog: (entry: string, message: string) => string): string[] {
+    const validEntries: string[] = [];
 
     if (!Array.isArray(entries)) {
         return validEntries;
@@ -103,7 +104,7 @@ export function filterValidIpPatterns(entries, formatLog) {
             validEntries.push(entry);
         } catch (e) {
             if (typeof formatLog === 'function') {
-                console.warn(formatLog(entry, e?.message || 'Unknown error'));
+                console.warn(formatLog(entry, (e as Error)?.message || 'Unknown error'));
             }
         }
     }
@@ -117,7 +118,7 @@ export function filterValidIpPatterns(entries, formatLog) {
  * @param {RateLimiterRes} rateLimit The rate limit information from rate-limiter-flexible
  * @returns {import('express').Response} The response object with the Retry-After header set if applicable
  */
-export function retryAfter(response, rateLimit) {
+export function retryAfter(response: Response, rateLimit: RateLimiterRes): Response {
     if (response.headersSent || !(rateLimit instanceof RateLimiterRes)) {
         return response;
     }

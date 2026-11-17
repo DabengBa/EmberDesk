@@ -1,3 +1,4 @@
+import type {} from 'multer';
 import type { ChatRouteContext } from './chat-route-context.ts';
 
 export function registerChatImportRoute(context: ChatRouteContext): void {

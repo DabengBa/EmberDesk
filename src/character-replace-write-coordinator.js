@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 
-import { withCanonicalTransaction } from './canonical-sqlite.js';
+import { withCanonicalTransaction } from './canonical-sqlite.ts';
 
 // Each database belongs to one authenticated user. These records deliberately
 // contain resource identifiers and result codes, never card or chat contents.

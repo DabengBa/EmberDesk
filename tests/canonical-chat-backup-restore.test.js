@@ -6,10 +6,10 @@ import { pathToFileURL } from 'node:url';
 
 import { afterEach, describe, expect, test } from '@jest/globals';
 
-import { createCanonicalSqliteManager } from '../src/canonical-sqlite.js';
-import { runCanonicalMigrations } from '../src/canonical-sqlite-migrations.js';
+import { createCanonicalSqliteManager } from '../src/canonical-sqlite.ts';
+import { runCanonicalMigrations } from '../src/canonical-sqlite-migrations.ts';
 import { runCanonicalChatShadowImport } from '../src/canonical-chat-shadow-import.ts';
-import { repairCanonicalChatProjection } from '../src/canonical-sqlite-operator.js';
+import { repairCanonicalChatProjection } from '../src/canonical-sqlite-operator.ts';
 import { listOpenCanonicalChatProjectionRepairs } from '../src/endpoints/canonical-chat-store.ts';
 import { readCanonicalChatPayload } from '../src/endpoints/canonical-chat-read-service.ts';
 import {
@@ -100,7 +100,7 @@ describe('canonical chat backup and restore service', () => {
         const backup = createCanonicalChatBackup({ db });
         backup.sessions = [{ ownerType: 'character', ownerId: 'alice', sourcePath: 'chats/alice/first.jsonl', sourceMtimeMs: 0, jsonl: '{"chat_metadata":{}}' }];
         const service = pathToFileURL(path.resolve(process.cwd(), '../src/endpoints/canonical-chat-backup-restore-service.ts')).href;
-        const sqlite = pathToFileURL(path.resolve(process.cwd(), '../src/canonical-sqlite.js')).href;
+        const sqlite = pathToFileURL(path.resolve(process.cwd(), '../src/canonical-sqlite.ts')).href;
         const child = `
             import { createCanonicalSqliteManager } from ${JSON.stringify(sqlite)};
             import { restoreCanonicalChatBackup, getCanonicalChatRestoreVersion } from ${JSON.stringify(service)};

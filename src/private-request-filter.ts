@@ -6,8 +6,17 @@ import dns from 'node:dns';
 import ipMatch from 'ip-matching';
 import ipRegex from 'ip-regex';
 import { Agent } from 'agent-base';
+import type { AgentConnectOpts } from 'agent-base';
 import { color } from './util.js';
-import { filterValidIpPatterns } from './express-common.js';
+import { filterValidIpPatterns } from './express-common.ts';
+
+type PrivateRequestAgentOptions = {
+    privateAddressWhitelist: string[];
+    logBlocked: boolean;
+    logAllowed: boolean;
+    allowUnresolvedHosts: boolean;
+    enableKeepAlive: boolean;
+};
 
 const LOG_HEADER = '[Private Request Filter]';
 
@@ -36,7 +45,7 @@ const privateIpRanges = [
  * @param {string} address IP address
  * @returns {boolean} Whether the address is private
  */
-export function isPrivateIpAddress(address) {
+export function isPrivateIpAddress(address: string): boolean {
     return privateIpRanges.some(range => range.matches(address));
 }
 
@@ -51,7 +60,7 @@ export class PrivateRequestAgent extends Agent {
      * List of private IP addresses or CIDR ranges to allow
      * @type {Readonly<import('ip-matching').IPMatch[]>}
      */
-    privateAddressWhitelist = [];
+    privateAddressWhitelist: Readonly<import('ip-matching').IPMatch[]> = [];
 
     /**
      * Whether to log blocked requests to the console
@@ -80,10 +89,10 @@ export class PrivateRequestAgent extends Agent {
      * @param {boolean} options.allowUnresolvedHosts Whether to allow requests to hosts that cannot be resolved.
      * @param {boolean} options.enableKeepAlive Whether to enable HTTP/HTTPS keep-alive.
      */
-    constructor(options = { privateAddressWhitelist: [], logBlocked: true, logAllowed: false, allowUnresolvedHosts: false, enableKeepAlive: false }) {
+    constructor(options: PrivateRequestAgentOptions = { privateAddressWhitelist: [], logBlocked: true, logAllowed: false, allowUnresolvedHosts: false, enableKeepAlive: false }) {
         super({ keepAlive: options.enableKeepAlive });
 
-        const logEntryWarning = (entry, message) => `${color.red('Warning')}: Ignoring invalid private whitelist entry ${color.yellow(entry)} - ${message}`;
+        const logEntryWarning = (entry: string, message: string) => `${color.red('Warning')}: Ignoring invalid private whitelist entry ${color.yellow(entry)} - ${message}`;
         const whitelistArray = Array.isArray(options.privateAddressWhitelist) ? options.privateAddressWhitelist : [];
         this.privateAddressWhitelist = Object.freeze(filterValidIpPatterns(whitelistArray, logEntryWarning).map(pattern => ipMatch.getMatch(pattern)));
         this.allowUnresolvedHosts = options.allowUnresolvedHosts;
@@ -96,7 +105,7 @@ export class PrivateRequestAgent extends Agent {
      * @param {string} address The IP address to check.
      * @returns {boolean} Whether the given address is allowed based on the private address whitelist.
      */
-    #isAllowedPrivateAddress(address) {
+    #isAllowedPrivateAddress(address: string): boolean {
         // Permit the request if the private IP address is in the whitelist
         return this.privateAddressWhitelist.some(match => match.matches(address));
     }
@@ -106,13 +115,13 @@ export class PrivateRequestAgent extends Agent {
      * @param {http.ClientRequest} _req HTTP request object.
      * @param {import('agent-base').AgentConnectOpts} options Agent connection options.
      */
-    async connect(_req, options) {
+    async connect(_req: http.ClientRequest, options: AgentConnectOpts): Promise<net.Socket> {
         /**
          * Raise an error and log it if necessary.
          * @param {string} message The error message.
          * @param {boolean} [log=true] Whether to log the error to the console.
          */
-        const raiseError = (message, log = true) => {
+        const raiseError = (message: string, log = true): never => {
             if (log) {
                 console.error(color.red(LOG_HEADER), message);
             }
@@ -124,7 +133,7 @@ export class PrivateRequestAgent extends Agent {
          * @param {string|null} [hostOverride] Pass a host to override the one in options when connecting.
          * @returns {net.Socket|tls.TLSSocket} A socket connected to the target host.
          */
-        const connect = (hostOverride = null) => {
+        const connect = (hostOverride: string | null = null): net.Socket => {
             if (hostOverride) {
                 options.host = hostOverride;
             }
@@ -140,7 +149,7 @@ export class PrivateRequestAgent extends Agent {
          * @param {string} ip The IP address to validate.
          * @returns {net.Socket|tls.TLSSocket} A socket connected to the target IP address if it's allowed, otherwise an error is raised.
          */
-        const validateIpAddress = (ip) => {
+        const validateIpAddress = (ip: string): net.Socket => {
             // Not a private IP address, allow the request
             if (!isPrivateIpAddress(ip)) {
                 return connect(ip);
@@ -163,7 +172,7 @@ export class PrivateRequestAgent extends Agent {
          * @param {string} host The host to resolve to an IP address.
          * @returns {Promise<string>} The resolved IP address for the given host, or an empty string if the host cannot be resolved.
          */
-        const lookupHost = async (host) => {
+        const lookupHost = async (host: string): Promise<string> => {
             try {
                 return (await dns.promises.lookup(host)).address;
             } catch {
@@ -207,7 +216,7 @@ export class PrivateRequestAgent extends Agent {
  * @param {boolean} options.allowUnresolvedHosts Whether to allow requests to hosts that cannot be resolved.
  * @param {boolean} options.enableKeepAlive Whether to enable HTTP/HTTPS keep-alive.
  */
-export default function initPrivateRequestFilter({ listen, enabled, privateAddressWhitelist, logBlocked, logAllowed, allowUnresolvedHosts, enableKeepAlive }) {
+export default function initPrivateRequestFilter({ listen, enabled, privateAddressWhitelist, logBlocked, logAllowed, allowUnresolvedHosts, enableKeepAlive }: PrivateRequestAgentOptions & { listen: boolean; enabled: boolean }): void {
     if (!enabled) {
         if (listen) {
             console.warn();

@@ -25,11 +25,11 @@ jest.unstable_mockModule('../src/util.js', () => ({
     },
 }));
 
-jest.unstable_mockModule('../src/express-common.js', () => ({
+jest.unstable_mockModule('../src/express-common.ts', () => ({
     filterValidIpPatterns: patterns => patterns,
 }));
 
-/** @type {import('../src/private-request-filter.js').default} */
+/** @type {import('../src/private-request-filter.ts').default} */
 let initPrivateRequestFilter;
 /** @type {import('node:http').default} */
 let http;
@@ -39,7 +39,7 @@ let originalHttpGlobalAgent;
 let originalHttpsGlobalAgent;
 
 beforeAll(async () => {
-    ({ default: initPrivateRequestFilter } = await import('../src/private-request-filter.js'));
+    ({ default: initPrivateRequestFilter } = await import('../src/private-request-filter.ts'));
     ({ default: http } = await import('node:http'));
     ({ default: https } = await import('node:https'));
     originalHttpGlobalAgent = http.globalAgent;

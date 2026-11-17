@@ -1,13 +1,15 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
+import type { DatabaseSync } from 'node:sqlite';
+import type { UserDirectoryList } from './users.js';
 
 import { sync as writeFileAtomicSync } from 'write-file-atomic';
 
 import { AVATAR_HEIGHT, AVATAR_WIDTH, DEFAULT_AVATAR_PATH } from './constants.js';
 import { avatarToPngSized } from './image-processing.js';
 import { serverDirectory } from './server-directory.js';
-import { withCanonicalTransaction } from './canonical-sqlite.js';
+import { withCanonicalTransaction } from './canonical-sqlite.ts';
 import { getPersistedCanonicalAuditStatus, invalidateCanonicalAuditStatus, auditCanonicalShadowImport } from './canonical-sqlite-shadow-import.ts';
 import { auditCanonicalWorldInfoShadowImport, WORLD_INFO_AUDIT_SCOPE } from './canonical-world-info-shadow-import.ts';
 import { auditCanonicalSettingsShadowImport } from './canonical-settings-shadow-import.ts';
@@ -33,7 +35,7 @@ import {
     getCanonicalStorageSlice,
     getDefaultCanonicalStorageSliceRegistry,
     listCanonicalStorageSliceKeys,
-} from './canonical-storage-slice-registry.js';
+} from './canonical-storage-slice-registry.ts';
 import {
     getCanonicalCharacter,
     resolveProjectionRepair,
@@ -65,31 +67,41 @@ import {
 import { getCharaCardV2 } from './endpoints/character-card-v2.ts';
 import { parse as parseCharacterCard, write as writeCharacterCard } from './character-card-parser.ts';
 
+type CharacterRepair = ReturnType<typeof listOpenProjectionRepairs>[number];
+type WorldRepair = ReturnType<typeof listOpenWorldInfoProjectionRepairs>[number];
+type ChatRepair = ReturnType<typeof listOpenCanonicalChatProjectionRepairs>[number];
+type RepairResult = { repairKey: string; status: string; operation?: string | null; blocker?: string; reason?: string; errorClass?: string };
+type RepairOptions = { db: DatabaseSync; directories: UserDirectoryList; repairKeys?: string[] | null; nowMs?: number };
+type AuditOptions = { handle: string; directories: UserDirectoryList; db: DatabaseSync; auditedAtMs?: number };
+type Registry = ReturnType<typeof getDefaultCanonicalStorageSliceRegistry>;
+type Blocker = { code: string | null; severity?: string; details?: { repairCount?: number; repairKeys?: string[]; illegalFlags?: string[]; sliceKey?: string | null; auditReason?: string | null; auditBlocking?: boolean } };
+type RollbackResult = { ok: boolean; phase: string; blockers: Blocker[] };
+
 function createSnapshotBuilder() {
-    return (avatar, directories) => buildCharacterFileSnapshotRow({
+    return (avatar: string, directories: Parameters<typeof auditCanonicalShadowImport>[0]['directories']) => buildCharacterFileSnapshotRow({
         avatar,
-        directories,
+        directories: directories as UserDirectoryList,
         readCharacterData: filePath => parseCharacterCard(filePath, 'png'),
-        getCharaCardV2,
+        getCharaCardV2: getCharaCardV2 as Parameters<typeof buildCharacterFileSnapshotRow>[0]['getCharaCardV2'],
     });
 }
 
-function getCharacterDirectoryPath(directories, avatarFilename) {
+function getCharacterDirectoryPath(directories: UserDirectoryList, avatarFilename: string) {
     return path.join(directories.characters, avatarFilename);
 }
 
-function parseAvatarInternalName(avatarFilename) {
+function parseAvatarInternalName(avatarFilename: string) {
     return path.parse(avatarFilename).name;
 }
 
-function toJsonData(payload) {
-    if (typeof payload?.json_data === 'string') {
-        return payload.json_data;
+function toJsonData(payload: object) {
+    if (typeof (payload as { json_data?: unknown })?.json_data === 'string') {
+        return (payload as { json_data: string }).json_data;
     }
     return JSON.stringify(payload);
 }
 
-async function normalizeImageToPngBuffer(sourcePath) {
+async function normalizeImageToPngBuffer(sourcePath: string) {
     const resolvedSourcePath = path.isAbsolute(sourcePath)
         ? sourcePath
         : path.resolve(serverDirectory, sourcePath);
@@ -100,7 +112,7 @@ async function normalizeImageToPngBuffer(sourcePath) {
     }
 }
 
-async function resolveProjectionSourceImage({ repair, directories }) {
+async function resolveProjectionSourceImage({ repair, directories }: { repair: CharacterRepair; directories: UserDirectoryList }): Promise<{ ok: true; sourcePath: string } | { ok: false; blocker: string }> {
     const detailSource = typeof repair.details?.sourceImage === 'string' ? repair.details.sourceImage : null;
     const targetPath = repair.avatarFilename ? getCharacterDirectoryPath(directories, repair.avatarFilename) : null;
 
@@ -123,7 +135,7 @@ async function resolveProjectionSourceImage({ repair, directories }) {
     };
 }
 
-async function writeProjectionFile({ directories, avatarFilename, payload, sourcePath }) {
+async function writeProjectionFile({ directories, avatarFilename, payload, sourcePath }: { directories: UserDirectoryList; avatarFilename: string; payload: object; sourcePath: string }) {
     const outputPath = getCharacterDirectoryPath(directories, avatarFilename);
     const inputImage = await normalizeImageToPngBuffer(sourcePath);
     const outputImage = writeCharacterCard(inputImage, toJsonData(payload));
@@ -131,7 +143,7 @@ async function writeProjectionFile({ directories, avatarFilename, payload, sourc
     return outputPath;
 }
 
-function moveChatsIfNeeded({ oldInternalName, newInternalName, directories }) {
+function moveChatsIfNeeded({ oldInternalName, newInternalName, directories }: { oldInternalName: string; newInternalName: string; directories: UserDirectoryList }) {
     const oldChatsPath = path.join(directories.chats, oldInternalName);
     const newChatsPath = path.join(directories.chats, newInternalName);
     if (fs.existsSync(oldChatsPath) && !fs.existsSync(newChatsPath)) {
@@ -140,13 +152,13 @@ function moveChatsIfNeeded({ oldInternalName, newInternalName, directories }) {
     }
 }
 
-function toRequestedRepairKeySet(repairKeys) {
+function toRequestedRepairKeySet(repairKeys: unknown) {
     return Array.isArray(repairKeys) && repairKeys.length > 0
         ? new Set(repairKeys.map(String))
         : null;
 }
 
-function buildMissingRepairResults(requested, openRepairs) {
+function buildMissingRepairResults(requested: Set<string> | null, openRepairs: { repairKey: unknown }[] | null | undefined): RepairResult[] {
     if (!requested) {
         return [];
     }
@@ -161,7 +173,7 @@ function buildMissingRepairResults(requested, openRepairs) {
         }));
 }
 
-function deleteProjectionForRepair({ repair, directories }) {
+function deleteProjectionForRepair({ repair, directories }: { repair: CharacterRepair; directories: UserDirectoryList }) {
     const avatarPath = getCharacterDirectoryPath(directories, repair.avatarFilename);
     if (fs.existsSync(avatarPath)) {
         fs.rmSync(avatarPath, { force: true });
@@ -173,7 +185,7 @@ function deleteProjectionForRepair({ repair, directories }) {
     }
 }
 
-async function repairSingleProjection({ db, directories, repair, nowMs = Date.now() }) {
+async function repairSingleProjection({ db, directories, repair, nowMs = Date.now() }: { db: DatabaseSync; directories: UserDirectoryList; repair: CharacterRepair; nowMs?: number }): Promise<RepairResult> {
     const operation = repair.details?.operation ?? null;
 
     if (operation === 'delete') {
@@ -241,19 +253,19 @@ async function repairSingleProjection({ db, directories, repair, nowMs = Date.no
     return { repairKey: repair.repairKey, status: 'repaired', operation };
 }
 
-export function listCanonicalRepairs(db) {
+export function listCanonicalRepairs(db: DatabaseSync) {
     return listOpenProjectionRepairs(db);
 }
 
-export function listCanonicalWorldInfoRepairs(db) {
+export function listCanonicalWorldInfoRepairs(db: DatabaseSync) {
     return listOpenWorldInfoProjectionRepairs(db);
 }
 
-export function listCanonicalManagedMediaRepairs(db) {
+export function listCanonicalManagedMediaRepairs(db: DatabaseSync) {
     return listOpenCanonicalManagedMediaRepairs(db);
 }
 
-export function listCanonicalChatRepairs(db) {
+export function listCanonicalChatRepairs(db: DatabaseSync) {
     return listOpenCanonicalChatProjectionRepairs(db);
 }
 
@@ -263,7 +275,7 @@ export function explainCanonicalRolloutBlockers({
     phase = 'writes',
     sliceKey = null,
     registry = getDefaultCanonicalStorageSliceRegistry(),
-} = {}) {
+}: { db: DatabaseSync; featureFlags?: Record<string, unknown> | null; phase?: string; sliceKey?: string | null; registry?: Registry } = {} as { db: DatabaseSync }) {
     if (sliceKey) {
         const slice = registry.get(sliceKey);
         return slice.getRollbackBlockers({
@@ -273,7 +285,9 @@ export function explainCanonicalRolloutBlockers({
         });
     }
 
-    const result = buildCanonicalRollbackBlockers({
+    // The JS dependency's inferred defaults omit accepted audit/flag values.
+    const buildBlockers = buildCanonicalRollbackBlockers as unknown as (options: { db: DatabaseSync; featureFlags?: Record<string, unknown> | null; persistedAuditStatus: ReturnType<typeof getPersistedCanonicalAuditStatus>; phase: string }) => RollbackResult;
+    const result = buildBlockers({
         db,
         featureFlags,
         persistedAuditStatus: getPersistedCanonicalAuditStatus(db),
@@ -322,7 +336,7 @@ export function explainCanonicalRolloutBlockers({
     return result;
 }
 
-function sanitizeRepairKeys(repairs) {
+function sanitizeRepairKeys(repairs: { repairKey: unknown }[] | null | undefined) {
     return (repairs ?? []).map(repair => String(repair.repairKey));
 }
 
@@ -332,7 +346,7 @@ function summarizeSliceStatus({
     directories,
     featureFlags,
     phase,
-}) {
+}: { slice: ReturnType<Registry['get']> & { authorityMode?: string }; db: DatabaseSync; directories: UserDirectoryList; featureFlags: Record<string, unknown> | null; phase: string }) {
     const flagSnapshot = slice.getFeatureFlagSnapshot?.(featureFlags) ?? {
         featureFlags: slice.getFeatureFlags(featureFlags),
         sources: {},
@@ -352,7 +366,7 @@ function summarizeSliceStatus({
     // Per-slice path presence only. Full backup/restore readiness is top-level.
     const missingPaths = backupManagedPaths.filter(managedPath => {
         try {
-            return !fs.existsSync(managedPath);
+            return !fs.existsSync(managedPath as string);
         } catch {
             return true;
         }
@@ -424,7 +438,7 @@ function summarizeSliceStatus({
         rollback: {
             ok: !!rollback.ok,
             phase: rollback.phase ?? phase,
-            blockers: (rollback.blockers ?? []).map(blocker => ({
+            blockers: (rollback.blockers ?? []).map((blocker: Blocker) => ({
                 code: blocker.code,
                 severity: blocker.severity ?? 'error',
                 details: {
@@ -467,8 +481,8 @@ export function getCanonicalStorageControlPlaneStatus({
     sliceKeys = null,
     registry = getDefaultCanonicalStorageSliceRegistry(),
     managedFileManifest = null,
-} = {}) {
-    const keys = sliceKeys?.length
+}: { handle?: string; directories: UserDirectoryList; db: DatabaseSync; featureFlags?: Record<string, unknown> | null; phase?: string; sliceKeys?: string[] | null; registry?: Registry; managedFileManifest?: unknown } = {} as { directories: UserDirectoryList; db: DatabaseSync }) {
+    const keys: string[] = sliceKeys?.length
         ? sliceKeys
         : listCanonicalStorageSliceKeys(registry);
     const slices = keys.map(key => summarizeSliceStatus({
@@ -479,7 +493,9 @@ export function getCanonicalStorageControlPlaneStatus({
         phase,
     }));
 
-    const backupRestore = getCanonicalBackupRestoreReadiness({
+    // JS-inferred defaults on the registry can be narrower than its runtime contract.
+    const getBackupReadiness = getCanonicalBackupRestoreReadiness as (options: { directories: UserDirectoryList; db: DatabaseSync; registry: Registry; managedFileManifest: unknown }) => { ready: boolean; ok: boolean; managedFileManifestVersion: unknown; blockers: { code: string; severity: string; details?: object }[] };
+    const backupRestore = getBackupReadiness({
         directories,
         db,
         registry,
@@ -506,7 +522,7 @@ export function getCanonicalStorageControlPlaneStatus({
     };
 }
 
-export async function runCanonicalAudit({ handle, directories, db, auditedAtMs = Date.now() }) {
+export async function runCanonicalAudit({ handle, directories, db, auditedAtMs = Date.now() }: AuditOptions) {
     return auditCanonicalShadowImport({
         handle,
         directories,
@@ -517,7 +533,7 @@ export async function runCanonicalAudit({ handle, directories, db, auditedAtMs =
     });
 }
 
-async function runCanonicalChatAudit({ handle, directories, db, auditedAtMs = Date.now() }) {
+async function runCanonicalChatAudit({ handle, directories, db, auditedAtMs = Date.now() }: NonNullable<Parameters<typeof auditCanonicalChatShadowImport>[0]>) {
     return auditCanonicalChatShadowImport({
         handle,
         directories,
@@ -527,7 +543,7 @@ async function runCanonicalChatAudit({ handle, directories, db, auditedAtMs = Da
     });
 }
 
-export async function runCanonicalWorldInfoAudit({ handle, directories, db, auditedAtMs = Date.now() }) {
+export async function runCanonicalWorldInfoAudit({ handle, directories, db, auditedAtMs = Date.now() }: AuditOptions) {
     return auditCanonicalWorldInfoShadowImport({
         handle,
         directories,
@@ -537,7 +553,7 @@ export async function runCanonicalWorldInfoAudit({ handle, directories, db, audi
     });
 }
 
-export function rebuildCanonicalChatStats({ db, directories, avatars = null, nowMs = Date.now() }) {
+export function rebuildCanonicalChatStats({ db, directories, avatars = null, nowMs = Date.now() }: { db: DatabaseSync; directories: UserDirectoryList; avatars?: string[] | null; nowMs?: number }) {
     const rows = db.prepare(`
         SELECT id, avatar_filename
         FROM characters
@@ -545,7 +561,7 @@ export function rebuildCanonicalChatStats({ db, directories, avatars = null, now
         ORDER BY avatar_filename COLLATE NOCASE ASC
     `).all();
     const requested = avatars ? new Set(avatars) : null;
-    const rebuilt = [];
+    const rebuilt: { avatarFilename: string; chatCount: number; chatSizeBytes: number; dateLastChatMs: number | null }[] = [];
 
     withCanonicalTransaction(db, txnDb => {
         for (const row of rows) {
@@ -601,11 +617,11 @@ export function rebuildCanonicalChatStats({ db, directories, avatars = null, now
     };
 }
 
-export async function repairCanonicalProjection({ db, directories, repairKeys = null, nowMs = Date.now() }) {
+export async function repairCanonicalProjection({ db, directories, repairKeys = null, nowMs = Date.now() }: RepairOptions) {
     const requested = toRequestedRepairKeySet(repairKeys);
     const openRepairs = listOpenProjectionRepairs(db);
     const repairs = openRepairs
-        .filter(repair => !requested || requested.has(repair.repairKey));
+        .filter((repair: CharacterRepair) => !requested || requested.has(repair.repairKey));
     const results = buildMissingRepairResults(requested, openRepairs);
 
     for (const repair of repairs) {
@@ -626,19 +642,19 @@ export async function repairCanonicalProjection({ db, directories, repairKeys = 
     };
 }
 
-async function repairSingleWorldInfoProjection({ db, directories, repair, nowMs = Date.now() }) {
+async function repairSingleWorldInfoProjection({ db, directories, repair, nowMs = Date.now() }: { db: DatabaseSync; directories: UserDirectoryList; repair: WorldRepair; nowMs?: number }): Promise<RepairResult> {
     if (!repair.repairKey.startsWith('world-path-v1:')) {
         return {
             repairKey: repair.repairKey,
             status: 'blocked',
-            operation: repair.details?.operation ?? null,
+            operation: (repair.details as { operation?: string } | null)?.operation ?? null,
             blocker: 'legacy_world_projection_repair_blocked',
         };
     }
     return replayWorldProjection(db, { directories, repairKey: repair.repairKey, nowMs });
 }
 
-export async function repairCanonicalWorldInfoProjection({ db, directories, repairKeys = null, nowMs = Date.now() }) {
+export async function repairCanonicalWorldInfoProjection({ db, directories, repairKeys = null, nowMs = Date.now() }: RepairOptions) {
     const requested = toRequestedRepairKeySet(repairKeys);
     const openRepairs = listOpenWorldInfoProjectionRepairs(db);
     const repairs = openRepairs
@@ -664,7 +680,7 @@ export async function repairCanonicalWorldInfoProjection({ db, directories, repa
     };
 }
 
-function getCanonicalChatProjectionPath(directories, sourcePath, ownerType, ownerId) {
+function getCanonicalChatProjectionPath(directories: UserDirectoryList, sourcePath: string, ownerType: string, ownerId: string) {
     return resolveCanonicalChatProjectionPath({
         directories,
         ownerType,
@@ -673,7 +689,7 @@ function getCanonicalChatProjectionPath(directories, sourcePath, ownerType, owne
     });
 }
 
-function repairSingleCanonicalChatProjection({ db, directories, repair, nowMs = Date.now() }) {
+function repairSingleCanonicalChatProjection({ db, directories, repair, nowMs = Date.now() }: { db: DatabaseSync; directories: UserDirectoryList; repair: ChatRepair; nowMs?: number }): RepairResult {
     const operation = repair.operation;
     try {
         return withCanonicalTransaction(db, txn => {
@@ -698,7 +714,7 @@ function repairSingleCanonicalChatProjection({ db, directories, repair, nowMs = 
                     sourcePath: repair.sourcePath,
                 });
             } else {
-                const jsonl = currentSession.source_jsonl;
+                const jsonl = currentSession.source_jsonl as string;
                 fs.mkdirSync(path.dirname(filePath), { recursive: true });
                 writeFileAtomicSync(filePath, jsonl, 'utf8');
                 recordImportLedgerEntry(txn, {
@@ -709,21 +725,21 @@ function repairSingleCanonicalChatProjection({ db, directories, repair, nowMs = 
                     nowMs,
                 });
 
-                if (operation === 'rename' && repair.details?.previousSourcePath) {
+                if (operation === 'rename' && (repair.details as { previousSourcePath?: string })?.previousSourcePath) {
                     const previousPath = getCanonicalChatProjectionPath(
                         directories,
-                        repair.details.previousSourcePath,
+                        (repair.details as { previousSourcePath: string }).previousSourcePath,
                         repair.ownerType,
                         repair.ownerId,
                     );
                     if (previousPath !== filePath) {
                         const previous = txn.prepare('SELECT 1 FROM chat_sessions WHERE owner_type = ? AND owner_id = ? AND source_path = ?')
-                            .get(repair.ownerType, repair.ownerId, repair.details.previousSourcePath);
+                            .get(repair.ownerType, repair.ownerId, (repair.details as { previousSourcePath: string }).previousSourcePath);
                         if (!previous) {
                             fs.rmSync(previousPath, { force: true });
                             removeImportLedgerEntry(txn, {
                                 sliceKey: 'chats',
-                                sourcePath: repair.details.previousSourcePath,
+                                sourcePath: (repair.details as { previousSourcePath: string }).previousSourcePath,
                             });
                         }
                     }
@@ -745,12 +761,12 @@ function repairSingleCanonicalChatProjection({ db, directories, repair, nowMs = 
             repairKey: repair.repairKey,
             status: 'failed',
             operation,
-            errorClass: String(error?.name ?? 'Error'),
+            errorClass: String((error as { name?: unknown } | null)?.name ?? 'Error'),
         };
     }
 }
 
-export async function repairCanonicalChatProjection({ db, directories, repairKeys = null, nowMs = Date.now() }) {
+export async function repairCanonicalChatProjection({ db, directories, repairKeys = null, nowMs = Date.now() }: RepairOptions) {
     const requested = toRequestedRepairKeySet(repairKeys);
     const openRepairs = listOpenCanonicalChatProjectionRepairs(db);
     const repairs = openRepairs
@@ -781,17 +797,17 @@ export async function repairCanonicalChatProjection({ db, directories, repairKey
 }
 
 
-async function runCanonicalSettingsAudit({ handle, directories, db, auditedAtMs = Date.now() }) {
+async function runCanonicalSettingsAudit({ handle, directories, db, auditedAtMs = Date.now() }: AuditOptions) {
     return auditCanonicalSettingsShadowImport({
         handle,
         directories,
         db,
         auditedAtMs,
         projection: getCanonicalStorageSlice('settings').getProjectionMode(),
-    });
+    } as Parameters<typeof auditCanonicalSettingsShadowImport>[0]);
 }
 
-async function repairCanonicalSettingsProjection({ db, directories: _directories, repairKeys = null, nowMs = Date.now() }) {
+async function repairCanonicalSettingsProjection({ db, directories: _directories, repairKeys = null, nowMs = Date.now() }: RepairOptions) {
     const requested = toRequestedRepairKeySet(repairKeys);
     const openRepairs = listOpenSettingsProjectionRepairs(db);
     const repairs = openRepairs
@@ -819,7 +835,7 @@ async function repairCanonicalSettingsProjection({ db, directories: _directories
     };
 }
 
-async function runCanonicalSecretsAudit({ handle, directories, db, auditedAtMs = Date.now() }) {
+async function runCanonicalSecretsAudit({ handle, directories, db, auditedAtMs = Date.now() }: AuditOptions) {
     return auditCanonicalSecretsShadowImport({
         handle,
         directories,
@@ -829,7 +845,7 @@ async function runCanonicalSecretsAudit({ handle, directories, db, auditedAtMs =
     });
 }
 
-export function listCanonicalSecretRepairs(db) {
+export function listCanonicalSecretRepairs(db: DatabaseSync) {
     return listOpenSecretProjectionRepairs(db);
 }
 
@@ -838,7 +854,7 @@ export async function repairCanonicalSecretProjection({
     directories,
     repairKeys = null,
     nowMs = Date.now(),
-} = {}) {
+}: RepairOptions = {} as RepairOptions) {
     const requested = toRequestedRepairKeySet(repairKeys);
     const openRepairs = listOpenSecretProjectionRepairs(db);
     const repairs = openRepairs
@@ -871,7 +887,7 @@ export async function repairCanonicalSecretProjection({
                 repairKey: repair.repairKey,
                 status: 'failed',
                 operation: repair.operation,
-                errorClass: String(error?.name ?? 'Error'),
+                errorClass: String((error as { name?: unknown } | null)?.name ?? 'Error'),
             });
         }
     }
@@ -921,7 +937,7 @@ function ensureDefaultSliceRunners(registry = getDefaultCanonicalStorageSliceReg
     }
     if (!registry.getRunners('managed_media')) {
         registry.setRunners('managed_media', {
-            runAudit: ({ handle, directories, db, auditedAtMs }) => auditCanonicalManagedMediaShadowImport({
+            runAudit: ({ handle, directories, db, auditedAtMs }: AuditOptions) => auditCanonicalManagedMediaShadowImport({
                 handle,
                 directories,
                 db,
@@ -947,7 +963,7 @@ export async function runCanonicalSliceAudit({
     db,
     auditedAtMs = Date.now(),
     registry = getDefaultCanonicalStorageSliceRegistry(),
-} = {}) {
+}: AuditOptions & { sliceKey: string; registry?: Registry } = {} as AuditOptions & { sliceKey: string }) {
     const activeRegistry = ensureDefaultSliceRunners(registry);
     activeRegistry.get(sliceKey);
     const runners = activeRegistry.getRunners(sliceKey);
@@ -965,7 +981,7 @@ export async function runCanonicalSliceRepair({
     repairKeys = null,
     nowMs = Date.now(),
     registry = getDefaultCanonicalStorageSliceRegistry(),
-} = {}) {
+}: RepairOptions & { sliceKey: string; registry?: Registry } = {} as RepairOptions & { sliceKey: string }) {
     const activeRegistry = ensureDefaultSliceRunners(registry);
     activeRegistry.get(sliceKey);
     const runners = activeRegistry.getRunners(sliceKey);
@@ -975,7 +991,7 @@ export async function runCanonicalSliceRepair({
     const result = await runners.runRepair({ db, directories, repairKeys, nowMs });
     const requested = toRequestedRepairKeySet(repairKeys);
     const missingResults = buildMissingRepairResults(requested, activeRegistry.get(sliceKey).listOpenRepairs(db) ?? [])
-        .filter(missing => !(result.results ?? []).some(entry => String(entry.repairKey) === missing.repairKey));
+        .filter(missing => !(result.results ?? []).some((entry: { repairKey: unknown }) => String(entry.repairKey) === missing.repairKey));
     if (missingResults.length === 0) {
         return { ...result, sliceKey };
     }

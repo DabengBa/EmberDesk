@@ -1,11 +1,11 @@
 import express from 'express';
 import sanitize from 'sanitize-filename';
 
-import { canonicalSqliteManager } from '../canonical-sqlite.js';
-import { runCanonicalMigrations } from '../canonical-sqlite-migrations.js';
+import { canonicalSqliteManager } from '../canonical-sqlite.ts';
+import { runCanonicalMigrations } from '../canonical-sqlite-migrations.ts';
 import { getPersistedCanonicalAuditStatus } from '../canonical-sqlite-shadow-import.ts';
 import { ensureCanonicalSliceBackend } from '../canonical-backend.js';
-import { getCanonicalStorageSlice } from '../canonical-storage-slice-registry.js';
+import { getCanonicalStorageSlice } from '../canonical-storage-slice-registry.ts';
 import { getDefaultPresetFile, getDefaultPresets } from './content-manager.js';
 import {
     deleteCanonicalPreset,

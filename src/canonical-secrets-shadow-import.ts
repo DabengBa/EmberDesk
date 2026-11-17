@@ -8,7 +8,7 @@ import {
     recordImportLedgerEntry,
     resolveAuditDriftReason,
 } from './canonical-import-ledger.js';
-import { getCanonicalMigrationStatus, runCanonicalMigrations } from './canonical-sqlite-migrations.js';
+import { getCanonicalMigrationStatus, runCanonicalMigrations } from './canonical-sqlite-migrations.ts';
 import { persistCanonicalAuditStatus } from './canonical-sqlite-shadow-import.ts';
 import {
     getCanonicalSecrets,

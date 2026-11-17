@@ -35,10 +35,10 @@ import {
 
     readCharacterSummaryPayload,
 } from './character-read-service.ts';
-import { getCanonicalStorageSlice } from '../canonical-storage-slice-registry.js';
+import { getCanonicalStorageSlice } from '../canonical-storage-slice-registry.ts';
 import { ensureCanonicalSliceBackend } from '../canonical-backend.js';
-import { CanonicalSqliteDisabledError, getCanonicalStorageStatus, openCanonicalDatabase, withCanonicalTransaction } from '../canonical-sqlite.js';
-import { CanonicalMigrationBlockedError, runCanonicalMigrations } from '../canonical-sqlite-migrations.js';
+import { CanonicalSqliteDisabledError, getCanonicalStorageStatus, openCanonicalDatabase, withCanonicalTransaction } from '../canonical-sqlite.ts';
+import { CanonicalMigrationBlockedError, runCanonicalMigrations } from '../canonical-sqlite-migrations.ts';
 import { getPersistedCanonicalAuditStatus, invalidateCanonicalAuditStatus } from '../canonical-sqlite-shadow-import.ts';
 import { recordImportLedgerEntry, removeImportLedgerEntry } from '../canonical-import-ledger.js';
 import {

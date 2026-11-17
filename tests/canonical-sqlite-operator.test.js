@@ -9,7 +9,7 @@ import { AVATAR_HEIGHT, AVATAR_WIDTH } from '../src/constants.js';
 
 import { afterEach, describe, expect, test } from '@jest/globals';
 
-import { createCanonicalSqliteManager } from '../src/canonical-sqlite.js';
+import { createCanonicalSqliteManager } from '../src/canonical-sqlite.ts';
 import { recordWorldProjectionIntent } from '../src/canonical-world-info-projection.ts';
 import { runCanonicalShadowImport, getPersistedCanonicalAuditStatus, persistCanonicalAuditStatus } from '../src/canonical-sqlite-shadow-import.ts';
 import { runCanonicalChatShadowImport } from '../src/canonical-chat-shadow-import.ts';
@@ -30,9 +30,9 @@ import {
     runCanonicalAudit,
     runCanonicalSliceAudit,
     runCanonicalSliceRepair,
-} from '../src/canonical-sqlite-operator.js';
-import { getDefaultCanonicalStorageSliceRegistry } from '../src/canonical-storage-slice-registry.js';
-import { runCanonicalMigrations } from '../src/canonical-sqlite-migrations.js';
+} from '../src/canonical-sqlite-operator.ts';
+import { getDefaultCanonicalStorageSliceRegistry } from '../src/canonical-storage-slice-registry.ts';
+import { runCanonicalMigrations } from '../src/canonical-sqlite-migrations.ts';
 import {
     listOpenSettingsProjectionRepairs,
     recordSettingsProjectionRepair,

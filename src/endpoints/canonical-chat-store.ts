@@ -16,7 +16,7 @@ type Condition = { projection?: boolean; create?: boolean; version?: string };
 import crypto from 'node:crypto';
 import path from 'node:path';
 
-import { withCanonicalTransaction } from '../canonical-sqlite.js';
+import { withCanonicalTransaction } from '../canonical-sqlite.ts';
 
 function hashIdentity(...parts: unknown[]) {
     const hash = crypto.createHash('sha256');

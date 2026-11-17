@@ -3,10 +3,10 @@
 import path from 'node:path';
 import process from 'node:process';
 
-import { createCanonicalSqliteManager } from '../src/canonical-sqlite.js';
-import { runCanonicalMigrations } from '../src/canonical-sqlite-migrations.js';
+import { createCanonicalSqliteManager } from '../src/canonical-sqlite.ts';
+import { runCanonicalMigrations } from '../src/canonical-sqlite-migrations.ts';
 import { runCanonicalChatShadowImport } from '../src/canonical-chat-shadow-import.ts';
-import { runCanonicalAudit, runCanonicalSliceAudit } from '../src/canonical-sqlite-operator.js';
+import { runCanonicalAudit, runCanonicalSliceAudit } from '../src/canonical-sqlite-operator.ts';
 import { getUserDirectories } from '../src/user-directories.ts';
 
 const manager = createCanonicalSqliteManager({ logger: { info() {}, warn() {} } });

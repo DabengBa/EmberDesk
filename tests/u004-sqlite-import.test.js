@@ -4,7 +4,7 @@ import path from 'node:path';
 
 import { expect, test } from '@jest/globals';
 
-import { createCanonicalSqliteManager } from '../src/canonical-sqlite.js';
+import { createCanonicalSqliteManager } from '../src/canonical-sqlite.ts';
 import { buildCharacterFileSnapshotRow } from '../src/endpoints/character-file-snapshot.js';
 import { auditCanonicalShadowImport, getPersistedCanonicalAuditStatus, runCanonicalShadowImport } from '../src/canonical-sqlite-shadow-import.ts';
 

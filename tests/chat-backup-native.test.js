@@ -14,7 +14,7 @@ const queries = new URL('../src/endpoints/canonical-chat-query-service.ts', impo
 const reads = new URL('../src/endpoints/canonical-chat-read-service.ts', import.meta.url).href;
 const textReplace = new URL('../src/endpoints/character-text-replace-service.ts', import.meta.url).href;
 const util = new URL('../src/util.js', import.meta.url).href;
-const migrations = new URL('../src/canonical-sqlite-migrations.js', import.meta.url).href;
+const migrations = new URL('../src/canonical-sqlite-migrations.ts', import.meta.url).href;
 const writes = new URL('../src/endpoints/canonical-chat-write-service.ts', import.meta.url).href;
 const chatReadRoutes = new URL('../src/endpoints/chat-read-routes.ts', import.meta.url).href;
 

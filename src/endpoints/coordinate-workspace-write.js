@@ -1,5 +1,5 @@
-import { openCanonicalDatabase } from '../canonical-sqlite.js';
-import { runCanonicalMigrations } from '../canonical-sqlite-migrations.js';
+import { openCanonicalDatabase } from '../canonical-sqlite.ts';
+import { runCanonicalMigrations } from '../canonical-sqlite-migrations.ts';
 import { executeWorkspaceWrite } from '../character-replace-write-coordinator.js';
 import { executeReplaceIntent } from '../character-replace-write-coordinator.js';
 import { getCanonicalSqliteFeatureFlags } from '../storage-feature-flags.js';

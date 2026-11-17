@@ -164,7 +164,7 @@ The retired helper module:
 
 - delegates `node:sqlite` feature detection to `src/derived-cache-sqlite.js`
 - delegates cached `DatabaseSync` handle lifecycle to `src/derived-cache-sqlite.js`
-- exposes disposal helpers for tests, but `src/server-main.js` no longer opens, logs, or disposes character-index databases during normal startup/shutdown
+- exposes disposal helpers for tests, but `src/server-main.ts` no longer opens, logs, or disposes character-index databases during normal startup/shutdown
 - resets cached handles through the helper when structural index operations fail
 - recreates derived rows when:
   - the row is missing

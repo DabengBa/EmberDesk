@@ -142,4 +142,4 @@ Operational binding points:
 - `src/healthcheck.js` - container healthcheck entry point
 - `src/middleware/react-login-serve.js` - required `app/dist` login shell contract
 - `server.js` - deployed process entry point
-- `src/server-main.js` - server boot orchestration inside the container
+- `src/server-main.ts` - server boot orchestration inside the container

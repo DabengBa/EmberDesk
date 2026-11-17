@@ -5,8 +5,8 @@ import { DEFAULT_USER, PUBLIC_DIRECTORIES } from './constants.js';
 import { color, delay, setPermissionsSync } from './util.js';
 import { serverDirectory } from './server-directory.js';
 import { getUserDirectories } from './user-directories.ts';
-import { applyCanonicalPragmas, resolveCanonicalDatabasePath } from './canonical-sqlite.js';
-import { runCanonicalMigrations } from './canonical-sqlite-migrations.js';
+import { applyCanonicalPragmas, resolveCanonicalDatabasePath } from './canonical-sqlite.ts';
+import { runCanonicalMigrations } from './canonical-sqlite-migrations.ts';
 import { upsertCanonicalSettingsDocument } from './endpoints/settings-store.ts';
 
 /**
@@ -150,7 +150,7 @@ export async function migrateUserData() {
                 applyCanonicalPragmas(db);
                 const migrationStatus = runCanonicalMigrations(db);
                 if (!migrationStatus.ok) {
-                    throw new Error(`canonical migrations failed: ${migrationStatus.reason ?? 'unknown'}`);
+                    throw new Error(`canonical migrations failed: ${(migrationStatus as typeof migrationStatus & { reason?: string }).reason ?? 'unknown'}`);
                 }
                 const saved = upsertCanonicalSettingsDocument(db, {
                     userId: DEFAULT_USER.handle,

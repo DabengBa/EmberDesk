@@ -34,10 +34,10 @@ import { registerChatGetRoute, registerChatSearchRoute, registerChatRecentRoute 
 import { registerChatSaveRoute, registerChatRenameRoute, registerChatDeleteRoute } from './chat-write-routes.ts';
 import { registerChatImportRoute } from './chat-import-routes.ts';
 import { registerChatExportRoute } from './chat-compatibility.ts';
-import { getCanonicalStorageSlice } from '../canonical-storage-slice-registry.js';
+import { getCanonicalStorageSlice } from '../canonical-storage-slice-registry.ts';
 import { ensureCanonicalSliceBackend } from '../canonical-backend.js';
-import { getCanonicalStorageStatus, openCanonicalDatabase, withCanonicalTransaction } from '../canonical-sqlite.js';
-import { runCanonicalMigrations } from '../canonical-sqlite-migrations.js';
+import { getCanonicalStorageStatus, openCanonicalDatabase, withCanonicalTransaction } from '../canonical-sqlite.ts';
+import { runCanonicalMigrations } from '../canonical-sqlite-migrations.ts';
 import {
     getPersistedCanonicalAuditStatus,
     invalidateCanonicalAuditStatus,

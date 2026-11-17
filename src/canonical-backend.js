@@ -1,7 +1,7 @@
 import path from 'node:path';
 
-import { canonicalSqliteManager } from './canonical-sqlite.js';
-import { runCanonicalMigrations } from './canonical-sqlite-migrations.js';
+import { canonicalSqliteManager } from './canonical-sqlite.ts';
+import { runCanonicalMigrations } from './canonical-sqlite-migrations.ts';
 import {
     auditCanonicalShadowImport,
     getPersistedCanonicalAuditStatus,
@@ -31,7 +31,7 @@ import {
     auditCanonicalPresetsShadowImport,
     runCanonicalPresetsShadowImport,
 } from './canonical-presets-shadow-import.ts';
-import { getCanonicalStorageSlice } from './canonical-storage-slice-registry.js';
+import { getCanonicalStorageSlice } from './canonical-storage-slice-registry.ts';
 import { buildCharacterFileSnapshotRow } from './endpoints/character-file-snapshot.js';
 import { parse as parseCharacterCard } from './character-card-parser.ts';
 import { getCharaCardV2 } from './endpoints/character-card-v2.ts';

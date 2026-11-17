@@ -21,7 +21,7 @@ function read(relativePath) {
 describe('workspace React shell retirement', () => {
     test('removes shell feature flags and inline workspace bootstrap payloads', () => {
         const configSource = read('default/config.yaml');
-        const serverMainSource = read('src/server-main.js');
+        const serverMainSource = read('src/server-main.ts');
         const featureSource = read('src/workspace-react-features.js');
         const shellSource = read('public/script.js');
 

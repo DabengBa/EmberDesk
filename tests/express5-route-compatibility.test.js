@@ -9,7 +9,7 @@ import http from 'node:http';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { setConfigFilePath } from '../src/util.js';
-import corsProxyMiddleware from '../src/middleware/corsProxy.js';
+import corsProxyMiddleware from '../src/middleware/corsProxy.ts';
 import errorHandlerMiddleware from '../src/middleware/errorHandler.js';
 import {
     CORS_PROXY_ROUTE,
@@ -32,7 +32,7 @@ setConfigFilePath(configPath);
 
 const { router: userDataRouter, requireLoginMiddleware } = await import('../src/users.js');
 const { router: imagesRouter } = await import('../src/endpoints/images.js');
-const { redirectDeprecatedEndpoints, setupPrivateEndpoints, setupPublicEndpoints } = await import('../src/server-startup.js');
+const { redirectDeprecatedEndpoints, setupPrivateEndpoints, setupPublicEndpoints } = await import('../src/server-startup.ts');
 
 function listen(app) {
     const server = http.createServer(app);
@@ -542,7 +542,7 @@ describe('Express 5 route compatibility', () => {
     });
 
     test('server startup owns no Webpack fallback or compiler path', () => {
-        const serverMain = fs.readFileSync(path.join(repoRoot, 'src', 'server-main.js'), 'utf8');
+        const serverMain = fs.readFileSync(path.join(repoRoot, 'src', 'server-main.ts'), 'utf8');
         const viteMiddleware = fs.readFileSync(path.join(repoRoot, 'src', 'middleware', 'vite-lib-serve.js'), 'utf8');
 
         expect(serverMain).not.toContain('getWebpackServeMiddleware');

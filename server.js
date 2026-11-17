@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { CommandLineParser } from './src/command-line.js';
+import { CommandLineParser } from './src/command-line.ts';
 import { serverDirectory } from './src/server-directory.js';
 
 console.log(`Node version: ${process.version}. Running in ${process.env.NODE_ENV} environment. Server directory: ${serverDirectory}`);
@@ -11,7 +11,7 @@ globalThis.COMMAND_LINE_ARGS = cliArgs;
 process.chdir(serverDirectory);
 
 try {
-    await import('./src/server-main.js');
+    await import('./src/server-main.ts');
 } catch (error) {
     console.error('A critical error has occurred while starting the server:', error);
 }

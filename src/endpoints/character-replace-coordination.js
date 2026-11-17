@@ -1,7 +1,7 @@
 import express from 'express';
 
-import { openCanonicalDatabase } from '../canonical-sqlite.js';
-import { runCanonicalMigrations } from '../canonical-sqlite-migrations.js';
+import { openCanonicalDatabase } from '../canonical-sqlite.ts';
+import { runCanonicalMigrations } from '../canonical-sqlite-migrations.ts';
 import { getCanonicalSqliteFeatureFlags } from '../storage-feature-flags.js';
 import {
     acknowledgeReplaceIntent,

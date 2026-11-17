@@ -11,8 +11,8 @@ import zlib from 'node:zlib';
 
 import storage from 'node-persist';
 
-import { applyCanonicalPragmas } from '../src/canonical-sqlite.js';
-import { runCanonicalMigrations } from '../src/canonical-sqlite-migrations.js';
+import { applyCanonicalPragmas } from '../src/canonical-sqlite.ts';
+import { runCanonicalMigrations } from '../src/canonical-sqlite-migrations.ts';
 import { write as writeCharacterCardPngData } from '../src/character-card-parser.ts';
 import { DEFAULT_USER, USER_DIRECTORY_TEMPLATE } from '../src/constants.js';
 import { ensureCanonicalPreset } from '../src/endpoints/presets-store.ts';

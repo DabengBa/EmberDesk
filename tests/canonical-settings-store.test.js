@@ -5,8 +5,8 @@ import crypto from 'node:crypto';
 
 import { afterEach, describe, expect, jest, test } from '@jest/globals';
 
-import { createCanonicalSqliteManager, withCanonicalTransaction } from '../src/canonical-sqlite.js';
-import { CANONICAL_SQLITE_MIGRATIONS, runCanonicalMigrations } from '../src/canonical-sqlite-migrations.js';
+import { createCanonicalSqliteManager, withCanonicalTransaction } from '../src/canonical-sqlite.ts';
+import { CANONICAL_SQLITE_MIGRATIONS, runCanonicalMigrations } from '../src/canonical-sqlite-migrations.ts';
 import { expectCanonicalDomainSchema } from './helpers/canonical-domain-schema.js';
 import {
     getCanonicalSettingsDocument,
@@ -26,7 +26,7 @@ import {
 import {
     getPersistedCanonicalAuditStatus,
 } from '../src/canonical-sqlite-shadow-import.ts';
-import { getDefaultCanonicalStorageSliceRegistry } from '../src/canonical-storage-slice-registry.js';
+import { getDefaultCanonicalStorageSliceRegistry } from '../src/canonical-storage-slice-registry.ts';
 
 const tempRoots = [];
 const managers = [];
@@ -492,7 +492,7 @@ describe('canonical settings route integration', () => {
     afterEach(async () => {
         clearCanonicalEnv();
         try {
-            const { canonicalSqliteManager } = await import('../src/canonical-sqlite.js');
+            const { canonicalSqliteManager } = await import('../src/canonical-sqlite.ts');
             canonicalSqliteManager.dispose();
         } catch {
             // ignore
@@ -522,7 +522,7 @@ describe('canonical settings route integration', () => {
         expectedRevision = 0,
         nowMs = 2000,
     } = {}) {
-        const { canonicalSqliteManager } = await import('../src/canonical-sqlite.js');
+        const { canonicalSqliteManager } = await import('../src/canonical-sqlite.ts');
         const { persistCanonicalAuditStatus } = await import('../src/canonical-sqlite-shadow-import.ts');
         const db = canonicalSqliteManager.open({
             handle,
@@ -619,7 +619,7 @@ describe('canonical settings route integration', () => {
         expect(getResponse.statusCode).toBe(200);
         expect(saveResponse.statusCode).toBe(200);
 
-        const { canonicalSqliteManager } = await import('../src/canonical-sqlite.js');
+        const { canonicalSqliteManager } = await import('../src/canonical-sqlite.ts');
         const db = canonicalSqliteManager.open({
             handle: 'alice',
             directories,
@@ -680,7 +680,7 @@ describe('canonical settings route integration', () => {
 
         // Seed a DB-only world book: no worlds/*.json exists, so a directory
         // scan would produce an empty list while canonical storage has the row.
-        const { canonicalSqliteManager } = await import('../src/canonical-sqlite.js');
+        const { canonicalSqliteManager } = await import('../src/canonical-sqlite.ts');
         const { upsertCanonicalWorldInfoBook } = await import('../src/endpoints/world-info-store.ts');
         const { persistCanonicalAuditStatus } = await import('../src/canonical-sqlite-shadow-import.ts');
         const db = canonicalSqliteManager.open({
@@ -730,7 +730,7 @@ describe('canonical settings route integration', () => {
                 settings_revision: 1,
             },
         });
-        const { canonicalSqliteManager } = await import('../src/canonical-sqlite.js');
+        const { canonicalSqliteManager } = await import('../src/canonical-sqlite.ts');
         const db = canonicalSqliteManager.open({
             handle: 'alice',
             directories,
@@ -782,7 +782,7 @@ describe('canonical settings route integration', () => {
         setCanonicalEnv({ enabled: true, reads: true, writes: true });
         const router = await loadSettingsRouter();
         await invokeRoute(router, '/get', { directories });
-        const { canonicalSqliteManager } = await import('../src/canonical-sqlite.js');
+        const { canonicalSqliteManager } = await import('../src/canonical-sqlite.ts');
         const db = canonicalSqliteManager.open({
             handle: 'alice',
             directories,
@@ -1013,7 +1013,7 @@ describe('canonical settings snapshots and rollback', () => {
     afterEach(async () => {
         clearCanonicalEnv();
         try {
-            const { canonicalSqliteManager } = await import('../src/canonical-sqlite.js');
+            const { canonicalSqliteManager } = await import('../src/canonical-sqlite.ts');
             canonicalSqliteManager.dispose();
         } catch {
             // ignore
@@ -1031,7 +1031,7 @@ describe('canonical settings snapshots and rollback', () => {
         // stays inert while we seed divergent state on top.
         await invokeRoute(router, '/get', { directories });
 
-        const { canonicalSqliteManager } = await import('../src/canonical-sqlite.js');
+        const { canonicalSqliteManager } = await import('../src/canonical-sqlite.ts');
         const { persistCanonicalAuditStatus } = await import('../src/canonical-sqlite-shadow-import.ts');
         const db = canonicalSqliteManager.open({
             handle: 'alice',

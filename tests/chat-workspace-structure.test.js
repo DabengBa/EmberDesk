@@ -159,9 +159,10 @@ describe('chat workspace structure', () => {
         expect(composerSource).toContain('id="send_textarea_hint"');
         expect(composerSource).toContain("translate('Send requires an API connection.')");
         expect(indexHtml).toContain('id="send_form"');
-        expect(scriptSource).toContain("const sendTextareaHint = $('#send_textarea_hint');");
-        expect(scriptSource).toContain('sendTextareaHint.text(t`Send requires an API connection.`);');
-        expect(scriptSource).toContain("sendTextareaHint.text('');");
+        expect(scriptSource).toContain("const sendTextareaHint = document.getElementById('send_textarea_hint');");
+        expect(scriptSource).toContain('const hint = t`Send requires an API connection.`;');
+        expect(scriptSource).toContain('if (sendTextareaHint) sendTextareaHint.textContent = hint;');
+        expect(scriptSource).toContain("if (sendTextareaHint) sendTextareaHint.textContent = '';");
         expect(keyboardSource).toContain("'.mes_stop', // Stop button in the chat bar");
         expect(keyboardSource).toContain("event.key === 'Enter' || event.key === ' '");
         expect(keyboardSource).toContain("event.key === ' '");

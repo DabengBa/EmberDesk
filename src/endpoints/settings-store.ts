@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import type { DatabaseSync, SQLInputValue } from 'node:sqlite';
 
-import { withCanonicalTransaction } from '../canonical-sqlite.js';
+import { withCanonicalTransaction } from '../canonical-sqlite.ts';
 import { uuidv4 } from '../util.js';
 
 // Views describe existing unchecked JSON access, not runtime validation.

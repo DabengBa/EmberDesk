@@ -18,9 +18,9 @@ import path from 'node:path';
 
 import { deleteRecord, listRecords, readRecord } from '../wire-log-store.ts';
 import { normalizeWireLogOptions } from '../wire-log-recorder.ts';
-import { canonicalSqliteManager } from '../canonical-sqlite.js';
-import { getCanonicalStorageSlice } from '../canonical-storage-slice-registry.js';
-import { runCanonicalMigrations } from '../canonical-sqlite-migrations.js';
+import { canonicalSqliteManager } from '../canonical-sqlite.ts';
+import { getCanonicalStorageSlice } from '../canonical-storage-slice-registry.ts';
+import { runCanonicalMigrations } from '../canonical-sqlite-migrations.ts';
 import { ensureCanonicalSliceBackend } from '../canonical-backend.js';
 import { getPersistedCanonicalAuditStatus } from '../canonical-sqlite-shadow-import.ts';
 import { getDefaultTemplateFile } from './content-manager.js';

@@ -20,6 +20,7 @@ Replace the chain of post-character-import popups with one immediate decision di
 - After importing one or more [character cards](term.character_card) by file picker or drag/drop, EmberDesk scans the imported cards for embedded optional content before selecting the character.
 - If importable embedded content exists and the user's settings still require asking, EmberDesk shows one unified confirmation dialog with per-content checkboxes.
 - Tags are selected by default when they are askable; world books, regex scripts, and CSS choices require explicit user selection unless existing settings already suppress the section.
+- For a card with creator-note CSS, the CSS choice controls whether its styles may apply across the app. Leaving it unselected, or choosing Skip All, records a notes-only preference; selecting it grants global styling for that character. The preference can later be changed from the creator-notes styles control.
 - World book entries that would overwrite an existing world display a visible overwrite warning.
 - Confirm applies only the selected choices and suppresses the older individual follow-up popups for those imported cards; cancel/Skip All records skip choices so individual popups do not appear later.
 - If settings suppress all askable sections or no embedded content exists, no dialog appears and import continues through the normal character-selection path.

@@ -12,8 +12,8 @@ import { DatabaseSync } from 'node:sqlite';
 
 import { chromium } from '../tests/node_modules/playwright/index.mjs';
 
-import { applyCanonicalPragmas } from '../src/canonical-sqlite.js';
-import { runCanonicalMigrations } from '../src/canonical-sqlite-migrations.js';
+import { applyCanonicalPragmas } from '../src/canonical-sqlite.ts';
+import { runCanonicalMigrations } from '../src/canonical-sqlite-migrations.ts';
 import { DEFAULT_USER } from '../src/constants.js';
 import { upsertCanonicalSettingsDocument } from '../src/endpoints/settings-store.ts';
 import { summarizeStartupPerformance } from '../src/performance-report.js';

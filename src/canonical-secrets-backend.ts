@@ -5,8 +5,8 @@ import type { DatabaseSync } from 'node:sqlite';
 import { sync as writeFileAtomicSync } from 'write-file-atomic';
 
 import { recordImportLedgerEntry } from './canonical-import-ledger.js';
-import { canonicalSqliteManager } from './canonical-sqlite.js';
-import { runCanonicalMigrations } from './canonical-sqlite-migrations.js';
+import { canonicalSqliteManager } from './canonical-sqlite.ts';
+import { runCanonicalMigrations } from './canonical-sqlite-migrations.ts';
 import {
     getPersistedCanonicalAuditStatus,
     invalidateCanonicalAuditStatus,
@@ -17,7 +17,7 @@ import {
     getCanonicalSecretsProjection,
     runCanonicalSecretsShadowImport,
 } from './canonical-secrets-shadow-import.ts';
-import { getCanonicalStorageSlice } from './canonical-storage-slice-registry.js';
+import { getCanonicalStorageSlice } from './canonical-storage-slice-registry.ts';
 import { decideCanonicalBackendInitAction } from './canonical-backend.js';
 import {
     listOpenSecretProjectionRepairs,

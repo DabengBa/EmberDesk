@@ -4,8 +4,8 @@ import path from 'node:path';
 
 import { afterEach, describe, expect, jest, test } from '@jest/globals';
 
-import { createCanonicalSqliteManager } from '../src/canonical-sqlite.js';
-import { runCanonicalMigrations } from '../src/canonical-sqlite-migrations.js';
+import { createCanonicalSqliteManager } from '../src/canonical-sqlite.ts';
+import { runCanonicalMigrations } from '../src/canonical-sqlite-migrations.ts';
 import {
     buildCanonicalBackupManifest,
     createCanonicalStorageSliceRegistry,
@@ -14,7 +14,7 @@ import {
     listCanonicalStorageSliceKeys,
     MANAGED_FILE_MANIFEST_VERSION,
     resetDeprecatedSettingsProjectionWarningForTests,
-} from '../src/canonical-storage-slice-registry.js';
+} from '../src/canonical-storage-slice-registry.ts';
 import {
     buildCanonicalRollbackBlockers,
     buildCanonicalSliceRollbackBlockers,
@@ -94,6 +94,45 @@ afterEach(() => {
 });
 
 describe('canonical storage slice registry', () => {
+    test('a registry with defaults cannot replace built-in descriptors', () => {
+        const registry = createCanonicalStorageSliceRegistry({ registerDefaults: true });
+        for (const key of ['characters', 'world_info', 'settings', 'secrets', 'managed_media', 'chats', 'presets']) {
+            const original = registry.get(key);
+            expect(Object.isFrozen(original)).toBe(true);
+            expect(() => registry.register({ ...original, getRollbackBlockers: () => { throw new Error('replacement'); } }))
+                .toThrow(`Duplicate canonical storage slice key: ${key}`);
+            expect(registry.get(key)).toBe(original);
+        }
+    });
+
+    test('database-free rollback paths depend on audit, slice, and phase', () => {
+        const registry = getDefaultCanonicalStorageSliceRegistry();
+        const audit = { blocking: false };
+        const keys = ['characters', 'world_info', 'settings', 'secrets', 'managed_media', 'chats', 'presets'];
+
+        for (const key of keys) {
+            const slice = registry.get(key);
+            expect(() => slice.getRollbackBlockers()).toThrow();
+            for (const phase of ['reads', 'enabled', 'custom']) {
+                expect(slice.getRollbackBlockers({ phase, persistedAuditStatus: audit }))
+                    .toEqual(expect.objectContaining({ sliceKey: key, phase }));
+            }
+            expect(() => slice.getRollbackBlockers({ phase: 'reads', persistedAuditStatus: null })).toThrow();
+            if (key !== 'presets') {
+                expect(() => slice.getRollbackBlockers({ persistedAuditStatus: audit })).toThrow();
+                expect(() => slice.getRollbackBlockers({ phase: 'writes', persistedAuditStatus: audit })).toThrow();
+            }
+            if (key === 'characters') {
+                expect(() => slice.getRollbackBlockers({ phase: 'chatStats', persistedAuditStatus: audit })).toThrow();
+            } else {
+                expect(slice.getRollbackBlockers({ phase: 'chatStats', persistedAuditStatus: audit }))
+                    .toEqual(expect.objectContaining({ sliceKey: key, phase: 'chatStats' }));
+            }
+        }
+        expect(registry.get('presets').getRollbackBlockers({ persistedAuditStatus: audit }))
+            .toEqual(expect.objectContaining({ sliceKey: 'presets', phase: 'writes' }));
+    });
+
     test('registers all delivered canonical slices with required capabilities', () => {
         const registry = getDefaultCanonicalStorageSliceRegistry();
         expect(listCanonicalStorageSliceKeys(registry)).toEqual(['characters', 'world_info', 'settings', 'secrets', 'managed_media', 'chats', 'presets']);

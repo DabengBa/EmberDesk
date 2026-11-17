@@ -5,8 +5,8 @@ import { fileURLToPath } from 'node:url';
 
 import { afterEach, describe, expect, jest, test } from '@jest/globals';
 
-import { createCanonicalSqliteManager } from '../src/canonical-sqlite.js';
-import { runCanonicalMigrations } from '../src/canonical-sqlite-migrations.js';
+import { createCanonicalSqliteManager } from '../src/canonical-sqlite.ts';
+import { runCanonicalMigrations } from '../src/canonical-sqlite-migrations.ts';
 import { expectCanonicalDomainSchema } from './helpers/canonical-domain-schema.js';
 import {
     getCanonicalSecretRecords,
@@ -20,7 +20,7 @@ import {
     runCanonicalSecretsShadowImport,
 } from '../src/canonical-secrets-shadow-import.ts';
 import { getPersistedCanonicalAuditStatus } from '../src/canonical-sqlite-shadow-import.ts';
-import { runCanonicalSliceRepair } from '../src/canonical-sqlite-operator.js';
+import { runCanonicalSliceRepair } from '../src/canonical-sqlite-operator.ts';
 
 const tempRoots = [];
 const managers = [];
@@ -79,7 +79,7 @@ afterEach(async () => {
         delete process.env[key];
     }
     try {
-        const { canonicalSqliteManager } = await import('../src/canonical-sqlite.js');
+        const { canonicalSqliteManager } = await import('../src/canonical-sqlite.ts');
         canonicalSqliteManager.dispose();
     } catch {
         // Ignore disposal failures from tests that never load the singleton.
@@ -328,7 +328,7 @@ describe('canonical secrets store', () => {
         const { setConfigFilePath } = await import('../src/util.js');
         setConfigFilePath(fileURLToPath(new URL('../default/config.yaml', import.meta.url)));
         const { SecretManager } = await import(`../src/endpoints/secrets.js?canonicalSecrets=${Date.now()}-${Math.random()}`);
-        const { canonicalSqliteManager } = await import('../src/canonical-sqlite.js');
+        const { canonicalSqliteManager } = await import('../src/canonical-sqlite.ts');
         const secretManager = new SecretManager(directories);
 
         expect(secretManager.readSecret('api_key_openai')).toBe(`${canary}-seed`);
@@ -388,7 +388,7 @@ describe('canonical secrets store', () => {
         const { setConfigFilePath } = await import('../src/util.js');
         setConfigFilePath(fileURLToPath(new URL('../default/config.yaml', import.meta.url)));
         const { SecretManager } = await import(`../src/endpoints/secrets.js?canonicalRepair=${Date.now()}-${Math.random()}`);
-        const { canonicalSqliteManager } = await import('../src/canonical-sqlite.js');
+        const { canonicalSqliteManager } = await import('../src/canonical-sqlite.ts');
         const secretManager = new SecretManager(directories);
         expect(secretManager.readSecret('api_key_openai')).toBe(`${canary}-seed`);
 
@@ -466,7 +466,7 @@ describe('canonical secrets store', () => {
         const { setConfigFilePath } = await import('../src/util.js');
         setConfigFilePath(fileURLToPath(new URL('../default/config.yaml', import.meta.url)));
         const { SecretManager } = await import(`../src/endpoints/secrets.js?canonicalOff=${Date.now()}-${Math.random()}`);
-        const { canonicalSqliteManager } = await import('../src/canonical-sqlite.js');
+        const { canonicalSqliteManager } = await import('../src/canonical-sqlite.ts');
         const secretManager = new SecretManager(directories);
 
         expect(secretManager.readSecret('api_key_openai')).toBe(`${canary}-seed`);

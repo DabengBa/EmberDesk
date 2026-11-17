@@ -2,7 +2,7 @@ import { DatabaseSync } from 'node:sqlite';
 
 import { afterEach, beforeEach, describe, expect, test } from '@jest/globals';
 
-import { runCanonicalMigrations } from '../src/canonical-sqlite-migrations.js';
+import { runCanonicalMigrations } from '../src/canonical-sqlite-migrations.ts';
 import * as coordinator from '../src/character-replace-write-coordinator.js';
 import {
     acknowledgeReplaceIntent,

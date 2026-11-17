@@ -4,8 +4,8 @@ import path from 'node:path';
 
 import { afterAll, afterEach, beforeAll, describe, expect, test } from '@jest/globals';
 
-import { createCanonicalSqliteManager, canonicalSqliteManager } from '../src/canonical-sqlite.js';
-import { runCanonicalMigrations } from '../src/canonical-sqlite-migrations.js';
+import { createCanonicalSqliteManager, canonicalSqliteManager } from '../src/canonical-sqlite.ts';
+import { runCanonicalMigrations } from '../src/canonical-sqlite-migrations.ts';
 import { getPersistedCanonicalAuditStatus } from '../src/canonical-sqlite-shadow-import.ts';
 import { setConfigFilePath } from '../src/util.js';
 
@@ -36,7 +36,7 @@ const {
 } = await import('../src/canonical-presets-shadow-import.ts');
 const { router: presetsRouter } = await import('../src/endpoints/presets.js');
 const { router: settingsRouter } = await import('../src/endpoints/settings.js');
-const { exportCanonicalStorageToFiles } = await import('../src/canonical-sqlite-export.js');
+const { exportCanonicalStorageToFiles } = await import('../src/canonical-sqlite-export.ts');
 
 const roots = [];
 const managers = [];

@@ -5,8 +5,8 @@ import path from 'node:path';
 import express from 'express';
 import { afterAll, beforeAll, describe, expect, test } from '@jest/globals';
 
-import { disposeCanonicalDatabases, openCanonicalDatabase } from '../src/canonical-sqlite.js';
-import { runCanonicalMigrations } from '../src/canonical-sqlite-migrations.js';
+import { disposeCanonicalDatabases, openCanonicalDatabase } from '../src/canonical-sqlite.ts';
+import { runCanonicalMigrations } from '../src/canonical-sqlite-migrations.ts';
 import {
     createReplaceIntent,
     createWorkspaceWriteSession,

@@ -4,8 +4,8 @@ import path from 'node:path';
 
 import { afterEach, describe, expect, jest, test } from '@jest/globals';
 
-import { createCanonicalSqliteManager } from '../src/canonical-sqlite.js';
-import { runCanonicalMigrations } from '../src/canonical-sqlite-migrations.js';
+import { createCanonicalSqliteManager } from '../src/canonical-sqlite.ts';
+import { runCanonicalMigrations } from '../src/canonical-sqlite-migrations.ts';
 import { runCanonicalChatShadowImport } from '../src/canonical-chat-shadow-import.ts';
 import { getCanonicalChatSession } from '../src/endpoints/canonical-chat-store.ts';
 import { readCanonicalChatPayload } from '../src/endpoints/canonical-chat-read-service.ts';

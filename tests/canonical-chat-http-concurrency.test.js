@@ -6,8 +6,8 @@ import crypto from 'node:crypto';
 import express from 'express';
 import { afterAll, beforeAll, expect, jest, test } from '@jest/globals';
 import { setConfigFilePath } from '../src/util.js';
-import { canonicalSqliteManager } from '../src/canonical-sqlite.js';
-import { runCanonicalMigrations } from '../src/canonical-sqlite-migrations.js';
+import { canonicalSqliteManager } from '../src/canonical-sqlite.ts';
+import { runCanonicalMigrations } from '../src/canonical-sqlite-migrations.ts';
 import { auditCanonicalChatShadowImport, runCanonicalChatShadowImport } from '../src/canonical-chat-shadow-import.ts';
 
 jest.setTimeout(20000);

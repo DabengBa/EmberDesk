@@ -62,7 +62,7 @@ async function runGenerationScenario({ type = 'avatar', format = 'jpg', quality 
         invalidateFirefoxCache: () => {},
     }));
 
-    jest.unstable_mockModule('../src/express-common.js', () => ({
+    jest.unstable_mockModule('../src/express-common.ts', () => ({
         isFirefox: () => false,
     }));
 

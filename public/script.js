@@ -3463,7 +3463,6 @@ function hideLegacyCharacterLibraryToolbarChrome() {
 let characterLibrarySearchCompatHandler;
 
 function ensureCharacterLibraryToolbarCompatBridges() {
-
     if (characterLibrarySearchCompatHandler) {
         document.removeEventListener('click', characterLibrarySearchCompatHandler);
     }
@@ -4372,9 +4371,9 @@ export function resolveActiveBackgroundUrl(metadata, globalUrl) {
 }
 
 function setFittingClass(fitting) {
-    const backgrounds = $('#bg1');
+    const backgrounds = document.getElementById('bg1');
     for (const option of ['cover', 'contain', 'stretch', 'center']) {
-        backgrounds.toggleClass(option, option === fitting);
+        backgrounds?.classList.toggle(option, option === fitting);
     }
 }
 
@@ -4591,7 +4590,7 @@ async function fixViewport() {
 function initStandaloneMode() {
     const isPwaMode = window.matchMedia('(display-mode: standalone)').matches;
     if (isPwaMode) {
-        $('body').addClass('PWA');
+        document.body?.classList.add('PWA');
     }
 }
 
@@ -4602,12 +4601,13 @@ export function cancelStatusCheck(reason = 'Manually cancelled status check') {
 }
 
 export function displayOnlineStatus() {
-    const sendTextareaHint = $('#send_textarea_hint');
+    const sendTextareaHint = document.getElementById('send_textarea_hint');
 
     if (online_status == 'no_connection') {
-        sendTextareaHint.text(t`Send requires an API connection.`);
+        const hint = t`Send requires an API connection.`;
+        if (sendTextareaHint) sendTextareaHint.textContent = hint;
     } else {
-        sendTextareaHint.text('');
+        if (sendTextareaHint) sendTextareaHint.textContent = '';
     }
 }
 
@@ -7822,7 +7822,9 @@ function select_rm_create({ switchMenu = true } = {}) {
         character_world: create_save.world, creator_notes_textarea: create_save.creator_notes,
     });
     const notes = document.getElementById('creator_notes_spoiler');
-    if (notes) notes.innerHTML = formatCreatorNotes(create_save.creator_notes, '');
+    // CSS was already scoped by formatCreatorNotes; preserve its style elements
+    // while sanitizing the resulting HTML at the final insertion boundary.
+    if (notes) notes.innerHTML = DOMPurify.sanitize(formatCreatorNotes(create_save.creator_notes, ''), { ADD_TAGS: ['style'], FORCE_BODY: true });
     setCreateMirrorValues({
         post_history_instructions_textarea: create_save.post_history_instructions, system_prompt_textarea: create_save.system_prompt,
         tags_textarea: create_save.tags, creator_textarea: create_save.creator, character_version_textarea: create_save.character_version,
@@ -9488,9 +9490,11 @@ async function mountDialoguePopupControls() {
                     }));
                 },
                 hide: kind => {
-                    $('#shadow_popup').css('display', 'none');
-                    $('#dialogue_popup').removeClass('large_dialogue_popup');
-                    if (kind === 'confirm') $('#dialogue_popup').removeClass('wide_dialogue_popup');
+                    const shadowPopup = document.getElementById('shadow_popup');
+                    const dialoguePopup = document.getElementById('dialogue_popup');
+                    if (shadowPopup) shadowPopup.style.display = 'none';
+                    dialoguePopup?.classList.remove('large_dialogue_popup');
+                    if (kind === 'confirm') dialoguePopup?.classList.remove('wide_dialogue_popup');
                 },
                 schedule: callback => { void fadeOutFinished.then(callback); },
             });

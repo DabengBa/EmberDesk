@@ -6,7 +6,7 @@ import express from 'express';
 
 import { getUserAvatar, toKey, getPasswordHash, getPasswordSalt, createBackupArchive, ensurePublicDirectoriesExist, toAvatarKey, getAccountVersion } from '../users.js';
 import { checkForNewContent } from './content-manager.js';
-import { closeCanonicalDatabase } from '../canonical-sqlite.js';
+import { closeCanonicalDatabase } from '../canonical-sqlite.ts';
 import { ensureCanonicalSettingsForUser, resetCanonicalSettings } from './settings.js';
 import { color, Cache, getConfigValue } from '../util.js';
 

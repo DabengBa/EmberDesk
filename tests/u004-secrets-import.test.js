@@ -4,7 +4,7 @@ import path from 'node:path';
 
 import { expect, test } from '@jest/globals';
 
-import { createCanonicalSqliteManager } from '../src/canonical-sqlite.js';
+import { createCanonicalSqliteManager } from '../src/canonical-sqlite.ts';
 import { auditCanonicalSecretsShadowImport, runCanonicalSecretsShadowImport } from '../src/canonical-secrets-shadow-import.ts';
 import { getCanonicalSecrets } from '../src/endpoints/canonical-secrets-store.ts';
 

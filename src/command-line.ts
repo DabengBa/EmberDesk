@@ -7,70 +7,27 @@ import envPaths from 'env-paths';
 import { color, getConfigValue, stringToBool } from './util.js';
 import { initConfig } from './config-init.ts';
 
-/**
- * @typedef {object} ParsedArgv Raw CLI arguments, nullable where not provided.
- * @property {boolean} isGlobal Whether global mode is active
- * @property {string} configPath Resolved config file path
- * @property {string|null} dataRoot Data root from CLI (null if not provided)
- * @property {number|null} port Port number from CLI
- * @property {boolean|null} listen Whether to listen on all interfaces
- * @property {string|null} listenAddressIPv6 IPv6 listen address
- * @property {string|null} listenAddressIPv4 IPv4 listen address
- * @property {string|null} enableIPv4 IPv4 protocol (raw string: "true", "false", "auto")
- * @property {string|null} enableIPv6 IPv6 protocol (raw string: "true", "false", "auto")
- * @property {boolean|null} dnsPreferIPv6 Prefer IPv6 for DNS
- * @property {number|null} heartbeatInterval Heartbeat interval in seconds
- * @property {boolean|null} browserLaunchEnabled Auto-launch browser
- * @property {string|null} browserLaunchHostname Browser launch hostname
- * @property {number|null} browserLaunchPort Browser launch port override
- * @property {boolean|null} browserLaunchAvoidLocalhost Avoid localhost for browser launch
- * @property {boolean|null} enableCorsProxy Enable CORS proxy
- * @property {boolean|null} disableCsrf Disable CSRF protection
- * @property {boolean|null} ssl Enable SSL
- * @property {string|null} certPath SSL certificate path
- * @property {string|null} keyPath SSL private key path
- * @property {string|null} keyPassphrase SSL key passphrase
- * @property {boolean|null} whitelistMode Enable whitelist mode
- * @property {boolean|null} basicAuthMode Enable basic auth
- * @property {boolean|null} enableKeepAlive Enable HTTP keep-alive
- * @property {boolean|null} requestProxyEnabled Enable outgoing request proxy
- * @property {string|null} requestProxyUrl Request proxy URL
- * @property {string[]|null} requestProxyBypass Request proxy bypass list
- */
+import type { ServerStartupResult } from './server-startup.ts';
 
-/**
- * @typedef {object} CommandLineArguments Parsed command line arguments
- * @property {string} configPath Path to the config file
- * @property {string} dataRoot Data root directory
- * @property {number} port Port number
- * @property {boolean} listen If EmberDesk is listening on all network interfaces
- * @property {string} listenAddressIPv6 IPv6 address to listen to
- * @property {string} listenAddressIPv4 IPv4 address to listen to
- * @property {boolean|string} enableIPv4 If enable IPv4 protocol ("auto" is also allowed)
- * @property {boolean|string} enableIPv6 If enable IPv6 protocol ("auto" is also allowed)
- * @property {boolean} dnsPreferIPv6 If prefer IPv6 for DNS
- * @property {number} heartbeatInterval Interval in seconds to write a heartbeat file. 0 to disable.
- * @property {boolean} browserLaunchEnabled If automatically launch EmberDesk in the browser
- * @property {string} browserLaunchHostname Browser launch hostname
- * @property {number} browserLaunchPort Browser launch port override (-1 is use server port)
- * @property {boolean} browserLaunchAvoidLocalhost If avoid using 'localhost' for browser launch in auto mode
- * @property {boolean} enableCorsProxy If enable CORS proxy
- * @property {boolean} disableCsrf If disable CSRF protection
- * @property {boolean} ssl If enable SSL
- * @property {string} certPath Path to certificate
- * @property {string} keyPath Path to private key
- * @property {string} keyPassphrase SSL private key passphrase
- * @property {boolean} whitelistMode If enable whitelist mode
- * @property {boolean} basicAuthMode If enable basic authentication
- * @property {boolean} enableKeepAlive Enable HTTP/HTTPS keep-alive globally
- * @property {boolean} requestProxyEnabled If enable outgoing request proxy
- * @property {string} requestProxyUrl Request proxy URL
- * @property {string[]} requestProxyBypass Request proxy bypass list
- * @property {function(): URL} getIPv4ListenUrl Get IPv4 listen URL
- * @property {function(): URL} getIPv6ListenUrl Get IPv6 listen URL
- * @property {function(import('./server-startup.js').ServerStartupResult): Promise<string>} getBrowserLaunchHostname Get browser launch hostname
- * @property {function(string): URL} getBrowserLaunchUrl Get browser launch URL
- */
+export type ParsedArgv = {
+    isGlobal: boolean; configPath: string; dataRoot: string | null;
+    port: number | null; listen: boolean | null; listenAddressIPv6: string | null; listenAddressIPv4: string | null;
+    enableIPv4: string | null; enableIPv6: string | null; dnsPreferIPv6: boolean | null; heartbeatInterval: number | null;
+    browserLaunchEnabled: boolean | null; browserLaunchHostname: string | null; browserLaunchPort: number | null;
+    browserLaunchAvoidLocalhost: boolean | null; enableCorsProxy: boolean | null; disableCsrf: boolean | null;
+    ssl: boolean | null; certPath: string | null; keyPath: string | null; keyPassphrase: string | null;
+    whitelistMode: boolean | null; basicAuthMode: boolean | null; enableKeepAlive: boolean | null;
+    requestProxyEnabled: boolean | null; requestProxyUrl: string | null; requestProxyBypass: string[] | null;
+};
+export type CommandLineArguments = {
+    configPath: string; dataRoot: string; port: number; listen: boolean; listenAddressIPv6: string; listenAddressIPv4: string;
+    enableIPv4: boolean | string; enableIPv6: boolean | string; dnsPreferIPv6: boolean; heartbeatInterval: number;
+    browserLaunchEnabled: boolean; browserLaunchHostname: string; browserLaunchPort: number; browserLaunchAvoidLocalhost: boolean;
+    enableCorsProxy: boolean; disableCsrf: boolean; ssl: boolean; certPath: string; keyPath: string; keyPassphrase: string;
+    whitelistMode: boolean; basicAuthMode: boolean; enableKeepAlive: boolean; requestProxyEnabled: boolean;
+    requestProxyUrl: string; requestProxyBypass: string[]; getIPv4ListenUrl: () => URL; getIPv6ListenUrl: () => URL;
+    getBrowserLaunchHostname: (result: ServerStartupResult) => Promise<string>; getBrowserLaunchUrl: (hostname: string) => URL;
+};
 
 /**
  * Phase 1 — Pure argv parsing, no side effects.
@@ -78,7 +35,7 @@ import { initConfig } from './config-init.ts';
  * @param {string[]} args Process startup arguments
  * @returns {ParsedArgv} Raw CLI arguments
  */
-export function parseArgv(args) {
+export function parseArgv(args: string[]): ParsedArgv {
     const cliArguments = yargs(hideBin(args))
         .usage('Usage: <your-start-script> [options]\nOptions that are not provided will be filled with config values.')
         .option('global', {
@@ -280,7 +237,8 @@ export function parseArgv(args) {
         enableKeepAlive: cliArguments.enableKeepAlive ?? null,
         requestProxyEnabled: cliArguments.requestProxyEnabled ?? null,
         requestProxyUrl: cliArguments.requestProxyUrl ?? null,
-        requestProxyBypass: cliArguments.requestProxyBypass ?? null,
+        // Preserve the existing CLI contract; yargs does not type array elements.
+        requestProxyBypass: (cliArguments.requestProxyBypass as string[] | undefined) ?? null,
     };
 }
 
@@ -289,7 +247,7 @@ export function parseArgv(args) {
  * @param {string} configPath Path to the config file
  * @param {boolean} isGlobal Whether global mode is active
  */
-export function prepareConfigFilesystem(configPath, isGlobal) {
+export function prepareConfigFilesystem(configPath: string, isGlobal: boolean): void {
     if (isGlobal && !fs.existsSync(path.dirname(configPath))) {
         fs.mkdirSync(path.dirname(configPath), { recursive: true });
     }
@@ -300,7 +258,7 @@ export function prepareConfigFilesystem(configPath, isGlobal) {
  * Phase 2b — Create data root directory.
  * @param {string|null} dataRoot Path to the data root directory (null = skip)
  */
-export function prepareDataRoot(dataRoot) {
+export function prepareDataRoot(dataRoot: string | null): void {
     if (!dataRoot) return;
     try {
         if (!fs.existsSync(dataRoot)) {
@@ -317,10 +275,10 @@ export function prepareDataRoot(dataRoot) {
  * @param {CommandLineArguments} defaultConfig Default config from getDefaultConfig
  * @returns {CommandLineArguments} Fully resolved config with URL helpers
  */
-export function resolveConfig(argv, defaultConfig) {
+export function resolveConfig(argv: ParsedArgv, defaultConfig: CommandLineArguments): CommandLineArguments {
     const booleanAutoOptions = [true, false, 'auto'];
 
-    const result = {
+    const result: CommandLineArguments = {
         configPath: argv.configPath,
         dataRoot: argv.dataRoot ?? getConfigValue('dataRoot', defaultConfig.dataRoot),
         port: argv.port ?? getConfigValue('port', defaultConfig.port, 'number'),
@@ -413,7 +371,7 @@ export class CommandLineParser {
      * @param {boolean} isGlobal If the configuration is global or not
      * @returns {CommandLineArguments} Default configuration values
      */
-    getDefaultConfig(isGlobal) {
+    getDefaultConfig(isGlobal: boolean): CommandLineArguments {
         const appPaths = envPaths('EmberDesk', { suffix: '' });
         const configPath = isGlobal ? path.join(appPaths.data, 'config.yaml') : './config.yaml';
         const dataPath = isGlobal ? path.join(appPaths.data, 'data') : './data';
@@ -465,7 +423,7 @@ export class CommandLineParser {
      * @param {string[]} args Process startup arguments.
      * @returns {CommandLineArguments} Parsed command line arguments.
      */
-    parse(args) {
+    parse(args: string[]): CommandLineArguments {
         const argv = parseArgv(args);
         const defaultConfig = this.getDefaultConfig(argv.isGlobal);
         prepareConfigFilesystem(argv.configPath, argv.isGlobal);
