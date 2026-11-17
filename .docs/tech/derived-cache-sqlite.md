@@ -92,7 +92,7 @@ The helper emits structured `console.info` records with:
 - `unsupported`
 - `reset_threshold_exceeded`
 
-`src/server-main.js` no longer logs character-index startup status or disposes character-index databases during normal shutdown.
+`src/server-main.ts` no longer logs character-index startup status or disposes character-index databases during normal shutdown.
 
 Tests and diagnostic tooling can query status through the retired sidecar wrapper exported by `src/endpoints/character-index.js`, which delegates to the helper and reports:
 

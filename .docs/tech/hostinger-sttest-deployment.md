@@ -161,4 +161,4 @@ Operational binding points:
 - `pnpm run build:lib` - Vite browser library precompile during image build
 - `src/healthcheck.js` - container healthcheck entry point
 - `server.js` - deployed process entry point
-- `src/server-main.js` - server boot orchestration inside the container
+- `src/server-main.ts` - server boot orchestration inside the container

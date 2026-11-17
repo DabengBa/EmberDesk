@@ -39,7 +39,7 @@ test('Node resolves the production settings and presets graphs without a loader'
             db.close();
             console.log('settings-callers:native');
         `, url('util.js'), config, root, url('endpoints/settings.js'),
-        url('endpoints/presets-store.ts'), url('endpoints/settings-store.ts'), url('canonical-sqlite-migrations.js'),
+        url('endpoints/presets-store.ts'), url('endpoints/settings-store.ts'), url('canonical-sqlite-migrations.ts'),
         url('endpoints/presets.js')], {
             encoding: 'utf8', timeout: 10_000,
         });

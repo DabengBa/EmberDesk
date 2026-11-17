@@ -9,6 +9,7 @@ import https from 'node:https';
 import { characterLibraryChangeObserver } from './character-library-change-observer.js';
 
 import cors from 'cors';
+import type { CorsOptions } from 'cors';
 import { csrfSync } from 'csrf-sync';
 import express from 'express';
 import compression from 'compression';
@@ -49,15 +50,15 @@ import {
 import getViteLibServeMiddleware from './middleware/vite-lib-serve.js';
 import { getReactLoginServeMiddleware } from './middleware/react-login-serve.js';
 import basicAuthMiddleware from './middleware/basicAuth.js';
-import getWhitelistMiddleware from './middleware/whitelist.js';
+import getWhitelistMiddleware from './middleware/whitelist.ts';
 import accessLoggerMiddleware, { getAccessLogPath, migrateAccessLog } from './middleware/accessLogWriter.js';
 import multerMonkeyPatch from './middleware/multerMonkeyPatch.js';
-import initRequestProxy from './request-proxy.js';
-import initPrivateRequestFilter from './private-request-filter.js';
+import initRequestProxy from './request-proxy.ts';
+import initPrivateRequestFilter from './private-request-filter.ts';
 import cacheBuster from './middleware/cacheBuster.js';
-import corsProxyMiddleware from './middleware/corsProxy.js';
+import corsProxyMiddleware from './middleware/corsProxy.ts';
 import errorHandlerMiddleware from './middleware/errorHandler.js';
-import hostWhitelistMiddleware from './middleware/hostWhitelist.js';
+import hostWhitelistMiddleware from './middleware/hostWhitelist.ts';
 import userCssMiddleware from './middleware/userCss.js';
 import {
     CORS_PROXY_ROUTE,
@@ -82,7 +83,10 @@ import { REACT_LOGIN_BASE_PATH } from './react-login-feature.js';
 import { router as usersPublicRouter } from './endpoints/users-public.js';
 
 import { checkForNewContent } from './endpoints/content-manager.js';
-import { redirectDeprecatedEndpoints, ServerStartup, setupPrivateEndpoints, setupPublicEndpoints } from './server-startup.js';
+import { redirectDeprecatedEndpoints, ServerStartup, setupPrivateEndpoints, setupPublicEndpoints } from './server-startup.ts';
+import type { ServerStartupResult } from './server-startup.ts';
+import type { CommandLineArguments } from './command-line.ts';
+import type { Express } from 'express';
 import { diskCache } from './endpoints/characters.js';
 import { migrateFlatSecrets } from './endpoints/secrets.js';
 import { createServerStartupProfiler } from './server-startup-profiler.js';
@@ -92,8 +96,7 @@ util.inspect.defaultOptions.maxArrayLength = null;
 util.inspect.defaultOptions.maxStringLength = null;
 util.inspect.defaultOptions.depth = 4;
 
-/** @type {import('./command-line.js').CommandLineArguments} */
-const cliArgs = globalThis.COMMAND_LINE_ARGS;
+const cliArgs: CommandLineArguments = globalThis.COMMAND_LINE_ARGS;
 
 if (!cliArgs.enableIPv6 && !cliArgs.enableIPv4) {
     console.error('error: You can\'t disable all internet protocols: at least IPv6 or IPv4 must be enabled.');
@@ -105,15 +108,21 @@ http.globalAgent = new http.Agent({ keepAlive: cliArgs.enableKeepAlive });
 https.globalAgent = new https.Agent({ keepAlive: cliArgs.enableKeepAlive });
 
 const app = express();
-const startupProfiler = createServerStartupProfiler(process.env.EMBERDESK_STARTUP_PROFILE);
+// The JavaScript profiler documents its return value as `object`, although it
+// always returns these methods. Keep its generic measure result at this boundary.
+const startupProfiler = createServerStartupProfiler(process.env.EMBERDESK_STARTUP_PROFILE) as {
+    mark: (name: string, details?: object) => void;
+    measure: <T>(name: string, fn: () => T | PromiseLike<T>) => Promise<Awaited<T>>;
+    flush: (extra?: object) => void;
+};
 const publicRoot = path.join(serverDirectory, 'public');
 
 /**
  * Phase 2: Register Express middleware and static file routes.
  * @param {import('express').Express} app The Express app
- * @param {import('./command-line.js').CommandLineArguments} cli The CLI arguments
+ * @param {import('./command-line.ts').CommandLineArguments} cli The CLI arguments
  */
-async function registerMiddleware(app, cli) {
+async function registerMiddleware(app: Express, cli: CommandLineArguments): Promise<void> {
     app.use(helmet({
         contentSecurityPolicy: false,
     }));
@@ -133,8 +142,7 @@ async function registerMiddleware(app, cli) {
         const corsCredentials = getConfigValue('cors.credentials', false, 'boolean');
         const corsMaxAge = getConfigValue('cors.maxAge', null, 'number');
 
-        /** @type {cors.CorsOptions} */
-        const corsOptions = {
+        const corsOptions: CorsOptions = {
             origin: corsOrigin,
             methods: corsMethods,
             credentials: corsCredentials,
@@ -353,10 +361,10 @@ async function initRemainingServices() {
 
 /**
  * Tasks that need to be run after the server starts listening.
- * @param {import('./server-startup.js').ServerStartupResult} result The result of the server startup
+ * @param {import('./server-startup.ts').ServerStartupResult} result The result of the server startup
  * @returns {Promise<void>}
  */
-async function postSetupTasks(result) {
+async function postSetupTasks(result: ServerStartupResult): Promise<void> {
     const browserLaunchHostname = await cliArgs.getBrowserLaunchHostname(result);
     const browserLaunchUrl = cliArgs.getBrowserLaunchUrl(browserLaunchHostname);
     const browserLaunchApp = String(getConfigValue('browserLaunch.browser', 'default') ?? '');
@@ -380,7 +388,7 @@ async function postSetupTasks(result) {
                 };
             }
 
-            const validBrowsers = getBrowsers();
+            const validBrowsers: Record<string, string | readonly string[] | undefined> = getBrowsers();
             const appName = validBrowsers[browserLaunchApp.trim().toLowerCase()];
             const openOptions = appName ? { app: { name: appName } } : {};
 
@@ -402,7 +410,7 @@ async function postSetupTasks(result) {
             try {
                 fs.writeFileSync(heartbeatPath, JSON.stringify({ timestamp: Date.now() }));
             } catch (err) {
-                console.error(`Failed to write heartbeat file at ${color.green(heartbeatPath)}:`, err.message);
+                console.error(`Failed to write heartbeat file at ${color.green(heartbeatPath)}:`, (err as Error).message);
             }
         };
 
@@ -497,7 +505,7 @@ async function initDataPhase() {
  * @param {{cleanupPlugins: Function|null, diskCache: object, consoleTitle: string}} resources
  * @returns {() => Promise<void>}
  */
-function createCleanupHandler(resources) {
+function createCleanupHandler(resources: Awaited<ReturnType<typeof collectCleanupResources>>): () => Promise<void> {
     let isExiting = false;
     return async function exitProcess() {
         if (isExiting) return;

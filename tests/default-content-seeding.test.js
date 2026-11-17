@@ -152,8 +152,8 @@ describe('default content seeding', () => {
         const target = path.join(directories.worlds, 'Eldoria.json');
         expect(fs.existsSync(target)).toBe(true);
 
-        const { canonicalSqliteManager } = await import('../src/canonical-sqlite.js');
-        const { runCanonicalMigrations } = await import('../src/canonical-sqlite-migrations.js');
+        const { canonicalSqliteManager } = await import('../src/canonical-sqlite.ts');
+        const { runCanonicalMigrations } = await import('../src/canonical-sqlite-migrations.ts');
         const { upsertCanonicalWorldInfoBook, markCanonicalWorldInfoBookDeleted } = await import('../src/endpoints/world-info-store.ts');
         const db = canonicalSqliteManager.open({
             handle: 'seed-tombstone-user',
@@ -184,7 +184,7 @@ describe('default content seeding', () => {
     test('seed does not publish over an existing canonical world without a file', async () => {
         const directories = getUserDirectories('seed-live-authority');
         await checkForNewContent([directories], [], { freshUser: true });
-        const { canonicalSqliteManager } = await import('../src/canonical-sqlite.js');
+        const { canonicalSqliteManager } = await import('../src/canonical-sqlite.ts');
         const { upsertCanonicalWorldInfoBook } = await import('../src/endpoints/world-info-store.ts');
         const db = canonicalSqliteManager.open({ handle: 'seed-live-authority', directories, featureFlags: { enabled: true, strict: false } });
         upsertCanonicalWorldInfoBook(db, { name: 'Eldoria', payload: { entries: { one: { content: 'authority' } } } });
@@ -218,7 +218,7 @@ describe('default content seeding', () => {
         expect(fs.existsSync(target)).toBe(true);
 
         // Reset the world so only this test decides whether it comes back.
-        const { canonicalSqliteManager } = await import('../src/canonical-sqlite.js');
+        const { canonicalSqliteManager } = await import('../src/canonical-sqlite.ts');
         const { upsertCanonicalWorldInfoBook } = await import('../src/endpoints/world-info-store.ts');
         const seededDb = canonicalSqliteManager.open({
             handle: 'seed-delete-race-user',

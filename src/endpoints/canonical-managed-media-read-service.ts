@@ -5,10 +5,10 @@ import type { DatabaseSync } from 'node:sqlite';
 import mime from 'mime-types';
 
 import { MEDIA_REQUEST_TYPE } from '../constants.js';
-import { canonicalSqliteManager } from '../canonical-sqlite.js';
-import { runCanonicalMigrations } from '../canonical-sqlite-migrations.js';
+import { canonicalSqliteManager } from '../canonical-sqlite.ts';
+import { runCanonicalMigrations } from '../canonical-sqlite-migrations.ts';
 import { getPersistedCanonicalAuditStatus } from '../canonical-sqlite-shadow-import.ts';
-import { getCanonicalStorageSlice } from '../canonical-storage-slice-registry.js';
+import { getCanonicalStorageSlice } from '../canonical-storage-slice-registry.ts';
 import {
     getCanonicalManagedMediaReference,
     listCanonicalManagedMediaReferences,

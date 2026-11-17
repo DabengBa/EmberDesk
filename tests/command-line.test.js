@@ -8,7 +8,7 @@ import {
     prepareDataRoot,
     resolveConfig,
     CommandLineParser,
-} from '../src/command-line.js';
+} from '../src/command-line.ts';
 
 // ─── helpers ───────────────────────────────────────────────────────────────────
 

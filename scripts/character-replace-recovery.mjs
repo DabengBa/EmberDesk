@@ -8,8 +8,8 @@ import { parseArgs } from 'node:util';
 
 import sanitize from 'sanitize-filename';
 
-import { resolveCanonicalDatabasePath } from '../src/canonical-sqlite.js';
-import { CANONICAL_SQLITE_MIGRATIONS } from '../src/canonical-sqlite-migrations.js';
+import { resolveCanonicalDatabasePath } from '../src/canonical-sqlite.ts';
+import { CANONICAL_SQLITE_MIGRATIONS } from '../src/canonical-sqlite-migrations.ts';
 import { getReplaceIntent, interruptWorkspaceWriteSessionOffline } from '../src/character-replace-write-coordinator.js';
 import { getUserDirectories } from '../src/user-directories.ts';
 import { isPathUnderParent } from '../src/util.js';

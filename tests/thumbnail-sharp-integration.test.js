@@ -13,7 +13,7 @@ jest.unstable_mockModule('../src/util.js', () => ({
     getConfigValue: (_key, fallback) => fallback,
     invalidateFirefoxCache: () => {},
 }));
-jest.unstable_mockModule('../src/express-common.js', () => ({ isFirefox: () => false }));
+jest.unstable_mockModule('../src/express-common.ts', () => ({ isFirefox: () => false }));
 
 const { generateThumbnail } = await import('../src/endpoints/thumbnails.js');
 const roots = [];

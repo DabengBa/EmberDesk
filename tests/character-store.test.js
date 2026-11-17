@@ -1,6 +1,6 @@
 import { DatabaseSync } from 'node:sqlite';
 import { expect, test } from '@jest/globals';
-import { CANONICAL_SQLITE_MIGRATIONS } from '../src/canonical-sqlite-migrations.js';
+import { CANONICAL_SQLITE_MIGRATIONS } from '../src/canonical-sqlite-migrations.ts';
 import {
     assertCanonicalCharacterCardCurrent, clearCanonicalCharacterWorldBinding,
     getCanonicalCharacter, listCanonicalCharacters, markCanonicalCharacterDeleted,

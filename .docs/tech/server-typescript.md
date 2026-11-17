@@ -36,7 +36,7 @@ The supported runtime is Node.js 26.12.1 (`>=26.12.1 <27`). The server uses
 Node native type stripping for `.ts` modules. `pnpm start` still runs
 `node server.js`; no server emit, runtime loader, or frontend build is needed
 to execute a migrated module. The entry point still parses configuration,
-sets globals, changes cwd, then dynamically imports `src/server-main.js`.
+sets globals, changes cwd, then dynamically imports `src/server-main.ts`.
 
 Server modules use ESM and the actual on-disk extension in every relative
 import: `.ts` for migrated modules and `.js` for retained JavaScript. Use
@@ -116,11 +116,30 @@ run without a production loader or emitted graph.
 
 ## Migrated slices
 
+The canonical SQLite manager, migration runner, slice registry, operator and
+export helper are `src/canonical-sqlite.ts`,
+`src/canonical-sqlite-migrations.ts`, `src/canonical-storage-slice-registry.ts`,
+`src/canonical-sqlite-operator.ts` and `src/canonical-sqlite-export.ts`.
+Network security and startup likewise use the actual `.ts` modules, including
+`src/express-common.ts`, `src/private-request-filter.ts`, `src/request-proxy.ts`,
+the whitelist and CORS proxy middleware, `src/command-line.ts`,
+`src/server-main.ts` and `src/server-startup.ts`. These replace the former
+JavaScript implementations rather than adding shims. Behavior remains owned by
+the [storage roadmap](canonical-sqlite-storage-roadmap.md) and
+[startup orchestration](server-startup-orchestration.md); this internal migration
+does not introduce a product-semantic change.
+
+Focused coverage includes `tests/canonical-sqlite-cli.test.js`,
+`tests/network-security-native.test.js` and `tests/server-startup-native.test.js`.
+The security test exercises the real native Node module graph; the startup test
+also starts the real entry in an isolated data root. Both use Node subprocesses
+independently of the Jest TypeScript adapter.
+
 The canonical shadow import and audit modules for characters/chat stats, chat,
 World Info, settings, secrets, managed media and presets, plus the World Info
 projection helper, are `src/canonical-*-shadow-import.ts` and
 `src/canonical-world-info-projection.ts`. Callers including
-`src/canonical-backend.js` and `src/canonical-storage-slice-registry.js` use
+`src/canonical-backend.js` and `src/canonical-storage-slice-registry.ts` use
 their actual `.ts` paths; there are no JavaScript shims for these modules.
 The migration preserves existing import, audit and projection boundaries; the
 [storage roadmap](canonical-sqlite-storage-roadmap.md) owns their behavior.

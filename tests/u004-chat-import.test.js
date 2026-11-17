@@ -4,7 +4,7 @@ import path from 'node:path';
 
 import { expect, test } from '@jest/globals';
 
-import { createCanonicalSqliteManager } from '../src/canonical-sqlite.js';
+import { createCanonicalSqliteManager } from '../src/canonical-sqlite.ts';
 import { runCanonicalChatShadowImport, reconcileCanonicalChatSources, auditCanonicalChatShadowImport } from '../src/canonical-chat-shadow-import.ts';
 import { listCanonicalChatSessions, getCanonicalChatMessagePayloads } from '../src/endpoints/canonical-chat-store.ts';
 

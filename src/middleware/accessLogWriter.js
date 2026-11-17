@@ -1,6 +1,6 @@
 import path from 'node:path';
 import fs from 'node:fs';
-import { getIpAddress } from '../express-common.js';
+import { getIpAddress } from '../express-common.ts';
 import { color, getConfigValue } from '../util.js';
 
 const enableAccessLog = getConfigValue('logging.enableAccessLog', true, 'boolean');

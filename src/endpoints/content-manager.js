@@ -18,9 +18,9 @@ import {
     canonicalSqliteManager,
     resolveCanonicalDatabasePath,
     withCanonicalTransaction,
-} from '../canonical-sqlite.js';
-import { runCanonicalMigrations } from '../canonical-sqlite-migrations.js';
-import { getCanonicalStorageSlice } from '../canonical-storage-slice-registry.js';
+} from '../canonical-sqlite.ts';
+import { runCanonicalMigrations } from '../canonical-sqlite-migrations.ts';
+import { getCanonicalStorageSlice } from '../canonical-storage-slice-registry.ts';
 import { ensureCanonicalPreset, PRESETS_OPENAI_API_ID } from './presets-store.ts';
 import {
     classifyExternalContentId,

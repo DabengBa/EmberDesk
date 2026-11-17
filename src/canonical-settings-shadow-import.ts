@@ -1,6 +1,6 @@
 import type { DatabaseSync } from 'node:sqlite';
 
-import { getCanonicalMigrationStatus, runCanonicalMigrations } from './canonical-sqlite-migrations.js';
+import { getCanonicalMigrationStatus, runCanonicalMigrations } from './canonical-sqlite-migrations.ts';
 import { persistCanonicalAuditStatus } from './canonical-sqlite-shadow-import.ts';
 
 export const SETTINGS_AUDIT_SCOPE = 'settings';

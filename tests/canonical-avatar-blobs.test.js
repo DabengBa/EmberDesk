@@ -20,8 +20,8 @@ import {
     recordCharacterAvatarBlob,
 } from '../src/canonical-avatar-blob-service.ts';
 import { resetCanonicalBackendsForTests } from '../src/canonical-backend.js';
-import { createCanonicalSqliteManager } from '../src/canonical-sqlite.js';
-import { runCanonicalMigrations } from '../src/canonical-sqlite-migrations.js';
+import { createCanonicalSqliteManager } from '../src/canonical-sqlite.ts';
+import { runCanonicalMigrations } from '../src/canonical-sqlite-migrations.ts';
 import {
     auditCanonicalManagedMediaShadowImport,
 } from '../src/canonical-managed-media-shadow-import.ts';

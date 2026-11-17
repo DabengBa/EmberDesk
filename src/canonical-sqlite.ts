@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import process from 'node:process';
+import type { DatabaseSync as SqliteDatabase } from 'node:sqlite';
 
 import { isPathUnderParent } from './util.js';
 
@@ -9,19 +10,37 @@ const require = createRequire(import.meta.url);
 
 export const DEFAULT_CANONICAL_SQLITE_FILENAME = 'emberdesk.sqlite';
 
+type StorageDirectories = { root: string; storage?: string };
+type FeatureFlags = { enabled?: boolean; strict?: boolean };
+type OpenOptions = {
+    handle?: string;
+    directories: StorageDirectories | undefined;
+    filename?: string;
+    featureFlags?: FeatureFlags;
+    migrationBlockedReason?: string | null;
+};
+type ManagerState = {
+    db: SqliteDatabase | null;
+    storageRoot: string;
+    dbPath: string;
+    lastAction: string;
+    lastError: string | null;
+};
+
 export class CanonicalSqliteDisabledError extends Error {
+    reason: string | null;
     /**
      * @param {string} message
      * @param {string} reason
      */
-    constructor(message, reason) {
+    constructor(message: string, reason: string | null) {
         super(message);
         this.name = 'CanonicalSqliteDisabledError';
         this.reason = reason;
     }
 }
 
-function loadDatabaseSync() {
+function loadDatabaseSync(): typeof SqliteDatabase | undefined {
     try {
         return require('node:sqlite').DatabaseSync;
     } catch {
@@ -29,31 +48,31 @@ function loadDatabaseSync() {
     }
 }
 
-function normalizeStatePath(value) {
+function normalizeStatePath(value: string) {
     const resolved = path.resolve(value);
     return process.platform === 'win32' ? resolved.toLowerCase() : resolved;
 }
 
-function getStateKey(dbPath) {
+function getStateKey(dbPath: string) {
     return normalizeStatePath(dbPath);
 }
 
-function normalizeErrorMessage(error) {
-    return String(error?.message ?? error ?? '');
+function normalizeErrorMessage(error: unknown) {
+    return String((error as { message?: unknown } | null | undefined)?.message ?? error ?? '');
 }
 
-function normalizeFeatureFlags(featureFlags = {}) {
+function normalizeFeatureFlags(featureFlags: FeatureFlags = {}) {
     return {
         enabled: !!featureFlags.enabled,
         strict: !!featureFlags.strict,
     };
 }
 
-function isPromiseLike(value) {
-    return !!value && (typeof value === 'object' || typeof value === 'function') && typeof value.then === 'function';
+function isPromiseLike(value: unknown) {
+    return !!value && (typeof value === 'object' || typeof value === 'function') && typeof (value as { then?: unknown }).then === 'function';
 }
 
-export function resolveCanonicalStorageRoot(directories) {
+export function resolveCanonicalStorageRoot(directories: StorageDirectories | undefined) {
     if (!directories?.root) {
         throw new Error('Canonical SQLite requires user directories.root');
     }
@@ -67,7 +86,7 @@ export function resolveCanonicalStorageRoot(directories) {
     return storageRoot;
 }
 
-export function resolveCanonicalDatabasePath(directories, filename = DEFAULT_CANONICAL_SQLITE_FILENAME) {
+export function resolveCanonicalDatabasePath(directories: StorageDirectories | undefined, filename = DEFAULT_CANONICAL_SQLITE_FILENAME) {
     const storageRoot = resolveCanonicalStorageRoot(directories);
     const dbPath = path.resolve(storageRoot, filename);
     if (dbPath === storageRoot || !isPathUnderParent(storageRoot, dbPath)) {
@@ -76,7 +95,7 @@ export function resolveCanonicalDatabasePath(directories, filename = DEFAULT_CAN
     return { storageRoot, dbPath };
 }
 
-export function applyCanonicalPragmas(db) {
+export function applyCanonicalPragmas(db: SqliteDatabase) {
     db.exec(`
         PRAGMA journal_mode = WAL;
         PRAGMA synchronous = FULL;
@@ -86,7 +105,7 @@ export function applyCanonicalPragmas(db) {
     `);
 }
 
-export function withCanonicalTransaction(db, fn) {
+export function withCanonicalTransaction<T>(db: SqliteDatabase, fn: (db: SqliteDatabase) => T): T {
     db.exec('BEGIN IMMEDIATE');
     try {
         const result = fn(db);
@@ -110,18 +129,21 @@ export function withCanonicalTransaction(db, fn) {
  * @param {typeof import('node:sqlite').DatabaseSync} [options.DatabaseSync]
  * @param {{info?: Function, warn?: Function}} [options.logger]
  */
-export function createCanonicalSqliteManager(options = {}) {
+export function createCanonicalSqliteManager(options: {
+    DatabaseSync?: typeof SqliteDatabase;
+    logger?: { info?: (...args: unknown[]) => void; warn?: (...args: unknown[]) => void };
+} = {}) {
     const DatabaseSync = Object.prototype.hasOwnProperty.call(options, 'DatabaseSync')
         ? options.DatabaseSync
         : loadDatabaseSync();
     const logger = options.logger ?? console;
-    const states = new Map();
+    const states = new Map<string, ManagerState>();
 
-    function logStatus(details) {
+    function logStatus(details: unknown) {
         logger.info?.('Canonical SQLite status', details);
     }
 
-    function getState(directories, filename = DEFAULT_CANONICAL_SQLITE_FILENAME) {
+    function getState(directories: StorageDirectories | undefined, filename = DEFAULT_CANONICAL_SQLITE_FILENAME) {
         const { storageRoot, dbPath } = resolveCanonicalDatabasePath(directories, filename);
         const stateKey = getStateKey(dbPath);
         let state = states.get(stateKey);
@@ -147,11 +169,11 @@ export function createCanonicalSqliteManager(options = {}) {
         filename = DEFAULT_CANONICAL_SQLITE_FILENAME,
         featureFlags,
         migrationBlockedReason = null,
-    }) {
+    }: OpenOptions) {
         const { storageRoot, dbPath } = resolveCanonicalDatabasePath(directories, filename);
         const flags = normalizeFeatureFlags(featureFlags);
         const state = states.get(getStateKey(dbPath));
-        let disabledReason = null;
+        let disabledReason: string | null = null;
         if (!flags.enabled) {
             disabledReason = 'disabled';
         } else if (typeof DatabaseSync !== 'function') {
@@ -182,7 +204,7 @@ export function createCanonicalSqliteManager(options = {}) {
         filename = DEFAULT_CANONICAL_SQLITE_FILENAME,
         featureFlags,
         migrationBlockedReason = null,
-    }) {
+    }: OpenOptions) {
         const status = buildStatus({
             handle,
             directories,
@@ -229,7 +251,7 @@ export function createCanonicalSqliteManager(options = {}) {
         let db = null;
         try {
             fs.mkdirSync(state.storageRoot, { recursive: true });
-            db = new DatabaseSync(state.dbPath);
+            db = new DatabaseSync!(state.dbPath);
             applyCanonicalPragmas(db);
             state.db = db;
             state.lastAction = 'opened';
@@ -262,7 +284,7 @@ export function createCanonicalSqliteManager(options = {}) {
         }
     }
 
-    function close(directories, filename = DEFAULT_CANONICAL_SQLITE_FILENAME) {
+    function close(directories: StorageDirectories | undefined, filename = DEFAULT_CANONICAL_SQLITE_FILENAME) {
         const { dbPath } = resolveCanonicalDatabasePath(directories, filename);
         const state = states.get(getStateKey(dbPath));
         if (!state?.db) {
@@ -297,7 +319,7 @@ export function createCanonicalSqliteManager(options = {}) {
     }
 
     return {
-        getStatus(options) {
+        getStatus(options: OpenOptions) {
             return buildStatus(options);
         },
         open,

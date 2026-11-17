@@ -7,8 +7,8 @@ import { afterEach, describe, expect, test } from '@jest/globals';
 
 import { setConfigFilePath } from '../src/util.js';
 import { resetCanonicalBackendsForTests } from '../src/canonical-backend.js';
-import { canonicalSqliteManager, disposeCanonicalDatabases } from '../src/canonical-sqlite.js';
-import { runCanonicalMigrations } from '../src/canonical-sqlite-migrations.js';
+import { canonicalSqliteManager, disposeCanonicalDatabases } from '../src/canonical-sqlite.ts';
+import { runCanonicalMigrations } from '../src/canonical-sqlite-migrations.ts';
 import {
     auditCanonicalChatShadowImport,
     runCanonicalChatShadowImport,

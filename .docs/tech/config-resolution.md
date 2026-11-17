@@ -1,5 +1,5 @@
 ---
-description: "This document covers the three-phase config resolution pipeline in src/command-line.js that produces the CommandLineArguments object consumed by the rest of the server boot sequence. It describes the phase structure, the global-mode..."
+description: "This document covers the three-phase config resolution pipeline in src/command-line.ts that produces the CommandLineArguments object consumed by the rest of the server boot sequence. It describes the phase structure, the global-mode..."
 kind: technical
 topic: config-resolution
 ---
@@ -8,13 +8,13 @@ topic: config-resolution
 
 ## Module Responsibility
 
-This document covers the three-phase config resolution pipeline in `src/command-line.js` that produces the `CommandLineArguments` object consumed by the rest of the server boot sequence. It describes the phase structure, the global-mode data-root isolation rule, and the key module interactions.
+This document covers the three-phase config resolution pipeline in `src/command-line.ts` that produces the `CommandLineArguments` object consumed by the rest of the server boot sequence. It describes the phase structure, the global-mode data-root isolation rule, and the key module interactions.
 
 For the server boot pipeline that consumes the resolved config, see [server-startup-orchestration.md](server-startup-orchestration.md).
 
 Primary files:
 
-- `src/command-line.js` — three-phase pipeline: `parseArgv`, `prepareConfigFilesystem` / `prepareDataRoot`, `resolveConfig`
+- `src/command-line.ts` — three-phase pipeline: `parseArgv`, `prepareConfigFilesystem` / `prepareDataRoot`, `resolveConfig`
 - `src/config-init.ts` — config-file migration, deprecated-key rewriting, default-fill logic
 - `src/util.js` — `getConfigValue`, `stringToBool`, `setConfigFilePath`, `keyToEnv`
 - `default/config.yaml` — canonical default values

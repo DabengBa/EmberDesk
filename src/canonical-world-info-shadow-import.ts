@@ -8,9 +8,9 @@ import {
     recordImportLedgerEntry,
     resolveAuditDriftReason,
 } from './canonical-import-ledger.js';
-import { getCanonicalMigrationStatus, runCanonicalMigrations } from './canonical-sqlite-migrations.js';
+import { getCanonicalMigrationStatus, runCanonicalMigrations } from './canonical-sqlite-migrations.ts';
 import { persistCanonicalAuditStatusInTransaction } from './canonical-sqlite-shadow-import.ts';
-import { withCanonicalTransaction } from './canonical-sqlite.js';
+import { withCanonicalTransaction } from './canonical-sqlite.ts';
 import {
     WORLD_PROJECTION_INTENT_PREFIX,
     moveWorldFileToLocalQuarantine,
@@ -212,7 +212,7 @@ export async function runCanonicalWorldInfoShadowImport({
             const canonicalFilename = `${worldName}.json`;
             const legacyFilename = filename !== canonicalFilename && path.extname(filename).toLowerCase() === '.json'
                 && filename.slice(0, -path.extname(filename).length) === worldName ? filename : null;
-            const entry = withCanonicalTransaction(db, (txn: DatabaseSync) => {
+            const entry: ImportEntry = withCanonicalTransaction(db, (txn: DatabaseSync) => {
                 const resolved = resolveWorldProjectionPath(txn, directories, worldName, { legacyFilename });
                 if (legacyFilename && fs.readdirSync(directories.worlds).includes(canonicalFilename)) throw new Error('world_projection_filename_alias');
                 if (!legacyFilename && path.basename(resolved.target) !== filename) throw new Error('world_projection_filename_alias');

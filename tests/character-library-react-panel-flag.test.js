@@ -34,7 +34,7 @@ describe('character library React sole owner', () => {
 
     test('removes the retired character-library product flag and workspace bootstrap payload', () => {
         const source = read('public/script.js');
-        const serverMainSource = read('src/server-main.js');
+        const serverMainSource = read('src/server-main.ts');
 
         expect(source).not.toContain('characterLibrary: false');
         expect(source).not.toContain('__emberDeskWorkspaceFeatures');

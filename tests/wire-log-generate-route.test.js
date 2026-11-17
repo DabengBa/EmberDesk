@@ -25,7 +25,7 @@ setConfigFilePath(tmpConfigPath);
 
 const { router: chatCompletionsRouter } = await import('../src/endpoints/backends/chat-completions.js');
 const { router: wireLogRouter } = await import('../src/endpoints/wire-log.ts');
-const { canonicalSqliteManager } = await import('../src/canonical-sqlite.js');
+const { canonicalSqliteManager } = await import('../src/canonical-sqlite.ts');
 
 const HANDLE = 'wire-log-generate-user';
 const roots = [];
@@ -213,7 +213,7 @@ describe('POST /api/backends/chat-completions/generate wire logging', () => {
         const db = canonicalSqliteManager.open({ handle: HANDLE, directories, featureFlags: { enabled: true } });
         if (blocker === 'audit') {
             const { persistCanonicalAuditStatus } = await import('../src/canonical-sqlite-shadow-import.ts');
-            const { getCanonicalStorageSlice } = await import('../src/canonical-storage-slice-registry.js');
+            const { getCanonicalStorageSlice } = await import('../src/canonical-storage-slice-registry.ts');
             persistCanonicalAuditStatus(db, { blocking: true, reason: 'audit_drift_blocked' }, {
                 scope: getCanonicalStorageSlice('settings').auditScope,
             });
@@ -264,7 +264,7 @@ describe('POST /api/backends/chat-completions/generate wire logging', () => {
         });
         // reads/writes are retired rollout flags: the storage owner deliberately
         // makes them follow enabled, even when old config explicitly says false.
-        const { getCanonicalStorageSlice } = await import('../src/canonical-storage-slice-registry.js');
+        const { getCanonicalStorageSlice } = await import('../src/canonical-storage-slice-registry.ts');
         expect(getCanonicalStorageSlice('settings').getFeatureFlags()).toMatchObject({ enabled: true, reads: true, writes: true });
         expect(response.status).toBe(200);
         expect(await response.json()).toMatchObject({ enabled: false });

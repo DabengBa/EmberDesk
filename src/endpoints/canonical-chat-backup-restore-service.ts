@@ -7,8 +7,8 @@ import type { CanonicalChatProjectionPathInput } from './canonical-chat-projecti
 
 import { sync as writeFileAtomicSync } from 'write-file-atomic';
 
-import { withCanonicalTransaction } from '../canonical-sqlite.js';
-import { getCanonicalMigrationStatus } from '../canonical-sqlite-migrations.js';
+import { withCanonicalTransaction } from '../canonical-sqlite.ts';
+import { getCanonicalMigrationStatus } from '../canonical-sqlite-migrations.ts';
 import { invalidateCanonicalAuditStatus } from '../canonical-sqlite-shadow-import.ts';
 import { auditCanonicalChatShadowImport } from '../canonical-chat-shadow-import.ts';
 import {
@@ -21,7 +21,7 @@ import {
 } from './canonical-chat-store.ts';
 import { parseCanonicalChatJsonl } from './canonical-chat-write-service.ts';
 import { resolveCanonicalChatProjectionPath } from './canonical-chat-projection-path.ts';
-import { getCanonicalStorageSlice } from '../canonical-storage-slice-registry.js';
+import { getCanonicalStorageSlice } from '../canonical-storage-slice-registry.ts';
 import { recordImportLedgerEntry, removeImportLedgerEntry } from '../canonical-import-ledger.js';
 
 export const CANONICAL_CHAT_BACKUP_MANIFEST_VERSION = 2;

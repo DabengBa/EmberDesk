@@ -1,5 +1,5 @@
 ---
-description: "src/canonical-sqlite-migrations.js owns the schema-history and migration contract for EmberDesk's future canonical per-user SQLite store under the [canonical per-user SQLite storage contract](canonical-sqlite-storage-roadmap.md). It..."
+description: "src/canonical-sqlite-migrations.ts owns the schema-history and migration contract for EmberDesk's future canonical per-user SQLite store under the [canonical per-user SQLite storage contract](canonical-sqlite-storage-roadmap.md). It..."
 kind: technical
 topic: canonical-sqlite-migration-runner
 ---
@@ -8,12 +8,12 @@ topic: canonical-sqlite-migration-runner
 
 ## Module Responsibility
 
-`src/canonical-sqlite-migrations.js` owns the schema-history and migration contract for EmberDesk's future canonical per-user SQLite store under the [canonical per-user SQLite storage contract](canonical-sqlite-storage-roadmap.md). It sits above `src/canonical-sqlite.js`: the manager opens the DB and enforces fail-closed lifecycle rules, while the migration runner decides whether that DB is at a supported schema version and, if not blocked, applies ordered schema changes.
+`src/canonical-sqlite-migrations.ts` owns the schema-history and migration contract for EmberDesk's future canonical per-user SQLite store under the [canonical per-user SQLite storage contract](canonical-sqlite-storage-roadmap.md). It sits above `src/canonical-sqlite.ts`: the manager opens the DB and enforces fail-closed lifecycle rules, while the migration runner decides whether that DB is at a supported schema version and, if not blocked, applies ordered schema changes.
 
 Primary files:
 
-- `src/canonical-sqlite-migrations.js`
-- `src/canonical-sqlite.js`
+- `src/canonical-sqlite-migrations.ts`
+- `src/canonical-sqlite.ts`
 - `tests/canonical-sqlite-migrations.test.js`
 - `tests/canonical-sqlite.test.js`
 
@@ -112,8 +112,8 @@ Existing user-visible surfaces that later canonical phases will support remain:
 
 Code binding points:
 
-- `src/canonical-sqlite.js` provides `withCanonicalTransaction(...)` and the manager's `migration_blocked` status contract
-- `src/canonical-sqlite-migrations.js` owns migration status and schema-version checks
+- `src/canonical-sqlite.ts` provides `withCanonicalTransaction(...)` and the manager's `migration_blocked` status contract
+- `src/canonical-sqlite-migrations.ts` owns migration status and schema-version checks
 - later shadow import, audit, and read/write cutover slices must treat this module as the only schema-history authority
 
 ## Performance Or Caching Notes

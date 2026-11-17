@@ -30,7 +30,7 @@ Important constraints:
 - URL host decisions use `new URL(url).hostname`, not substring matching against the raw URL, path, or query
 - provider helpers receive an injected `fetchExternalResource` dependency so metadata and artifact downloads use the same wrapper
 - generic imports remain allowlist-bound
-- private-address filtering remains owned by `src/private-request-filter.js` and the startup-installed fetch agent
+- private-address filtering remains owned by `src/private-request-filter.ts` and the startup-installed fetch agent
 - service envelopes are internal implementation details and must not become new browser-facing JSON contracts
 
 ## Core Implementation
@@ -75,7 +75,7 @@ Stable binding points:
 - `POST /api/content/importUUID`
 - `POST /api/assets/download`
 - `whitelistImportDomains`
-- `src/private-request-filter.js`
+- `src/private-request-filter.ts`
 - `src/endpoints/external-content-import-service.ts`
 - `EXTERNAL_CONTENT_DOWNLOADERS` in `src/endpoints/content-manager.js`
 

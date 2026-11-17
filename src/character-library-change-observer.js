@@ -1,5 +1,5 @@
 import { DatabaseSync } from 'node:sqlite';
-import { resolveCanonicalDatabasePath } from './canonical-sqlite.js';
+import { resolveCanonicalDatabasePath } from './canonical-sqlite.ts';
 
 /** Coarse commit hints only. Versions are meaningful on one connection only. */
 export function createCharacterLibraryChangeObserver({

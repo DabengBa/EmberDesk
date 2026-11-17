@@ -1,5 +1,5 @@
 ---
-description: "This document covers the server-side boot pipeline in src/server-main.js that brings EmberDesk from process start to accepting HTTP connections. It describes the phase structure, cleanup contract, and key module interactions."
+description: "This document covers the server-side boot pipeline in src/server-main.ts that brings EmberDesk from process start to accepting HTTP connections. It describes the phase structure, cleanup contract, and key module interactions."
 kind: technical
 topic: server-startup-orchestration
 ---
@@ -8,22 +8,22 @@ topic: server-startup-orchestration
 
 ## Module Responsibility
 
-This document covers the server-side boot pipeline in `src/server-main.js` that brings EmberDesk from process start to accepting HTTP connections. It describes the phase structure, cleanup contract, and key module interactions.
+This document covers the server-side boot pipeline in `src/server-main.ts` that brings EmberDesk from process start to accepting HTTP connections. It describes the phase structure, cleanup contract, and key module interactions.
 
 For browser-side startup and `APP_READY`, see [startup-app-ready-optimization.md](startup-app-ready-optimization.md).
 
 Primary files:
 
-- `src/server-main.js` — coordinator: phase sequencing, cleanup wiring, signal handlers
-- `src/server-startup.js` — transport: IP detection, HTTP/HTTPS creation, listen failure handling
+- `src/server-main.ts` — coordinator: phase sequencing, cleanup wiring, signal handlers
+- `src/server-startup.ts` — transport: IP detection, HTTP/HTTPS creation, listen failure handling
 - `src/server-startup-profiler.js` — instrumentation: stage timing, event marks, JSON profile output
-- `src/command-line.js` — config resolution pipeline (see [config-resolution.md](config-resolution.md))
+- `src/command-line.ts` — config resolution pipeline (see [config-resolution.md](config-resolution.md))
 - `src/users.js` — barrel re-export plus middleware, routes, backup (see [user-module-split.md](user-module-split.md))
 - `src/plugin-loader.js` — plugin discovery, validation, init, cleanup (see [plugin-loader-lifecycle.md](plugin-loader-lifecycle.md))
 
 ## Architecture And Constraints
 
-`server-main.js` is the single entry point for all server boot work. It coordinates six phases without owning the implementation details of any one phase:
+`server.js` parses configuration, sets globals and changes cwd before dynamically importing `src/server-main.ts`. The latter coordinates six boot phases without owning the implementation details of any one phase:
 
 1. **Data Initialization** — `initDataPhase()`: user storage init, DNS resolution, directory creation, migrations, security verification. No Express dependency.
 2. **Middleware Registration** — `registerMiddleware(app, cli)`: Express middleware stack (helmet, CORS, CSRF, sessions, auth, static files, public routes). Async due to whitelist middleware.
@@ -37,12 +37,19 @@ Primary files:
 
 The split between 4a and 4b exists so that signal handlers are registered as soon as cleanup resources are available, before the remaining initialization tasks run. This preserves cleanup coverage during request-filter initialization.
 
+The outbound private request filter is initialized before the request proxy.
+The proxy captures the existing global HTTP and HTTPS agents; with both enabled,
+only requests bypassing the proxy are checked by that filter. The CORS proxy
+uses its own private-address filter. Inbound IP whitelist, Host whitelist,
+outbound private-address filtering and request proxying are distinct controls;
+none is a replacement for the others.
+
 Constraints:
 
-- `ServerStartup` is not modified. It owns IP auto-detection, HTTP/HTTPS server creation, and listen failure handling independently.
+- `ServerStartup` owns IP auto-detection, HTTP/HTTPS server creation, and listen failure handling independently.
 - Express remains the accepted runtime owner for this host chain; narrow route-island experiments do not authorize host replacement.
 - Middleware order is preserved: helmet -> compression -> responseTime -> bodyParser -> CORS -> auth -> whitelist -> host whitelist -> access log -> sessions -> user data -> CSRF -> public/static routes -> auth wall -> CORS proxy -> upload parsing -> deprecated redirects -> domain routes -> error handler -> 404.
-- Cleanup order is preserved: statsOnExit -> cleanupPlugins -> diskCache.dispose -> disposeCharacterIndexDatabases -> setWindowTitle -> process.exit.
+- Cleanup order: characterLibraryChangeObserver.dispose -> cleanupPlugins (if present) -> diskCache.dispose -> setWindowTitle -> process.exit.
 - Express 5 compatibility routes are treated as production contracts, not migration experiments:
   - OAuth callbacks use `/callback{/:source}` and preserve sourced provider callback parameters inside the nested `query` wrapper consumed by the browser OpenRouter flow.
   - The optional CORS proxy uses `/proxy/*url` so the full target URL remains available to the proxy middleware.
@@ -79,8 +86,9 @@ The `/lib.js` runtime path is Vite-only: `registerMiddleware()` mounts `getViteL
 
 - `cleanupPlugins` — function returned by `loadPlugins()`, may be null
 - `diskCache` — module-level `DiskCache` instance
-- `statsOnExit` — stats endpoint cleanup function
 - `consoleTitle` — captured `process.title` before plugins change it
+
+The module-level `characterLibraryChangeObserver` is disposed before plugin cleanup; it is not part of `resources`.
 
 Signal handlers are registered in `main()` between `collectCleanupResources()` and `initRemainingServices()`, matching the original inline closure placement.
 

@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 
 import { afterEach, beforeEach, describe, expect, test } from '@jest/globals';
 
-import { runCanonicalMigrations } from '../src/canonical-sqlite-migrations.js';
+import { runCanonicalMigrations } from '../src/canonical-sqlite-migrations.ts';
 import {
     claimReplaceIntent,
     claimWorkspaceWrite,

@@ -1,6 +1,21 @@
-import { withCanonicalTransaction } from './canonical-sqlite.js';
+import { withCanonicalTransaction } from './canonical-sqlite.ts';
+import type { DatabaseSync } from 'node:sqlite';
 
-const migrationBlockers = new WeakMap();
+type Migration = { version: number; name: string; sql: string };
+type AppliedMigration = Pick<Migration, 'version' | 'name'>;
+type MigrationOptions = { migrations?: Migration[]; strict?: boolean; nowMs?: number };
+type MigrationStatus = {
+    ok: boolean;
+    blockedReason: string | null;
+    currentVersion: number;
+    targetVersion: number;
+    appliedVersions: number[];
+    failedVersion: number | null;
+    failedName: string | null;
+    errorMessage: string | null;
+};
+
+const migrationBlockers = new WeakMap<DatabaseSync, MigrationStatus>();
 
 const SCHEMA_MIGRATIONS_TABLE_SQL = `
     CREATE TABLE IF NOT EXISTS schema_migrations (
@@ -552,22 +567,20 @@ export const CANONICAL_SQLITE_MIGRATIONS = Object.freeze([
 ]);
 
 export class CanonicalMigrationBlockedError extends Error {
-    /**
-     * @param {string} message
-     * @param {ReturnType<typeof buildBlockedStatus>} status
-     */
-    constructor(message, status) {
+    status: MigrationStatus;
+
+    constructor(message: string, status: MigrationStatus) {
         super(message);
         this.name = 'CanonicalMigrationBlockedError';
         this.status = status;
     }
 }
 
-function ensureSchemaMigrationsTable(db) {
+function ensureSchemaMigrationsTable(db: DatabaseSync) {
     db.exec(SCHEMA_MIGRATIONS_TABLE_SQL);
 }
 
-function getAppliedMigrations(db) {
+function getAppliedMigrations(db: DatabaseSync): AppliedMigration[] {
     ensureSchemaMigrationsTable(db);
     return db.prepare('SELECT version, name FROM schema_migrations ORDER BY version ASC').all().map(row => ({
         version: Number(row.version),
@@ -575,29 +588,29 @@ function getAppliedMigrations(db) {
     }));
 }
 
-function getAppliedVersions(db) {
+function getAppliedVersions(db: DatabaseSync) {
     return getAppliedMigrations(db).map(row => row.version);
 }
 
-function getTargetVersion(migrations) {
+function getTargetVersion(migrations: readonly Migration[]) {
     if (migrations.length === 0) {
         return 0;
     }
     return Number(migrations[migrations.length - 1].version);
 }
 
-function getCurrentVersion(db) {
+function getCurrentVersion(db: DatabaseSync) {
     const versions = getAppliedVersions(db);
     return versions.length === 0 ? 0 : versions[versions.length - 1];
 }
 
-function getCurrentVersionFromAppliedMigrations(appliedMigrations) {
+function getCurrentVersionFromAppliedMigrations(appliedMigrations: AppliedMigration[]) {
     return appliedMigrations.length === 0
         ? 0
         : appliedMigrations[appliedMigrations.length - 1].version;
 }
 
-function validateMigrationCatalog(migrations) {
+function validateMigrationCatalog(migrations: readonly Migration[]) {
     let lastVersion = 0;
     for (const migration of migrations) {
         if (!Number.isInteger(migration.version) || migration.version <= 0) {
@@ -616,7 +629,7 @@ function validateMigrationCatalog(migrations) {
     }
 }
 
-function buildOkStatus({ currentVersion, targetVersion, appliedVersions }) {
+function buildOkStatus({ currentVersion, targetVersion, appliedVersions }: Pick<MigrationStatus, 'currentVersion' | 'targetVersion' | 'appliedVersions'>): MigrationStatus {
     return {
         ok: true,
         blockedReason: null,
@@ -636,7 +649,12 @@ function buildBlockedStatus({
     failedVersion = null,
     failedName = null,
     errorMessage,
-}) {
+}: Pick<MigrationStatus, 'currentVersion' | 'targetVersion'> & {
+    appliedVersions?: number[];
+    failedVersion?: number | null;
+    failedName?: string | null;
+    errorMessage: string;
+}): MigrationStatus & { blockedReason: string } {
     const blockerDetail = failedVersion && failedName
         ? `migration ${failedVersion} (${failedName})`
         : 'migration status';
@@ -652,7 +670,7 @@ function buildBlockedStatus({
     };
 }
 
-function getAppliedMigrationJournalError(appliedMigrations, migrations) {
+function getAppliedMigrationJournalError(appliedMigrations: AppliedMigration[], migrations: readonly Migration[]) {
     for (let index = 0; index < appliedMigrations.length; index += 1) {
         const applied = appliedMigrations[index];
         const expected = migrations[index];
@@ -673,7 +691,7 @@ function getAppliedMigrationJournalError(appliedMigrations, migrations) {
     return null;
 }
 
-function rememberMigrationStatus(db, status) {
+function rememberMigrationStatus<T extends MigrationStatus>(db: DatabaseSync, status: T): T {
     if (status.ok) {
         migrationBlockers.delete(db);
         return status;
@@ -682,18 +700,10 @@ function rememberMigrationStatus(db, status) {
     return status;
 }
 
-/**
- * @param {import('node:sqlite').DatabaseSync} db
- * @param {{
- *   migrations?: Array<{version: number, name: string, sql: string}>,
- *   strict?: boolean,
- *   nowMs?: number,
- * }} [options]
- */
-export function runCanonicalMigrations(db, options = {}) {
+export function runCanonicalMigrations(db: DatabaseSync, options: MigrationOptions = {}): MigrationStatus {
     const migrations = options.migrations ?? CANONICAL_SQLITE_MIGRATIONS;
     const strict = !!options.strict;
-    const nowMs = Number.isInteger(options.nowMs) ? options.nowMs : Date.now();
+    const nowMs = Number.isInteger(options.nowMs) ? options.nowMs as number : Date.now();
 
     validateMigrationCatalog(migrations);
     ensureSchemaMigrationsTable(db);
@@ -730,7 +740,7 @@ export function runCanonicalMigrations(db, options = {}) {
     }
 
     const pendingMigrations = migrations.slice(existingAppliedMigrations.length);
-    const appliedVersions = [];
+    const appliedVersions: number[] = [];
 
     for (const migration of pendingMigrations) {
         try {
@@ -749,7 +759,7 @@ export function runCanonicalMigrations(db, options = {}) {
                 appliedVersions,
                 failedVersion: migration.version,
                 failedName: migration.name,
-                errorMessage: String(error?.message ?? error ?? ''),
+                errorMessage: String((error as { message?: unknown } | null | undefined)?.message ?? error ?? ''),
             }));
             if (strict) {
                 throw new CanonicalMigrationBlockedError(status.blockedReason, status);
@@ -766,14 +776,7 @@ export function runCanonicalMigrations(db, options = {}) {
     return rememberMigrationStatus(db, status);
 }
 
-/**
- * @param {import('node:sqlite').DatabaseSync} db
- * @param {{
- *   migrations?: Array<{version: number, name: string, sql: string}>,
- *   strict?: boolean,
- * }} [options]
- */
-export function getCanonicalMigrationStatus(db, options = {}) {
+export function getCanonicalMigrationStatus(db: DatabaseSync, options: MigrationOptions = {}): MigrationStatus {
     const migrations = options.migrations ?? CANONICAL_SQLITE_MIGRATIONS;
     validateMigrationCatalog(migrations);
 

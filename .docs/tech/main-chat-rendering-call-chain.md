@@ -23,6 +23,9 @@ code:
     - public/scripts/chats.js
     - public/scripts/external-media-policy.js
     - public/scripts/message-css-policy.js
+    - public/scripts/character-lifecycle-service.js
+    - public/scripts/dom-handlers.js
+    - public/scripts/import-confirm-dialog.js
     - public/scripts/character-external-media-authorization.js
     - public/scripts/generation-service.js
     - app/workspace-panels.tsx
@@ -67,6 +70,14 @@ The legacy formatter and row builder still produce the row data and rich-body HT
 `allowExternalMedia` also travels into the projection cache: `buildMainChatSnapshotFromLegacyChat()` (`public/scripts/main-chat-store-projection.js:269`, parameter at `:273`) records it on `lastProjection` and refuses row reuse unless the incoming value matches (`:316`), so toggling the character switch invalidates the cache instead of serving CSS-filtered HTML produced under the previous policy.
 
 The authorization write path is a command port, not a settings field: `setExternalMediaAllowed` in `getCharacterAuthoringReactCommands()` (`public/script.js:2597`, command at `:2601`) delegates to `setCharacterExternalMediaAuthorization()` (`public/scripts/character-external-media-authorization.js`), which rejects a `characterId` that is no longer the active card, rewrites the allow-list, removes the id from `external_media_forbidden_overrides`, saves, and awaits a refresh that calls `invalidateMainChatRenderProjection()` plus `scheduleMainChatMessageListPanelRefresh()`. The React checkbox is rendered only in edit mode (`app/workspace-panels.tsx:1814`) and reverts its own state when the command returns `false`.
+
+### Creator Notes CSS Boundary
+
+Creator notes use the shared style decoder but are not message rows and do not use the message external-media authorization. `formatCreatorNotes()` in `public/scripts/chats.js` converts Markdown, encodes style tags, runs DOMPurify, then decodes styles. Without a per-avatar `AllowGlobalStyles-<avatar>` value of `true`, it passes `creatorPolicy: true`, the `#creator_notes_spoiler ` prefix, a fresh cryptographically random `creator-notes-…` animation scope, and a shared keyframes map to `decodeStyleTags()`. The restricted branch collects and renames local keyframes, rewrites matching `animation` / `animation-name` references in blocks and inline styles, drops animation references it cannot resolve locally, rejects escaped animation property names and `-webkit-animation*` declarations in blocks, and filters escaping or backslash-containing selectors. It permits `@supports` in addition to the restricted node types; malformed blocks are discarded. Creator notes do not run the stricter message CSS declaration/resource filter, so this boundary must not be described as the message resource policy.
+
+With global styles explicitly allowed, `formatCreatorNotes()` decodes with an empty selector prefix and without creator animation isolation; global selectors and keyframes can affect the page. HTML sanitization still runs. No avatar (the create path) always means restricted styles. `checkForCreatorNotesStyles()` prompts when style content exists and no preference is stored; notes-only and cancellation store `false`, global stores `true`. `openGlobalStylesPreferenceDialog()` changes that per-avatar preference and refreshes the notes; `public/scripts/import-confirm-dialog.js` sets the same preference from the import choice. The preference is distinct from message external-media authorization.
+
+Selected-character and editing paths insert formatted notes through `public/scripts/character-lifecycle-service.js` and `public/scripts/dom-handlers.js`. The create-selection sink in `public/script.js` additionally sanitizes the formatted output at insertion while preserving already-scoped `<style>` elements. Both style dialogs sanitize their localized templates at the insertion boundary. `tests/creator-notes-security.e2e.js`, `tests/creator-notes-sinks.e2e.js`, and `tests/u001-creator-styles-native.test.js` cover restricted animations and selectors, the explicitly global path, sink sanitization, and preference behavior.
 
 ## Core Implementation
 

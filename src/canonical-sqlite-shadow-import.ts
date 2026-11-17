@@ -2,8 +2,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import type { DatabaseSync, SQLOutputValue } from 'node:sqlite';
 
-import { withCanonicalTransaction } from './canonical-sqlite.js';
-import { getCanonicalMigrationStatus, runCanonicalMigrations } from './canonical-sqlite-migrations.js';
+import { withCanonicalTransaction } from './canonical-sqlite.ts';
+import { getCanonicalMigrationStatus, runCanonicalMigrations } from './canonical-sqlite-migrations.ts';
 import {
     calculateCharacterChatStats,
     getCharacterChatDirectory,

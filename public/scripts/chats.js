@@ -646,10 +646,11 @@ function escapeAttribute(value) {
  * @returns {string} Sanitized message text
  * @copyright https://github.com/kwaroran/risuAI
  */
-export function decodeStyleTags(text, { prefix, messagePolicy = false, allowExternalMedia = false, animationScope = '', animationNames = new Map() } = { prefix: '.mes_text ' }) {
+export function decodeStyleTags(text, { prefix, messagePolicy = false, creatorPolicy = false, allowExternalMedia = false, animationScope = '', animationNames = new Map() } = { prefix: '.mes_text ' }) {
     const styleDecodeRegex = /<custom-style((?:\s[^>]*)?)>([\s\S]*?)<\/custom-style>/gms;
+    const isolateStyles = messagePolicy || creatorPolicy;
 
-    if (messagePolicy && /^[a-zA-Z0-9_-]+$/.test(animationScope)) {
+    if (isolateStyles && /^[a-zA-Z0-9_-]+$/.test(animationScope)) {
         for (const match of text.matchAll(styleDecodeRegex)) {
             try {
                 const ast = css.parse(decodeURIComponent(match[2]).replaceAll(/<br\/>/g, ''));
@@ -668,6 +669,8 @@ export function decodeStyleTags(text, { prefix, messagePolicy = false, allowExte
 
     function isolateAnimation(declaration) {
         const property = declaration.property.toLowerCase();
+        // CSS escapes can disguise animation properties from a textual comparison.
+        if (property.includes('\\')) return false;
         if (property !== 'animation' && property !== 'animation-name') return !property.startsWith('-webkit-animation');
         const rewritten = isolateMessageAnimation(property, declaration.value, animationNames);
         if (rewritten === null) return false;
@@ -678,7 +681,7 @@ export function decodeStyleTags(text, { prefix, messagePolicy = false, allowExte
 
     function sanitizeRule(rule) {
         if (Array.isArray(rule.selectors)) {
-            if (messagePolicy) {
+            if (isolateStyles) {
                 rule.selectors = rule.selectors.filter(selector => selector && !/^[\s]*[+~>]/.test(selector) && !selector.includes('\\'));
             }
             for (let i = 0; i < rule.selectors.length; i++) {
@@ -721,9 +724,9 @@ export function decodeStyleTags(text, { prefix, messagePolicy = false, allowExte
     }
 
     function sanitizeRuleSet(ruleSet) {
-        if (messagePolicy && Array.isArray(ruleSet.declarations)) {
+        if (isolateStyles && Array.isArray(ruleSet.declarations)) {
             ruleSet.declarations = ruleSet.declarations.filter(declaration => declaration.type === 'declaration'
-                && isMessageCssDeclarationAllowed(declaration.property, declaration.value, allowExternalMedia)
+                && (!messagePolicy || isMessageCssDeclarationAllowed(declaration.property, declaration.value, allowExternalMedia))
                 && isolateAnimation(declaration));
         }
         if (Array.isArray(ruleSet.selectors) || Array.isArray(ruleSet.declarations)) {
@@ -731,16 +734,16 @@ export function decodeStyleTags(text, { prefix, messagePolicy = false, allowExte
         }
 
         if (Array.isArray(ruleSet.rules)) {
-            ruleSet.rules = ruleSet.rules.filter(rule => messagePolicy
-                ? ['rule', 'media', 'keyframes', 'keyframe', 'comment'].includes(rule.type) && (rule.type !== 'keyframes' || animationNames.has(rule.name))
+            ruleSet.rules = ruleSet.rules.filter(rule => isolateStyles
+                ? ['rule', 'media', 'keyframes', 'keyframe', 'comment', ...(creatorPolicy ? ['supports'] : [])].includes(rule.type) && (rule.type !== 'keyframes' || animationNames.has(rule.name))
                 : rule.type !== 'import');
 
             for (const mediaRule of ruleSet.rules) {
-                if (messagePolicy && mediaRule.type === 'keyframes') mediaRule.name = animationNames.get(mediaRule.name);
+                if (isolateStyles && mediaRule.type === 'keyframes') mediaRule.name = animationNames.get(mediaRule.name);
                 sanitizeRuleSet(mediaRule);
             }
         }
-        if (messagePolicy && Array.isArray(ruleSet.keyframes)) {
+        if (isolateStyles && Array.isArray(ruleSet.keyframes)) {
             for (const keyframe of ruleSet.keyframes) sanitizeRuleSet(keyframe);
         }
     }
@@ -756,10 +759,25 @@ export function decodeStyleTags(text, { prefix, messagePolicy = false, allowExte
             const sanitizedCss = css.stringify(ast).replace(/<\/style/gi, closingTag => closingTag.replace('/', '\\/'));
             const media = safeStyleMedia(parseStyleTagAttributes(rawAttributes).get('data-style-media'));
             return `<style${media ? ` media="${escapeAttribute(media)}"` : ''}>${sanitizedCss}</style>`;
-        } catch (error) {
-            return messagePolicy ? '' : `CSS ERROR: ${error}`;
+        } catch {
+            return '';
         }
     });
+}
+
+/** Isolate inline animation names without applying the stricter message CSS policy. */
+function isolateCreatorInlineAnimations(html, animationNames) {
+    const template = document.createElement('template');
+    template.innerHTML = html;
+    for (const element of template.content.querySelectorAll('[style]')) {
+        const property = element.style.getPropertyValue('animation') ? 'animation' : 'animation-name';
+        const value = element.style.getPropertyValue(property);
+        if (!value) continue;
+        const rewritten = isolateMessageAnimation(property, value, animationNames);
+        if (rewritten === null) element.style.removeProperty(property);
+        else element.style.setProperty(property, rewritten, element.style.getPropertyPriority(property));
+    }
+    return template.innerHTML;
 }
 
 /**
@@ -821,7 +839,12 @@ class StylesPreference {
 export function formatCreatorNotes(text, avatarId) {
     const preference = new StylesPreference(avatarId);
     const sanitizeStyles = !preference.get();
-    const decodeStyleParam = { prefix: sanitizeStyles ? '#creator_notes_spoiler ' : '' };
+    const animationNames = new Map();
+    // A fresh namespace prevents a note from choosing a page animation's name.
+    const animationScope = sanitizeStyles ? `creator-notes-${Array.from(crypto.getRandomValues(new Uint32Array(4)), value => value.toString(16).padStart(8, '0')).join('')}` : '';
+    const decodeStyleParam = sanitizeStyles
+        ? { prefix: '#creator_notes_spoiler ', creatorPolicy: true, animationScope, animationNames }
+        : { prefix: '' };
     /** @type {DOMPurify.Config} */
     const config = {
         RETURN_DOM: false,
@@ -829,12 +852,14 @@ export function formatCreatorNotes(text, avatarId) {
         RETURN_TRUSTED_TYPE: false,
         MESSAGE_SANITIZE: true,
         ADD_TAGS: ['custom-style'],
+        FORBID_TAGS: ['style'],
     };
 
     let html = converter.makeHtml(substituteParams(text));
     html = encodeStyleTags(html);
     html = DOMPurify.sanitize(html, config);
     html = decodeStyleTags(html, decodeStyleParam);
+    if (sanitizeStyles) html = isolateCreatorInlineAnimations(html, animationNames);
 
     return html;
 }
@@ -845,7 +870,7 @@ async function openGlobalStylesPreferenceDialog() {
     const currentValue = preference.get();
 
     const container = document.createElement('div');
-    container.innerHTML = (await renderTemplateAsync('globalStylesPreference')) ?? '';
+    container.innerHTML = DOMPurify.sanitize((await renderTemplateAsync('globalStylesPreference')) ?? '');
     const template = container.firstElementChild ?? container;
 
     for (const radio of template.querySelectorAll('input[name="global_styles_preference"]')) {
@@ -889,7 +914,7 @@ async function checkForCreatorNotesStyles() {
     const hasPreference = preference.exists();
     if (!hasPreference) {
         const container = document.createElement('div');
-        container.innerHTML = (await renderTemplateAsync('globalStylesPopup')) ?? '';
+        container.innerHTML = DOMPurify.sanitize((await renderTemplateAsync('globalStylesPopup')) ?? '');
         const template = container.firstElementChild ?? container;
         const preview = template.querySelector('textarea');
         if (preview) preview.value = styleContents;

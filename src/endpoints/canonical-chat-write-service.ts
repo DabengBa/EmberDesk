@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
 import type { CanonicalChatLocator } from './canonical-chat-read-service.ts';
-import { withCanonicalTransaction } from '../canonical-sqlite.js';
+import { withCanonicalTransaction } from '../canonical-sqlite.ts';
 
 import {
     recordImportLedgerEntry,

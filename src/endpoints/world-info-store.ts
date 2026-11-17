@@ -1,7 +1,7 @@
 import sanitize from 'sanitize-filename';
 import type { DatabaseSync, SQLInputValue } from 'node:sqlite';
 
-import { withCanonicalTransaction } from '../canonical-sqlite.js';
+import { withCanonicalTransaction } from '../canonical-sqlite.ts';
 import { uuidv4 } from '../util.js';
 
 // Views describe the existing unchecked JSON access, not runtime validation.

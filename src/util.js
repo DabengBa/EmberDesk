@@ -19,7 +19,7 @@ import bytes from 'bytes';
 import { LOG_LEVELS, MEDIA_REQUEST_TYPE } from './constants.js';
 import { serverDirectory } from './server-directory.js';
 import { sync as writeFileAtomicSync } from 'write-file-atomic';
-import { isFirefox } from './express-common.js';
+import { isFirefox } from './express-common.ts';
 export {
     extractFileFromZipBuffer,
     normalizeZipEntryPath,

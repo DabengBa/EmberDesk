@@ -39,8 +39,8 @@ Phase 1 keeps file-backed character cards, chat directories, and world files as 
 
 Current constraints:
 
-- canonical DB access must go through `src/canonical-sqlite.js`
-- schema readiness must go through `src/canonical-sqlite-migrations.js`
+- canonical DB access must go through `src/canonical-sqlite.ts`
+- schema readiness must go through `src/canonical-sqlite-migrations.ts`
 - import must not rewrite PNG cards, chat JSONL, or world JSON files
 - audit drift must block future cutover decisions, not silently repair state
 - payload semantics must be reused from the existing file-backed snapshot path instead of reimplemented ad hoc
@@ -102,8 +102,8 @@ Existing user-facing surfaces supported by this backend-prep slice remain:
 
 Code binding points:
 
-- `src/canonical-sqlite.js` owns DB lifecycle and transaction boundaries
-- `src/canonical-sqlite-migrations.js` owns schema readiness and blocked-status reporting
+- `src/canonical-sqlite.ts` owns DB lifecycle and transaction boundaries
+- `src/canonical-sqlite-migrations.ts` owns schema readiness and blocked-status reporting
 - `src/endpoints/character-file-snapshot.js` owns file-backed payload/chat-stat snapshot parity
 - later DB-first read/write slices must treat this module as Phase 1 import/audit ownership, not as a general query layer
 

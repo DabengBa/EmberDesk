@@ -84,6 +84,14 @@ During `public/script.js` evaluation:
 
 `request-context.js` preserves the existing request shape: JSON requests receive `Content-Type: application/json` and the current `X-CSRF-Token`; callers may omit the content type for requests such as `pingServer()`. `loadCsrfToken()` rejects its caller on fetch or response failure, so the bootstrap owner decides how initialization fails.
 
+The composition root uses native DOM operations for background fitting,
+standalone-mode class, connection hint and dialogue hiding. This does not remove
+jQuery globally: the Ajax prefilter reads the current CSRF token at request time,
+and existing ready wiring remains. `app/workspace-panels.tsx` also retains
+`flushSync` where consumers require synchronous React wiring. Focused coverage
+includes `tests/script-js-composition-root.test.js`, compatibility tests and
+the isolated browser scenarios in `tests/thirteenth-frontend.e2e.js`.
+
 `public-api.js` has no module-evaluation side effect. The root calls `installPublicBrowserApi()` explicitly, which keeps public-global installation testable and prevents an imported helper from unexpectedly mutating the browser global.
 
 ### Tokenizers and notifications

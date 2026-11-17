@@ -19,8 +19,8 @@ import {
     markCharacterChatStatsDirty,
     resetCharacterIndexDatabase,
 } from '../src/endpoints/character-index.js';
-import { createCanonicalSqliteManager } from '../src/canonical-sqlite.js';
-import { runCanonicalMigrations } from '../src/canonical-sqlite-migrations.js';
+import { createCanonicalSqliteManager } from '../src/canonical-sqlite.ts';
+import { runCanonicalMigrations } from '../src/canonical-sqlite-migrations.ts';
 import {
     getPersistedCanonicalAuditStatus,
     persistCanonicalAuditStatus,

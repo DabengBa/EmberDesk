@@ -26,7 +26,7 @@ The loading pipeline follows four phases:
 
 Constraints:
 
-- `loadPlugins(app, pluginsPath)` is the sole export consumed by `server-main.js`. The call signature is unchanged.
+- `loadPlugins(app, pluginsPath)` is the sole export consumed by `server-main.ts`. The call signature is unchanged.
 - Plugin mounting under `/api/plugins/{id}` is part of the retained Express runtime-owner boundary. Any future server-runtime change must prove equivalent mount and cleanup semantics first.
 - `enableServerPlugins` uses lazy evaluation (same pattern as `getEnableAccounts` in `user-storage.ts`).
 - Plugin shape contract: `info` object with required string fields `id`, `name`, `description`; `init` function; optional `exit` function.
@@ -38,6 +38,6 @@ The plugin loader has no user-facing semantic ID.
 
 Stability-sensitive binding points:
 
-- `loadPlugins(app, pluginsDirectory)` in `server-main.js:335`
-- `cleanupPlugins()` in `server-main.js:518`
-- `startupProfiler.measure('loadPlugins', ...)` in `server-main.js:335`
+- `loadPlugins(app, pluginsDirectory)` in `src/server-main.ts`
+- `cleanupPlugins()` in `src/server-main.ts`
+- `startupProfiler.measure('loadPlugins', ...)` in `src/server-main.ts`

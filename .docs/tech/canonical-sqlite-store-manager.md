@@ -1,5 +1,5 @@
 ---
-description: "src/canonical-sqlite.js owns the first durable runtime foundation for canonical per-user SQLite storage under the [canonical per-user SQLite storage contract](canonical-sqlite-storage-roadmap.md). It does not make SQLite authoritative..."
+description: "src/canonical-sqlite.ts owns the first durable runtime foundation for canonical per-user SQLite storage under the [canonical per-user SQLite storage contract](canonical-sqlite-storage-roadmap.md). It does not make SQLite authoritative..."
 kind: technical
 topic: canonical-sqlite-store-manager
 ---
@@ -8,11 +8,11 @@ topic: canonical-sqlite-store-manager
 
 ## Module Responsibility
 
-`src/canonical-sqlite.js` owns the first durable runtime foundation for canonical per-user SQLite storage under the [canonical per-user SQLite storage contract](canonical-sqlite-storage-roadmap.md). It does not make SQLite authoritative by itself. Instead, it establishes the per-user DB path, lifecycle, fail-closed behavior, and transaction contract that later migration, import, read, and write slices will build on.
+`src/canonical-sqlite.ts` owns the first durable runtime foundation for canonical per-user SQLite storage under the [canonical per-user SQLite storage contract](canonical-sqlite-storage-roadmap.md). It does not make SQLite authoritative by itself. Instead, it establishes the per-user DB path, lifecycle, fail-closed behavior, and transaction contract that later migration, import, read, and write slices will build on.
 
 Primary files:
 
-- `src/canonical-sqlite.js`
+- `src/canonical-sqlite.ts`
 - `src/storage-feature-flags.js`
 - `src/constants.js`
 - `src/user-directories.ts`
@@ -48,7 +48,7 @@ Canonical SQLite remains separate from derived caches.
 - canonical DB location: `DATA_ROOT/<handle>/storage/emberdesk.sqlite`
 - derived sidecar location: `DATA_ROOT/<handle>/_cache/*.sqlite`
 
-`src/canonical-sqlite.js` intentionally does not reuse `src/derived-cache-sqlite.js`.
+`src/canonical-sqlite.ts` intentionally does not reuse `src/derived-cache-sqlite.js`.
 
 The separation is structural, not just naming:
 
@@ -78,7 +78,7 @@ Only the manager slice currently uses the master gate and strict gate directly. 
 
 ### Manager lifecycle
 
-`src/canonical-sqlite.js` provides:
+`src/canonical-sqlite.ts` provides:
 
 - `resolveCanonicalStorageRoot(directories)`
 - `resolveCanonicalDatabasePath(directories, filename?)`
@@ -133,7 +133,7 @@ Existing user-visible surfaces that later storage phases will support remain:
 Code binding points:
 
 - `getUserDirectories(handle)` remains the per-user root resolver
-- `src/canonical-sqlite.js` owns canonical DB lifecycle
+- `src/canonical-sqlite.ts` owns canonical DB lifecycle
 - `src/storage-feature-flags.js` owns the storage rollout flag snapshot for this slice
 
 ## Validation
@@ -169,9 +169,9 @@ What the tests currently prove:
 Per-user DB open/close remains owned by this manager. Slice rollout, audit/repair routing,
 operator status, and backup/restore readiness are owned by:
 
-- `src/canonical-storage-slice-registry.js`
+- `src/canonical-storage-slice-registry.ts`
 - `src/canonical-sqlite-rollout-contract.js`
-- `src/canonical-sqlite-operator.js`
+- `src/canonical-sqlite-operator.ts`
 
 The control plane does not open databases itself; it consumes manager handles and migration
 status for registered slices.

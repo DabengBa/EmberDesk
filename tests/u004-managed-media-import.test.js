@@ -4,7 +4,7 @@ import path from 'node:path';
 
 import { expect, test } from '@jest/globals';
 
-import { createCanonicalSqliteManager } from '../src/canonical-sqlite.js';
+import { createCanonicalSqliteManager } from '../src/canonical-sqlite.ts';
 import { runCanonicalManagedMediaShadowImport, auditCanonicalManagedMediaShadowImport } from '../src/canonical-managed-media-shadow-import.ts';
 import { listCanonicalManagedMediaReferences } from '../src/endpoints/canonical-managed-media-store.ts';
 

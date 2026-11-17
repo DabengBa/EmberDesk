@@ -46,9 +46,9 @@ fs.writeFileSync(path.join(configRoot, 'config.yaml'), 'port: 8000\n', 'utf8');
 setConfigFilePath(path.join(configRoot, 'config.yaml'));
 
 const { router } = await import('../src/endpoints/users-private.js');
-const { canonicalSqliteManager } = await import('../src/canonical-sqlite.js');
+const { canonicalSqliteManager } = await import('../src/canonical-sqlite.ts');
 const { resetCanonicalBackendsForTests } = await import('../src/canonical-backend.js');
-const { runCanonicalMigrations } = await import('../src/canonical-sqlite-migrations.js');
+const { runCanonicalMigrations } = await import('../src/canonical-sqlite-migrations.ts');
 const { upsertCanonicalSettingsDocument, getCanonicalSettingsDocument } = await import('../src/endpoints/settings-store.ts');
 const { persistCanonicalAuditStatus } = await import('../src/canonical-sqlite-shadow-import.ts');
 const { SETTINGS_AUDIT_SCOPE } = await import('../src/canonical-settings-shadow-import.ts');

@@ -26,7 +26,7 @@ function setup({ stored = 'false', result = 1001 } = {}) {
     }
     const popup = jest.fn(async () => result);
     const env = {
-        document, StylesPreference, getCurrentEntityId: () => 'avatar',
+        document, StylesPreference, getCurrentEntityId: () => 'avatar', DOMPurify: { sanitize: html => html },
         renderTemplateAsync: async name => `<div>${name}</div>`, callGenericPopup: popup,
         POPUP_TYPE: { TEXT: 1 }, POPUP_RESULT: { AFFIRMATIVE: 1, CUSTOM1: 1001, CANCELLED: null },
         t: strings => strings[0], this_chid: 0,

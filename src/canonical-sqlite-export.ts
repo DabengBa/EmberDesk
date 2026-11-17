@@ -1,3 +1,10 @@
+import type { DatabaseSync } from 'node:sqlite';
+import type { UserDirectoryList } from './users.js';
+
+type ExportDirectories = UserDirectoryList & { exportActiveWorlds: string; exportSourceStorage: string; exportIsolated: boolean };
+type ExportResult = { status: string; [key: string]: unknown };
+type ExportOptions = { db: DatabaseSync; directories: UserDirectoryList; handle: string; sliceKeys?: string[] | null; outDir?: string | null; nowMs?: number };
+
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -15,7 +22,7 @@ import { getCanonicalSecretsProjection } from './canonical-secrets-shadow-import
 import { getCanonicalSettingsDocument } from './endpoints/settings-store.ts';
 import { listCanonicalPresets } from './endpoints/presets-store.ts';
 import { listCanonicalWorldInfoBookRows } from './endpoints/world-info-store.ts';
-import { withCanonicalTransaction } from './canonical-sqlite.js';
+import { withCanonicalTransaction } from './canonical-sqlite.ts';
 
 const DEFAULT_AVATAR_FILE = fileURLToPath(new URL('../public/img/ai4.png', import.meta.url));
 
@@ -27,25 +34,27 @@ const DEFAULT_AVATAR_FILE = fileURLToPath(new URL('../public/img/ai4.png', impor
  * 'export' so later scans do not treat it as novel content.
  */
 
-function rebaseDirectories(directories, outDir) {
+function rebaseDirectories(directories: UserDirectoryList, outDir: string | null) {
     if (!outDir) {
         return directories;
     }
     const root = path.resolve(directories.root);
     const rebased = { ...directories, root: path.resolve(outDir) };
+    const entries = directories as unknown as Record<string, string>;
+    const target = rebased as unknown as Record<string, string>;
     for (const key of Object.keys(rebased)) {
-        if (key === 'root' || typeof directories[key] !== 'string') {
+        if (key === 'root' || typeof entries[key] !== 'string') {
             continue;
         }
-        const relative = path.relative(root, directories[key]);
+        const relative = path.relative(root, entries[key]);
         if (relative && !relative.startsWith('..') && !path.isAbsolute(relative)) {
-            rebased[key] = path.join(rebased.root, relative);
+            target[key] = path.join(rebased.root, relative);
         }
     }
     return rebased;
 }
 
-function physicalPath(candidate) {
+function physicalPath(candidate: string) {
     let current = path.resolve(candidate);
     const missing = [];
     while (!fs.existsSync(current)) {
@@ -57,7 +66,7 @@ function physicalPath(candidate) {
     return path.join(fs.realpathSync(current), ...missing);
 }
 
-function recordExport(db, { sliceKey, root, absolutePath, contents, nowMs, isolated }) {
+function recordExport(db: DatabaseSync, { sliceKey, root, absolutePath, contents, nowMs, isolated }: { sliceKey: string; root: string; absolutePath: string; contents: string | Buffer; nowMs: number; isolated: boolean }) {
     if (isolated) return;
     const sourcePath = path.relative(root, absolutePath).split(path.sep).join('/');
     recordImportLedgerEntry(db, {
@@ -71,14 +80,14 @@ function recordExport(db, { sliceKey, root, absolutePath, contents, nowMs, isola
 
 class UnsafeExportTargetError extends Error {}
 
-function assertSafeExportTarget(directories, target) {
+function assertSafeExportTarget(directories: ExportDirectories, target: string) {
     const relative = path.relative(physicalPath(directories.exportActiveWorlds), physicalPath(target));
     if (relative === '' || (relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative))) {
         throw new UnsafeExportTargetError('export target overlaps active worlds directory');
     }
 }
 
-function writeExportFile(directories, target, contents) {
+function writeExportFile(directories: ExportDirectories, target: string, contents: string | Buffer) {
     assertSafeExportTarget(directories, target);
     fs.mkdirSync(path.dirname(target), { recursive: true });
     if (Buffer.isBuffer(contents)) {
@@ -88,12 +97,12 @@ function writeExportFile(directories, target, contents) {
     writeFileAtomicSync(target, String(contents), 'utf8');
 }
 
-function hashContents(contents) {
+function hashContents(contents: string | Buffer) {
     const buffer = Buffer.isBuffer(contents) ? contents : Buffer.from(String(contents), 'utf8');
     return crypto.createHash('sha256').update(buffer).digest('hex');
 }
 
-function exportCharactersSlice(db, directories, nowMs) {
+function exportCharactersSlice(db: DatabaseSync, directories: ExportDirectories, nowMs: number) {
     const rows = db.prepare(`
         SELECT avatar_filename, card_json
         FROM characters
@@ -124,16 +133,16 @@ function exportCharactersSlice(db, directories, nowMs) {
             try {
                 const fallbackPath = `${target}.json`;
                 writeExportFile(directories, fallbackPath, String(row.card_json));
-                results.push({ avatar, path: fallbackPath, status: 'json_fallback', reason: String(error?.message ?? error) });
+                results.push({ avatar, path: fallbackPath, status: 'json_fallback', reason: String((error as { message?: unknown } | null)?.message ?? error) });
             } catch (fallbackError) {
-                results.push({ avatar, status: 'error', error: String(fallbackError?.message ?? fallbackError) });
+                results.push({ avatar, status: 'error', error: String((fallbackError as { message?: unknown } | null)?.message ?? fallbackError) });
             }
         }
     }
     return results;
 }
 
-function resolveAvatarImage(db, directories, avatar, fileTarget) {
+function resolveAvatarImage(db: DatabaseSync, directories: ExportDirectories, avatar: string, fileTarget: string) {
     // P1+ canonical avatar blob (character-avatars/<avatar> virtual path).
     const reference = getCanonicalManagedMediaReference(db, `character-avatars/${avatar}`);
     if (reference?.managedRelativePath) {
@@ -160,7 +169,7 @@ function resolveAvatarImage(db, directories, avatar, fileTarget) {
     return null;
 }
 
-function exportWorldInfoSlice(db, directories, nowMs) {
+function exportWorldInfoSlice(db: DatabaseSync, directories: ExportDirectories, nowMs: number) {
     const results = [];
     for (const row of listCanonicalWorldInfoBookRows(db)) {
         if (row.deletedAtMs != null) {
@@ -174,13 +183,13 @@ function exportWorldInfoSlice(db, directories, nowMs) {
             // must not be recorded as an observation of the active tree.
             results.push({ name: row.name, path: target, status: 'exported' });
         } catch (error) {
-            results.push({ name: row.name, status: 'error', error: String(error?.message ?? error) });
+            results.push({ name: row.name, status: 'error', error: String((error as { message?: unknown } | null)?.message ?? error) });
         }
     }
     return results;
 }
 
-function exportSettingsSlice(db, directories, handle, nowMs) {
+function exportSettingsSlice(db: DatabaseSync, directories: ExportDirectories, handle: string, nowMs: number) {
     const document = getCanonicalSettingsDocument(db, { userId: handle });
     if (!document) {
         return [{ status: 'skipped', reason: 'no_canonical_settings_document' }];
@@ -194,11 +203,11 @@ function exportSettingsSlice(db, directories, handle, nowMs) {
         recordExport(db, { sliceKey: 'settings', root: directories.root, absolutePath: target, contents: document.payloadJson, nowMs, isolated: directories.exportIsolated });
         return [{ status: 'exported', path: target, revision: document.revision }];
     } catch (error) {
-        return [{ status: 'error', error: String(error?.message ?? error) }];
+        return [{ status: 'error', error: String((error as { message?: unknown } | null)?.message ?? error) }];
     }
 }
 
-function exportPresetsSlice(db, directories, nowMs) {
+function exportPresetsSlice(db: DatabaseSync, directories: ExportDirectories, nowMs: number) {
     // Materialize under the historical `Open AI Settings/` layout so exports
     // round-trip into file-era builds; at runtime nothing reads that directory.
     const results = [];
@@ -209,13 +218,13 @@ function exportPresetsSlice(db, directories, nowMs) {
             recordExport(db, { sliceKey: 'presets', root: directories.root, absolutePath: target, contents: preset.payloadJson, nowMs, isolated: directories.exportIsolated });
             results.push({ status: 'exported', path: target, name: preset.name, revision: preset.revision });
         } catch (error) {
-            results.push({ status: 'error', name: preset.name, error: String(error?.message ?? error) });
+            results.push({ status: 'error', name: preset.name, error: String((error as { message?: unknown } | null)?.message ?? error) });
         }
     }
     return results;
 }
 
-function exportSecretsSlice(db, directories, nowMs) {
+function exportSecretsSlice(db: DatabaseSync, directories: ExportDirectories, nowMs: number) {
     const projection = getCanonicalSecretsProjection(db);
     const target = path.join(directories.root, 'secrets.json');
     try {
@@ -224,32 +233,32 @@ function exportSecretsSlice(db, directories, nowMs) {
         recordExport(db, { sliceKey: 'secrets', root: directories.root, absolutePath: target, contents, nowMs, isolated: directories.exportIsolated });
         return [{ status: 'exported', path: target, keyCount: Object.keys(projection).length }];
     } catch (error) {
-        return [{ status: 'error', error: String(error?.message ?? error) }];
+        return [{ status: 'error', error: String((error as { message?: unknown } | null)?.message ?? error) }];
     }
 }
 
-function exportChatsSlice(db, directories, nowMs) {
+function exportChatsSlice(db: DatabaseSync, directories: ExportDirectories, nowMs: number) {
     const results = [];
     for (const session of listCanonicalChatSessions(db)) {
         try {
             const target = resolveCanonicalChatProjectionPath({
                 directories,
-                ownerType: session.owner_type,
-                ownerId: session.owner_id,
-                sourcePath: session.source_path,
+                ownerType: session.owner_type as string,
+                ownerId: session.owner_id as string,
+                sourcePath: session.source_path as string,
             });
             const jsonl = String(session.source_jsonl ?? '');
             writeExportFile(directories, target, jsonl);
             recordExport(db, { sliceKey: 'chats', root: directories.root, absolutePath: target, contents: jsonl, nowMs, isolated: directories.exportIsolated });
             results.push({ sessionId: session.id, path: target, status: 'exported' });
         } catch (error) {
-            results.push({ sessionId: session.id, sourcePath: session.source_path, status: 'error', error: String(error?.message ?? error) });
+            results.push({ sessionId: session.id, sourcePath: session.source_path as string, status: 'error', error: String((error as { message?: unknown } | null)?.message ?? error) });
         }
     }
     return results;
 }
 
-function exportManagedMediaSlice(db, directories, nowMs) {
+function exportManagedMediaSlice(db: DatabaseSync, directories: ExportDirectories, nowMs: number) {
     const results = [];
     const storageRoot = path.resolve(directories.exportSourceStorage);
     for (const reference of listCanonicalManagedMediaReferences(db)) {
@@ -275,7 +284,7 @@ function exportManagedMediaSlice(db, directories, nowMs) {
             });
             results.push({ path: reference.compatibilityPath, status: 'exported' });
         } catch (error) {
-            results.push({ path: reference.compatibilityPath, status: 'error', error: String(error?.message ?? error) });
+            results.push({ path: reference.compatibilityPath, status: 'error', error: String((error as { message?: unknown } | null)?.message ?? error) });
         }
     }
     return results;
@@ -301,28 +310,29 @@ const SLICE_EXPORTERS = {
  * @remarks Requires a connection outside a transaction; it takes its own SQLite write lock.
  * @returns {{ok: boolean, slices: Array<{slice: string, results: object[]}>}}
  */
-export function exportCanonicalStorageToFiles({ db, directories, handle, sliceKeys = null, outDir = null, nowMs = Date.now() }) {
-    const dirs = { ...rebaseDirectories(directories, outDir) };
+export function exportCanonicalStorageToFiles({ db, directories, handle, sliceKeys = null, outDir = null, nowMs = Date.now() }: ExportOptions) {
+    const dirs = { ...rebaseDirectories(directories, outDir) } as ExportDirectories;
     dirs.exportActiveWorlds = directories.worlds;
     dirs.exportSourceStorage = directories.storage;
     dirs.exportIsolated = !!outDir && physicalPath(dirs.root) !== physicalPath(directories.root);
     return withCanonicalTransaction(db, () => exportUnderLock({ db, dirs, directories, handle, sliceKeys, nowMs }));
 }
 
-function exportUnderLock({ db, dirs, directories, handle, sliceKeys, nowMs }) {
+function exportUnderLock({ db, dirs, directories, handle, sliceKeys, nowMs }: { db: DatabaseSync; dirs: ExportDirectories; directories: UserDirectoryList; handle: string; sliceKeys: string[] | null; nowMs: number }) {
     const keys = sliceKeys?.length ? sliceKeys : Object.keys(SLICE_EXPORTERS);
     const manifestPath = path.join(dirs.root, 'export-manifest.json');
     const activeWorlds = physicalPath(directories.worlds);
-    const isActiveWorldPath = candidate => {
+    const isActiveWorldPath = (candidate: string) => {
         const relative = path.relative(activeWorlds, physicalPath(candidate));
         return relative === '' || (!relative.startsWith(`..${path.sep}`) && relative !== '..' && !path.isAbsolute(relative));
     };
     if (isActiveWorldPath(manifestPath)) {
         return { ok: false, manifestPath: null, slices: [{ slice: 'manifest', results: [{ status: 'error', error: 'export manifest overlaps active worlds directory' }] }] };
     }
-    const slices = [];
+    const slices: Array<{ slice: string; results: ExportResult[] }> = [];
     for (const key of keys) {
-        const exporter = SLICE_EXPORTERS[key];
+        const exporter = SLICE_EXPORTERS[key as keyof typeof SLICE_EXPORTERS] as
+            ((db: DatabaseSync, dirs: ExportDirectories, handleOrNowMs: string | number, nowMs?: number) => ExportResult[]) | undefined;
         if (!exporter) {
             slices.push({ slice: key, results: [{ status: 'error', error: `unknown slice: ${key}` }] });
             continue;
@@ -357,7 +367,7 @@ function exportUnderLock({ db, dirs, directories, handle, sliceKeys, nowMs }) {
     try {
         writeExportFile(dirs, manifestPath, JSON.stringify(manifest, null, 4));
     } catch (error) {
-        slices.push({ slice: 'manifest', results: [{ status: 'error', error: String(error?.message ?? error) }] });
+        slices.push({ slice: 'manifest', results: [{ status: 'error', error: String((error as { message?: unknown } | null)?.message ?? error) }] });
         return { ok: false, manifestPath: null, slices };
     }
 

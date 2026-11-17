@@ -3,8 +3,8 @@ import os from 'node:os';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, expect, test } from '@jest/globals';
-import { createCanonicalSqliteManager } from '../src/canonical-sqlite.js';
-import { runCanonicalMigrations } from '../src/canonical-sqlite-migrations.js';
+import { createCanonicalSqliteManager } from '../src/canonical-sqlite.ts';
+import { runCanonicalMigrations } from '../src/canonical-sqlite-migrations.ts';
 import { writeCanonicalChatPayload, renameCanonicalChat, deleteCanonicalChat } from '../src/endpoints/canonical-chat-write-service.ts';
 
 const cleanups = [];

@@ -1,13 +1,14 @@
 import http from 'node:http';
 import https from 'node:https';
 import { getConfigValue } from '../util.js';
-import { PrivateRequestAgent } from '../private-request-filter.js';
+import { PrivateRequestAgent } from '../private-request-filter.ts';
+import type { Request, Response } from 'express';
 
-function getRequestOrigin(req) {
+function getRequestOrigin(req: Request): URL {
     return new URL(`${req.protocol}://${req.get('host')}`);
 }
 
-function getEffectivePort(url) {
+function getEffectivePort(url: URL): string {
     if (url.port) {
         return url.port;
     }
@@ -23,7 +24,7 @@ function getEffectivePort(url) {
     return '';
 }
 
-function isCircularRequest(targetUrl, requestOrigin) {
+function isCircularRequest(targetUrl: URL, requestOrigin: URL): boolean {
     return targetUrl.protocol === requestOrigin.protocol
         && targetUrl.hostname.toLowerCase() === requestOrigin.hostname.toLowerCase()
         && getEffectivePort(targetUrl) === getEffectivePort(requestOrigin);
@@ -49,7 +50,7 @@ function createCorsProxyAgent() {
  * @param {import('express').Response} res Express response object
  * @returns {Promise<void>}
  */
-async function forwardProxyRequest(targetUrl, req, res) {
+async function forwardProxyRequest(targetUrl: URL, req: Request, res: Response): Promise<void> {
     const bodyMethods = ['POST', 'PUT', 'PATCH'];
     const headers = structuredClone(req.headers);
     const headersToRemove = [
@@ -71,7 +72,7 @@ async function forwardProxyRequest(targetUrl, req, res) {
 
     headersToRemove.forEach(header => delete headers[header]);
 
-    await new Promise((resolve, reject) => {
+    await new Promise<void>((resolve, reject) => {
         const request = (targetUrl.protocol === 'https:' ? https : http).request(targetUrl, {
             method: req.method,
             headers,
@@ -106,7 +107,7 @@ async function forwardProxyRequest(targetUrl, req, res) {
  * @param {import('express').Request} req Express request object
  * @returns {string} Proxied URL
  */
-function getProxyUrl(req) {
+function getProxyUrl(req: Request): string {
     const queryIndex = req.originalUrl.indexOf('?');
     const originalPath = queryIndex === -1 ? req.originalUrl : req.originalUrl.slice(0, queryIndex);
     const originalQuery = queryIndex === -1 ? '' : req.originalUrl.slice(queryIndex + 1);
@@ -127,7 +128,7 @@ function getProxyUrl(req) {
  * @param {import('express').Request} req Express request object
  * @param {import('express').Response} res Express response object
  */
-export default async function corsProxyMiddleware(req, res) {
+export default async function corsProxyMiddleware(req: Request, res: Response) {
     const url = getProxyUrl(req);
 
     if (!url) {
@@ -152,9 +153,9 @@ export default async function corsProxyMiddleware(req, res) {
     try {
         await forwardProxyRequest(targetUrl, req, res);
     } catch (error) {
-        if (error.message?.startsWith('Blocked request to private IP address:')
-            || error.message?.startsWith('Unable to resolve host:')) {
-            console.warn(error.message);
+        if ((error as Error).message?.startsWith('Blocked request to private IP address:')
+            || (error as Error).message?.startsWith('Unable to resolve host:')) {
+            console.warn((error as Error).message);
             return res.status(403).send('CORS proxy target is not allowed');
         }
 

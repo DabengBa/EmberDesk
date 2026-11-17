@@ -11,7 +11,7 @@ type RenameOptions = TargetOptions & { label?: unknown };
 type RepairOptions = { repairKey?: unknown; key?: unknown; recordId?: unknown; operation?: unknown; errorClass?: unknown; nowMs?: unknown };
 type ResolveOptions = { repairKey?: unknown; resolvedAtMs?: unknown };
 
-import { withCanonicalTransaction } from '../canonical-sqlite.js';
+import { withCanonicalTransaction } from '../canonical-sqlite.ts';
 import { uuidv4 } from '../util.js';
 
 export const SECRET_MIGRATION_MARKER = 'secret_records_import';

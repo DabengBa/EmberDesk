@@ -32,12 +32,52 @@ describe('validation gate selector', () => {
             .toEqual(['user-auth-storage']);
     });
 
+    test.each([
+        ['server-main', ['express-route-order', 'startup-config']],
+        ['server-startup', ['startup-config']],
+        ['command-line', ['startup-config']],
+        ['canonical-sqlite', ['canonical-storage-rollout']],
+        ['canonical-sqlite-migrations', ['canonical-storage-rollout']],
+        ['canonical-sqlite-export', ['canonical-storage-rollout']],
+        ['canonical-sqlite-operator', ['canonical-storage-rollout']],
+        ['canonical-storage-slice-registry', ['canonical-storage-rollout']],
+    ])('selects the existing gates for migrated and legacy %s paths individually', (basename, expected) => {
+        for (const extension of ['js', 'ts']) {
+            const input = `src/${basename}.${extension}`;
+            const selection = selectValidationGates([input]);
+            expect(selection.commands.map(command => command.id)).toEqual(expected);
+            for (const command of selection.commands) {
+                expect(command.matchedInputs).toEqual([input]);
+            }
+        }
+    });
+
+    test.each(['whitelist', 'hostWhitelist', 'corsProxy'])('keeps the middleware gate for migrated and legacy %s paths', basename => {
+        for (const extension of ['js', 'ts']) {
+            expect(selectValidationGates([`src/middleware/${basename}.${extension}`]).commands.map(command => command.id))
+                .toEqual(['express-route-order']);
+        }
+    });
+
+    test('does not select migrated exact-path rules for unrelated extensions or names', () => {
+        for (const input of [
+            'src/server-main.tsx',
+            'src/server-main-extra.ts',
+            'src/command-line.tsx',
+            'src/server-startup.tsx',
+            'src/canonical-sqlite.tsx',
+            'src/canonical-storage-slice-registry.tsx',
+        ]) {
+            expect(selectValidationGates([input]).commands).toEqual([]);
+        }
+    });
+
     test('maps high-risk touched paths to focused validation gates with local rule sources', () => {
         const result = selectValidationGates([
             'public/scripts/slash-commands.js',
             'src/endpoints/characters.js',
-            'src/canonical-sqlite-operator.js',
-            'src/command-line.js',
+            'src/canonical-sqlite-operator.ts',
+            'src/command-line.ts',
             'src/user-auth.ts',
             'src/derived-cache-sqlite.js',
             'public/lib.js',

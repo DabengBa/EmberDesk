@@ -35,7 +35,7 @@ users.js (barrel + middleware + routes)
 
 Constraints:
 
-- `src/users.js` re-exports all symbols from the four new modules. Existing importers (`server-main.js`, `server-startup.js`, `basicAuth.js`, `recover-password.js`, `settings.js`, `stats.js`, `characters.js`, `users-public.js`, `users-private.js`, `users-admin.js`) continue importing from `src/users.js` unchanged.
+- `src/users.js` re-exports all symbols from the four new modules. Existing importers (`server-main.ts`, `server-startup.ts`, `basicAuth.js`, `recover-password.js`, `settings.js`, `stats.js`, `characters.js`, `users-public.js`, `users-private.js`, `users-admin.js`) continue importing from `src/users.js` unchanged.
 - Path traversal protection (`isPathUnderParent` + `path.resolve`) remains in `createRouteHandler` and `createExtensionsRouteHandler` in `users.js`.
 - `node-persist` storage is initialized once via `initUserStorage()` in `user-storage.ts`. SSO login functions in `user-auth.ts` access `storage.getItem()` directly.
 

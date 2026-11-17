@@ -3,7 +3,7 @@ import path from 'node:path';
 
 import type { DatabaseSync, SQLOutputValue } from 'node:sqlite';
 
-import { withCanonicalTransaction } from '../canonical-sqlite.js';
+import { withCanonicalTransaction } from '../canonical-sqlite.ts';
 import { uuidv4 } from '../util.js';
 
 type Row = Record<string, SQLOutputValue>;

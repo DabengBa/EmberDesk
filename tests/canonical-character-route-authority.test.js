@@ -7,8 +7,8 @@ import archiver from 'archiver';
 import { afterEach, describe, expect, jest, test } from '@jest/globals';
 
 import { humanizedDateTime, setConfigFilePath } from '../src/util.js';
-import { canonicalSqliteManager } from '../src/canonical-sqlite.js';
-import { runCanonicalMigrations } from '../src/canonical-sqlite-migrations.js';
+import { canonicalSqliteManager } from '../src/canonical-sqlite.ts';
+import { runCanonicalMigrations } from '../src/canonical-sqlite-migrations.ts';
 import { auditCanonicalShadowImport } from '../src/canonical-sqlite-shadow-import.ts';
 import { auditCanonicalChatShadowImport } from '../src/canonical-chat-shadow-import.ts';
 import { markCanonicalCharacterDeleted, upsertCanonicalCharacter } from '../src/endpoints/character-store.ts';

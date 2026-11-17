@@ -88,8 +88,8 @@ describe('canonical chat projection paths', () => {
         const directories = setup();
         const projection = new URL('../src/endpoints/canonical-chat-projection-path.ts', import.meta.url).href;
         const consumers = [
-            '../src/canonical-sqlite-export.js',
-            '../src/canonical-sqlite-operator.js',
+            '../src/canonical-sqlite-export.ts',
+            '../src/canonical-sqlite-operator.ts',
             '../src/endpoints/canonical-chat-backup-restore-service.ts',
         ].map(file => new URL(file, import.meta.url).href);
         const script = `

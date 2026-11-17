@@ -112,7 +112,7 @@ describe('migratePublicOverrides', () => {
         const previousCwd = process.cwd();
         try {
             const { DatabaseSync } = await import('node:sqlite');
-            const { runCanonicalMigrations } = await import('../src/canonical-sqlite-migrations.js');
+            const { runCanonicalMigrations } = await import('../src/canonical-sqlite-migrations.ts');
             const { getCanonicalSettingsDocument, upsertCanonicalSettingsDocument } = await import('../src/endpoints/settings-store.ts');
             const dbPath = path.join(dataTmpDir, 'default-user', 'storage', 'emberdesk.sqlite');
             fs.mkdirSync(path.dirname(dbPath), { recursive: true });

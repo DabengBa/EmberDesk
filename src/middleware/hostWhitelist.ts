@@ -1,8 +1,9 @@
 import path from 'node:path';
 import { color, getConfigValue, safeReadFileSync } from '../util.js';
 import { isHostAllowed, hostValidationMiddleware } from 'host-validation-middleware';
+import type { Request, Response, NextFunction } from 'express';
 
-const knownHosts = new Set();
+const knownHosts = new Set<string | undefined>();
 const maxKnownHosts = 1000;
 
 const hostWhitelistEnabled = !!getConfigValue('hostWhitelist.enabled', false);
@@ -22,7 +23,7 @@ const validationMiddleware = hostValidationMiddleware({
  * @param {import('express').Response} res Response
  * @param {import('express').NextFunction} next Next middleware
  */
-export default function hostWhitelistMiddleware(req, res, next) {
+export default function hostWhitelistMiddleware(req: Request, res: Response, next: NextFunction) {
     const hostValue = req.headers.host;
     if (hostWhitelistScan && !isHostAllowed(hostValue, hostWhitelist) && !knownHosts.has(hostValue) && knownHosts.size < maxKnownHosts) {
         const isFirstWarning = knownHosts.size === 0;

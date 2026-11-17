@@ -9,7 +9,7 @@ import {
     createCanonicalSqliteManager,
     resolveCanonicalDatabasePath,
     withCanonicalTransaction,
-} from '../src/canonical-sqlite.js';
+} from '../src/canonical-sqlite.ts';
 import {
     getCanonicalSqliteFeatureFlags,
     getCanonicalStorageSliceFeatureFlagSnapshot,

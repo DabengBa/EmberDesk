@@ -4,11 +4,11 @@ import path from 'node:path';
 
 import { afterEach, beforeAll, describe, expect, test } from '@jest/globals';
 
-import { canonicalSqliteManager } from '../src/canonical-sqlite.js';
-import { runCanonicalMigrations } from '../src/canonical-sqlite-migrations.js';
+import { canonicalSqliteManager } from '../src/canonical-sqlite.ts';
+import { runCanonicalMigrations } from '../src/canonical-sqlite-migrations.ts';
 import { runCanonicalWorldInfoShadowImport } from '../src/canonical-world-info-shadow-import.ts';
 import { getPersistedCanonicalAuditStatus, persistCanonicalAuditStatus } from '../src/canonical-sqlite-shadow-import.ts';
-import { repairCanonicalWorldInfoProjection, runCanonicalWorldInfoAudit } from '../src/canonical-sqlite-operator.js';
+import { repairCanonicalWorldInfoProjection, runCanonicalWorldInfoAudit } from '../src/canonical-sqlite-operator.ts';
 import { upsertCanonicalWorldInfoBook } from '../src/endpoints/world-info-store.ts';
 import { router } from '../src/endpoints/worldinfo.js';
 import { setConfigFilePath } from '../src/util.js';

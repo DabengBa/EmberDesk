@@ -78,7 +78,7 @@ const RULES = [
                 /^src\/endpoints\//,
                 /^src\/middleware\//,
                 /^src\/express-route-compat\.js$/,
-                /^src\/server-main\.js$/,
+                /^src\/server-main\.[jt]s$/,
                 /^(express route|express routes|middleware order|route order)$/i,
             ]);
         },
@@ -96,9 +96,9 @@ const RULES = [
         matches(input) {
             return matchesAny(input, [
                 /^server\.js$/,
-                /^src\/command-line\.js$/,
-                /^src\/server-startup\.js$/,
-                /^src\/server-main\.js$/,
+                /^src\/command-line\.[jt]s$/,
+                /^src\/server-startup\.[jt]s$/,
+                /^src\/server-main\.[jt]s$/,
                 /^src\/startup/,
                 /^default\/config\.yaml$/,
                 /^(startup|startup\/config|startup config|config resolution|command-line|server boot)$/i,
@@ -135,10 +135,10 @@ const RULES = [
         ],
         matches(input) {
             return matchesAny(input, [
-                /^src\/canonical-sqlite(?:-|\.js)/,
+                /^src\/canonical-sqlite(?:-|\.js|\.ts$)/,
                 /^src\/canonical-sqlite-rollout-contract\.js$/,
-                /^src\/canonical-storage-slice-registry\.js$/,
-                /^src\/canonical-sqlite-operator\.js$/,
+                /^src\/canonical-storage-slice-registry\.[jt]s$/,
+                /^src\/canonical-sqlite-operator\.[jt]s$/,
                 /^src\/storage-feature-flags\.js$/,
                 /^src\/endpoints\/character-read-service\.ts$/,
                 /^src\/endpoints\/character-write-service\.ts$/,

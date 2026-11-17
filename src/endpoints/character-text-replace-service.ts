@@ -1,4 +1,4 @@
-import { getCanonicalStorageSlice } from '../canonical-storage-slice-registry.js';
+import { getCanonicalStorageSlice } from '../canonical-storage-slice-registry.ts';
 import { convertWorldInfoToCharacterBook } from './character-card-v2.ts';
 import { editCharacterCard } from './character-write-service.ts';
 import { listCanonicalCharactersBoundToWorld } from './character-store.ts';
@@ -695,7 +695,9 @@ export async function runCharacterTextReplace({ request, apply = false, dependen
     // ---- Area 1: bound World Info book ----
         let refreshedCharacterBook = null;
         if (areas.worldBook && boundWorldName && worldInfoState?.ok) {
-            const book = deps.getCanonicalWorldInfoBook(worldInfoState.db, normalizedWorldName) as WorldBook | null;
+            // The JS state helper only returns ok after opening a database; its
+            // inferred return type does not retain that discriminated union.
+            const book = deps.getCanonicalWorldInfoBook(worldInfoState.db as DatabaseSync, normalizedWorldName) as WorldBook | null;
             if (!book) {
                 result.areas.worldBook = { status: 'missing', name: boundWorldName, matches: [], occurrences: 0 };
             } else {
@@ -704,7 +706,7 @@ export async function runCharacterTextReplace({ request, apply = false, dependen
                 result.areas.worldBook = {
                     status: changed ? (apply ? 'applied' : 'preview') : 'unchanged',
                     name: boundWorldName,
-                    boundCharacterCount: deps.listCanonicalCharactersBoundToWorld(worldInfoState.db, normalizedWorldName).length,
+                    boundCharacterCount: deps.listCanonicalCharactersBoundToWorld(worldInfoState.db as DatabaseSync, normalizedWorldName).length,
                     matches,
                     occurrences: matches.reduce((sum, item) => sum + item.occurrences, 0),
                 };
@@ -717,7 +719,7 @@ export async function runCharacterTextReplace({ request, apply = false, dependen
                 // worker then applies the file projection under its own lock.
                     let repairKey;
                     try {
-                        repairKey = deps.commitWorldBookWithProjectionIntent(worldInfoState.db, {
+                        repairKey = deps.commitWorldBookWithProjectionIntent(worldInfoState.db as DatabaseSync, {
                             directories,
                             name: normalizedWorldName,
                             payload: bookPayload,
@@ -731,7 +733,7 @@ export async function runCharacterTextReplace({ request, apply = false, dependen
                     }
                     result.applied.worldBook = true;
                     try {
-                        deps.replayWorldProjection(worldInfoState.db, { directories, repairKey });
+                        deps.replayWorldProjection(worldInfoState.db as DatabaseSync, { directories, repairKey });
                     } catch {
                     // Canonical commit already happened — a projection failure
                     // stays a durably pending v1 intent, not an un-apply.
@@ -743,7 +745,7 @@ export async function runCharacterTextReplace({ request, apply = false, dependen
                 // The card's embedded snapshot must reflect the post-replace book —
                 // read it back from the same db so preview and apply agree.
                 if (apply && changed) {
-                    const persisted = (deps.getCanonicalWorldInfoBook(worldInfoState.db, normalizedWorldName) as WorldBook | null) ?? bookPayload;
+                    const persisted = (deps.getCanonicalWorldInfoBook(worldInfoState.db as DatabaseSync, normalizedWorldName) as WorldBook | null) ?? bookPayload;
                     refreshedCharacterBook = persisted.originalData
                     ?? (persisted.entries ? deps.convertWorldInfoToCharacterBook(normalizedWorldName, persisted.entries) : null);
                 } else if (changed) {

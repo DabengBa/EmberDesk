@@ -62,7 +62,7 @@ test('create mode restores authoring mirrors and presentation without jQuery or 
     const context = { document: { getElementById: id => elements[id] ?? null, querySelectorAll: () => [] },
         $: () => { throw new Error('create mirrors must not use jQuery'); }, selected_button: '',
         create_save: { name: 'Alice', description: undefined, world: 'W', creator_notes: 'notes', tags: ['a', 'b'], depth_prompt_depth: 0 },
-        default_avatar: 'default.png', formatCreatorNotes: notes => `<b>${notes}</b>`, setCharacterSelectionVisibility: jest.fn(),
+        default_avatar: 'default.png', formatCreatorNotes: notes => `<b>${notes}</b>`, DOMPurify: { sanitize: html => html }, setCharacterSelectionVisibility: jest.fn(),
         setWorldInfoButtonClass: jest.fn(), updateFavButtonState: jest.fn(), checkEmbeddedWorld: jest.fn() };
     extract('function select_rm_create(', 'function select_rm_characters(', context)({ switchMenu: false });
     expect(elements.character_name_pole.value).toBe('Alice'); expect(elements.description_textarea.value).toBe('');

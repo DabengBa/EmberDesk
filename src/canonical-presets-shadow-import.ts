@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import type { DatabaseSync } from 'node:sqlite';
 
-import { getCanonicalMigrationStatus, runCanonicalMigrations } from './canonical-sqlite-migrations.js';
+import { getCanonicalMigrationStatus, runCanonicalMigrations } from './canonical-sqlite-migrations.ts';
 import { persistCanonicalAuditStatus } from './canonical-sqlite-shadow-import.ts';
 import { recordImportLedgerEntry } from './canonical-import-ledger.js';
 import { importPresetFile, PRESETS_OPENAI_API_ID } from './endpoints/presets-store.ts';

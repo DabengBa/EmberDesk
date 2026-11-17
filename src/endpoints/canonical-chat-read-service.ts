@@ -4,7 +4,7 @@ import {
     getCanonicalChatMessagePayloads,
     getCanonicalChatSession,
 } from './canonical-chat-store.ts';
-import { withCanonicalTransaction } from '../canonical-sqlite.js';
+import { withCanonicalTransaction } from '../canonical-sqlite.ts';
 
 export type CanonicalChatLocator = {
     ownerType: 'character' | 'group';
