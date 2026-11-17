@@ -286,7 +286,6 @@ function prepareRegenerateRestore                                      (
 
 
 
-
 /** Select and run the existing provider transport for one bounded recovery attempt. */
 async function runTransportAttempt                                                                                   (input                                                     , ports                                                                                                             )                                   {
     const presetModel = ports.presetModel();
@@ -313,7 +312,6 @@ async function runTransportAttempt                                              
     if (!ports.ownsRun()) throw new Error('Generation was aborted.');
     if (!canPerformTools && ports.hasToolCalls(result)) ports.assertAllowed();
     if (!(canPerformTools && ports.hasToolCalls(result)) && ports.isEmpty(result)) throw ports.emptyFailure();
-    if (!ports.hasToolCalls(result)) ports.requirePipelineCall?.();
     return result;
 }
 
@@ -738,9 +736,23 @@ async function finishStreamAttempt                                           (in
     if (finished) {
         const id = processor.messageId;
         if (!String(messageChunk ?? '').trim()) { ports.clearProcessor(); throw ports.emptyFailure(id); }
-        try { ports.requirePipelineCall?.(); } catch (error) {
-            if (error instanceof Error) (error                                  ).messageId = id;
-            throw error;
+        const reasoning = processor.reasoningHandler.reasoning;
+        const signature = processor.reasoningSignature;
+        const assistant = { role: 'assistant', content: text, ...(reasoning ? { reasoning } : {}), ...(signature ? { signature } : {}) };
+        const textCalls = !withCalls ? ports.textInvocations?.(text, reasoning, assistant) : null;
+        if (textCalls) {
+            await ports.deleteLast();
+            check();
+            const decision = ports.prepareRound(textCalls);
+            ports.clearProcessor();
+            await ports.saveInvocations(textCalls);
+            check();
+            if (decision?.action === 'final') {
+                ports.markComplete(processor);
+                return ports.finalizePipeline({ type, text: decision.text, step: decision.step, meta: decision.meta,
+                    reasoning: processor.reasoningHandler.reasoning, reasoningSignature: processor.reasoningSignature, fromStream: true });
+            }
+            return { pipelineContinuation: true };
         }
         if (input.isOpenAI && attemptModel) ports.setModel(id, attemptModel);
         await ports.finishMessage(id, text);
@@ -1828,6 +1840,7 @@ async function finalizePipelineReply(input                    , ports           
 
 
 
+
 /** Own successful generation response handling, retaining transport and browser work as ports. */
 async function completeGenerationResponse(input                         , ports                         )                   {
     const { data, quietToLoud, jsonSchema, canPerformToolCalls } = input;
@@ -1846,6 +1859,7 @@ async function completeGenerationResponse(input                         , ports 
         return ports.extractJson(data, jsonSchema.returnInvalid ?? false);
     }
     let getMessage = ports.extractMessage(data);
+    const rawMessage = getMessage;
     const title = ports.extractTitle(data);
     let reasoning = ports.extractReasoning(data);
     const imageUrls = ports.extractImages(data);
@@ -1873,6 +1887,20 @@ async function completeGenerationResponse(input                         , ports 
     if (!ports.ownsRun()) return;
     if (canPerformToolCalls) {
         const hasToolCalls = ports.hasToolCalls(data);
+        const provider = data                                                                            ;
+        const assistant = (Array.isArray(provider.choices) ? provider.choices.find(choice => choice.index === 0)?.message : undefined) ?? provider.message;
+        const textCalls = !hasToolCalls ? ports.textInvocations?.(rawMessage, reasoning, assistant) : null;
+        if (textCalls) {
+            await ports.deleteLastMessage();
+            if (!ports.ownsRun()) return;
+            const decision = ports.preparePipeline(textCalls);
+            await ports.saveTools(textCalls, () => ports.ownsRun());
+            if (!ports.ownsRun()) return;
+            if (decision?.action === 'final') {
+                return ports.finalizePipeline({ type, text: decision.text, step: decision.step, meta: decision.meta, reasoning, reasoningSignature, title, imageUrls });
+            }
+            return ports.continueAfterTools();
+        }
         const shouldDeleteMessage = Boolean(ports.hasPipeline?.()) || (['', '...'].includes(getMessage) && !reasoning);
         if (hasToolCalls && shouldDeleteMessage) await ports.deleteLastMessage();
         if (!ports.ownsRun()) return;

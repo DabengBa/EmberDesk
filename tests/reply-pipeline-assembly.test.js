@@ -168,7 +168,41 @@ test('first request reserves step material and instruction before trimming real 
     expect(generate_data.messages.some(m => m.content === 'history-0')).toBe(false);
     expect(generate_data.messages.some(m => m.content === 'history-7')).toBe(true);
     expect(generate_data.messages.some(m => m.content === 'STEP_TAIL')).toBe(true);
-    expect(generate_data.messages.at(-1).content).toContain('must call the submit_story tool exactly once for analyze');
+    expect(generate_data.messages.at(-1).content).toContain('must call the analyze tool exactly once');
+});
+
+test('initial live and preview budgets charge the actual long step tool schema at the history boundary', async () => {
+    const name = 'analyze_' + 'long_tool_name_'.repeat(3);
+    runtime.endPipelineRun();
+    openai.oai_settings.reply_pipeline.steps = [{ tool: name }];
+    // The fixture has no normal binding for this name, so make it runnable.
+    const { feature_settings } = await import('../public/scripts/feature-settings.js');
+    feature_settings.tool_bindings.push({ name, enabled: true });
+    try {
+        runtime.beginPipelineRun();
+        includeHistory = true;
+        count.mockImplementation(async value => (Array.isArray(value) ? value : [value]).reduce((sum, message) => {
+            if (message.content?.includes('"parameters"')) return sum + (message.content.includes(name) ? 40 : 1);
+            return sum + (message.content ? 10 : 0);
+        }, 0));
+        count.mockClear();
+        const history = Array.from({ length: 8 }, (_, i) => ({ role: 'user', content: `history-${7 - i}` }));
+        const run = core.getPipelineRunState();
+        const options = { type: 'normal', pipelineStepTag: `pipeline:${name}`, messages: structuredClone(history) };
+        const [live, , completion] = await openai.prepareOpenAIMessages(options, false, { bookkeep: false });
+        expect(completion.error).toBeUndefined();
+        const charged = count.mock.calls.find(([messages]) => messages?.[0]?.content?.includes('"parameters"'))?.[0][0].content;
+        const { generate_data } = await openai.buildChatCompletionRequest({ type: 'normal', messages: live, model: 'gpt-4o-mini', emitSettingsReady: true });
+        expect(JSON.parse(charged)).toEqual(generate_data.tools);
+        expect(live.some(message => message.content === 'history-0')).toBe(false);
+        count.mockClear();
+        const [preview] = await openai.prepareOpenAIMessages({ ...options, messages: structuredClone(history), pipelinePreviewBase: { step: run.steps[0], total: 1, tag: `pipeline:${name}`, model: 'gpt-4o-mini' } }, true, { bookkeep: false });
+        const previewCharge = count.mock.calls.find(([messages]) => messages?.[0]?.content?.includes('"parameters"'))?.[0][0].content;
+        expect(JSON.parse(previewCharge)).toEqual(generate_data.tools);
+        expect(preview.filter(message => message.content?.startsWith('history-'))).toEqual(live.filter(message => message.content?.startsWith('history-')));
+    } finally {
+        feature_settings.tool_bindings.pop();
+    }
 });
 
 test.each(['first', 'closing'])('%s preview uses the first live round history budget', async round => {
@@ -493,8 +527,8 @@ test.each([
         const normalized = wide.messages.map(message => Object.fromEntries(Object.entries(message).filter(([, value]) => value !== undefined)
             .map(([key, value]) => [key, typeof value === 'string' ? value : JSON.stringify(value)])));
         const messageTokens = (await Promise.all(normalized.map(message => count([message])))).reduce((a, b) => a + b, 0);
-        const toolTokens = await count([{ role: 'system', content: JSON.stringify([core.PIPELINE_STORY_TOOL]) }], true);
         const run = core.getPipelineRunState();
+        const toolTokens = await count([{ role: 'system', content: JSON.stringify([core.pipelineStepTool(run.steps[run.index])]) }], true);
         const instructionTokens = await count([{ role: 'system', content: core.buildStepPrompt(run.steps[run.index], run.index, run.steps.length) }], true);
         manager.serviceSettings.openai_max_context = 20 + 3 + messageTokens + toolTokens + instructionTokens;
         const exact = await assembleHistory(chat, { raw: true });

@@ -113,7 +113,7 @@ export function resolvePipelineSteps(pipeline, availableToolNames) {
  * @returns {string} Instruction text
  */
 export function buildStepPrompt(step, index, total) {
-    const header = `[Reply pipeline ${index + 1}/${total}] This round you must call the submit_story tool exactly once for ${step.tool}.`;
+    const header = `[Reply pipeline ${index + 1}/${total}] This round you must call the ${step.tool} tool exactly once.`;
     const detail = typeof step?.prompt === 'string' && step.prompt.trim().length > 0 ? ` ${step.prompt.trim()}` : '';
     const history = index === 0
         ? ' Historical submit_story calls and their receipts record prior conversation content, including past user messages. Do not repeat those historical calls; follow the current step instruction.'
@@ -126,6 +126,11 @@ export function buildStepPrompt(step, index, total) {
  */
 export const PIPELINE_FALLBACK_PROMPT = '[Reply pipeline] All pipeline steps are complete. Write the final user-facing reply now, based on the step results above. Do not call any tools in this round.';
 
+/** Create the same step-specific schema for request shaping and token budgeting. */
+export function pipelineStepTool(step) {
+    return { ...PIPELINE_STORY_TOOL, function: { ...PIPELINE_STORY_TOOL.function, name: step.tool } };
+}
+
 /**
  * Applies a pipeline step's request overrides (forced tool_choice, token cap,
  * reasoning effort) onto a request body. Shared by the live CHAT_COMPLETION_SETTINGS_READY
@@ -137,18 +142,19 @@ export const PIPELINE_FALLBACK_PROMPT = '[Reply pipeline] All pipeline steps are
  * @param {object} data Request body (generate_data), mutated in place
  * @param {object} step Runnable pipeline step
  * @param {object} [options] Options
- * @param {string} [options.enforceMode] Pipeline enforce mode ('forced' pins tool_choice)
+ * Legacy enforce modes are accepted but do not change the forced choice.
  * @param {*} [options.reasoningEffort] Pre-resolved reasoning effort; assigned
  *        verbatim when the step declares one, so 'auto' resolves to undefined
  *        and drops out of the serialized body exactly like the live path.
  * @returns {object} The mutated request body
  */
-export function applyStepRequestOverrides(data, step, { enforceMode = 'soft', reasoningEffort = undefined } = {}) {
+export function applyStepRequestOverrides(data, step, { reasoningEffort = undefined } = {}) {
     if (!data || typeof data !== 'object' || !step) {
         return data;
     }
-    if (enforceMode === 'forced' && Array.isArray(data.tools)) {
-        data.tool_choice = { type: 'function', function: { name: 'submit_story' } };
+    if (Array.isArray(data.tools)) {
+        data.tools = [pipelineStepTool(step)];
+        data.tool_choice = { type: 'function', function: { name: step.tool } };
     }
 
     if (step.maxTokens) {
@@ -225,7 +231,7 @@ export function validatePipelineToolCalls(calls, assistantMessage = null) {
     if (!run || !Array.isArray(calls) || calls.length === 0) return;
     const step = run.steps[run.index];
     if (run.fallbackRound || run.pendingAssistant || calls.length !== 1
-        || calls[0]?.function?.name !== 'submit_story' || !calls[0]?.id || !step
+        || calls[0]?.function?.name !== step?.tool || !calls[0]?.id || !step
         || run.callIds?.has(calls[0].id)) {
         throw new Error(`Reply pipeline: expected exactly one current-step call (${run.fallbackRound ? 'none' : step?.tool}).`);
     }

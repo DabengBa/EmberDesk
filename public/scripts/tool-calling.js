@@ -640,6 +640,10 @@ export class ToolManager {
             // Find a choice with 0-index
             const choice = data.choices.find(choice => choice.index === 0);
 
+            // Malformed call containers must not be mistaken for text-only steps.
+            if (getPipelineRunState() && choice?.message?.tool_calls != null && !Array.isArray(choice.message.tool_calls)) {
+                return [choice.message.tool_calls];
+            }
             if (choice && typeof choice.message === 'object' && Array.isArray(choice.message.tool_calls)) {
                 // Add OpenRouter signatures
                 if (Array.isArray(choice.message.reasoning_details)) {
@@ -705,7 +709,7 @@ export class ToolManager {
             const name = toolCall.function.name;
             if (getPipelineRunState()) {
                 const args = typeof parameters === 'string' ? JSON.parse(parameters) : parameters;
-                result.invocations.push({ id, displayName: getPipelineRunState().steps[getPipelineRunState().index].tool, name, parameters: stringify(parameters), result: args.content, error: false, signature: toolCall.signature || null, reasoning: reasoningText || null });
+                result.invocations.push({ id, displayName: getPipelineRunState().steps[getPipelineRunState().index].tool, name: 'submit_story', parameters: stringify(parameters), result: args.content, error: false, signature: toolCall.signature || null, reasoning: reasoningText || null });
                 continue;
             }
             const displayName = ToolManager.getDisplayName(name);
