@@ -260,7 +260,7 @@ Failure behavior:
 
 The service is route-adjacent instead of storage-owned:
 
-- `characters.js` still owns Express routes, middleware, status mapping, JSON response bodies, and `applyInteractionPerfHeaders()`
+- `src/endpoints/characters.js` registers Express routes and middleware and supplies `applyInteractionPerfHeaders()`; `src/endpoints/character-read-routes.ts` owns the read handlers, status mapping and JSON response bodies
 - `character-index.js` no longer participates in this service boundary during normal runtime
 - `processCharacter()` and card conversion remain in the character endpoint boundary instead of moving into the service
 

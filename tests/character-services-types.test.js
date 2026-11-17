@@ -31,6 +31,14 @@ function compile(source) {
     }
 }
 
+test('strict NodeNext accepts all character route modules', () => {
+    const modules = ['character-read-routes.ts', 'character-write-routes.ts', 'character-edit-routes.ts',
+        'character-merge-routes.ts', 'character-replace-routes.ts', 'character-import-routes.ts',
+        'character-delete-preflight-routes.ts', 'character-transfer-routes.ts'];
+    const result = compile(modules.map(name => `import ${modulePath(name)};`).join('\n'));
+    expect(result).toEqual({ status: 0, diagnostics: '' });
+});
+
 test('strict consumers can compose reads, writes, text replacement and import callbacks', () => {
     const routeSource = fs.readFileSync(path.join(repoRoot, 'src/endpoints/characters.js'), 'utf8');
     const factoryReturn = routeSource.match(/ \* @returns \{(.+)\}\r?\n \*\/\r?\nfunction createCharacterWriteDependencies\(/)?.[1];

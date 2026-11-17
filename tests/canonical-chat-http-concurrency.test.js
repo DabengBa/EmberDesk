@@ -64,6 +64,55 @@ async function post(route, body) {
     return fetch(`${url}${route}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
 }
 
+test('compatibility export serves canonical JSONL and text, and reports a missing chat', async () => {
+    const jsonl = await post('/export', { avatar_url, file: 'first.jsonl', exportfilename: 'export.jsonl', format: 'jsonl' });
+    expect(jsonl.status).toBe(200);
+    const jsonlBody = await jsonl.json();
+    expect(jsonlBody.message).toBe('Chat saved to export.jsonl');
+    expect(jsonlBody.result.split('\n').filter(Boolean).map(JSON.parse)).toEqual(payload);
+
+    const text = await post('/export', { avatar_url, file: 'first.jsonl', exportfilename: 'export.txt', format: 'txt' });
+    expect(text.status).toBe(200);
+    expect(await text.json()).toEqual({ message: 'Chat saved to export.txt', result: 'User: Original\n\n' });
+
+    const missing = await post('/export', { avatar_url, file: 'missing.jsonl', format: 'jsonl' });
+    expect(missing.status).toBe(404);
+    expect((await missing.json()).message).toContain('Could not find JSONL file to export.');
+    const groupSearch = await post('/search', { group_id: 'legacy-group', query: 'Original' });
+    expect(await groupSearch.json()).toEqual([]);
+});
+
+test('legacy avatar input handling differs between get and import', async () => {
+    const get = await post('/get', { avatar_url: 42 });
+    expect(get.status).toBe(200);
+    expect(await get.json()).toEqual({});
+    const imported = await post('/import', {
+        avatar_url: 42, file_type: 'jsonl', character_name: 'Alice', user_name: 'User',
+        operationId: 'numeric-avatar-import', testUpload: '{"chat_metadata":{}}',
+    });
+    expect(imported.status).toBe(500);
+});
+
+test('import preserves the existing upload cleanup policy for invalid and successful inputs', async () => {
+    const uploads = () => fs.readdirSync(root).filter(name => name.startsWith('upload-')).sort();
+    const body = { avatar_url, character_name: 'Alice', user_name: 'User' };
+    let before = uploads();
+    let result = await post('/import', { ...body, file_type: 'json', operationId: 'cleanup-invalid-json', testUpload: '{' });
+    expect(await result.json()).toEqual({ error: true });
+    expect(uploads()).toEqual(before);
+
+    result = await post('/import', { ...body, file_type: 'jsonl', operationId: 'cleanup-invalid-jsonl', testUpload: '{' });
+    expect(await result.json()).toEqual({ error: true });
+    const retained = uploads().filter(name => !before.includes(name));
+    expect(retained).toHaveLength(1);
+    fs.unlinkSync(path.join(root, retained[0]));
+
+    before = uploads();
+    result = await post('/import', { ...body, file_type: 'jsonl', operationId: 'cleanup-valid-jsonl', testUpload: '{"chat_metadata":{}}\n{"mes":"cleanup"}' });
+    expect((await result.json()).res).toBe(true);
+    expect(uploads()).toEqual(before);
+});
+
 test('import retry after a disconnected response does not overwrite later edits', async () => {
     const body = { avatar_url, file_type: 'jsonl', character_name: 'Alice', user_name: 'User', operationId: 'import-lost-response', testUpload: '{"chat_metadata":{}}\n{"mes":"imported"}' };
     await expect(fetch(`${url}/import`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-test-drop-response': 'yes' }, body: JSON.stringify(body) })).rejects.toThrow();

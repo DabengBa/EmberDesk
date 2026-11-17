@@ -49,7 +49,7 @@ Important constraints:
 
 `public/scripts/secrets.js` maps `SECRET_KEYS.OPENAI_FALLBACK` to `#fallback_provider_api_key`. `public/scripts/openai.js` delegates fallback status, save, clear, and mask behavior to the state module while keeping current event binding and visible drawer structure.
 
-On the server, `src/endpoints/secrets.js` remains the only public manager/route boundary. When canonical storage flags and the `secrets` audit gate pass, `SecretManager` reads and writes `secret_records` through `src/canonical-secrets-backend.ts`; writes commit SQLite first and then atomically project `secrets.json`. Projection failures record only record identifiers, operation, error class, and timestamps, keep DB reads authoritative, and block later writes until operator repair and re-audit.
+On the server, `src/endpoints/secrets.js` remains the public manager/router boundary and exports the router created by `src/endpoints/secrets-routes.ts`. When canonical storage flags and the `secrets` audit gate pass, `SecretManager` reads and writes `secret_records` through `src/canonical-secrets-backend.ts`; writes commit SQLite first. When projection is enabled, they then atomically project `secrets.json`; projection is off by default. Projection failures record only record identifiers, operation, error class, and timestamps, keep DB reads authoritative, and block later writes until operator repair and re-audit.
 
 The file backend remains available when canonical flags are off. Rollback after canonical writes is valid only when the `secrets` audit is clean, the compatibility projection is current, and no `secret_projection_repairs` row remains open.
 
