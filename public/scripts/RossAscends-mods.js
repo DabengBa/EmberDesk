@@ -158,27 +158,27 @@ export async function RA_CountCharTokens() {
             return;
         }
 
-        const counter = $(tokenCounter);
-        const input = $(document.getElementById(counter.data('token-counter')));
-        const isPermanent = counter.data('token-permanent') === true;
-        const value = String(input.val());
+        const counter = tokenCounter;
+        const input = document.getElementById(counter.dataset.tokenCounter);
+        const isPermanent = counter.dataset.tokenPermanent === 'true';
 
-        if (input.length === 0) {
-            counter.text('Invalid input reference');
+        if (!input) {
+            counter.textContent = 'Invalid input reference';
             continue;
         }
+        const value = String(input.value);
 
         if (!value) {
-            input.data('last-value-hash', '');
-            counter.text(0);
+            delete input.dataset.lastValueHash;
+            counter.textContent = '0';
             continue;
         }
 
         const valueHash = getStringHash(value);
 
-        if (input.data('last-value-hash') === valueHash) {
-            total_tokens += Number(counter.text());
-            permanent_tokens += isPermanent ? Number(counter.text()) : 0;
+        if (input.dataset.lastValueHash === String(valueHash)) {
+            total_tokens += Number(counter.textContent);
+            permanent_tokens += isPermanent ? Number(counter.textContent) : 0;
         } else {
             // We substitute macro for existing characters, but not for the character being created
             const valueToCount = menu_type === 'create' ? value : substituteParams(value);
@@ -188,20 +188,23 @@ export async function RA_CountCharTokens() {
                 return;
             }
 
-            counter.text(tokens);
+            counter.textContent = String(tokens);
             total_tokens += tokens;
             permanent_tokens += isPermanent ? tokens : 0;
-            input.data('last-value-hash', valueHash);
+            input.dataset.lastValueHash = String(valueHash);
         }
     }
 
     // Warn if total tokens exceeds the limit of half the max context
     const tokenLimit = Math.max(((main_api !== 'openai' ? max_context : oai_settings.openai_max_context) / 2), 1024);
     const showWarning = (total_tokens > tokenLimit);
-    $('#result_info_total_tokens').text(total_tokens);
-    $('#result_info_permanent_tokens').text(permanent_tokens);
-    $('#result_info_text').toggleClass('neutral_warning', showWarning);
-    $('#chartokenwarning').toggle(showWarning);
+    const total = document.getElementById('result_info_total_tokens');
+    const permanent = document.getElementById('result_info_permanent_tokens');
+    if (total) total.textContent = String(total_tokens);
+    if (permanent) permanent.textContent = String(permanent_tokens);
+    document.getElementById('result_info_text')?.classList.toggle('neutral_warning', showWarning);
+    const warning = document.getElementById('chartokenwarning');
+    if (warning) warning.style.display = showWarning ? '' : 'none';
 }
 export async function favsToHotswap() {
     const entities = getEntitiesList({ doFilter: false });
@@ -226,21 +229,21 @@ export async function favsToHotswap() {
 //changes input bar and send button display depending on connection status
 function RA_checkOnlineStatus() {
     if (online_status == 'no_connection') {
-        const send_textarea = $('#send_textarea');
-        send_textarea.attr('placeholder', send_textarea.attr('no_connection_text')); //Input bar placeholder tells users they are not connected
-        $('#send_form').addClass('no-connection');
-        $('#send_but').addClass('displayNone'); //send button is hidden when not connected;
+        const send_textarea = document.getElementById('send_textarea');
+        if (send_textarea?.hasAttribute('no_connection_text')) send_textarea.setAttribute('placeholder', send_textarea.getAttribute('no_connection_text'));
+        document.getElementById('send_form')?.classList.add('no-connection');
+        document.getElementById('send_but')?.classList.add('displayNone');
         connection_made = false;
     } else {
         if (online_status !== undefined && online_status !== 'no_connection') {
-            const send_textarea = $('#send_textarea');
-            send_textarea.attr('placeholder', send_textarea.attr('connected_text')); //on connect, placeholder tells user to type message
-            $('#send_form').removeClass('no-connection');
+            const send_textarea = document.getElementById('send_textarea');
+            if (send_textarea?.hasAttribute('connected_text')) send_textarea.setAttribute('placeholder', send_textarea.getAttribute('connected_text'));
+            document.getElementById('send_form')?.classList.remove('no-connection');
             connection_made = true;
             retry_delay = 100;
 
             if (!is_send_press) {
-                $('#send_but').removeClass('displayNone'); //on connect, send button shows
+                document.getElementById('send_but')?.classList.remove('displayNone');
             }
         }
     }
@@ -322,23 +325,52 @@ function saveUserInput() {
 }
 const saveUserInputDebounced = debounce(saveUserInput);
 
+// Matches layout visibility (including zero-sized inline boxes), not CSS visibility.
+function isVisible(element) {
+    return !!element && !!(element.offsetWidth || element.offsetHeight || element.getClientRects().length);
+}
+
+const dragCleanups = new WeakMap();
+
 // Make the DIV element draggable:
 
 /**
  * Make the given element draggable (e.g. zoomed avatars, extension windows).
- * @param {JQuery} $elmnt - The element to make draggable.
+ * @param {HTMLElement} element - The element to make draggable.
  */
-export function dragElement($elmnt) {
+export function dragElement(element) {
+    dragCleanups.get(element)?.();
     let actionType = null; // "drag" or "resize"
     let isMouseDown = false;
+    let resizeChanged = false;
 
     let pos1 = 0, pos2 = 0, pos3 = 0, pos4 = 0;
     let height, width, top, left,
         maxX, maxY, winHeight, winWidth;
 
-    const elmntName = $elmnt.attr('id');
-    const elmntNameEscaped = $.escapeSelector(elmntName);
-    const $elmntHeader = $(`#${elmntNameEscaped}header`);
+    const elmntName = element.id;
+    const header = document.getElementById(`${elmntName}header`);
+
+    // jQuery width/height use content-box dimensions, regardless of box-sizing.
+    function size(target, axis) {
+        if (!target) return 0;
+        const style = getComputedStyle(target);
+        let value = parseFloat(style[axis]) || 0;
+        if (style.boxSizing === 'border-box') {
+            const edges = axis === 'width' ? ['Left', 'Right'] : ['Top', 'Bottom'];
+            for (const edge of edges) value -= (parseFloat(style[`padding${edge}`]) || 0) + (parseFloat(style[`border${edge}Width`]) || 0);
+        }
+        return value;
+    }
+    function setSize(target, axis, value) {
+        if (value == null || !Number.isFinite(value)) return;
+        const style = getComputedStyle(target);
+        if (style.boxSizing === 'border-box') {
+            const edges = axis === 'width' ? ['Left', 'Right'] : ['Top', 'Bottom'];
+            for (const edge of edges) value += (parseFloat(style[`padding${edge}`]) || 0) + (parseFloat(style[`border${edge}Width`]) || 0);
+        }
+        target.style[axis] = `${Math.max(0, value)}px`;
+    }
 
     // Helper: Notify listeners when a drag/resize interaction ends
     function notifyResize() {
@@ -349,20 +381,20 @@ export function dragElement($elmnt) {
 
     // Helper: Clamp element within viewport
     function clampToViewport() {
-        if (top <= 0) $elmnt.css('top', '0px');
-        else if (maxY >= winHeight) $elmnt.css('top', winHeight - maxY + top - 1 + 'px');
-        if (left <= 0) $elmnt.css('left', '0px');
-        else if (maxX >= winWidth) $elmnt.css('left', winWidth - maxX + left - 1 + 'px');
+        if (top <= 0) element.style.top = '0px';
+        else if (maxY >= winHeight) element.style.top = winHeight - maxY + top - 1 + 'px';
+        if (left <= 0) element.style.left = '0px';
+        else if (maxX >= winWidth) element.style.left = winWidth - maxX + left - 1 + 'px';
     }
 
     // Observer for style changes (position/size)
     const observer = new MutationObserver((mutations) => {
-        const $target = $(mutations[0].target);
+        const target = mutations[0].target;
         if (
-            !$target.is(':visible') ||
-            $target.hasClass('resizing') ||
-            $target.height() < 50 ||
-            $target.width() < 50 ||
+            !isVisible(target) ||
+            target.classList.contains('resizing') ||
+            size(target, 'height') < 50 ||
+            size(target, 'width') < 50 ||
             isMobile() ||
             !isMouseDown
         ) {
@@ -370,7 +402,6 @@ export function dragElement($elmnt) {
             return;
         }
 
-        const element = /** @type {HTMLElement} */ ($target[0]);
         const style = getComputedStyle(element);
         height = parseInt(style.height);
         width = parseInt(style.width);
@@ -382,36 +413,31 @@ export function dragElement($elmnt) {
         winHeight = window.innerHeight;
 
         if (actionType === 'resize') {
-            let containerAspectRatio = height / width;
-            if ($elmnt.attr('id').startsWith('zoomFor_')) {
-                const zoomedAvatarImage = $elmnt.find('.zoomed_avatar_img');
-                const imgHeight = zoomedAvatarImage.height();
-                const imgWidth = zoomedAvatarImage.width();
+            resizeChanged = true;
+            const containerAspectRatio = height / width;
+            if (elmntName.startsWith('zoomFor_')) {
+                const zoomedAvatarImage = element.querySelector('.zoomed_avatar_img');
+                const imgHeight = size(zoomedAvatarImage, 'height');
+                const imgWidth = size(zoomedAvatarImage, 'width');
                 const imageAspectRatio = imgHeight / imgWidth;
                 if (containerAspectRatio !== imageAspectRatio) {
-                    $elmnt.css('width', $elmnt.width());
-                    $elmnt.css('height', $elmnt.width() * imageAspectRatio);
+                    setSize(element, 'width', size(element, 'width'));
+                    setSize(element, 'height', size(element, 'width') * imageAspectRatio);
                 }
-                if (top + $elmnt.height() >= winHeight) {
-                    $elmnt.css('height', winHeight - top - 1 + 'px');
-                    $elmnt.css('width', (winHeight - top - 1) / imageAspectRatio + 'px');
+                if (top + size(element, 'height') >= winHeight) {
+                    setSize(element, 'height', winHeight - top - 1);
+                    setSize(element, 'width', (winHeight - top - 1) / imageAspectRatio);
                 }
-                if (left + $elmnt.width() >= winWidth) {
-                    $elmnt.css('width', winWidth - left - 1 + 'px');
-                    $elmnt.css('height', (winWidth - left - 1) * imageAspectRatio + 'px');
+                if (left + size(element, 'width') >= winWidth) {
+                    setSize(element, 'width', winWidth - left - 1);
+                    setSize(element, 'height', (winWidth - left - 1) * imageAspectRatio);
                 }
             } else {
-                if (top + $elmnt.height() >= winHeight) $elmnt.css('height', winHeight - top - 1 + 'px');
-                if (left + $elmnt.width() >= winWidth) $elmnt.css('width', winWidth - left - 1 + 'px');
+                if (top + size(element, 'height') >= winHeight) setSize(element, 'height', winHeight - top - 1);
+                if (left + size(element, 'width') >= winWidth) setSize(element, 'width', winWidth - left - 1);
             }
-            //if (top < topBarLastY && maxX >= topBarFirstX && left <= topBarFirstX) {
-            //    $elmnt.css('width', width - 1 + 'px');
-            // }
-            $elmnt.css({ left, top });
-            $elmnt.off('mouseup').on('mouseup', () => {
-                notifyResize();
-                observer.disconnect();
-            });
+            element.style.left = `${left}px`;
+            element.style.top = `${top}px`;
         } else if (actionType === 'drag') {
             clampToViewport();
         }
@@ -426,8 +452,8 @@ export function dragElement($elmnt) {
             pos3 = e.clientX;
             pos4 = e.clientY;
         }
-        $(document).on('mouseup', closeDragElement);
-        $(document).on('mousemove', elementDrag);
+        document.addEventListener('mouseup', closeDragElement);
+        document.addEventListener('mousemove', elementDrag);
     }
 
     function elementDrag(e) {
@@ -436,51 +462,61 @@ export function dragElement($elmnt) {
         pos2 = pos4 - e.clientY;
         pos3 = e.clientX;
         pos4 = e.clientY;
-        $elmnt.attr('data-dragged', 'true');
-        $elmnt.css('left', ($elmnt.offset().left - pos1) + 'px');
-        $elmnt.css('top', ($elmnt.offset().top - pos2) + 'px');
-        $elmnt.css('margin', 'unset');
-        $elmnt.css('height', height);
-        $elmnt.css('width', width);
+        element.setAttribute('data-dragged', 'true');
+        const rect = element.getBoundingClientRect();
+        element.style.left = (rect.left + window.scrollX - pos1) + 'px';
+        element.style.top = (rect.top + window.scrollY - pos2) + 'px';
+        element.style.margin = 'unset';
+        setSize(element, 'height', height);
+        setSize(element, 'width', width);
     }
 
     function closeDragElement() {
         isMouseDown = false;
         actionType = null;
-        $(document).off('mouseup', closeDragElement);
-        $(document).off('mousemove', elementDrag);
-        $elmnt.attr('data-dragged', 'false');
+        document.removeEventListener('mouseup', closeDragElement);
+        document.removeEventListener('mousemove', elementDrag);
+        element.setAttribute('data-dragged', 'false');
         observer.disconnect();
         notifyResize();
     }
 
     // Setup event listeners
-    if ($elmntHeader.length) {
-        $elmntHeader.off('mousedown').on('mousedown', (e) => {
-            if ($(e.target).hasClass('drag-grabber')) {
-                actionType = 'drag';
-                isMouseDown = true;
-                observer.observe($elmnt[0], { attributes: true, attributeFilter: ['style'] });
-                dragMouseDown(e);
-            }
-        });
+    function onHeaderDown(e) {
+        if (e.target.classList.contains('drag-grabber')) {
+            actionType = 'drag';
+            isMouseDown = true;
+            observer.observe(element, { attributes: true, attributeFilter: ['style'] });
+            dragMouseDown(e);
+        }
     }
-
-    $elmnt.off('mousedown').on('mousedown', (e) => {
-        const rect = $elmnt[0].getBoundingClientRect();
+    function onElementDown(e) {
+        const rect = element.getBoundingClientRect();
         const resizeMargin = 16;
         const isNearRight = e.clientX > rect.right - resizeMargin;
         const isNearBottom = e.clientY > rect.bottom - resizeMargin;
         if (isNearRight && isNearBottom) {
             actionType = 'resize';
             isMouseDown = true;
-            observer.observe($elmnt[0], { attributes: true, attributeFilter: ['style'] });
+            resizeChanged = false;
+            observer.observe(element, { attributes: true, attributeFilter: ['style'] });
         }
-    });
-
-    $elmnt.off('mouseup').on('mouseup', () => {
+    }
+    function onElementUp() {
+        if (resizeChanged) notifyResize();
         isMouseDown = false;
         actionType = null;
+        observer.disconnect();
+    }
+    header?.addEventListener('mousedown', onHeaderDown);
+    element.addEventListener('mousedown', onElementDown);
+    element.addEventListener('mouseup', onElementUp);
+    dragCleanups.set(element, () => {
+        header?.removeEventListener('mousedown', onHeaderDown);
+        element.removeEventListener('mousedown', onElementDown);
+        element.removeEventListener('mouseup', onElementUp);
+        document.removeEventListener('mouseup', closeDragElement);
+        document.removeEventListener('mousemove', elementDrag);
         observer.disconnect();
     });
 }
@@ -497,9 +533,9 @@ export function initRossMods({ openWorkspaceShellSettings = null, drawerService 
         SelectedCharacterTab?.querySelectorAll(':scope > h2').forEach(heading => { heading.innerHTML = ''; }); // empty nav's 3rd panel tab
     });
     //when any input is made to the create/edit character form textareas
-    $('#rm_ch_create_block').on('input', function () { countTokensDebounced(); });
+    document.getElementById('rm_ch_create_block')?.addEventListener('input', countTokensDebounced);
     //when any input is made to the advanced editing popup textareas
-    $('#character_popup').on('input', function () { countTokensDebounced(); });
+    document.getElementById('character_popup')?.addEventListener('input', countTokensDebounced);
 
     // initial status check
     RA_checkOnlineStatus();
@@ -519,8 +555,8 @@ export function initRossMods({ openWorkspaceShellSettings = null, drawerService 
     // race window where a nav click could interleave with the restore.
     OpenNavPanels(drawerService);
 
-    $(SelectedCharacterTab).on('click', function () { accountStorage.setItem('SelectedNavTab', 'rm_button_selected_ch'); });
-    $('#rm_button_characters').on('click', function () { accountStorage.setItem('SelectedNavTab', 'rm_button_characters'); });
+    SelectedCharacterTab?.addEventListener('click', function () { accountStorage.setItem('SelectedNavTab', 'rm_button_selected_ch'); });
+    document.getElementById('rm_button_characters')?.addEventListener('click', function () { accountStorage.setItem('SelectedNavTab', 'rm_button_characters'); });
 
     // when a char is selected from the list, save them as the auto-load character for next page load
 
@@ -539,12 +575,12 @@ export function initRossMods({ openWorkspaceShellSettings = null, drawerService 
 
     restoreUserInput();
 
-    $(document).on('keydown', async function (event) {
-        if (event.key !== 'Escape') await processHotkeys(event.originalEvent);
+    document.addEventListener('keydown', async function (event) {
+        if (event.key !== 'Escape') await processHotkeys(event);
     });
     // Let the React chat owner consume edit/stop Escape before legacy panels.
-    $(window).on('keydown', async function (event) {
-        if (event.key === 'Escape' && !event.originalEvent.defaultPrevented) await processHotkeys(event.originalEvent);
+    window.addEventListener('keydown', async function (event) {
+        if (event.key === 'Escape' && !event.defaultPrevented) await processHotkeys(event);
     });
 
     const hotkeyTargets = {
@@ -588,8 +624,8 @@ export function initRossMods({ openWorkspaceShellSettings = null, drawerService 
         }
 
         if (event.key == 'Escape') { //closes various panels
-            if ($('#dialogue_popup').is(':visible')) {
-                if ($('#dialogue_popup_cancel').is(':visible')) {
+            if (isVisible(document.getElementById('dialogue_popup'))) {
+                if (isVisible(document.getElementById('dialogue_popup_cancel'))) {
                     runDialoguePopupCommand('cancelDialoguePopup');
                     return;
                 } else {
@@ -598,17 +634,17 @@ export function initRossMods({ openWorkspaceShellSettings = null, drawerService 
                 }
             }
 
-            if ($('#select_chat_popup').is(':visible')) {
+            if (isVisible(document.getElementById('select_chat_popup'))) {
                 document.getElementById('shadow_select_chat_popup').close();
                 return;
             }
 
-            if ($('#character_popup').is(':visible')) {
-                $('#character_cross').trigger('click');
+            if (isVisible(document.getElementById('character_popup'))) {
+                document.getElementById('character_cross')?.click();
                 return;
             }
 
-            if ($('#dialogue_del_mes_cancel').is(':visible')) {
+            if (isVisible(document.getElementById('dialogue_del_mes_cancel'))) {
                 runDeleteMessageCommand('cancel');
                 return;
             }
@@ -616,18 +652,18 @@ export function initRossMods({ openWorkspaceShellSettings = null, drawerService 
             if (drawerService.handleEscape('primary')) return;
             if (drawerService.handleEscape('world')) return;
 
-            const movingDivs = $('#movingDivs > div').toArray().reverse();
+            const movingDivs = Array.from(document.querySelectorAll('#movingDivs > div')).reverse();
             for (const div of movingDivs) {
-                if ($(div).is(':visible')) {
-                    $(div).find('.floating_panel_close, .dragClose').trigger('click');
+                if (isVisible(div)) {
+                    div.querySelectorAll('.floating_panel_close, .dragClose').forEach(button => button.click());
                     return;
                 }
             }
 
             if (drawerService.handleEscape('right')) return;
-            if ($('.draggable').is(':visible')) {
+            if (Array.from(document.querySelectorAll('.draggable')).some(isVisible)) {
                 // Remove the first matched element
-                $('.draggable:first').remove();
+                document.querySelector('.draggable')?.remove();
                 return;
             }
         }

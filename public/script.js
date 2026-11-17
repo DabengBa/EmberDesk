@@ -408,7 +408,7 @@ import {
 } from './scripts/character-library-query-helpers.js';
 import { ensureReactPanelStylesheet, mountReactWorkspaceShellChrome, mountReactSettingsPanel, loadWorkspacePanelsModule } from './scripts/workspace-panels-react-bridge.js';
 import { initChatMemory, getChatMemoryDisplayItems } from './scripts/chat-memory-service.js';
-import { getRequestHeaders, installAjaxCsrfPrefilter, loadCsrfToken } from './scripts/request-context.js';
+import { getRequestHeaders, loadCsrfToken } from './scripts/request-context.js';
 import { installPublicBrowserApi } from './scripts/public-api.js';
 import { createReactRuntimeProvider } from './scripts/react-runtime-provider.js';
 import { createSettingsWriteOwner } from './scripts/settings-write-owner.js';
@@ -2285,7 +2285,7 @@ function ensureCharacterAuthoringReactHost() {
 }
 
 function getCurrentCharacterAuthoringMode() {
-    return $('#form_create').attr('actiontype') === 'editcharacter' ? 'edit' : 'create';
+    return document.getElementById('form_create')?.getAttribute('actiontype') === 'editcharacter' ? 'edit' : 'create';
 }
 
 // Session identity, not card object identity: card refreshes are allowed while
@@ -2318,7 +2318,7 @@ function getCharacterAuthoringReactBridgeState(stateOverrides = {}) {
     const draft = stateOverrides?.draft && typeof stateOverrides.draft === 'object'
         ? createCharacterAuthoringDraft(stateOverrides.draft, { mode })
         : sourceDraft;
-    const title = draft.name.trim() || String($('#character_popup-button-h3').text() || '').trim();
+    const title = draft.name.trim() || String(document.getElementById('character_popup-button-h3')?.textContent || '').trim();
 
     return {
         mode,
@@ -2329,8 +2329,8 @@ function getCharacterAuthoringReactBridgeState(stateOverrides = {}) {
         externalMediaAllowed: mode === 'edit' && isCharacterExternalMediaAllowed(power_user, sourceCharacter?.avatar, sourceCharacter?.canonical_id),
         avatarUrl: draft.avatar ? getThumbnailUrl('avatar', draft.avatar) : '',
         tokenSummary: {
-            total: String($('#result_info_total_tokens').text() || '').trim(),
-            permanent: String($('#result_info_permanent_tokens').text() || '').trim(),
+            total: String(document.getElementById('result_info_total_tokens')?.textContent || '').trim(),
+            permanent: String(document.getElementById('result_info_permanent_tokens')?.textContent || '').trim(),
         },
         unsupportedFields: Array.isArray(draft.unsupportedFields) ? [...draft.unsupportedFields] : [],
         managementActions: getCharacterManagementDropdownActions(),
@@ -2381,11 +2381,12 @@ function getCharacterManagementDropdownActions() {
 let authoringMirrorWriteDepth = 0;
 
 function setAuthoringInputValue(selector, value) {
-    const element = $(selector);
-    element.val(value ?? '');
+    const element = document.querySelector(selector);
+    if (!element) return;
+    element.value = value ?? '';
     authoringMirrorWriteDepth += 1;
     try {
-        element.trigger('input');
+        element.dispatchEvent(new Event('input', { bubbles: true }));
     } finally {
         authoringMirrorWriteDepth -= 1;
     }
@@ -2659,13 +2660,13 @@ function getCharacterAuthoringReactCommands() {
                 return false;
             },
             deleteAuthoring: () => {
-                $('#delete_button').trigger('click');
+                document.getElementById('delete_button')?.click();
                 return false;
             },
             duplicateAuthoring: async payload => {
                 // Duplicate reads the saved card — persist pending edits first.
                 await persistAuthoringDraftBeforeLegacyAction(payload);
-                $('#dupe_button').trigger('click');
+                document.getElementById('dupe_button')?.click();
                 return false;
             },
             exportAuthoring: async payload => {
@@ -2920,7 +2921,7 @@ async function mountReactCharacterAuthoringPanel(stateOverrides = undefined) {
     if (result?.mounted) {
         // The gates in selectRightMenuWithAnimation/showWorkspaceChildSlotContent run
         // before the async mount settles, so the legacy tab title must be hidden here too.
-        $('#rm_button_selected_ch h2').hide();
+        setLegacyCharacterShellVisibility('#rm_button_selected_ch h2', false);
     } else {
         const host = ensureCharacterAuthoringReactHost();
         if (host && !host.querySelector('[data-react-authoring-build-error]')) {
@@ -4071,8 +4072,8 @@ function getExportPopupController() {
                 exportPopper?.destroy();
                 exportPopper = Popper.createPopper(reference, document.getElementById('export_format_popup'), { placement: 'left' });
             },
-            show: () => $('#export_format_popup').show(),
-            hide: () => $('#export_format_popup').hide(),
+            show: () => { const popup = document.getElementById('export_format_popup'); if (popup) popup.style.display = 'block'; },
+            hide: () => { const popup = document.getElementById('export_format_popup'); if (popup) popup.style.display = 'none'; },
             update: updateCharacterExportPopupPosition,
             focusFirst: () => document.querySelector('#export_format_popup .export_format')?.focus(),
             restoreFocus: trigger => { if (trigger instanceof HTMLElement && document.contains(trigger)) trigger.focus(); },
@@ -4117,7 +4118,7 @@ function getVisibleCharacterExportTrigger() {
 // Saved here for performance reasons
 const messageTemplate = document.querySelector('#message_template .mes');
 const chatRoot = document.getElementById('chat');
-export const chatElement = $('#chat');
+export const chatElement = chatRoot;
 
 let dialogueController = null;
 let dialogueCloseStop = false;
@@ -4154,7 +4155,7 @@ export const DEFAULT_SAVE_EDIT_TIMEOUT = debounce_timeout.relaxed;
 export const DEFAULT_PRINT_TIMEOUT = debounce_timeout.quick;
 
 export const saveSettingsDebounced = debounce((loopCounter = 0) => saveSettings(loopCounter), DEFAULT_SAVE_EDIT_TIMEOUT);
-export const saveCharacterDebounced = debounce(() => $('#create_button').trigger('click'), DEFAULT_SAVE_EDIT_TIMEOUT);
+export const saveCharacterDebounced = debounce(() => document.getElementById('create_button')?.click(), DEFAULT_SAVE_EDIT_TIMEOUT);
 
 /**
  * Prints the character list in a debounced fashion without blocking, with a delay of 100 milliseconds.
@@ -4378,7 +4379,8 @@ function setFittingClass(fitting) {
 }
 
 export function applyActiveBackground() {
-    $('#bg1').css('background-image', resolveActiveBackgroundUrl(chat_metadata, background_settings.url));
+    const background = document.getElementById('bg1');
+    if (background) background.style.backgroundImage = resolveActiveBackgroundUrl(chat_metadata, background_settings.url);
 }
 
 export function loadBackgroundSettings(settings) {
@@ -4396,7 +4398,7 @@ export let main_api;// = "kobold";
 
 
 //css
-var css_send_form_display = $('<div id=send_form></div>').css('display');
+var css_send_form_display = '';
 
 export { getRequestHeaders } from './scripts/request-context.js';
 
@@ -4413,7 +4415,7 @@ export function getSlideToggleOptions() {
     };
 }
 
-installAjaxCsrfPrefilter();
+
 
 /**
  * Pings the STserver to check if it is reachable.
@@ -5408,13 +5410,15 @@ export async function replaceCurrentChat() {
         if (chats.length && typeof chats[0] === 'object') {
             // pick existing chat
             characters[this_chid].chat = chats[0].file_name.replace('.jsonl', '');
-            $('#selected_chat_pole').val(characters[this_chid].chat);
+            const chatField = document.getElementById('selected_chat_pole');
+            if (chatField) chatField.value = characters[this_chid].chat;
             saveCharacterDebounced();
             await getChat();
         } else {
             // start new chat
             characters[this_chid].chat = `${name2} - ${humanizedDateTime()}`;
-            $('#selected_chat_pole').val(characters[this_chid].chat);
+            const chatField = document.getElementById('selected_chat_pole');
+            if (chatField) chatField.value = characters[this_chid].chat;
             saveCharacterDebounced();
             await getChat();
         }
@@ -6180,13 +6184,15 @@ export function isStreamingEnabled() {
 }
 
 function showStopButton() {
-    $('#mes_stop').css({ 'display': 'flex' });
+    const button = document.getElementById('mes_stop');
+    if (button) button.style.display = 'flex';
 }
 
 function hideStopButton() {
     // prevent NOOP, because hideStopButton() gets called multiple times
-    if ($('#mes_stop').css('display') !== 'none') {
-        $('#mes_stop').css({ 'display': 'none' });
+    const button = document.getElementById('mes_stop');
+    if (button && getComputedStyle(button).display !== 'none') {
+        button.style.display = 'none';
         eventSource.emit(event_types.GENERATION_ENDED, chat.length);
     }
 }
@@ -6246,13 +6252,15 @@ export async function generateRaw({ prompt = '', api = null, instructOverride = 
  */
 function removeLastMessage() {
     return new Promise((resolve) => {
-        const lastMes = chatElement.children('.mes').last();
-        if (lastMes.length === 0) {
+        const lastMes = Array.from(chatElement?.children ?? []).filter(element => element.matches('.mes')).at(-1);
+        if (!lastMes) {
             return resolve();
         }
-        lastMes.hide(animation_duration, function () {
-            $(this).remove();
-            resolve();
+        transitionOpacity(lastMes, {
+            opacity: 0,
+            duration: animation_duration,
+            complete: () => lastMes.remove(),
+            settled: resolve,
         });
     });
 }
@@ -6676,14 +6684,15 @@ function setInContextMessages(msgInContextCount, _type) {
         return;
     }
 
-    chatElement.find('.mes').removeClass('lastInContext');
+    chatElement?.querySelectorAll('.mes').forEach(element => element.classList.remove('lastInContext'));
 
-    const lastMessageBlock = chatElement.find('.mes:not([is_system="true"]), .mes.toolCall').eq(-msgInContextCount);
-    lastMessageBlock.addClass('lastInContext');
+    const blocks = Array.from(chatElement?.querySelectorAll('.mes:not([is_system="true"]), .mes.toolCall') ?? []);
+    const lastMessageBlock = blocks.at(-msgInContextCount);
+    lastMessageBlock?.classList.add('lastInContext');
 
-    if (lastMessageBlock.length === 0) {
+    if (!lastMessageBlock) {
         const firstMessageId = getFirstDisplayedMessageId();
-        chatElement.find(`.mes[mesid="${firstMessageId}"]`).addClass('lastInContext');
+        chatElement?.querySelectorAll(`.mes[mesid="${firstMessageId}"]`).forEach(element => element.classList.add('lastInContext'));
     }
 
     // Update last id to chat. No metadata save on purpose, gets hopefully saved via another call
@@ -6981,9 +6990,10 @@ export function setCharacterName(value) {
 }
 
 function setTemporaryChatStatus(isTemporary) {
-    const status = $('#temporary_chat_status');
-    status.prop('hidden', !isTemporary);
-    status.attr('aria-hidden', String(!isTemporary));
+    const status = document.getElementById('temporary_chat_status');
+    if (!status) return;
+    status.hidden = !isTemporary;
+    status.setAttribute('aria-hidden', String(!isTemporary));
 }
 
 function syncTemporaryChatStatus() {
@@ -7037,7 +7047,8 @@ async function read_avatar_load(input) {
             }
 
             crop_data = dlg.cropData;
-            $('#avatar_load_preview').attr('src', String(croppedImage));
+            const preview = document.getElementById('avatar_load_preview');
+            if (preview) preview.setAttribute('src', String(croppedImage));
         }
 
         if (menu_type == 'create') {
@@ -7046,7 +7057,7 @@ async function read_avatar_load(input) {
 
         await createOrEditCharacter();
 
-        const formData = new FormData(/** @type {HTMLFormElement} */($('#form_create').get(0)));
+        const formData = new FormData(/** @type {HTMLFormElement} */(document.getElementById('form_create')));
         const avatarKey = formData.get('avatar_url').toString();
 
         // Bust cache for the avatar thumbnail and character image
@@ -7214,10 +7225,10 @@ export function changeMainAPI(api = null) {
     const selectedVal = api ?? main_api ?? 'openai';
     const apiElements = {
         'openai': {
-            apiStreaming: $('#NULL_SELECTOR'),
-            apiSettings: $('#openai_settings'),
-            apiPresets: $('#openai_api-presets'),
-            apiRanges: $('#range_block_openai'),
+            apiStreaming: document.getElementById('NULL_SELECTOR'),
+            apiSettings: document.getElementById('openai_settings'),
+            apiPresets: document.getElementById('openai_api-presets'),
+            apiRanges: document.getElementById('range_block_openai'),
         },
     };
     //console.log('--- apiElements--- ');
@@ -7230,23 +7241,17 @@ export function changeMainAPI(api = null) {
         if (selectedVal === apiName) {
             continue;
         }
-        apiObj.apiSettings.css('display', 'none');
-        apiObj.apiRanges.css('display', 'none');
-        apiObj.apiPresets.css('display', 'none');
-        apiObj.apiStreaming.css('display', 'none');
+        for (const element of Object.values(apiObj)) if (element) element.style.display = 'none';
     }
 
     //then, find and enable the active item.
     //This is split out of the loop so that different apis can share settings divs
-    let activeItem = apiElements[selectedVal];
+    const activeItem = apiElements[selectedVal];
 
-    activeItem.apiStreaming.css('display', 'block');
-    activeItem.apiSettings.css('display', 'block');
-    activeItem.apiRanges.css('display', 'block');
-    activeItem.apiPresets.css('display', 'block');
+    for (const element of Object.values(activeItem)) if (element) element.style.display = 'block';
 
     if (selectedVal === 'openai') {
-        activeItem.apiPresets.css('display', 'flex');
+        if (activeItem.apiPresets) activeItem.apiPresets.style.display = 'flex';
     }
 
     main_api = selectedVal;
@@ -7327,11 +7332,7 @@ async function applyStartupSettingsCore(data, _initLoaderHandle = null) {
         await eventSource.emit(event_types.SETTINGS_LOADED_AFTER, settings);
 
         // Set context size after loading power user (may override the max value)
-        $('#max_context').val(max_context);
-        $('#max_context_counter').val(max_context);
-
-        $('#amount_gen').val(amount_gen);
-        $('#amount_gen_counter').val(amount_gen);
+        setGenerationParamsFromPreset({ max_length: max_context, genamt: amount_gen });
 
         //Load which API we are using
         if (settings.main_api == undefined) {
@@ -7418,14 +7419,18 @@ export async function saveSettings(loopCounter = 0) {
 export function setGenerationParamsFromPreset(preset) {
     if (preset.genamt !== undefined) {
         amount_gen = preset.genamt;
-        $('#amount_gen').val(amount_gen);
-        $('#amount_gen_counter').val(amount_gen);
+        for (const id of ['amount_gen', 'amount_gen_counter']) {
+            const input = document.getElementById(id);
+            if (input) input.value = amount_gen;
+        }
     }
 
     if (preset.max_length !== undefined) {
         max_context = preset.max_length;
-        $('#max_context').val(max_context);
-        $('#max_context_counter').val(max_context);
+        for (const id of ['max_context', 'max_context_counter']) {
+            const input = document.getElementById(id);
+            if (input) input.value = max_context;
+        }
     }
 }
 
@@ -7482,15 +7487,17 @@ function applyMessageEditText(messageId, inputText) {
 function openMessageDelete() {
     closeMessageEditor();
     if (!is_send_press) {
-        $('#dialogue_del_mes').css('display', 'block');
+        const dialogue = document.getElementById('dialogue_del_mes');
+        if (dialogue) dialogue.style.display = 'block';
         globalThis.__emberDeskBulkDeleteController.open(t`Select a message to delete it and every message after it.`);
-        $('#send_form').css('display', 'none');
-        $('.del_checkbox').each(function () {
-            const checkbox = $(this);
+        const form = document.getElementById('send_form');
+        if (form) form.style.display = 'none';
+        document.querySelectorAll('.del_checkbox').forEach(checkbox => {
             const row = checkbox.closest('.mes');
-            if (row.is('[data-main-chat-message-row-owner="react"]')) return;
-            checkbox.css('display', 'grid');
-            row.find('.for_checkbox').first().css('display', 'none');
+            if (row?.matches('[data-main-chat-message-row-owner="react"]')) return;
+            checkbox.style.display = 'grid';
+            const marker = row?.querySelector('.for_checkbox');
+            if (marker) marker.style.display = 'none';
         });
     } else {
         console.debug(`
@@ -7655,16 +7662,14 @@ export async function displayPastChats(hightlightNames = []) {
         controller.setSearchQuery(String(searchQuery ?? ''));
         debouncedDisplay(String(searchQuery ?? ''));
     };
-    // Preserve synthetic extension events; native input is owned by React.
-    $('#select_chat_search').off('input').on('input', function (event) {
-        if (event.isTrigger) selectChatSearchCommand($(this).val());
-    });
     await showHistory('', hightlightNames);
 
     // UX convenience: Focus the search field when the Manage Chat Files view opens.
     setTimeout(function () {
-        const textSearchElement = $('#select_chat_search');
-        textSearchElement.trigger('click').trigger('focus').trigger('select');
+        const textSearchElement = document.getElementById('select_chat_search');
+        textSearchElement?.click();
+        textSearchElement?.focus();
+        textSearchElement?.select();
     }, 200);
 
     addChatBackupsBrowser();
@@ -7955,7 +7960,9 @@ export async function setCharacterSettingsOverrides() {
     const scenarioOverrideValue = chat_metadata.scenario || '';
     const exampleMessagesValue = chat_metadata.mes_example || '';
     const systemPromptValue = chat_metadata.system_prompt || '';
-    const $template = $(await renderTemplateAsync('scenarioOverride'));
+    const template = document.createElement('template');
+    template.innerHTML = await renderTemplateAsync('scenarioOverride');
+    const content = template.content;
     const pendingChanges = {
         scenario: scenarioOverrideValue,
         examples: exampleMessagesValue,
@@ -7963,31 +7970,33 @@ export async function setCharacterSettingsOverrides() {
     };
 
     // Keep edits local until the popup is closed/confirmed
-    const $scenario = $template.find('.chat_scenario');
-    $scenario.val(scenarioOverrideValue).on('input', function () {
-        pendingChanges.scenario = String($(this).val());
+    const scenario = content.querySelector('.chat_scenario');
+    scenario.value = scenarioOverrideValue;
+    scenario.addEventListener('input', function () {
+        pendingChanges.scenario = String(scenario.value);
     });
-    const $systemPrompt = $template.find('.chat_system_prompt');
-    $systemPrompt.val(systemPromptValue).on('input', function () {
-        pendingChanges.system_prompt = String($(this).val());
+    const systemPrompt = content.querySelector('.chat_system_prompt');
+    systemPrompt.value = systemPromptValue;
+    systemPrompt.addEventListener('input', function () {
+        pendingChanges.system_prompt = String(systemPrompt.value);
     });
 
-    $template.find('.remove_scenario_override').on('click', async function () {
+    content.querySelector('.remove_scenario_override').addEventListener('click', async function () {
         const confirm = await Popup.show.confirm(t`Are you sure you want to remove all overrides?`, t`This action cannot be undone.`);
         if (!confirm) {
             return;
         }
 
-        $scenario.val('');
+        scenario.value = '';
         pendingChanges.scenario = '';
         pendingChanges.examples = '';
-        $systemPrompt.val('');
+        systemPrompt.value = '';
         pendingChanges.system_prompt = '';
     });
 
     // Wait for popup close/confirm. Only an affirmative result commits —
     // Cancel and Escape discard the pending edits.
-    const result = await callGenericPopup($template, POPUP_TYPE.TEXT, '', {
+    const result = await callGenericPopup(content, POPUP_TYPE.TEXT, '', {
         wide: true,
         large: true,
         allowVerticalScrolling: true,
@@ -8015,11 +8024,19 @@ export async function setCharacterSettingsOverrides() {
  * @returns {Promise<any>} A promise that resolves when the popup is closed.
  * @deprecated Use `callGenericPopup` instead.
  */
+function replaceDialogueContent(content) {
+    const target = document.getElementById('dialogue_popup_text');
+    if (!target) return;
+    target.replaceChildren();
+    if (typeof content === 'string') target.insertAdjacentHTML('beforeend', content);
+    else if (content instanceof Node) target.append(content);
+}
+
 export function callPopup(text, type, inputValue = '', { okButton, rows, wide, wider, large, allowHorizontalScrolling, allowVerticalScrolling, cropAspect: _cropAspect } = {}) {
     if (!dialogueController) return Promise.reject(new Error('Dialogue controller is not initialized'));
     function getOkButtonText() {
         if (['text', 'char_not_selected'].includes(popup_type)) {
-            $dialoguePopupCancel.css('display', 'none');
+            dialoguePopupCancel.style.display = 'none';
             return okButton ?? t`Ok`;
         } else if (['delete_extension'].includes(popup_type)) {
             return okButton ?? t`Ok`;
@@ -8036,44 +8053,43 @@ export function callPopup(text, type, inputValue = '', { okButton, rows, wide, w
         popup_type = type;
     }
 
-    const $dialoguePopup = $('#dialogue_popup');
-    const $dialoguePopupCancel = $('#dialogue_popup_cancel');
-    const $dialoguePopupOk = $('#dialogue_popup_ok');
-    const $dialoguePopupInput = $('#dialogue_popup_input');
-    const $dialoguePopupText = $('#dialogue_popup_text');
-    const $shadowPopup = $('#shadow_popup');
+    const dialoguePopup = document.getElementById('dialogue_popup');
+    const dialoguePopupCancel = document.getElementById('dialogue_popup_cancel');
+    const dialoguePopupOk = document.getElementById('dialogue_popup_ok');
+    const dialoguePopupInput = document.getElementById('dialogue_popup_input');
+    const shadowPopup = document.getElementById('shadow_popup');
 
-    $dialoguePopup.toggleClass('wide_dialogue_popup', !!wide)
-        .toggleClass('wider_dialogue_popup', !!wider)
-        .toggleClass('large_dialogue_popup', !!large)
-        .toggleClass('horizontal_scrolling_dialogue_popup', !!allowHorizontalScrolling)
-        .toggleClass('vertical_scrolling_dialogue_popup', !!allowVerticalScrolling);
+    dialoguePopup.classList.toggle('wide_dialogue_popup', !!wide);
+    dialoguePopup.classList.toggle('wider_dialogue_popup', !!wider);
+    dialoguePopup.classList.toggle('large_dialogue_popup', !!large);
+    dialoguePopup.classList.toggle('horizontal_scrolling_dialogue_popup', !!allowHorizontalScrolling);
+    dialoguePopup.classList.toggle('vertical_scrolling_dialogue_popup', !!allowVerticalScrolling);
 
-    $dialoguePopupCancel.css('display', 'inline-block');
+    dialoguePopupCancel.style.display = 'inline-block';
     // Write into the adapter label span so the React-rendered button keeps its
     // children; fall back to the whole button when the mount is absent.
-    const $okLabel = $dialoguePopupOk.find('.dialogue-popup-btn-label').first();
-    if ($okLabel.length) {
-        $okLabel.text(getOkButtonText());
-    } else {
-        $dialoguePopupOk.text(getOkButtonText());
+    const okLabel = dialoguePopupOk.querySelector('.dialogue-popup-btn-label') ?? dialoguePopupOk;
+    okLabel.textContent = getOkButtonText();
+    const reactInput = dialoguePopupInput.dataset.reactDialogueInput === 'true';
+    if (!reactInput) {
+        dialoguePopupInput.style.display = popup_type === 'input' ? '' : 'none';
+        dialoguePopupInput.value = inputValue;
+        dialoguePopupInput.setAttribute('rows', rows ?? 1);
     }
-    const reactInput = $dialoguePopupInput.attr('data-react-dialogue-input') === 'true';
-    if (!reactInput) $dialoguePopupInput.toggle(popup_type === 'input').val(inputValue).attr('rows', rows ?? 1);
     const presentation = globalThis.__emberDeskDialoguePresentation;
     if (presentation) {
         presentation.open(text);
     } else {
-        $dialoguePopupText.empty().append(text);
-        $shadowPopup.css('display', 'block');
+        replaceDialogueContent(text);
+        shadowPopup.style.display = 'block';
     }
 
     if (popup_type == 'input' && !reactInput) {
-        $dialoguePopupInput.trigger('focus');
+        dialoguePopupInput.focus();
     }
 
     if (!presentation) {
-        transitionOpacity($shadowPopup[0], {
+        transitionOpacity(shadowPopup, {
             opacity: 1,
             duration: animation_duration,
             easing: animation_easing,
@@ -8129,13 +8145,14 @@ export function updateViewMessageIds(startIndex = null) {
 
     // Only real message rows carry mesid — summary cards share the .mes
     // styling class but must not be renumbered or misidentified as message 0.
-    chatElement.find('.mes[mesid]').each(function (index, element) {
-        $(element).attr('mesid', minId + index);
-        $(element).find('.mesIDDisplay').text(`#${minId + index}`);
+    const rows = Array.from(chatElement?.querySelectorAll('.mes[mesid]') ?? []);
+    rows.forEach((element, index) => {
+        element.setAttribute('mesid', String(minId + index));
+        element.querySelectorAll('.mesIDDisplay').forEach(label => { label.textContent = `#${minId + index}`; });
     });
 
-    chatElement.find('.mes').removeClass('last_mes');
-    chatElement.find('.mes[mesid]').last().addClass('last_mes');
+    chatElement?.querySelectorAll('.mes').forEach(element => element.classList.remove('last_mes'));
+    rows.at(-1)?.classList.add('last_mes');
 
     updateEditArrowClasses();
 }
@@ -8164,14 +8181,10 @@ export function closeMessageEditor(what = 'all') {
 }
 
 export function setGenerationProgress(progress) {
-    if (!progress) {
-        $('#send_textarea').css({ 'background': '', 'transition': '' });
-    } else {
-        $('#send_textarea').css({
-            'background': `linear-gradient(90deg, color-mix(in srgb, var(--success-green) 84%, transparent) ${progress}%, transparent ${progress}%)`,
-            'transition': '0.25s ease-in-out',
-        });
-    }
+    const textarea = document.getElementById('send_textarea');
+    if (!textarea) return;
+    textarea.style.background = progress ? `linear-gradient(90deg, color-mix(in srgb, var(--success-green) 84%, transparent) ${progress}%, transparent ${progress}%)` : '';
+    textarea.style.transition = progress ? '0.25s ease-in-out' : '';
 }
 
 export function cancelTtsPlay() {
@@ -8459,7 +8472,8 @@ async function importCharacter(file, { preserveFileName = '', importTags = false
     const exists = preserveFileName ? characters.find(character => character.avatar === preserveFileName) : undefined;
 
     const format = ext[1].toLowerCase();
-    $('#character_import_file_type').val(format);
+    const formatInput = document.getElementById('character_import_file_type');
+    if (formatInput) formatInput.value = format;
     const formData = new FormData();
     formData.append('avatar', file);
     formData.append('file_type', format);
@@ -8556,7 +8570,8 @@ export async function doNewChat({ deleteCurrentChat = false } = {}) {
 
     chat_metadata = {};
     characters[this_chid].chat = `${name2} - ${humanizedDateTime()}`;
-    $('#selected_chat_pole').val(characters[this_chid].chat);
+    const chatField = document.getElementById('selected_chat_pole');
+    if (chatField) chatField.value = characters[this_chid].chat;
     await getChat();
     await createOrEditCharacter(new CustomEvent('newChat'));
     if (deleteCurrentChat) await delChat(chat_file_for_del + '.jsonl');
@@ -8606,7 +8621,7 @@ export async function closeCurrentChat() {
         this_edit_mes_id = undefined;
         chat_metadata = {};
         selected_button = 'characters';
-        $('#rm_button_selected_ch').children('h2').text('');
+        document.querySelectorAll('#rm_button_selected_ch > h2').forEach(heading => { heading.textContent = ''; });
         select_rm_characters();
         await eventSource.emit(event_types.CHAT_CHANGED, getCurrentChatId());
         return true;
@@ -8690,9 +8705,9 @@ async function removeCharacterFromUI(deletedAvatars = [], { deleteContext = null
     cancelDebounce(printCharactersDebounced);
     preserveNeutralChat();
     await clearChat();
-    $('#character_cross').trigger('click');
+    document.getElementById('character_cross')?.click();
     resetChatStateWithOptions({ clearCharacters: false });
-    $(document.getElementById('rm_button_selected_ch')).children('h2').text('');
+    document.querySelectorAll('#rm_button_selected_ch > h2').forEach(heading => { heading.textContent = ''; });
     restoreNeutralChat();
     removeCharactersFromState(characters, deletedAvatars);
     const reconcileStartedAt = performance.now();
@@ -8842,10 +8857,9 @@ async function measureCharacterSearchForPerf(query) {
         throw new Error('Character list element is unavailable.');
     }
 
-    const searchInputs = $('#character_search_bar');
-    const visibleSearchInput = searchInputs.filter(':visible').first();
-    const searchInput = visibleSearchInput.length ? visibleSearchInput : searchInputs.first();
-    const searchStatus = $('#character_search_status');
+    const searchInputs = Array.from(document.querySelectorAll('#character_search_bar'));
+    const searchInput = searchInputs.find(input => input.getClientRects().length > 0) ?? searchInputs[0];
+    const searchStatus = document.getElementById('character_search_status');
     const normalizedQuery = String(query ?? '');
     const startedAt = performance.now();
     const pageLoadedPromise = new Promise(resolve => {
@@ -8870,16 +8884,18 @@ async function measureCharacterSearchForPerf(query) {
         eventSource.on(event_types.CHARACTER_PAGE_LOADED, listener);
     });
 
-    searchInput.val(normalizedQuery);
-    searchInput.attr('aria-busy', 'true');
-    searchStatus.prop('hidden', false);
+    if (searchInput) {
+        searchInput.value = normalizedQuery;
+        searchInput.setAttribute('aria-busy', 'true');
+    }
+    if (searchStatus) searchStatus.hidden = false;
 
     entitiesFilter.setFilterData(FILTER_TYPES.SEARCH, normalizedQuery, true);
     await printCharacters(false);
     const pageLoadedAt = await pageLoadedPromise;
 
-    searchInput.attr('aria-busy', 'false');
-    searchStatus.prop('hidden', true);
+    searchInput?.setAttribute('aria-busy', 'false');
+    if (searchStatus) searchStatus.hidden = true;
     const busyClearedAt = performance.now();
 
     return {
@@ -9264,7 +9280,7 @@ function getReactSelectChatListBridge(module) {
             selectChatSearchCommand('');
             document.getElementById('select_chat_search')?.focus();
         },
-        highlightRow(row) { flashHighlight($(row), debounce_timeout.extended); },
+        highlightRow(row) { flashHighlight(row, debounce_timeout.extended); },
         controller: (() => {
             const controller = module.createHistoryPanelController({
                 load: async query => module.projectHistoryChats(
@@ -9498,7 +9514,7 @@ async function mountDialoguePopupControls() {
                 },
                 schedule: callback => { void fadeOutFinished.then(callback); },
             });
-            module.mountDialoguePopupContent(presentationHost, presentation, content => $('#dialogue_popup_text').empty().append(content));
+            module.mountDialoguePopupContent(presentationHost, presentation, replaceDialogueContent);
             globalThis.__emberDeskDialoguePresentation = {
                 open: content => module.openDialoguePresentation(presentation, content),
                 close: kind => presentation.close(kind),
@@ -9561,6 +9577,8 @@ async function mountDialogueDelMesControls() {
 }
 
 // MARK: DOM Handlers Start
-jQuery(async function () {
-    await bindLegacyShellHandlers();
-});
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', bindLegacyShellHandlers, { once: true });
+} else {
+    bindLegacyShellHandlers();
+}

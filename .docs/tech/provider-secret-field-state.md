@@ -22,7 +22,7 @@ It does not own backend `SecretManager`, all provider key inputs, connection pro
 
 ## Architecture And Constraints
 
-`public/scripts/provider-secret-field-state.js` is a focused frontend state module. `public/scripts/openai.js` owns jQuery event binding and DOM writes, while the state module returns explicit decisions that are easy to test without the full page.
+`public/scripts/provider-secret-field-state.js` is a focused frontend state module. `public/scripts/openai.js` owns event binding and DOM writes, while the state module returns explicit decisions that are easy to test without the full page.
 
 Important constraints:
 

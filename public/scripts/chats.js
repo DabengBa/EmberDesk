@@ -160,7 +160,7 @@ export async function hideChatMessageRange(start, end, unhide, nameFitler = null
  * Mark message as hidden (system message).
  * @deprecated Use hideChatMessageRange.
  * @param {number} messageId Message ID
- * @param {JQuery<Element>} _messageBlock Unused
+ * @param {Element} _messageBlock Unused
  * @returns {Promise<void>}
  */
 export async function hideChatMessage(messageId, _messageBlock) {
@@ -171,7 +171,7 @@ export async function hideChatMessage(messageId, _messageBlock) {
  * Mark message as visible (non-system message).
  * @deprecated Use hideChatMessageRange.
  * @param {number} messageId Message ID
- * @param {JQuery<Element>} _messageBlock Unused
+ * @param {Element} _messageBlock Unused
  * @returns {Promise<void>}
  */
 export async function unhideChatMessage(messageId, _messageBlock) {
@@ -1476,10 +1476,7 @@ async function onImageSwiped(messageId, element, direction) {
         return;
     }
 
-    // Preserve the established collection when jQuery is present. Without it,
-    // pass the native row through the event and React media refresh instead.
-    const eventElement = typeof $ === 'function' ? $(element) : element;
-    await eventSource.emit(event_types.IMAGE_SWIPED, { message, element: eventElement, direction });
+    await eventSource.emit(event_types.IMAGE_SWIPED, { message, element, direction });
 
     if (media.length === 1) {
         console.warn('Only one media item in the message, swiping is not applicable');
@@ -1499,7 +1496,7 @@ async function onImageSwiped(messageId, element, direction) {
     }
 
     await saveChatConditional();
-    appendMediaToMessage(message, eventElement);
+    appendMediaToMessage(message, element);
 }
 
 let openAttachmentPicker = () => {};
@@ -1745,7 +1742,7 @@ export function initChatUtilities(mergeAttachmentFiles) {
         const mediaIndex = Number(mediaBlock?.getAttribute('data-index') ?? undefined);
         return { messageBlock, messageId, mediaBlock, mediaIndex };
     }
-    const chatRoot = chatElement?.nodeType === 1 ? chatElement : chatElement?.[0];
+    const chatRoot = chatElement;
     delegateClick(chatRoot, '.mes_img', async function () {
         const { messageId, mediaIndex } = getMediaContainerInfo.call(this);
         expandMessageMedia(messageId, mediaIndex);

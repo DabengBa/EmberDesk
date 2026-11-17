@@ -6,6 +6,8 @@ topic: server-typescript
 
 # Server TypeScript
 
+For the remaining JavaScript implementations, callers and compatibility boundaries, see the [server JavaScript inventory](server-javascript-inventory.md).
+
 `src/canonical-secrets-backend.ts` is the synchronous canonical Secrets backend. The existing SecretManager remains the public boundary; initialization, audit, SQLite authority and projection repair behavior are unchanged.
 
 ## Wire log and archive/card formats

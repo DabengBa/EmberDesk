@@ -1,6 +1,7 @@
 import { expect, jest, test } from '@jest/globals';
 import { readFileSync } from 'node:fs';
-import { createRuntimeSettingsPersistence } from '../public/scripts/runtime-settings-persistence.js';
+import { createRuntimeSettingsPersistence, withStrictSettingsSaveFailureHandler } from '../public/scripts/runtime-settings-persistence.js';
+import { createSettingsWriteOwner } from '../public/scripts/settings-write-owner.js';
 
 function fixture() {
     const calls = [];
@@ -42,6 +43,92 @@ test('strict save reports a queued write while not ready', async () => {
     expect(f.calls).toEqual([['schedule', undefined]]);
 });
 
+test('overlapping runtime saves use the revision committed by the previous save', async () => {
+    const f = fixture();
+    let releaseFirst;
+    const firstResponse = new Promise(resolve => { releaseFirst = resolve; });
+    let rules = ['alpha'];
+    f.ports.featureSettings = () => ({ regex: [...rules] });
+    const requests = [];
+    f.ports.post = jest.fn(async request => {
+        requests.push(JSON.parse(request.body));
+        if (requests.length === 1) await firstResponse;
+        return { ok: true, json: async () => ({ result: 'ok', settings_revision: requests.length + 2 }) };
+    });
+    const service = createRuntimeSettingsPersistence(f.ports);
+    const first = service.saveSettings(0, { strict: true });
+    await Promise.resolve();
+    rules = [];
+    const second = service.saveSettings(0, { strict: true });
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(requests).toHaveLength(1);
+    releaseFirst();
+    await Promise.all([first, second]);
+    expect(requests.map(request => [request.settings_revision, request.feature_settings.regex])).toEqual([
+        [2, ['alpha']], [3, []],
+    ]);
+    expect(f.getRevision()).toBe(4);
+});
+
+test('a real revision conflict blocks queued strict saves without retrying or posting them', async () => {
+    const f = fixture();
+    f.ports.conflict = createSettingsWriteOwner();
+    let release;
+    const wait = new Promise(resolve => { release = resolve; });
+    f.ports.post = jest.fn(async () => {
+        await wait;
+        return { status: 409 };
+    });
+    const errorLog = jest.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+        const service = createRuntimeSettingsPersistence(f.ports);
+        const first = service.saveSettings(0, { strict: true });
+        const second = service.saveSettings(0, { strict: true });
+        const results = Promise.allSettled([first, second]);
+        release();
+        const [a, b] = await results;
+        expect(a.status).toBe('rejected');
+        expect(a.reason.message).toBe('Failed to save settings: revision conflict');
+        expect(b.status).toBe('rejected');
+        expect(b.reason.message).toBe('Unresolved runtime settings conflict');
+        expect(f.ports.post).toHaveBeenCalledTimes(1);
+        expect(f.getRevision()).toBe(2);
+    } finally {
+        errorLog.mockRestore();
+    }
+});
+
+test('a settings-updated subscriber may await another save without deadlocking', async () => {
+    const f = fixture();
+    let service;
+    let notifications = 0;
+    f.ports.emitUpdated = async () => {
+        if (++notifications === 1) await service.saveSettings(0, { strict: true });
+    };
+    f.ports.post = jest.fn(f.ports.post);
+    service = createRuntimeSettingsPersistence(f.ports);
+    await service.saveSettings(0, { strict: true });
+    expect(f.ports.post).toHaveBeenCalledTimes(2);
+    expect(notifications).toBe(2);
+});
+
+test('strict rollback handler belongs only to its synchronous save invocation', async () => {
+    const f = fixture();
+    const rollback = jest.fn();
+    const errorLog = jest.spyOn(console, 'error').mockImplementation(() => {});
+    f.ports.post = jest.fn(async () => ({ ok: false, status: 500, statusText: 'offline' }));
+    try {
+        const service = createRuntimeSettingsPersistence(f.ports);
+        const first = withStrictSettingsSaveFailureHandler(rollback, () => service.saveSettings(0, { strict: true }));
+        const second = service.saveSettings(0, { strict: true });
+        const results = await Promise.allSettled([first, second]);
+        expect(results.map(result => result.status)).toEqual(['rejected', 'rejected']);
+        expect(rollback).toHaveBeenCalledTimes(1);
+        expect(f.ports.post).toHaveBeenCalledTimes(2);
+    } finally {
+        errorLog.mockRestore();
+    }
+});
 test('production settings exports forward payload and strict saves to the real owner', async () => {
     const source = readFileSync(new URL('../public/script.js', import.meta.url), 'utf8');
     const start = source.indexOf('const runtimeSettingsPersistence = createRuntimeSettingsPersistence({');

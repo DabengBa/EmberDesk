@@ -2,8 +2,7 @@ import fs from 'node:fs';
 import { expect, test } from '@playwright/test';
 
 const source = fs.readFileSync(new URL('../public/scripts/tags.js', import.meta.url), 'utf8');
-const jquery = fs.readFileSync(new URL('../public/lib/jquery-3.5.1.min.js', import.meta.url), 'utf8');
-const jqueryUI = fs.readFileSync(new URL('../public/lib/jquery-ui.min.js', import.meta.url), 'utf8');
+
 
 function productionFunction(start, end) {
     const from = source.indexOf(`function ${start}(`);
@@ -14,53 +13,50 @@ function productionFunction(start, end) {
 
 const folderFunction = productionFunction('getTagBlock', '\n/**');
 const tagFunction = productionFunction('appendTagToList', '\nfunction onTagFilterClick(');
+const resolveFunction = productionFunction('resolveTagListElements', '\nfunction createTagMapFromList(');
 const colorsFunction = source.includes('function applyTagColors(') ? productionFunction('applyTagColors', '\n/**') : null;
 
 test.beforeEach(async ({ page }) => {
     await page.setContent('<div id="list"></div>');
-    await page.addScriptTag({ content: jquery });
-    await page.addScriptTag({ content: jqueryUI });
-    await page.evaluate(({ folderFunction, tagFunction, colorsFunction }) => {
+    await page.evaluate(({ folderFunction, tagFunction, colorsFunction, resolveFunction }) => {
+        for (const name of ['$', 'jQuery']) Object.defineProperty(window, name, { configurable: true, get() { throw new Error(`Unexpected ${name} access`); } });
         if (colorsFunction) window.applyTagColors = (0, eval)(`(${colorsFunction})`);
         window.getTagBlock = (0, eval)(`(${folderFunction})`);
         window.appendTagToList = (0, eval)(`(${tagFunction})`);
+        window.resolveTagListElements = (0, eval)(`(${resolveFunction})`);
         window.TAG_FOLDER_TYPES = { folder: { class: 'folder', fa_icon: 'icon' } };
         window.t = strings => strings[0];
         window.requireCharacterTagsShellContext = () => ({ buildAvatarList: () => {} });
-        window.hookCalls = [];
-        for (const property of ['backgroundColor', 'color']) {
-            const original = window.jQuery.cssHooks[property].set;
-            window.jQuery.cssHooks[property].set = function (element, value) {
-                window.hookCalls.push({ property, value });
-                return original.apply(this, arguments);
-            };
-        }
-    }, { folderFunction, tagFunction, colorsFunction });
+    }, { folderFunction, tagFunction, colorsFunction, resolveFunction });
 });
 
 async function render(page, tag) {
     return page.evaluate(tag => {
-        const $ = window.jQuery;
-        $('#list').empty();
-        window.hookCalls.length = 0;
-        window.FOLDER_TEMPLATE = $('<div><div class="avatar" style="background-color: blue; color: green"></div><div class="avatar" style="background-color: blue; color: green"></div><div class="ch_name"></div><div class="bogus_folder_hidden_counter"></div><div class="bogus_folder_counter"></div><div class="bogus_folder_icon"></div><div class="bogus_folder_avatars_block"></div></div>');
-        window.TAG_TEMPLATE = $('<div class="tag" style="background-color: blue; color: green"><span class="tag_name"></span><button class="tag_remove"></button></div>');
+        document.getElementById('list').replaceChildren();
+
+        const folderTemplate = document.createElement('div');
+        folderTemplate.innerHTML = '<div class="avatar" style="background-color: blue; color: green"></div><div class="avatar" style="background-color: blue; color: green"></div><div class="ch_name"></div><div class="bogus_folder_hidden_counter"></div><div class="bogus_folder_counter"></div><div class="bogus_folder_icon"></div><div class="bogus_folder_avatars_block"></div>';
+        window.FOLDER_TEMPLATE = folderTemplate;
+        const tagTemplate = document.createElement('div');
+        tagTemplate.innerHTML = '<div class="tag" style="background-color: blue; color: green"><span class="tag_name"></span><button class="tag_remove"></button></div>';
+        window.TAG_TEMPLATE = tagTemplate.firstElementChild;
         const input = { id: 'tag-id', name: 'Example', folder_type: 'folder', ...tag };
         const folder = window.getTagBlock(input, []);
-        window.appendTagToList($('#list'), input);
+        window.appendTagToList(document.getElementById('list'), input);
         const styles = element => ({ background: element.style.backgroundColor, color: element.style.color });
         return {
-            hooks: window.hookCalls,
-            avatars: folder.find('.avatar').toArray().map(styles),
-            title: folder.find('.avatar').toArray().map(element => element.title),
-            tags: $('#list .tag').toArray().map(element => ({ ...styles(element), id: element.id, text: $(element).find('.tag_name').text() })),
+
+            avatars: Array.from(folder.querySelectorAll('.avatar')).map(styles),
+            title: Array.from(folder.querySelectorAll('.avatar')).map(element => element.title),
+            tags: Array.from(document.querySelectorAll('#list .tag')).map(element => ({ ...styles(element), id: element.id, text: element.querySelector('.tag_name').textContent })),
         };
     }, tag);
 }
 
-test('production tag color writes do not invoke jQuery UI hooks', async ({ page }) => {
+test('production tag color writes render native styles without jQuery', async ({ page }) => {
     const result = await render(page, { color: 'rgba(51, 102, 153, 0.5)', color2: 'transparent' });
-    expect(result.hooks).toEqual([]);
+    expect(result.avatars).toEqual(Array(2).fill({ background: 'rgba(51, 102, 153, 0.5)', color: 'transparent' }));
+    expect(result.tags).toEqual([{ background: 'rgba(51, 102, 153, 0.5)', color: 'transparent', id: 'tag-id', text: 'Example' }]);
 });
 
 for (const [name, tag, background, color] of [

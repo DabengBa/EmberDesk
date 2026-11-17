@@ -73,19 +73,19 @@ beforeEach(() => {
     timeout = {}; timeout.promise = new Promise(resolve => { timeout.resolve = resolve; });
     mount = jest.fn(); players = []; chatRoot = { scrollHeight: 100, scrollTop: 30 };
     class AudioPlayer { constructor(audio, container) { players.push({ audio, container }); } }
-    registerMessageShellContext({ state: { chatElement: [chatRoot], AudioPlayer }, isReactMainChatOwner: () => false,
+    registerMessageShellContext({ state: { chatElement: chatRoot, AudioPlayer }, isReactMainChatOwner: () => false,
         delay: () => timeout.promise, humanFileSize: size => `${size} bytes`, mountReactMainChatMessageListPanel: mount });
 });
 afterEach(() => { delete globalThis.document; delete globalThis.HTMLMediaElement; delete globalThis.$; });
 
-test('legacy collection renders image/video/audio after load, restores playback and adjusts scrolling', async () => {
+test('native row renders image/video/audio after load, restores playback and adjusts scrolling', async () => {
     const oldVideo = new Media('mes_video'); oldVideo.setAttribute('src', '/video'); oldVideo.readyState = 2; oldVideo.currentTime = 18; oldVideo.paused = false;
     mediaWrapper.append(oldVideo); mediaWrapper.onReplace = () => { chatRoot.scrollHeight = 150; };
-    const collection = [row]; collection.jquery = '3.5.1';
+
     const message = { extra: { inline_image: false, title: 'fallback', media: [
         { type: 'image', url: '/image', title: 'image title' }, { type: 'video', url: '/video' }, { type: 'audio', url: '/audio' },
     ], files: [{ name: '<notes>', size: 3 }] } };
-    appendMediaToMessage(message, collection, 'adjust');
+    appendMediaToMessage(message, row, 'adjust');
     expect(fileWrapper.querySelector('.mes_file_name').textContent).toBe('<notes>');
     expect(mediaWrapper.children).toEqual([oldVideo]); expect(players).toHaveLength(1);
     created.image.dispatch('error'); created.video.dispatch('loadeddata'); players[0].audio.dispatch('loadeddata');
@@ -129,18 +129,21 @@ test('empty attachments clear previous containers without changing scroll or mou
     expect(chatRoot.scrollTop).toBe(30); expect(mount).not.toHaveBeenCalled();
 });
 
-test('multiple legacy rows receive distinct file and media nodes, while empty collections are safe', async () => {
+test('separate native rows receive distinct file and media nodes, while a null row is safe', async () => {
     const second = new Element('mes'); const secondFile = new Element('mes_file_wrapper'); const secondMedia = new Element('mes_media_wrapper');
     second.append(new Element('mes_text'), secondFile, secondMedia);
-    const rows = [row, second]; rows.jquery = '3.5.1';
-    appendMediaToMessage({ extra: { media: [{ type: 'video', url: '/broken' }], files: [{ name: 'note', size: 1 }] } }, rows, 'none');
-    created.video.dispatch('error'); await flush();
-    expect(created.video.classList.contains('error')).toBe(true);
+    const message = { extra: { media: [{ type: 'video', url: '/broken' }], files: [{ name: 'note', size: 1 }] } };
+    appendMediaToMessage(message, row, 'none');
+    const firstVideo = created.video;
+    appendMediaToMessage(message, second, 'none');
+    const secondVideo = created.video;
+    firstVideo.dispatch('error'); secondVideo.dispatch('error'); await flush();
+    expect(firstVideo.classList.contains('error')).toBe(true);
+    expect(secondVideo.classList.contains('error')).toBe(true);
     expect(mediaWrapper.children).toHaveLength(1); expect(secondMedia.children).toHaveLength(1);
     expect(mediaWrapper.children[0]).not.toBe(secondMedia.children[0]);
     expect(fileWrapper.children[0]).not.toBe(secondFile.children[0]);
-    const empty = []; empty.jquery = '3.5.1';
-    expect(() => appendMediaToMessage({ extra: {} }, empty, 'none')).not.toThrow();
+    expect(() => appendMediaToMessage({ extra: {} }, null, 'none')).not.toThrow();
 });
 
 test('real audio player receives native nodes and destroys listeners on observed removal', async () => {
@@ -153,7 +156,7 @@ test('real audio player receives native nodes and destroys listeners on observed
     document.body = {}; document.removeEventListener = jest.fn();
     let player;
     class RecordingPlayer extends AudioPlayer { constructor(...args) { super(...args); player = this; } }
-    registerMessageShellContext({ state: { chatElement: [chatRoot], AudioPlayer: RecordingPlayer }, isReactMainChatOwner: () => false,
+    registerMessageShellContext({ state: { chatElement: chatRoot, AudioPlayer: RecordingPlayer }, isReactMainChatOwner: () => false,
         delay: () => timeout.promise, mountReactMainChatMessageListPanel: mount });
     const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
     try {

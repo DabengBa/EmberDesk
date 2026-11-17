@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 const source = readFileSync(new URL('../public/scripts/message-service.js', import.meta.url), 'utf8');
 const code = source.slice(source.indexOf('export function appendMediaToMessage('), source.indexOf('export function addCopyToCodeBlocks(')).replace('export ', '');
 
-test('legacy file attachments clone the real template shape natively and retain safe text and indices', () => {
+test('native row file attachments clone the real template shape and retain safe text and indices', () => {
     const clones = [];
     const makeClone = () => {
         const name = { textContent: '', setAttribute: jest.fn(), removeAttribute: jest.fn() };
@@ -17,19 +17,17 @@ test('legacy file attachments clone the real template shape natively and retain 
     const fileWrapper = { replaceChildren: jest.fn(), append: jest.fn() };
     const mediaWrapper = { replaceChildren: jest.fn() };
     const row = { removeAttribute() {}, querySelectorAll: selector => ({ '.mes_file_wrapper': [fileWrapper], '.mes_media_wrapper': [mediaWrapper] })[selector] ?? [] };
-    const collection = [row];
-    collection.jquery = 'legacy';
-    collection.find = selector => selector === '.mes_file_wrapper' ? fileWrapper : mediaWrapper;
+
     const env = {
         ensureMessageMediaIsArray() {}, isReactMainChatOwner: () => false,
-        state: { chatElement: [{ scrollHeight: 50, scrollTop: 10 }] },
+        state: { chatElement: { scrollHeight: 50, scrollTop: 10 } },
         SCROLL_BEHAVIOR: { KEEP: 'keep', ADJUST: 'adjust', NONE: 'none' },
         document: { querySelectorAll: selector => selector === '#message_file_template .mes_file_container' ? [template] : [] },
         $: () => { throw Error('file template must not use jQuery'); },
         humanFileSize: size => `${size} bytes`,
     };
     const append = new Function(...Object.keys(env), `${code}; return appendMediaToMessage;`)(...Object.values(env));
-    append({ extra: { files: [{ name: '<img src=x>', size: 0 }, { name: 'notes.txt', size: 12 }] } }, collection, 'keep');
+    append({ extra: { files: [{ name: '<img src=x>', size: 0 }, { name: 'notes.txt', size: 12 }] } }, row, 'keep');
     expect(fileWrapper.replaceChildren).toHaveBeenCalledTimes(1);
     expect(template.cloneNode).toHaveBeenCalledTimes(2);
     expect(clones[0].node.setAttribute).toHaveBeenCalledWith('data-index', '0');

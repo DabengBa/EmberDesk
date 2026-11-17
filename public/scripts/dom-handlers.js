@@ -7,6 +7,7 @@ import { requireDomHandlersShellContext } from './dom-handlers-shell-context.js'
 import { renameComposerDraftContext, setComposerDraftContext, requestComposerFocus } from './main-chat-composer-service.js';
 import { installWorkspaceInteractionCommands } from './workspace-interaction-commands.js';
 import { transitionOpacity } from './chat-ui-motion.js';
+import { fixToastrForDialogs } from './popup.js';
 
 function shell() {
     return requireDomHandlersShellContext();
@@ -159,7 +160,7 @@ export function initDomHandlers() {
 export async function bindLegacyShellHandlers() {
     // React-owned composer markup must exist before handlers bind below.
     await mountChatComposer();
-    // React-owned static panels must exist before the direct $(...).on()
+    // React-owned static panels must exist before the direct event
     // bindings below; bootstrapWorkspace re-invokes these mounts later, and
     // each mount is idempotent via its dataset.react*Mounted guard. Dialogue
     // controls mount during bootstrap after their controller is initialized.
@@ -175,13 +176,23 @@ export async function bindLegacyShellHandlers() {
 
     initCharacterSearch();
 
+    function delegate(type, selector, handler) {
+        document.addEventListener(type, event => {
+            if (type === 'click' && event.button >= 1) return;
+            const target = event.target instanceof Element ? event.target : event.target?.parentElement;
+            const match = target?.closest(selector);
+            if (!match || (type === 'click' && match.disabled === true)) return;
+            return handler.call(match, event);
+        });
+    }
+
     //menu buttons setup
 
-    $('#rm_button_characters').on('click', function () {
+    document.getElementById('rm_button_characters')?.addEventListener('click', function () {
         state.selected_button = 'characters';
         select_rm_characters();
     });
-    $('#rm_button_back').on('click', function () {
+    document.getElementById('rm_button_back')?.addEventListener('click', function () {
         state.selected_button = 'characters';
         select_rm_characters();
     });
@@ -193,7 +204,7 @@ export async function bindLegacyShellHandlers() {
         // the sole-owner authoring UI explicitly for new-character drafts.
         queueReactCharacterAuthoringRemount();
     });
-    $('#rm_button_selected_ch').on('click', function () {
+    document.getElementById('rm_button_selected_ch')?.addEventListener('click', function () {
         if (state.this_chid !== undefined && state.characters[state.this_chid]) {
             state.selected_button = 'character_edit';
             select_selected_character(state.this_chid);
@@ -217,10 +228,14 @@ export async function bindLegacyShellHandlers() {
         await selectCharacterById(id);
     });
 
-    $(document).on('click', '.bogus_folder_select', function () {
-        const tagId = $(this).attr('tagid');
+    document.addEventListener('click', function onBogusFolderSelect(event) {
+        if (event.button >= 1) return;
+        const target = event.target instanceof Element ? event.target : event.target?.parentElement;
+        const folder = target?.closest('.bogus_folder_select');
+        if (!folder || folder.disabled === true) return;
+        const tagId = folder.getAttribute('tagid');
         console.debug('Bogus folder clicked', tagId);
-        chooseBogusFolder($(this), tagId);
+        chooseBogusFolder(null, tagId);
     });
 
     const cssAutofit = CSS.supports('field-sizing', 'content');
@@ -230,11 +245,12 @@ export async function bindLegacyShellHandlers() {
          * @param {HTMLTextAreaElement} e Textarea element to auto-fit
          */
         function autoFitEditTextArea(e) {
-            const scrollTop = state.chatElement.scrollTop();
+            const chat = document.getElementById('chat');
+            const scrollTop = chat.scrollTop;
             e.style.height = '0px';
             const newHeight = e.scrollHeight + 4;
             e.style.height = `${newHeight}px`;
-            state.chatElement.scrollTop(scrollTop);
+            chat.scrollTop = scrollTop;
         }
         const autoFitEditTextAreaDebounced = debounce(autoFitEditTextArea, debounce_timeout.short);
         document.addEventListener('input', e => {
@@ -268,28 +284,30 @@ export async function bindLegacyShellHandlers() {
     }
     globalThis.__emberDeskBulkDeleteController.setSelectionHandler(selectMessageForDeletion);
 
-    $(document).on('click', '.mes', function () {
+    delegate('click', '.mes', function () {
         //when a 'delete message' parent div is clicked
         // and we are in delete mode and del_checkbox is visible
         if (this.matches('[data-main-chat-message-row-owner="react"]')) return;
-        const row = $(this);
-        const deleteCheckbox = row.find('.del_checkbox').first();
+        const row = this;
+        const deleteCheckbox = row.querySelector('.del_checkbox');
 
-        if (!state.is_delete_mode || !deleteCheckbox.is(':visible')) {
+        if (!state.is_delete_mode || !deleteCheckbox || !(deleteCheckbox.offsetWidth || deleteCheckbox.offsetHeight || deleteCheckbox.getClientRects().length)) {
             return;
         }
-        globalThis.__emberDeskBulkDeleteController.selectLegacyRange(Number(row.attr('mesid')), state.chat.length, {
-            clear: () => $('.mes').each(function () {
-                const candidateRow = $(this);
-                candidateRow.find('.del_checkbox').first().prop('checked', false);
-                candidateRow.removeClass('selected');
+        globalThis.__emberDeskBulkDeleteController.selectLegacyRange(Number(row.getAttribute('mesid')), state.chat.length, {
+            clear: () => document.querySelectorAll('.mes').forEach(candidateRow => {
+                const checkbox = candidateRow.querySelector('.del_checkbox');
+                if (checkbox) checkbox.checked = false;
+                candidateRow.classList.remove('selected');
             }),
-            markClicked: () => row.addClass('selected'),
+            markClicked: () => row.classList.add('selected'),
             announce: selectMessageForDeletion,
             select: index => {
-                const selectedRow = $(`.mes[mesid="${index}"]`);
-                selectedRow.addClass('selected');
-                selectedRow.find('.del_checkbox').first().prop('checked', true);
+                document.querySelectorAll(`.mes[mesid="${index}"]`).forEach(selectedRow => {
+                    selectedRow.classList.add('selected');
+                    const checkbox = selectedRow.querySelector('.del_checkbox');
+                    if (checkbox) checkbox.checked = true;
+                });
             },
         });
     });
@@ -315,20 +333,19 @@ export async function bindLegacyShellHandlers() {
             close: closeSelectChatPopup,
             showLoader: () => state.loader.show({ slug: 'chat-delete', title: t`Delete Chat`, message: t`Deleting chat…`, toastMode: state.loader.ToastMode.STATIC }),
             remove: delChat,
-            hideMenu: () => $('#options').hide(),
+            hideMenu: () => { document.getElementById('options').style.display = 'none'; },
             reopen: () => { void runOptionsMenuCommand('option_select_chat'); },
             schedule: callback => setTimeout(callback, 2000),
         });
     }
 
-    $(document).on('click', '.PastChat_cross', function (e) {
+    delegate('click', '.PastChat_cross', function (e) {
         e.stopPropagation();
-        if (e.isTrigger) e.preventDefault();
-        return deleteChatByFileName($(this).attr('file_name'));
+        return deleteChatByFileName(this.getAttribute('file_name'));
     });
 
 
-    $('#character_cross').on('click', function () {
+    document.getElementById('character_cross')?.addEventListener('click', function () {
         state.is_advanced_char_open = false;
         const popup = document.getElementById('character_popup');
         transitionOpacity(popup, {
@@ -339,9 +356,9 @@ export async function bindLegacyShellHandlers() {
         });
     });
 
-    $('#character_popup_ok').on('click', function () {
+    document.getElementById('character_popup_ok')?.addEventListener('click', function () {
         state.is_advanced_char_open = false;
-        $('#character_popup').css('display', 'none');
+        document.getElementById('character_popup').style.display = 'none';
     });
 
     async function confirmDialoguePopup() {
@@ -355,18 +372,18 @@ export async function bindLegacyShellHandlers() {
                 easing: state.animation_easing,
                 complete() {
                     if (state.dialogueCloseStop) return;
-                    $('#shadow_popup').css('display', 'none');
-                    $('#dialogue_popup').removeClass('large_dialogue_popup');
-                    $('#dialogue_popup').removeClass('wide_dialogue_popup');
+                    document.getElementById('shadow_popup').style.display = 'none';
+                    document.getElementById('dialogue_popup').classList.remove('large_dialogue_popup', 'wide_dialogue_popup');
                 },
             });
         }
 
         const controller = state.dialogueController;
         if (controller?.getSnapshot().open) {
-            if (state.popup_type == 'input' && $('#dialogue_popup_input').attr('data-react-dialogue-input') !== 'true') {
-                controller.setInput(String($('#dialogue_popup_input').val() ?? ''));
-                $('#dialogue_popup_input').val('');
+            const input = document.getElementById('dialogue_popup_input');
+            if (state.popup_type == 'input' && input?.getAttribute('data-react-dialogue-input') !== 'true') {
+                controller.setInput(String(input?.value ?? ''));
+                if (input) input.value = '';
             }
             controller.confirmDialoguePopup();
         }
@@ -383,8 +400,8 @@ export async function bindLegacyShellHandlers() {
                 easing: state.animation_easing,
                 complete() {
                     if (state.dialogueCloseStop) return;
-                    $('#shadow_popup').css('display', 'none');
-                    $('#dialogue_popup').removeClass('large_dialogue_popup');
+                    document.getElementById('shadow_popup').style.display = 'none';
+                    document.getElementById('dialogue_popup').classList.remove('large_dialogue_popup');
                 },
             });
         }
@@ -398,32 +415,16 @@ export async function bindLegacyShellHandlers() {
     }
 
     dialoguePopupCommands = { confirmDialoguePopup, cancelDialoguePopup };
-    // Enter/Escape and third-party jQuery triggers retain their old entrypoint;
-    // native button clicks are owned by React.
-    $(document).on('click', '#dialogue_popup_ok', function (event) {
-        if (!event.isTrigger) return;
-        event.preventDefault();
-        return confirmDialoguePopup();
-    });
-    $(document).on('click', '#dialogue_popup_cancel', function (event) {
-        if (!event.isTrigger) return;
-        event.preventDefault();
-        return cancelDialoguePopup();
-    });
+    // React owns button clicks; keyboard and programmatic callers use commands.
 
     const avatarInput = /** @type {HTMLInputElement|null} */ (document.getElementById('add_avatar_button'));
     if (avatarInput) {
         avatarInput.addEventListener('change', () => read_avatar_load(avatarInput));
-        // jQuery's trigger/triggerHandler do not invoke native change listeners.
-        // Keep only the synthetic compatibility entrypoint, not a second native handler.
-        $(avatarInput).on('change', event => {
-            if (event.isTrigger) read_avatar_load(avatarInput);
-        });
     }
 
-    $('#form_create').on('submit', (e) => createOrEditCharacter(e.originalEvent));
+    document.getElementById('form_create')?.addEventListener('submit', e => createOrEditCharacter(e));
 
-    $('#delete_button').on('click', async function () {
+    document.getElementById('delete_button')?.addEventListener('click', async function () {
         if (state.this_chid === undefined || !state.characters[state.this_chid]) {
             toastr.warning('No character selected.');
             return;
@@ -488,7 +489,7 @@ export async function bindLegacyShellHandlers() {
             const confirm = await state.Popup.show.confirm(deleteDialogTitle, content, {
                 leftAlign: true,
                 defaultResult: state.POPUP_RESULT.NEGATIVE,
-                onClose: () => { deleteChats = !!$('#del_char_checkbox').prop('checked'); },
+                onClose: () => { deleteChats = Boolean(document.getElementById('del_char_checkbox')?.checked); },
             });
             if (!confirm) {
                 return;
@@ -504,29 +505,29 @@ export async function bindLegacyShellHandlers() {
 
     //////// OPTIMIZED ALL CHAR CREATION/EDITING TEXTAREA LISTENERS ///////////////
 
-    $('#character_name_pole').on('input', function () {
+    document.getElementById('character_name_pole')?.addEventListener('input', function () {
         if (state.menu_type == 'create') {
-            state.create_save.name = String($('#character_name_pole').val());
+            state.create_save.name = String(document.getElementById('character_name_pole').value);
         }
     });
 
     const elementsToUpdate = {
-        '#description_textarea': function () { state.create_save.description = String($('#description_textarea').val()); },
-        '#creator_notes_textarea': function () { state.create_save.creator_notes = String($('#creator_notes_textarea').val()); },
-        '#character_version_textarea': function () { state.create_save.character_version = String($('#character_version_textarea').val()); },
-        '#system_prompt_textarea': function () { state.create_save.system_prompt = String($('#system_prompt_textarea').val()); },
-        '#post_history_instructions_textarea': function () { state.create_save.post_history_instructions = String($('#post_history_instructions_textarea').val()); },
-        '#creator_textarea': function () { state.create_save.creator = String($('#creator_textarea').val()); },
-        '#tags_textarea': function () { state.create_save.tags = String($('#tags_textarea').val()); },
-        '#scenario_pole': function () { state.create_save.scenario = String($('#scenario_pole').val()); },
-        '#firstmessage_textarea': function () { state.create_save.first_message = String($('#firstmessage_textarea').val()); },
-        '#depth_prompt_prompt': function () { state.create_save.depth_prompt_prompt = String($('#depth_prompt_prompt').val()); },
-        '#depth_prompt_depth': function () { state.create_save.depth_prompt_depth = Number($('#depth_prompt_depth').val()); },
-        '#depth_prompt_role': function () { state.create_save.depth_prompt_role = String($('#depth_prompt_role').val()); },
+        '#description_textarea': function () { state.create_save.description = String(document.getElementById('description_textarea').value); },
+        '#creator_notes_textarea': function () { state.create_save.creator_notes = String(document.getElementById('creator_notes_textarea').value); },
+        '#character_version_textarea': function () { state.create_save.character_version = String(document.getElementById('character_version_textarea').value); },
+        '#system_prompt_textarea': function () { state.create_save.system_prompt = String(document.getElementById('system_prompt_textarea').value); },
+        '#post_history_instructions_textarea': function () { state.create_save.post_history_instructions = String(document.getElementById('post_history_instructions_textarea').value); },
+        '#creator_textarea': function () { state.create_save.creator = String(document.getElementById('creator_textarea').value); },
+        '#tags_textarea': function () { state.create_save.tags = String(document.getElementById('tags_textarea').value); },
+        '#scenario_pole': function () { state.create_save.scenario = String(document.getElementById('scenario_pole').value); },
+        '#firstmessage_textarea': function () { state.create_save.first_message = String(document.getElementById('firstmessage_textarea').value); },
+        '#depth_prompt_prompt': function () { state.create_save.depth_prompt_prompt = String(document.getElementById('depth_prompt_prompt').value); },
+        '#depth_prompt_depth': function () { state.create_save.depth_prompt_depth = Number(document.getElementById('depth_prompt_depth').value); },
+        '#depth_prompt_role': function () { state.create_save.depth_prompt_role = String(document.getElementById('depth_prompt_role').value); },
     };
 
     Object.keys(elementsToUpdate).forEach(function (id) {
-        $(id).on('input', function () {
+        document.querySelector(id)?.addEventListener('input', function () {
             if (state.menu_type == 'create') {
                 elementsToUpdate[id]();
             } else if (!shell().isAuthoringMirrorWrite?.()) {
@@ -535,10 +536,11 @@ export async function bindLegacyShellHandlers() {
         });
     });
 
-    $('#creator_notes_textarea').on('input', function () {
-        const notes = String($('#creator_notes_textarea').val());
+    document.getElementById('creator_notes_textarea')?.addEventListener('input', function () {
+        const notes = String(document.getElementById('creator_notes_textarea').value);
         const avatar = state.menu_type === 'create' ? '' : state.characters[state.this_chid]?.avatar;
-        $('#creator_notes_spoiler').html(formatCreatorNotes(notes, avatar));
+        const spoiler = document.getElementById('creator_notes_spoiler');
+        if (spoiler) spoiler.innerHTML = formatCreatorNotes(notes, avatar);
     });
 
     document.getElementById('favorite_button')?.addEventListener('click', function () {
@@ -549,8 +551,6 @@ export async function bindLegacyShellHandlers() {
             saveCharacterDebounced();
         }
     });
-
-    /* $("#renameCharButton").on('click', renameCharacter); */
 
     async function openHistoryChat(fileName, closeAfterLoad = true) {
         if (!fileName) {
@@ -574,13 +574,18 @@ export async function bindLegacyShellHandlers() {
     }
 
     async function renameHistoryChat(oldFileName) {
-        const popupText = $('<div></div>').html(await renderTemplateAsync('chatRename'));
-        const errorText = $('<p role="alert" class="chat-rename-error" hidden></p>');
+        const popupText = document.createElement('div');
+        popupText.innerHTML = await renderTemplateAsync('chatRename');
+        const errorText = document.createElement('p');
+        errorText.setAttribute('role', 'alert');
+        errorText.className = 'chat-rename-error';
+        errorText.hidden = true;
         popupText.append(errorText);
         let currentPopup;
         const rename = shell().getHistoryCommands().createHistoryRenameCommand(oldFileName, {
             invalid: () => {
-                errorText.text(t`Enter a chat name.`).prop('hidden', false);
+                errorText.textContent = t`Enter a chat name.`;
+                errorText.hidden = false;
                 currentPopup.mainInput.setAttribute('aria-invalid', 'true');
                 currentPopup.mainInput.focus();
             },
@@ -592,7 +597,7 @@ export async function bindLegacyShellHandlers() {
                 if (!value) currentPopup.mainInput.focus();
             },
             rename: name => renameChat(oldFileName, name),
-            failed: () => errorText.text(t`Chat was not renamed. Check the name and connection, then try again.`).prop('hidden', false),
+            failed: () => { errorText.textContent = t`Chat was not renamed. Check the name and connection, then try again.`; errorText.hidden = false; },
         });
         const result = await callGenericPopup(popupText, state.POPUP_TYPE.INPUT, oldFileName, {
             okButton: t`Rename chat`,
@@ -635,54 +640,52 @@ export async function bindLegacyShellHandlers() {
         deleteChat: deleteChatByFileName,
         importFiles: importHistoryFiles,
     };
-    // Compatibility for programmatic jQuery triggers and non-React rows. React
+    // Native fallback for non-React rows. React
     // rows stop propagation and invoke the commands above directly.
-    $(document).on('click', '.select_chat_block', function (event) {
-        if (event.isTrigger) event.preventDefault();
-        return openHistoryChat($(this).attr('file_name'));
+    delegate('click', '.select_chat_block', function (event) {
+        const target = event.target instanceof Element ? event.target : event.target?.parentElement;
+        if (target?.closest('.PastChat_cross, .renameChatButton, .exportChatButton, .exportRawChatButton')) return;
+        return openHistoryChat(this.getAttribute('file_name'));
     });
-    $(document).on('click', '.renameChatButton', function (event) {
+    delegate('click', '.renameChatButton', function (event) {
         event.stopPropagation();
-        if (event.isTrigger) event.preventDefault();
-        return renameHistoryChat($(this).closest('.select_chat_block_wrapper').find('.select_chat_block_filename').text());
+        return renameHistoryChat(this.closest('.select_chat_block_wrapper')?.querySelector('.select_chat_block_filename')?.textContent ?? '');
     });
-    $(document).on('click', '.exportChatButton, .exportRawChatButton', function (event) {
+    delegate('click', '.exportChatButton, .exportRawChatButton', function (event) {
         event.stopPropagation();
-        if (event.isTrigger) event.preventDefault();
-        return exportHistoryChat($(this).closest('.select_chat_block_wrapper').find('.select_chat_block_filename').text(), $(this).data('format') || 'txt');
+        return exportHistoryChat(this.closest('.select_chat_block_wrapper')?.querySelector('.select_chat_block_filename')?.textContent ?? '', this.dataset.format || 'txt');
     });
 
 
-    const button = $('#options_button');
-    const menu = $('#options');
+    const button = document.getElementById('options_button');
+    const menu = document.getElementById('options');
 
 
     function showMenu() {
-        button.attr('aria-expanded', 'true');
+        button.setAttribute('aria-expanded', 'true');
         showBranchChatButtons();
         setOptionsMenuRegenerateAvailability(canRegenerateLastReply());
-        menu.fadeIn(state.animation_duration);
+        if (getComputedStyle(menu).display === 'none') { menu.style.opacity = '0'; menu.style.display = 'block'; }
+        transitionOpacity(menu, { opacity: 1, duration: state.animation_duration, easing: state.animation_easing });
         getOptionsPopper()?.update();
     }
 
     function hideMenu() {
-        button.attr('aria-expanded', 'false');
-        menu.fadeOut(state.animation_duration);
+        button.setAttribute('aria-expanded', 'false');
+        transitionOpacity(menu, { opacity: 0, duration: state.animation_duration, easing: state.animation_easing, complete() { menu.style.display = 'none'; } });
         getOptionsPopper()?.update();
     }
 
     function isMouseOverButtonOrMenu() {
-        return menu.is(':hover, :focus-within') || button.is(':hover, :focus');
+        return menu.matches(':hover, :focus-within') || button.matches(':hover, :focus');
     }
 
     const createMenuController = shell().getOptionsMenuControllerFactory();
-    const menuController = createMenuController({ show: showMenu, hide: hideMenu, focus: () => button.trigger('focus') });
-    menuController.attach(button[0], document, isMouseOverButtonOrMenu);
-    button.on('click', event => { if (event.isTrigger) { event.preventDefault(); menuController.toggle(); } });
+    const menuController = createMenuController({ show: showMenu, hide: hideMenu, focus: () => button.focus() });
+    menuController.attach(button, document, isMouseOverButtonOrMenu);
 
     ///////////// OPTIMIZED LISTENERS FOR LEFT SIDE OPTIONS POPUP MENU //////////////////////
-    // Delegated binding: the menu items are React-owned inside #options and can be
-    // remounted; a document-level handler keeps jQuery-trigger compatibility.
+    // React-owned menu items invoke this command directly.
     optionsMenuCommand = async function (id) {
         return shell().getHistoryCommands().runHistoryMenuAction(id, false, {
             hasCharacter: () => state.this_chid !== undefined,
@@ -700,7 +703,7 @@ export async function bindLegacyShellHandlers() {
                 const result = await state.Popup.show.confirm(t`Start new chat?`, await renderTemplateAsync('newChatConfirm'), {
                     okButton: t`Start new chat`,
                     cancelButton: t`Cancel`,
-                    onClose: () => { deleteCurrentChat = !!$('#del_chat_checkbox').prop('checked'); },
+                    onClose: () => { deleteCurrentChat = Boolean(document.getElementById('del_chat_checkbox')?.checked); },
                 });
                 return result ? deleteCurrentChat : null;
             },
@@ -716,31 +719,23 @@ export async function bindLegacyShellHandlers() {
             closeMenu: () => menuController.close(),
         });
     };
-    $(document).on('click', '#options [id]', function (event) {
-        const id = $(this).attr('id');
-        if (event.isTrigger && ['option_start_new_chat', 'option_close_chat', 'option_select_chat', 'option_regenerate', 'option_chat_memory', 'option_wire_log', 'option_delete_mes', 'option_back_to_main', 'attachFile'].includes(id)) event.preventDefault();
-        return optionsMenuCommand(id);
-    });
 
-    $('#newChatFromManageScreenButton').on('click', function (event) {
-        if (event.isTrigger) { event.preventDefault(); return runHistoryRowCommand('newChat'); }
-    });
 
     //////////////////////////////////////////////////////////////////////////////////////////////
 
     //functionality for the cancel delete messages button, reverts to normal display of input form
     function cancelMessageDeletion() {
         globalThis.__emberDeskBulkDeleteController.finish();
-        $('#dialogue_del_mes').css('display', 'none');
-        $('#send_form').css('display', state.css_send_form_display);
-        $('.del_checkbox').each(function () {
-            const checkbox = $(this);
+        document.getElementById('dialogue_del_mes').style.display = 'none';
+        document.getElementById('send_form').style.display = state.css_send_form_display;
+        document.querySelectorAll('.del_checkbox').forEach(checkbox => {
             const row = checkbox.closest('.mes');
-            if (row.is('[data-main-chat-message-row-owner="react"]')) return;
-            checkbox.css('display', 'none');
-            row.find('.for_checkbox').first().css('display', 'block');
-            row.removeClass('selected');
-            checkbox.prop('checked', false);
+            if (row?.matches('[data-main-chat-message-row-owner="react"]')) return;
+            checkbox.style.display = 'none';
+            const content = row?.querySelector('.for_checkbox');
+            if (content) content.style.display = 'block';
+            row?.classList.remove('selected');
+            checkbox.checked = false;
         });
         state.is_delete_mode = false;
         requestComposerFocus();
@@ -751,47 +746,44 @@ export async function bindLegacyShellHandlers() {
         const controller = globalThis.__emberDeskBulkDeleteController;
         return controller.confirm(t`Deleting messages…`, async deletedFrom => {
             try {
-                $('#dialogue_del_mes').attr('aria-busy', 'true');
-                $('.del_checkbox').each(function () {
-                    const checkbox = $(this);
+                document.getElementById('dialogue_del_mes').setAttribute('aria-busy', 'true');
+                document.querySelectorAll('.del_checkbox').forEach(checkbox => {
                     const row = checkbox.closest('.mes');
-                    if (row.is('[data-main-chat-message-row-owner="react"]')) return;
-                    checkbox.css('display', 'none');
-                    row.find('.for_checkbox').first().css('display', 'block');
-                    row.removeClass('selected');
-                    checkbox.prop('checked', false);
+                    if (row?.matches('[data-main-chat-message-row-owner="react"]')) return;
+                    checkbox.style.display = 'none';
+                    const content = row?.querySelector('.for_checkbox');
+                    if (content) content.style.display = 'block';
+                    row?.classList.remove('selected');
+                    checkbox.checked = false;
                 });
                 await shell().getChatMessageCommands().deleteFrom(deletedFrom);
             } finally {
-                $('#dialogue_del_mes').css('display', 'none').removeAttr('aria-busy');
-                $('#send_form').css('display', state.css_send_form_display);
+                const dialogue = document.getElementById('dialogue_del_mes');
+                dialogue.style.display = 'none';
+                dialogue.removeAttribute('aria-busy');
+                document.getElementById('send_form').style.display = state.css_send_form_display;
                 requestComposerFocus();
                 state.is_delete_mode = false;
             }
         });
     }
     deleteMessageCommands = { cancel: cancelMessageDeletion, confirm: confirmMessageDeletion };
-    $('#dialogue_del_mes_cancel').on('click', event => { if (event.isTrigger) { event.preventDefault(); return cancelMessageDeletion(); } });
-    $('#dialogue_del_mes_ok').on('click', event => { if (event.isTrigger) { event.preventDefault(); return confirmMessageDeletion(); } });
-
-
-    $('#select_chat_cross').on('click', function (event) {
-        if (event.isTrigger) { event.preventDefault(); closeSelectChatPopup(); }
-    });
+    // React owns delete and history close buttons; callers use the commands.
     document.getElementById('shadow_select_chat_popup').addEventListener('keydown', event => {
         if (event.key === 'Escape') event.stopPropagation();
     });
     document.getElementById('shadow_select_chat_popup').addEventListener('close', () => {
+        fixToastrForDialogs();
         document.getElementById('options_button').focus();
     });
 
-    $(document).on('pointerup', '.mes_copy', async function () {
-        if (isReactMainChatOwner() && $(this).closest('[data-main-chat-message-row-owner="react"]').length > 0) {
+    delegate('pointerup', '.mes_copy', async function () {
+        if (isReactMainChatOwner() && this.closest('[data-main-chat-message-row-owner="react"]')) {
             return;
         }
         if (state.this_chid !== undefined || state.name2 === state.neutralCharacterName) {
             try {
-                const messageId = $(this).closest('.mes').attr('mesid');
+                const messageId = this.closest('.mes')?.getAttribute('mesid');
                 const text = state.chat[messageId].mes;
                 await copyText(text);
                 toastr.info('Copied!', '', { timeOut: 2000 });
@@ -803,7 +795,7 @@ export async function bindLegacyShellHandlers() {
 
     //********************
     //***Message Editor***
-    $(document).on('click', '.mes_edit', async function () {
+    delegate('click', '.mes_edit', async function () {
         if (isReactMainChatOwner()) {
             return;
         }
@@ -811,18 +803,10 @@ export async function bindLegacyShellHandlers() {
             return;
         }
         if (state.this_chid !== undefined || state.name2 === state.neutralCharacterName) {
-            // Previously system messages we're allowed to be edited
-            /*const message = $(this).closest(".mes");
-
-            if (message.data("isSystem")) {
-                return;
-            }*/
-
             if (state.this_edit_mes_id >= 0) {
-                let mes_edited = state.chatElement.find(`[mesid="${state.this_edit_mes_id}"]`).find('.mes_edit_done');
-                await messageEditDone(mes_edited);
+                await messageEditDone();
             }
-            var edit_mes_id = Number($(this).closest('.mes').attr('mesid'));
+            const edit_mes_id = Number(this.closest('.mes')?.getAttribute('mesid'));
 
             await messageEdit(edit_mes_id);
         }
@@ -844,14 +828,14 @@ export async function bindLegacyShellHandlers() {
     });
     state.mainChatMessageActionsController.init();
 
-    $(document).on('click', '.mes_edit_cancel', async function () {
+    delegate('click', '.mes_edit_cancel', async function () {
         if (isReactMainChatOwner()) {
             return;
         }
         await messageEditCancel.call(this, state.this_edit_mes_id);
     });
 
-    $(document).on('click', '.mes_edit_up', async function () {
+    delegate('click', '.mes_edit_up', async function () {
         if (isReactMainChatOwner()) return;
         if (state.this_edit_mes_id <= 0) {
             return;
@@ -860,7 +844,7 @@ export async function bindLegacyShellHandlers() {
         await messageEditMove(state.this_edit_mes_id, targetId);
     });
 
-    $(document).on('click', '.mes_edit_down', async function () {
+    delegate('click', '.mes_edit_down', async function () {
         if (isReactMainChatOwner()) return;
         if (state.this_edit_mes_id >= state.chat.length - 1) {
             return;
@@ -870,7 +854,7 @@ export async function bindLegacyShellHandlers() {
         await messageEditMove(state.this_edit_mes_id, targetId);
     });
 
-    $(document).on('click', '.mes_edit_copy', async function () {
+    delegate('click', '.mes_edit_copy', async function () {
         if (isReactMainChatOwner()) return;
         const confirmation = await callGenericPopup(t`Create a copy of this message?`, state.POPUP_TYPE.CONFIRM);
         if (!confirmation) {
@@ -880,27 +864,28 @@ export async function bindLegacyShellHandlers() {
         await shell().getChatMessageCommands().duplicateMessage(state.this_edit_mes_id);
     });
 
-    $(document).on('click', '.mes_edit_delete', async function () {
+    delegate('click', '.mes_edit_delete', async function () {
         if (isReactMainChatOwner()) return;
         await deleteMessage(Number(state.this_edit_mes_id), true);
     });
 
-    $(document).on('click', '.mes_edit_done', async function () {
+    delegate('click', '.mes_edit_done', async function () {
         if (isReactMainChatOwner()) {
             return;
         }
-        await messageEditDone($(this));
+        await messageEditDone();
     });
 
     //Select chat
 
     //**************************CHARACTER IMPORT EXPORT*************************//
-    $('#character_import_button').on('click', function () {
-        $('#character_import_file').trigger('click');
+    document.getElementById('character_import_button')?.addEventListener('click', function () {
+        document.getElementById('character_import_file')?.click();
     });
 
-    $('#character_import_file').on('change', async function (e) {
-        $('#rm_info_avatar').html('');
+    document.getElementById('character_import_file')?.addEventListener('change', async function (e) {
+        const avatarInfo = document.getElementById('rm_info_avatar');
+        if (avatarInfo) avatarInfo.replaceChildren();
 
         if (!(e.target instanceof HTMLInputElement)) {
             return;
@@ -927,7 +912,7 @@ export async function bindLegacyShellHandlers() {
         e.target.value = '';
     });
 
-    $('#export_button').on('click', function () {
+    document.getElementById('export_button')?.addEventListener('click', function () {
         toggleCharacterExportPopup(this);
     });
 
@@ -935,7 +920,7 @@ export async function bindLegacyShellHandlers() {
         isOpen: () => state.isExportPopupOpen,
         close: restoreFocus => closeCharacterExportPopup({ restoreFocus }),
     });
-    $(document).on('keydown', function (event) {
+    document.addEventListener('keydown', function (event) {
         if (exportDismissal.key(event.key)) {
             event.preventDefault();
             event.stopImmediatePropagation();
@@ -973,20 +958,7 @@ export async function bindLegacyShellHandlers() {
             },
         });
     };
-    $(document).on('click', '.export_format', function (event) {
-        if (event.isTrigger) event.preventDefault();
-        return characterExportCommand($(this).data('format'));
-    });
-    //**************************CHAT IMPORT EXPORT*************************//
-    $('#chat_import_button').on('click', function (event) {
-        if (!event.isTrigger) return;
-        event.preventDefault();
-        $('#chat_import_file').trigger('click');
-    });
-
-    $('#chat_import_file').on('change', function (event) {
-        if (event.isTrigger) return importHistoryFiles(event.target);
-    });
+    // React owns format and history import controls; callers use commands.
 
     async function importHistoryFiles(targetElement) {
         const formElement = document.getElementById('form_import_chat');
@@ -1012,20 +984,17 @@ export async function bindLegacyShellHandlers() {
         targetElement.value = '';
     }
 
-    $('#dupe_button').on('click', async function () {
+    document.getElementById('dupe_button')?.addEventListener('click', async function () {
         await duplicateCharacter();
     });
 
-    $('html').on('touchstart mousedown', async function (e) {
-        const clickTarget = $(e.target);
-
-        exportDismissal.pointer(Boolean(clickTarget.closest('#export_button').length), Boolean(clickTarget.closest('#export_format_popup').length));
-
-        // Drawer policy lives in the typed service; this listener remains for
-        // the separate export-popup compatibility behavior above.
+    function onOutsidePointer(e) {
         const target = e.target instanceof Element ? e.target : e.target?.parentElement;
+        exportDismissal.pointer(Boolean(target?.closest('#export_button')), Boolean(target?.closest('#export_format_popup')));
         handleWorkspaceDrawerOutsidePointer(target);
-    });
+    }
+    document.documentElement.addEventListener('touchstart', onOutsidePointer);
+    document.documentElement.addEventListener('mousedown', onOutsidePointer);
 
 
     document.addEventListener('click', event => {
@@ -1097,9 +1066,9 @@ export async function bindLegacyShellHandlers() {
     });
 
 
-    $(document).on('click', '.open_alternate_greetings', openAlternateGreetings);
-    /* $('#set_character_world').on('click', openCharacterWorldPopup); */
+    delegate('click', '.open_alternate_greetings', openAlternateGreetings);
 
+    let replacementCardChangeHandler;
     document.getElementById('char-management-dropdown')?.addEventListener('change', async (e) => {
         const targetElement = /** @type {HTMLSelectElement} */ (e.target);
         const target = targetElement.selectedOptions[0]?.id;
@@ -1167,7 +1136,13 @@ export async function bindLegacyShellHandlers() {
                                 toastr.error('Failed to replace the character card.', 'Something went wrong');
                             }
                         }
-                        $('#character_replace_file').off('change').on('change', uploadReplacementCard).trigger('click');
+                        const input = document.getElementById('character_replace_file');
+                        if (input) {
+                            if (replacementCardChangeHandler) input.removeEventListener('change', replacementCardChangeHandler);
+                            replacementCardChangeHandler = uploadReplacementCard;
+                            input.addEventListener('change', replacementCardChangeHandler);
+                            input.click();
+                        }
                         break;
                     }
                     case POPUP_RESULT_URL: {
@@ -1195,7 +1170,7 @@ export async function bindLegacyShellHandlers() {
                 await duplicateCharacter();
             } break;
             case 'delete_from_dropdown': {
-                $('#delete_button').trigger('click');
+                document.getElementById('delete_button')?.click();
             } break;
             /*case 'delete_button':
                 popup_type = "del_ch";
@@ -1212,7 +1187,7 @@ export async function bindLegacyShellHandlers() {
         targetElement.selectedIndex = 0;
     });
 
-    $(window).on('beforeunload', () => {
+    window.addEventListener('beforeunload', () => {
         cancelTtsPlay();
         if (state.streamingProcessor) {
             console.log('Page reloaded. Aborting streaming...');
@@ -1220,9 +1195,9 @@ export async function bindLegacyShellHandlers() {
         }
     });
 
-    $(document).on('click', '.external_import_button, #external_import_button', async () => {
+    delegate('click', '.external_import_button, #external_import_button', async () => {
         const html = await renderTemplateAsync('importCharacters');
-        const input = await callGenericPopup(html, state.POPUP_TYPE.INPUT, '', { allowVerticalScrolling: true, wider: true, okButton: $('#popup_template').attr('popup-button-import'), rows: 4 });
+        const input = await callGenericPopup(html, state.POPUP_TYPE.INPUT, '', { allowVerticalScrolling: true, wider: true, okButton: document.getElementById('popup_template')?.getAttribute('popup-button-import') ?? undefined, rows: 4 });
 
         if (!input) {
             console.debug('Custom content import cancelled');
@@ -1252,19 +1227,47 @@ export async function bindLegacyShellHandlers() {
         }
     });
 
-    $('#hideCharPanelAvatarButton').on('click', () => {
-        $('#avatar-and-name-block').slideToggle();
+    let avatarPanelAnimation;
+    let avatarPanelHidden;
+    let avatarPanelOverflow;
+    document.getElementById('hideCharPanelAvatarButton')?.addEventListener('click', () => {
+        const panel = document.getElementById('avatar-and-name-block');
+        if (!panel) return;
+        const hidden = avatarPanelAnimation ? avatarPanelHidden : getComputedStyle(panel).display === 'none';
+        avatarPanelHidden = !hidden;
+        if (avatarPanelAnimation) {
+            avatarPanelAnimation.cancel();
+            avatarPanelAnimation = undefined;
+            panel.style.overflow = avatarPanelOverflow;
+        }
+        if (hidden) panel.style.display = '';
+        if (hidden && getComputedStyle(panel).display === 'none') panel.style.display = 'block';
+        avatarPanelOverflow = panel.style.overflow;
+        if (!panel.animate || globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches) {
+            panel.style.display = hidden ? panel.style.display : 'none';
+            return;
+        }
+        panel.style.overflow = 'hidden';
+        const height = `${panel.scrollHeight}px`;
+        const animation = panel.animate(hidden ? [{ height: '0px' }, { height }] : [{ height }, { height: '0px' }], { duration: 400, easing: 'ease' });
+        avatarPanelAnimation = animation;
+        animation.finished.then(() => {
+            if (avatarPanelAnimation !== animation) return;
+            if (!hidden) panel.style.display = 'none';
+            panel.style.overflow = avatarPanelOverflow;
+            avatarPanelAnimation = undefined;
+        }).catch(() => {});
     });
 
     // Compatibility fallback click path. React MainChatShowMoreOwnerPortal owns the
     // primary load-more control when the message-list panel is mounted (capture phase).
-    $(document).on('click', '#show_more_messages', async function (event) {
+    delegate('click', '#show_more_messages', async function (event) {
         event.stopPropagation();
         event.preventDefault();
         await loadEarlierChatMessages();
     });
 
-    $(document).on('click', '.open_characters_library', async function () {
+    delegate('click', '.open_characters_library', async function () {
         const popup = state.Popup.util.popups.find(popup => popup.dlg.contains(this));
         await popup?.completeAffirmative();
         await shell().openCharacterLibrary();

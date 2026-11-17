@@ -6,6 +6,11 @@ topic: frontend-jquery-slice-migration
 
 # Frontend jQuery Slice Migration
 
+This note describes historical extraction slices. The login and setup legacy
+pages and controllers have since been retired in favor of React, and the
+workspace no longer loads jQuery, jQuery UI or transit. Current workspace
+resource and startup ownership is in [Workspace Composition Root](workspace-composition-root.md).
+
 ## Module Responsibility
 
 This document records EmberDesk's repeatable migration pattern for shrinking legacy jQuery page scripts into narrow, testable page controllers.
@@ -26,7 +31,7 @@ The shipped slices are:
 - `public/scripts/provider-secret-field-state.js` - state-only API drawer helper for unified key and fallback provider secret status/save/clear decisions
 - `tests/helpers/frontend-structure-contract.js` - tests-only helper for selector, order, role/name, aria-live, and source-marker structure contracts
 
-This is not a framework migration. EmberDesk still uses the existing HTML/CSS/jQuery frontend, and this pattern only removes page-local jQuery dependencies when the slice can stay small and independently validated.
+These slices were not a framework migration: they removed page-local jQuery dependencies when a slice could stay small and independently validated.
 
 React page and panel islands are the separate modernization route used by `/login`, `/setup`, `/settings`, and the guarded workspace panels. The jQuery slice pattern remains valid for small legacy controller extractions, but it is not the owner for those React surfaces.
 
@@ -118,7 +123,7 @@ The recovery success behavior now matches the semantic contract: after a success
 
 `public/scripts/chat-message-actions-controller.js` applies the same root-scoped controller rule to a narrow main-chat affordance. It owns only the delegated expand/collapse behavior for `.extraMesButtonsHint` and `.extraMesButtons`, preserves existing selectors and animation settings, and exposes `MESSAGE_ACTION_TIERS` as a local implementation note for high-frequency, secondary, and danger action grouping. It does not own message body rendering, edit/delete business logic, swipe handling, reasoning controls, media controls, streaming, or slash-command message injection.
 
-`public/scripts/provider-secret-field-state.js` is not a page controller, but it follows the same small-slice rule: isolate decision logic, inject dependencies through callers and tests, and keep jQuery DOM binding in the existing owner. It covers unified-key placeholder/value state, fallback provider readiness, save/clear decisions, and mask toggling for the API drawer.
+`public/scripts/provider-secret-field-state.js` is not a page controller, but it follows the same small-slice rule: isolate decision logic, inject dependencies through callers and tests, and keep DOM binding in the existing owner. It covers unified-key placeholder/value state, fallback provider readiness, save/clear decisions, and mask toggling for the API drawer.
 
 `tests/helpers/frontend-structure-contract.js` is a tests-only companion for small frontend slices. It centralizes repeated contract assertions while keeping each test's contract inventory explicit. It should prefer role/name, label, `aria-live`, document order, and selector uniqueness before falling back to raw source markers.
 

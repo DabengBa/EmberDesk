@@ -11,6 +11,23 @@ function readRepoFile(relativePath) {
 }
 
 describe('options menu + character context menu React surfaces', () => {
+    test('bubbled button clicks do not immediately dismiss the opened menu without hover or focus', async () => {
+        const { loadTsModule } = await import('./helpers/load-ts-module.mjs');
+        const { createOptionsMenuController } = await loadTsModule('app/lib/history-panel-service.ts');
+        const effects = [];
+        const button = new EventTarget(), documentTarget = new EventTarget(), icon = new EventTarget();
+        const menu = createOptionsMenuController({ show: () => effects.push('show'), hide: () => effects.push('hide'), focus: () => effects.push('focus') });
+        menu.attach(button, documentTarget, () => false);
+        button.dispatchEvent(new Event('click'));
+        const bubbled = new Event('click');
+        Object.defineProperty(bubbled, 'composedPath', { value: () => [icon, button, documentTarget] });
+        documentTarget.dispatchEvent(bubbled);
+        expect(menu.getSnapshot()).toBe(true);
+        expect(effects).toEqual(['show']);
+        documentTarget.dispatchEvent(new Event('click'));
+        expect(menu.getSnapshot()).toBe(false);
+        expect(effects).toEqual(['show', 'hide']);
+    });
     test('menu controller owns outside and Escape events and removes listeners', async () => {
         const { loadTsModule } = await import('./helpers/load-ts-module.mjs');
         const { createOptionsMenuController } = await loadTsModule('app/lib/history-panel-service.ts');
@@ -100,10 +117,10 @@ describe('options menu + character context menu React surfaces', () => {
         expect(script).toContain('export function setOptionsMenuRegenerateAvailability');
         expect(script).toContain('export function canRegenerateLastReply');
         expect(script).toContain('export async function regenerateLastReply');
-        // The delegated click path re-checks eligibility before dispatching —
-        // a stale menu state can never trigger a second generation.
-        expect(domHandlers).toContain('option_regenerate');
-        expect(domHandlers).toContain('canRegenerateLastReply()');
+        // The React command supplies the live eligibility check and action to
+        // the shared history command owner.
+        expect(domHandlers).toContain('canRegenerate: canRegenerateLastReply');
+        expect(domHandlers).toContain('regenerate: () => { void regenerateLastReply(); }');
         // Availability is synced every time the menu opens.
         expect(domHandlers).toContain('setOptionsMenuRegenerateAvailability(canRegenerateLastReply())');
     });

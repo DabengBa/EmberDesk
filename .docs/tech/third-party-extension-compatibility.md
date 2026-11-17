@@ -17,9 +17,10 @@ topic: third-party-extension-compatibility
 
 ### Migrating older jQuery message cards
 
-The current workspace still loads and uses jQuery. The frame predefine script
-best-effort copies `$`, `jQuery`, and other available globals from its parent;
-it does not install them or guarantee that a future host supplies them. Frame
+The frame predefine script does not copy `$` or `jQuery` from its parent, even
+if the parent provides them. It best-effort copies the other available shared
+globals (`_`, `showdown`, `DOMPurify`, `hljs`, `moment`, and `SVGInject`); it
+does not install them or guarantee that a host supplies them. Frame
 mounting, the `EmberDeskFrame` event/context bridge, and host-side height and
 teardown do not require a parent jQuery. A card that calls `$` or a jQuery
 plugin still requires those dependencies, even when the frame itself mounts.
@@ -31,9 +32,9 @@ needed library and plugins within their own card; do not assume plugins can be
 mechanically replaced or that loading arbitrary scripts is safe. This does not
 change the security contract above: frames are unsandboxed same-origin page
 code. The isolated no-jQuery browser test is designed to exercise the real
-frame module, not the full workspace's React/controller/event-bus integration;
-the separate workspace frame E2E covers that integration while the workspace
-uses jQuery.
+frame module with and without parent jQuery, not the full workspace's
+React/controller/event-bus integration; the separate workspace frame E2E
+covers that integration.
 
 ## Internal Contracts
 
@@ -92,7 +93,7 @@ Stable event names consumed by first-party modules and the frontend-frame whitel
 ### Composition-root ownership
 
 - `public/scripts/events.js` owns `eventSource` and `event_types`.
-- `public/scripts/request-context.js` owns CSRF loading, request headers, and the jQuery Ajax prefilter.
+- `public/scripts/request-context.js` owns CSRF loading and request headers; there is no jQuery Ajax prefilter.
 - `public/scripts/public-api.js` installs `globalThis.SillyTavern`.
 - `public/script.js` assembles these contracts and calls `bootstrapWorkspace()`.
 

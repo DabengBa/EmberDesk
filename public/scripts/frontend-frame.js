@@ -322,7 +322,7 @@ const FRAME_PREDEFINE_SCRIPT = `(function () {
     try { delete window.__ED_FRAME_META__; } catch (e) { window.__ED_FRAME_META__ = undefined; }
     try {
         var parentWindow = window.parent;
-        ['_', '$', 'jQuery', 'showdown', 'DOMPurify', 'hljs', 'moment', 'SVGInject'].forEach(function (key) {
+        ['_', 'showdown', 'DOMPurify', 'hljs', 'moment', 'SVGInject'].forEach(function (key) {
             if (window[key] === undefined && parentWindow && parentWindow[key] !== undefined) {
                 window[key] = parentWindow[key];
             }

@@ -318,7 +318,8 @@ export async function writeExtensionFieldBulk(avatars, key, value, { filterPath 
     if (context.characterId !== undefined) {
         const activeChar = context.characters[context.characterId];
         if (activeChar && updatedSet.has(activeChar.avatar) && activeChar.json_data) {
-            $('#character_json_data').val(activeChar.json_data);
+            const field = document.getElementById('character_json_data');
+            if (field) field.value = activeChar.json_data;
         }
     }
 

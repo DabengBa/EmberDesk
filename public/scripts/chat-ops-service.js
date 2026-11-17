@@ -218,7 +218,7 @@ export async function loadEarlierChatMessages(messagesToLoad = null) {
         return;
     }
 
-    const chatElement = state.chatElement?.jquery ? state.chatElement[0] : state.chatElement;
+    const chatElement = state.chatElement;
     const firstDisplayedMessage = Array.from(chatElement?.children ?? []).find(element => element.matches('.mes'));
     const firstDisplayedMesId = firstDisplayedMessage?.getAttribute('mesid') ?? undefined;
     let messageId = Number(firstDisplayedMesId);
@@ -240,12 +240,7 @@ export async function loadEarlierChatMessages(messagesToLoad = null) {
     state.chat.slice(firstId, messageId).forEach((message, id) => {
         messageElements.push(updateMessageElement(message, { messageId: firstId + id }));
     });
-    const messageNodes = messageElements
-        .map(messageElement => {
-            const node = messageElement?.jquery ? messageElement[0] : messageElement?.[0] ?? messageElement;
-            return node instanceof HTMLElement ? node : null;
-        })
-        .filter(Boolean);
+    const messageNodes = messageElements.filter(node => node instanceof HTMLElement);
 
     // Insert older rows ahead of the current first message so load-more keeps
     // chronological DOM order and scroll compensation remains stable.
@@ -288,7 +283,7 @@ export async function printMessages() {
 
     if (state.chat.length > count) {
         startIndex = state.chat.length - count;
-        const chatElement = state.chatElement?.jquery ? state.chatElement[0] : state.chatElement;
+        const chatElement = state.chatElement;
         if (chatElement) {
             const showMoreButton = document.createElement('div');
             showMoreButton.id = 'show_more_messages';
@@ -390,8 +385,7 @@ export async function clearChat({ clearData = false, preserveMainChatScrollSnaps
         // is enough to clear rows and avoids a second DOM writer.
         if (!isReactMainChatOwner()) {
             // This also removes non '.mes' elements, e.g. '#show_more_messages'.
-            const roots = state.chatElement?.jquery ? Array.from(state.chatElement) : [state.chatElement];
-            roots.forEach(root => Array.from(root?.children ?? []).forEach(child => child.remove()));
+            Array.from(state.chatElement?.children ?? []).forEach(child => child.remove());
         }
         const zoomedAvatars = document.querySelectorAll('.zoomed_avatar[forChar]');
         if (zoomedAvatars.length) {

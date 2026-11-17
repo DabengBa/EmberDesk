@@ -29,9 +29,9 @@ test('real workspace loader closes without UI and transit scripts', async ({ pag
 test('real tag and folder templates apply and reset colors without plugin scripts', async ({ page }) => {
     const result = await page.evaluate(async () => {
         const { appendTagToList, getTagBlock } = await import('/scripts/tags.js');
-        const $ = window.jQuery;
-        const host = $('<div>').appendTo(document.body);
-        host[0].style.setProperty('--proof-tag-color', 'rgb(35, 80, 125)');
+        const host = document.createElement('div');
+        document.body.append(host);
+        host.style.setProperty('--proof-tag-color', 'rgb(35, 80, 125)');
         const read = element => ({ inline: element.style.backgroundColor, computed: getComputedStyle(element).backgroundColor, inlineText: element.style.color, computedText: getComputedStyle(element).color });
         const templateElements = [document.querySelector('#tag_template .tag'), ...document.querySelectorAll('#bogus_folder_template .avatar')];
         const originalStyles = templateElements.map(element => element.getAttribute('style'));
@@ -41,12 +41,12 @@ test('real tag and folder templates apply and reset colors without plugin script
         }
         const values = [];
         for (const color of ['var(--proof-tag-color)', '', undefined]) {
-            host.empty();
+            host.replaceChildren();
             const tag = { id: 'proof-tag', name: 'Proof tag', folder_type: 'OPEN', color, color2: color };
             appendTagToList(host, tag);
             const folder = getTagBlock(tag, []);
             host.append(folder);
-            values.push({ tag: read(host.find('.tag')[0]), folder: read(folder.find('.avatar')[0]) });
+            values.push({ tag: read(host.querySelector('.tag')), folder: read(folder.querySelector('.avatar')) });
         }
         templateElements.forEach((element, index) => originalStyles[index] === null ? element.removeAttribute('style') : element.setAttribute('style', originalStyles[index]));
         host.remove();

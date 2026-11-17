@@ -35,7 +35,7 @@ These extractions do not claim that all historical `script.js` domain code has b
 The first extracted contract modules are:
 
 - `public/scripts/events.js` - owns `event_types` and the `eventSource` emitter.
-- `public/scripts/request-context.js` - owns the CSRF token, `getRequestHeaders()`, and the jQuery Ajax prefilter.
+- `public/scripts/request-context.js` - owns CSRF token loading and `getRequestHeaders()`.
 - `public/scripts/public-api.js` - explicitly installs `globalThis.SillyTavern`.
 - `public/scripts/world-info-shell-context.js` - owns the fail-closed internal context registry used by the World Info compatibility facade.
 
@@ -59,8 +59,7 @@ During `public/script.js` evaluation:
 1. The root imports `eventSource` / `event_types`, request-context helpers, and the browser library.
 2. `installPublicBrowserApi({ libs, getContext })` explicitly assigns the supported `globalThis.SillyTavern` object.
 3. `registerWorldInfoShellContext(...)` registers callable shell capabilities and a lazy `extensionPromptRoles` accessor. It does not cause `world-info.js` to import the root.
-4. `installAjaxCsrfPrefilter()` registers the jQuery request hook. The request-context module keeps the token private to that module and exposes headers through `getRequestHeaders()`.
-5. The jQuery-ready callback invokes `bootstrapWorkspace()` once the browser shell and its imported modules are available.
+4. Once the DOM is ready, `bindLegacyShellHandlers()` in `public/scripts/dom-handlers.js` binds the shell and invokes `bootstrapWorkspace()`; `public/script.js` handles both the loading and already-ready cases.
 
 ### Bootstrap order
 
@@ -85,9 +84,9 @@ During `public/script.js` evaluation:
 `request-context.js` preserves the existing request shape: JSON requests receive `Content-Type: application/json` and the current `X-CSRF-Token`; callers may omit the content type for requests such as `pingServer()`. `loadCsrfToken()` rejects its caller on fetch or response failure, so the bootstrap owner decides how initialization fails.
 
 The composition root uses native DOM operations for background fitting,
-standalone-mode class, connection hint and dialogue hiding. This does not remove
-jQuery globally: the Ajax prefilter reads the current CSRF token at request time,
-and existing ready wiring remains. `app/workspace-panels.tsx` also retains
+standalone-mode class, connection hint and dialogue hiding. The workspace no
+longer loads jQuery, jQuery UI or transit, and there is no Ajax CSRF prefilter;
+request callers use `getRequestHeaders()`. `app/workspace-panels.tsx` retains
 `flushSync` where consumers require synchronous React wiring. Focused coverage
 includes `tests/script-js-composition-root.test.js`, compatibility tests and
 the isolated browser scenarios in `tests/thirteenth-frontend.e2e.js`.
@@ -107,10 +106,9 @@ OpenAI results. `tests/tokenizers-async.test.js` covers these contracts.
 `public/scripts/notifications.js` is the single stateful notification owner.
 First-party modules import it; its `globalThis.toastr` and
 `globalThis.emberDeskNotifications` aliases point to the same instance used by
-the React bridge. `notifications.native` shares that state but returns native
-elements; the legacy methods and `getContainer` retain jQuery wrappers when
-jQuery is available. HTML strings are sanitized with DOMPurify; DOM and jQuery
-nodes are trusted and moved intact, including their existing listeners. This
+the React bridge. Notification methods return native elements, and `getContainer`
+returns a native container when present or created. HTML strings are sanitized with DOMPurify; DOM nodes are trusted and
+moved intact, including their existing listeners. This
 does not establish a third-party extension runtime.
 `tests/notifications.test.js` covers the notification API and lifecycle;
 `tests/notifications-integration.e2e.js` covers the browser singleton,
@@ -118,7 +116,7 @@ modal, action loader and lifecycle integration.
 
 ### React popup ownership and retained resources
 
-`public/scripts/popup.js` retains the public constructor, synchronous `dlg`/content/button references, result helpers and utilities. It forwards construction and lifecycle to the installed React factory and fails explicitly if that factory is missing. React creates the native dialog and owns open/close/cancel, focus restoration, asynchronous confirmation, custom controls and Cropper effects. HTML, DOM and jQuery content are opaque consumer subtrees; their callers may still mount an existing editor or dropdown inside the React-owned dialog. There is no legacy dialog-controller fallback or hidden popup template.
+`public/scripts/popup.js` retains the public constructor, synchronous `dlg`/content/button references, result helpers and utilities. It forwards construction and lifecycle to the installed React factory and fails explicitly if that factory is missing. React creates the native dialog and owns open/close/cancel, focus restoration, asynchronous confirmation, custom controls and Cropper effects. HTML and DOM content are opaque consumer subtrees; their callers may still mount an existing editor or dropdown inside the React-owned dialog. There is no legacy dialog-controller fallback or hidden popup template.
 
 `flushSync` at construction is intentional: ActionLoader, World Cascade and chat consumers read or modify references before `show()`. Popup preparation occurs after CSRF success without moving settings, locale or application-ready events. The cropper's ready state controls React button props, so changing the native disabled attribute cannot leave React suppressing a click.
 
@@ -128,8 +126,7 @@ modal, action loader and lifecycle integration.
 | dialog-polyfill and jquery-cropper wrapper | Removed: React uses native dialog and the existing native Cropper constructor |
 | touch-punch | Removed: no jQuery UI mouse-widget consumers remain; workspace dragging uses its existing separate implementation |
 | izoomify | Removed with its unused data attributes: no initialization call remained |
-| jQuery and transit | Retained: shell consumers still use jQuery. ActionLoader now writes its blur and opacity directly to the native style; transit's filter hook is not required by that path. Removing transit needs broader evidence for remaining implicit or dynamic consumers. |
-| jQuery UI | Retained pending broader compatibility verification: tag and folder color writes now use native styles rather than its color hooks; unused tag autocomplete exports and their dedicated bindings and CSS remain removed. |
+| jQuery, transit and jQuery UI | Removed from the workspace shell and vendored assets; first-party callers use native DOM and browser APIs. Frontend-frame compatibility is described in [First-Party Internal Compatibility Contracts](third-party-extension-compatibility.md). |
 | Select2 | Removed with its placeholder plugin, styles, types and unused helpers. Character World Info and the global selector use React; browser checks cover selection, synchronization, dialogs and menus. Dynamic paths cannot be exhaustively established by static search alone. |
 | Cropper | Retained as the native image-crop implementation used by the React popup |
 

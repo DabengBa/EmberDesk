@@ -49,6 +49,7 @@ function createOpenAIResponse(body) {
         ok: true,
         status: 200,
         statusText: 'OK',
+        headers: { raw: () => ({}) },
         json: async () => body,
         text: async () => JSON.stringify(body),
     };
@@ -171,5 +172,47 @@ describe('single-endpoint OpenAI-compatible chat completions backend', () => {
         });
 
         expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
+
+    test('status forwards models and rejects unsupported providers without an upstream request', async () => {
+        readSecretMock.mockReturnValue('shared-key');
+        fetchMock.mockResolvedValue(createOpenAIResponse({ data: [{ id: 'model-a' }] }));
+        await withServer(createApp(router), async url => {
+            const status = await fetch(`${url}/api/backends/chat-completions/status`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ chat_completion_source: 'openai', custom_url: 'https://endpoint.example/v1' }),
+            });
+            expect(await status.json()).toEqual({ data: [{ id: 'model-a' }] });
+            const unsupported = await fetch(`${url}/api/backends/chat-completions/status`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ chat_completion_source: 'retired' }),
+            });
+            expect(unsupported.status).toBe(400);
+        });
+        expect(fetchMock).toHaveBeenCalledTimes(1);
+        expect(String(fetchMock.mock.calls[0][0])).toBe('https://endpoint.example/v1/models');
+        expect(fetchMock.mock.calls[0][1].headers.Authorization).toBe('Bearer shared-key');
+    });
+
+    test('generation retains reasoning, schema, stop and tool payloads', async () => {
+        readSecretMock.mockReturnValue('shared-key');
+        fetchMock.mockResolvedValue(createOpenAIResponse({ choices: [] }));
+        await withServer(createApp(router), async url => {
+            const response = await fetch(`${url}/api/backends/chat-completions/generate`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(generateBody({
+                    model: 'gpt-5', reasoning_effort: 'min', verbosity: 'low',
+                    json_schema: { name: 'result', value: { type: 'object' } },
+                    stop: ['end'], tools: [{ type: 'function', function: { name: 'lookup' } }], tool_choice: 'auto',
+                })),
+            });
+            expect(response.status).toBe(200);
+            await response.text();
+        });
+        expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toMatchObject({
+            reasoning_effort: 'minimal', verbosity: 'low', stop: ['end'], tool_choice: 'auto',
+            tools: [{ type: 'function', function: { name: 'lookup' } }],
+            response_format: { type: 'json_schema', json_schema: { name: 'result', strict: true, schema: { type: 'object' } } },
+        });
     });
 });

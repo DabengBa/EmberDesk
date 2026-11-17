@@ -10,6 +10,7 @@ test.beforeEach(async ({ page }) => {
         const mocks = {
             '/': '<!doctype html><div id="preloader"></div>',
             '/script.js': 'export function stopGeneration() {}',
+            '/lib.js': 'export const DOMPurify = { sanitize() { throw new Error("Unexpected toast sanitization"); } };',
             '/scripts/i18n.js': 'export const t = parts => parts[0];',
             '/scripts/popup.js': `
                 export const POPUP_RESULT = { AFFIRMATIVE: 1, CANCELLED: 0 };
@@ -33,22 +34,15 @@ test.beforeEach(async ({ page }) => {
         await route.fulfill({ status: 200, contentType: path === '/' ? 'text/html' : 'application/javascript', body });
     });
     await page.goto('http://loader.test/');
-    await page.addScriptTag({ path: `${publicRoot}lib/jquery-3.5.1.min.js` });
-    await page.addScriptTag({ path: `${publicRoot}lib/jquery.transit.min.js` });
     await page.evaluate(async () => {
-        const original = window.jQuery.cssHooks.filter.set;
-        window.filterHookCalls = [];
-        window.jQuery.cssHooks.filter.set = function (element, value) {
-            window.filterHookCalls.push(value);
-            return original.apply(this, arguments);
-        };
+        for (const name of ['$', 'jQuery']) Object.defineProperty(window, name, { configurable: true, get() { throw new Error(`Unexpected ${name} access`); } });
         window.actionLoader = await import('/scripts/action-loader.js');
     });
 });
 
 
 test.describe('action loader native filter', () => {
-    test('last handle animates, bypasses the filter hook, and waits for transition and Popup completion', async ({ page }) => {
+    test('last handle animates natively and waits for transition and Popup completion', async ({ page }) => {
         const state = await page.evaluate(async () => {
             const options = { toastMode: 'none', message: 'Loading' };
             const first = window.actionLoader.showActionLoader(options);
@@ -60,7 +54,7 @@ test.describe('action loader native filter', () => {
             let resolved = false;
             const hiding = last.hide().then(() => { resolved = true; });
             const during = { attached: element.isConnected, filter: element.style.filter, opacity: element.style.opacity,
-                hooks: [...window.filterHookCalls], completed: window.completedWith, resolved };
+                completed: window.completedWith, resolved };
             element.dispatchEvent(new Event('transitionend', { bubbles: true }));
             await new Promise(resolve => setTimeout(resolve, 0));
             const afterTransition = { attached: element.isConnected, preloader: !!document.querySelector('#preloader'),
@@ -70,7 +64,7 @@ test.describe('action loader native filter', () => {
             return { afterFirst, during, afterTransition, resolved, popupAttached: window.popup.dlg.isConnected };
         });
         expect(state.afterFirst).toEqual({ attached: true, filter: '', completed: undefined });
-        expect(state.during).toEqual({ attached: true, filter: 'blur(15px)', opacity: '0', hooks: [], completed: undefined, resolved: false });
+        expect(state.during).toEqual({ attached: true, filter: 'blur(15px)', opacity: '0', completed: undefined, resolved: false });
         expect(state.afterTransition).toEqual({ attached: false, preloader: false, completed: 1, resolved: false });
         expect(state.resolved).toBe(true);
         expect(state.popupAttached).toBe(false);
@@ -89,9 +83,9 @@ test.describe('action loader native filter', () => {
             const completed = window.completedWith;
             window.finishPopup();
             await hiding;
-            return { before, after, completed, hooks: window.filterHookCalls };
+            return { before, after, completed };
         });
-        expect(state).toEqual({ before: true, after: false, completed: 1, hooks: [] });
+        expect(state).toEqual({ before: true, after: false, completed: 1 });
     });
 
     for (const [label, duration, mode] of [
@@ -108,12 +102,12 @@ test.describe('action loader native filter', () => {
                 const stopping = handle.stop();
                 await new Promise(resolve => setTimeout(resolve, 0));
                 const beforeCompletion = { attached: element.isConnected, filter: element.style.filter, opacity: element.style.opacity,
-                    preloader: !!document.querySelector('#preloader'), completed: window.completedWith, hooks: window.filterHookCalls };
+                    preloader: !!document.querySelector('#preloader'), completed: window.completedWith };
                 window.finishPopup();
                 await stopping;
                 return { beforeCompletion, calls };
             }, { duration, mode });
-            expect(state.beforeCompletion).toEqual({ attached: false, filter: 'blur(15px)', opacity: '0', preloader: false, completed: 1, hooks: [] });
+            expect(state.beforeCompletion).toEqual({ attached: false, filter: 'blur(15px)', opacity: '0', preloader: false, completed: 1 });
             expect(state.calls).toEqual(['stop']);
         });
     }

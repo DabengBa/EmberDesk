@@ -6,6 +6,8 @@ import {
 import { mountReactWorkspacePanel } from './workspace-panels-react-bridge.js';
 import { getMainChatFailure } from './main-chat-failure.js';
 
+const drawerListeners = new WeakMap();
+
 export function decideWorkspacePanelHostLifecycle({
     kind,
     features,
@@ -117,8 +119,17 @@ export function initWorkspacePanelDrawerBridge({
     }
 
     if (drawerSelector && drawerNamespace) {
-        $(drawerSelector).off(`click.${drawerNamespace}`).on(`click.${drawerNamespace}`, () => {
-            remount();
+        document.querySelectorAll(drawerSelector).forEach(element => {
+            let listeners = drawerListeners.get(element);
+            if (!listeners) {
+                listeners = new Map();
+                drawerListeners.set(element, listeners);
+            }
+            const previous = listeners.get(drawerNamespace);
+            if (previous) element.removeEventListener('click', previous);
+            const listener = () => remount();
+            listeners.set(drawerNamespace, listener);
+            element.addEventListener('click', listener);
         });
     }
 

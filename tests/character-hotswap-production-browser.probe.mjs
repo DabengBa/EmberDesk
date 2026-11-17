@@ -39,14 +39,8 @@ try {
     const pageErrors = [];
     page.on('pageerror', error => pageErrors.push(error.message));
     await page.setContent(`<div id="right-nav-panel"><div class="hotswap"></div><div id="rm_print_characters_block"><button class="bogus_folder_select">folder</button></div></div>${avatarTemplate}`);
-    await page.addScriptTag({ content: read('public/lib/jquery-3.5.1.min.js') });
     await page.addScriptTag({ content: `
         window.events = [];
-        const $on = jQuery.fn.on;
-        jQuery.fn.on = function(type, selector, ...rest) {
-            if (type === 'click' && selector === '.character_select') throw new Error('hotswap delegation still uses jQuery');
-            return $on.call(this, type, selector, ...rest);
-        };
         const INTERACTABLE_CONTROL_CLASS = 'interactable';
         const default_avatar = 'none.png';
         const getThumbnailUrl = (_type, file) => file;

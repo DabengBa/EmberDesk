@@ -193,20 +193,20 @@ async function getMissingTranslations() {
 
     for (const language of langs) {
         const localeData = await getLocaleData(language.lang);
-        $(document).find('[data-i18n]').each(function () {
-            for (const entry of parseI18nAttributeSpecs($(this).data('i18n'))) {
+        document.querySelectorAll('[data-i18n]').forEach(element => {
+            for (const entry of parseI18nAttributeSpecs(element.getAttribute('data-i18n'))) {
                 const localizedValue = localeData?.[entry.key];
                 if (localizedValue || localizedValue === '') {
                     continue;
                 }
 
                 if (entry.attributes.length > 0) {
-                    const fallbackAttribute = entry.attributes.find(attribute => $(this).attr(attribute) !== undefined) ?? entry.attributes[0];
-                    missingData.push({ key: entry.raw, language: language.lang, value: String($(this).attr(fallbackAttribute) ?? '') });
+                    const fallbackAttribute = entry.attributes.find(attribute => element.hasAttribute(attribute)) ?? entry.attributes[0];
+                    missingData.push({ key: entry.raw, language: language.lang, value: String(element.getAttribute(fallbackAttribute) ?? '') });
                     continue;
                 }
 
-                missingData.push({ key: entry.raw, language: language.lang, value: $(this).text().trim() });
+                missingData.push({ key: entry.raw, language: language.lang, value: element.textContent.trim() });
             }
         });
     }
@@ -249,15 +249,13 @@ export function applyLocale(root = document) {
         return root;
     }
 
-    const $root = root instanceof Document ? $(root) : $(new DOMParser().parseFromString(root, 'text/html'));
+    const parsedRoot = root instanceof Document ? root : new DOMParser().parseFromString(root, 'text/html');
 
     //find all the elements with `data-i18n` attribute
-    $root.find('[data-i18n]').each(function () {
-        translateElement(this);
-    });
+    parsedRoot.querySelectorAll('[data-i18n]').forEach(translateElement);
 
     if (root !== document) {
-        return $root.get(0).body.innerHTML;
+        return parsedRoot.body.innerHTML;
     }
 
     // React surfaces subscribe to this event to re-render programmatic strings,

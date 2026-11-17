@@ -16,7 +16,12 @@ test('Node resolves the production settings and presets graphs without a loader'
             const { setConfigFilePath } = await import(process.argv[1]);
             setConfigFilePath(process.argv[2]);
             globalThis.DATA_ROOT = process.argv[3];
-            const { router } = await import(process.argv[4]);
+            const settingsEntry = await import(process.argv[4]);
+            const settingsRoutes = await import(process.argv[9]);
+            const { router } = settingsEntry;
+            assert.equal(router, settingsRoutes.router);
+            assert.equal(settingsEntry.ensureCanonicalSettingsForUser, settingsRoutes.ensureCanonicalSettingsForUser);
+            assert.equal(settingsEntry.resetCanonicalSettings, settingsRoutes.resetCanonicalSettings);
             const presets = await import(process.argv[5]);
             const settings = await import(process.argv[6]);
             const { runCanonicalMigrations } = await import(process.argv[7]);
@@ -40,7 +45,7 @@ test('Node resolves the production settings and presets graphs without a loader'
             console.log('settings-callers:native');
         `, url('util.js'), config, root, url('endpoints/settings.js'),
         url('endpoints/presets-store.ts'), url('endpoints/settings-store.ts'), url('canonical-sqlite-migrations.ts'),
-        url('endpoints/presets.js')], {
+        url('endpoints/presets.js'), url('endpoints/settings-routes.ts')], {
             encoding: 'utf8', timeout: 10_000,
         });
         expect({ status: result.status, stderr: result.status === 0 ? '' : result.stderr })

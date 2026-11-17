@@ -20,7 +20,7 @@ type Services = {
     confirmForceClose(): Promise<boolean>;
     reportError(error: unknown): void;
 };
-type Request = { popup: Popup; content: string | Element | JQuery<HTMLElement>; inputValue: string; options: PopupOptions; services: Services };
+type Request = { popup: Popup; content: string | Element; inputValue: string; options: PopupOptions; services: Services };
 export type PopupRuntime = {
     refs: PopupRefs;
     show(): Promise<PopupValue>;
@@ -64,8 +64,7 @@ function PopupDialog({ request, refs, phase, complete, cancel, opened, close, se
         if (typeof content !== 'string') {
             // Compatibility content is an opaque subtree: its caller may mount
             // another React root or attach existing DOM controls inside it.
-            if (content instanceof Node) refs.content.append(content);
-            else if (content) refs.content.append(...Array.from(content));
+            refs.content.append(content);
         }
         const heading = refs.content.querySelector<HTMLElement>('h1, h2, h3, h4');
         if (heading) {

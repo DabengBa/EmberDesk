@@ -5,7 +5,7 @@ import { stripTypeScriptTypes } from 'node:module';
 import { createRegexListBridge } from '../public/scripts/extensions/regex/regex-list-bridge.js';
 import { setValueByPath } from '../public/scripts/util/primitives.js';
 import { createRuntimeSettingsConflictGuard } from '../public/scripts/react-runtime-provider.js';
-import { createRuntimeSettingsPersistence } from '../public/scripts/runtime-settings-persistence.js';
+import { createRuntimeSettingsPersistence, withStrictSettingsSaveFailureHandler } from '../public/scripts/runtime-settings-persistence.js';
 
 // Unit proof: production functions with controlled browser and persistence boundaries.
 // The lane creates isolated data/tmp roots; the invoking worker owns cleanup. Budget: 10s.
@@ -31,7 +31,7 @@ function setup() {
         SCRIPT_TYPES: { GLOBAL: 0, SCOPED: 1, PRESET: 2 }, SCRIPT_TYPE_UNKNOWN: -1,
         DEFAULT_GET_REGEX_SCRIPTS_OPTIONS: { allowedOnly: false }, characters: [alice, bob], this_chid: 0,
         feature_settings: {}, getPresetManager: () => manager, saveSettingsDebounced: jest.fn(),
-        saveSettingsStrict: jest.fn(async () => {}), writeExtensionField: jest.fn(async () => {}),
+        saveSettingsStrict: jest.fn(async () => {}), withStrictSettingsSaveFailureHandler, writeExtensionField: jest.fn(async () => {}),
         lodash: { set: (obj, [key, id], val) => { obj[key] ??= {}; obj[key][id] = val; } }, console,
     };
     const api = functions('public/scripts/extensions/regex/engine.js', 'export function getRegexScripts(', '\n/**\n * Check if character', context);
@@ -129,6 +129,38 @@ function settingsSetup() {
 
 const tick = () => new Promise(setImmediate);
 const success = revision => ({ ok: true, json: async () => ({ result: 'ok', settings_revision: revision }) });
+
+test.each([1, 2].flatMap(type => [true, false].map(allowed => ({ type, allowed }))))
+('failed authorization rolls back before a queued settings save builds its payload: %j', async ({ type, allowed }) => {
+    const settings = settingsSetup();
+    const regex = setup();
+    const id = type === 1 ? 'alice.png' : 'one';
+    const list = allowed ? ['unrelated'] : [id, 'unrelated'];
+    if (type === 1) regex.context.feature_settings.character_allowed_regex = list;
+    else regex.context.feature_settings.preset_allowed_regex = { api: list };
+    const getSavedList = payload => type === 1
+        ? payload.feature_settings.character_allowed_regex
+        : payload.feature_settings.preset_allowed_regex.api;
+    settings.context.feature_settings = regex.context.feature_settings;
+    // Exercise the real strict wrapper's asynchronous forwarding boundary.
+    regex.context.saveSettingsStrict = extract('public/scripts/preset-manager.js', 'export async function saveSettingsStrict(', '\n/**', { saveSettings: settings.save });
+    const authorization = regex.authorizeRegexTarget(regex.captureRegexTarget(type), allowed);
+    const failed = expect(authorization).rejects.toThrow('offline');
+    await tick();
+    expect(getSavedList(JSON.parse(settings.requests[0].request.body)).includes(id)).toBe(allowed);
+    list.push('another');
+    const later = settings.save(0, { strict: true });
+    settings.requests[0].resolve({ ok: false, status: 500, statusText: 'offline' });
+    await failed;
+    await tick();
+    expect(settings.requests).toHaveLength(2);
+    const saved = JSON.parse(settings.requests[1].request.body);
+    settings.requests[1].resolve(success(2));
+    await later;
+    expect(list.includes(id)).toBe(!allowed);
+    expect(getSavedList(saved)).toEqual(list);
+    expect(getSavedList(saved)).toEqual(expect.arrayContaining(['unrelated', 'another']));
+});
 
 test('strict settings waits for response, fails closed on revision conflicts and rejects HTTP errors', async () => {
     const s = settingsSetup();
@@ -438,7 +470,7 @@ async function integratedPresetSetup() {
         savePreset: (name, body, options) => service.save(name, body, options), writePresetExtensionField: options => write.call(manager, options) };
     const engineContext = { SCRIPT_TYPES: { GLOBAL: 0, SCOPED: 1, PRESET: 2 }, SCRIPT_TYPE_UNKNOWN: -1,
         DEFAULT_GET_REGEX_SCRIPTS_OPTIONS: { allowedOnly: false }, feature_settings: { regex: [{ id: 'r' }] },
-        getPresetManager: () => manager, saveSettingsStrict: jest.fn(async () => {}), console };
+        getPresetManager: () => manager, saveSettingsStrict: jest.fn(async () => {}), withStrictSettingsSaveFailureHandler, console };
     const engine = functions('public/scripts/extensions/regex/engine.js', 'export function getRegexScripts(', '\n/**\n * Check if character', engineContext);
     return { service, port, settings, presets, names, manager, context, engine, engineContext };
 }
@@ -544,7 +576,7 @@ function integratedMoveSetup(sourceType, { noJQuery = false, missingField = fals
     const engineContext = { SCRIPT_TYPES: { GLOBAL: 0, SCOPED: 1, PRESET: 2 }, SCRIPT_TYPE_UNKNOWN: -1,
         DEFAULT_GET_REGEX_SCRIPTS_OPTIONS: { allowedOnly: false }, characters: [character], this_chid: 0,
         feature_settings: featureSettings, getPresetManager: () => null,
-        saveSettingsStrict: () => settings.save(0, { strict: true }), writeExtensionField, console };
+        saveSettingsStrict: () => settings.save(0, { strict: true }), withStrictSettingsSaveFailureHandler, writeExtensionField, console };
     const engine = functions('public/scripts/extensions/regex/engine.js', 'export function getRegexScripts(', '\n/**\n * Check if character', engineContext);
     const bridge = createRegexListBridge({ capture: engine.captureRegexTarget, read: engine.getScriptsForTarget,
         save: engine.saveScriptsByType, authorize: async () => {}, confirm: async () => true,
@@ -652,9 +684,11 @@ test.each([0, 1])('older failed strict write cannot undo a newer successful writ
     s.fetch.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
     const first = s.engine.saveScriptsByType(scripts, type, target);
     await tick();
-    await s.engine.saveScriptsByType(scripts, type, target);
+    const second = s.engine.saveScriptsByType(scripts, type, target);
+    if (type === 1) await second; // Character writes have a separate persistence owner.
     finish({ ok: false, status: 500, statusText: 'offline' });
     await expect(first).rejects.toThrow('offline');
+    if (type === 0) await second;
     expect(type === 0 ? s.featureSettings.regex : s.character.data.extensions.regex_scripts).toBe(scripts);
     if (type === 1) expect(JSON.parse(s.character.json_data).data.extensions.regex_scripts).toEqual([{ id: 'newer' }]);
 });

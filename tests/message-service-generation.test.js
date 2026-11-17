@@ -93,7 +93,7 @@ test('legacy edit controls honor first and last visible message without jQuery c
     };
     const rows = [makeRow(3), makeRow(4), makeRow(5)];
     const root = { children: rows, querySelectorAll: selector => selector === '.mes' ? rows : [] };
-    state.chatElement = { jquery: 'legacy', 0: root };
+    state.chatElement = root;
     state.this_edit_mes_id = 3;
     registerGenerationShellContext({ state, isReactMainChatOwner: () => false });
     updateEditArrowClasses();
@@ -146,22 +146,17 @@ test('native message preview adds copy action without requiring jQuery', async (
     }
 });
 
-test('message collection highlights overlapping roots once in document order without jQuery traversal', () => {
+test('native message row highlights code blocks once in document order without jQuery traversal', () => {
     const code = position => ({ position, closest: () => ({ textContent: 'code' }), appendChild: jest.fn(),
         compareDocumentPosition(other) { return this.position < other.position ? 4 : 2; } });
     const first = code(1), second = code(2);
-    const collection = [
-        { querySelectorAll: () => [second] },
-        { querySelectorAll: () => [first, second] },
-    ];
-    collection.jquery = 'legacy';
-    collection.find = () => { throw Error('code blocks must not use jQuery traversal'); };
+    const row = { querySelectorAll: selector => selector === 'pre code' ? [first, second] : [] };
     const button = { classList: { add: jest.fn() }, addEventListener: jest.fn() };
     state.hljs = { highlightElement: jest.fn() };
-    globalThis.$ = () => { throw Error('existing collection must not be rewrapped'); };
+    globalThis.$ = () => { throw Error('native row must not be wrapped'); };
     globalThis.document = { createElement: () => button };
     try {
-        addCopyToCodeBlocks(collection);
+        addCopyToCodeBlocks(row);
         expect(state.hljs.highlightElement.mock.calls).toEqual([[first], [second]]);
         expect(first.appendChild).toHaveBeenCalledWith(button);
         expect(second.appendChild).toHaveBeenCalledWith(button);
@@ -170,7 +165,7 @@ test('message collection highlights overlapping roots once in document order wit
     }
 });
 
-test('empty or disconnected message roots preserve iteration order without jQuery', () => {
+test('empty or disconnected native message rows preserve call order without jQuery', () => {
     const first = { closest: () => null, appendChild: jest.fn(), compareDocumentPosition: () => 1 };
     const second = { closest: () => null, appendChild: jest.fn(), compareDocumentPosition: () => 1 };
     const button = { classList: { add: jest.fn() }, addEventListener: jest.fn() };
@@ -178,8 +173,9 @@ test('empty or disconnected message roots preserve iteration order without jQuer
     globalThis.$ = () => { throw Error('must not use jQuery'); };
     globalThis.document = { createElement: () => button };
     try {
-        addCopyToCodeBlocks([]);
-        addCopyToCodeBlocks([{ querySelectorAll: () => [second] }, { querySelectorAll: () => [first] }]);
+        addCopyToCodeBlocks(null);
+        addCopyToCodeBlocks({ querySelectorAll: () => [second] });
+        addCopyToCodeBlocks({ querySelectorAll: () => [first] });
         expect(state.hljs.highlightElement.mock.calls).toEqual([[second], [first]]);
     } finally {
         delete globalThis.document;

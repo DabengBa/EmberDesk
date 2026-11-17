@@ -67,7 +67,7 @@ for (const action of ['search', 'close', 'close and reopen']) {
     });
 }
 
-test('attachment picker merges files through native and synthetic menu clicks', async ({ page }) => {
+test('attachment picker merges files through user and programmatic native menu clicks', async ({ page }) => {
     await testSetup.awaitST({ page });
     const first = fileURLToPath(new URL('./package.json', import.meta.url));
     const second = fileURLToPath(new URL('./history-panels.e2e.js', import.meta.url));
@@ -78,7 +78,7 @@ test('attachment picker merges files through native and synthetic menu clicks', 
     await expect(page.locator('#file_form .file_name')).toHaveText('package.json');
     await page.locator('#options_button').click();
     chooser = page.waitForEvent('filechooser');
-    await page.evaluate(() => window.$('#attachFile').trigger('click'));
+    await page.evaluate(() => document.querySelector('#attachFile').click());
     await (await chooser).setFiles([first, second]);
     await expect.poll(() => page.locator('#file_form_input').evaluate(input => Array.from(input.files, file => file.name))).toEqual(['package.json', 'history-panels.e2e.js']);
     await expect(page.locator('#file_form .file_name')).toContainText('2');
@@ -111,7 +111,7 @@ test('legacy message rows select the requested delete range', async ({ page }) =
     const rows = page.locator('#u004-legacy-rows .mes');
     expect(await page.evaluate(() => ({
         active: globalThis.__emberDeskBulkDeleteController.getSnapshot().active,
-        visible: window.$('#u004-legacy-rows .del_checkbox').first().is(':visible'),
+        visible: Boolean(document.querySelector('#u004-legacy-rows .del_checkbox').getClientRects().length),
     }))).toEqual({ active: true, visible: true });
     await rows.nth(1).locator('span').click();
     await expect(rows.nth(0)).not.toHaveClass(/selected/);
@@ -184,7 +184,7 @@ test('public history display renders and highlights a requested row', async ({ p
     await expect.poll(() => page.locator('#select_chat_div .select_chat_block_wrapper').first().evaluate(row => row.className)).toContain('flash');
 });
 
-test('options returns from a branch to its parent with native and synthetic clicks', async ({ page }) => {
+test('options returns from a branch to its parent with user and programmatic native clicks', async ({ page }) => {
     await testSetup.awaitST({ page });
     await page.evaluate(async () => {
         const context = window.SillyTavern.getContext();
@@ -197,7 +197,7 @@ test('options returns from a branch to its parent with native and synthetic clic
         await expect.poll(() => page.evaluate(() => window.SillyTavern.getContext().chatId)).not.toBe(parent);
         await page.locator('#options_button').click();
         await expect(page.locator('#option_back_to_main')).toBeVisible();
-        if (synthetic) await page.evaluate(() => window.$('#option_back_to_main').trigger('click'));
+        if (synthetic) await page.evaluate(() => document.querySelector('#option_back_to_main').click());
         else await page.locator('#option_back_to_main').click();
         await expect.poll(() => page.evaluate(() => window.SillyTavern.getContext().chatId)).toBe(parent);
     }
@@ -470,6 +470,8 @@ test('history import retries a committed upload with the same operation id', asy
 
 test('partial import failure offers a retry with the same operation id', async ({ page }) => {
     await openCharacterHistory(page);
+    // Exercise container recreation while the history dialog is open.
+    await page.evaluate(() => window.toastr.remove());
     const ids = [];
     await page.route('**/api/chats/import', async route => {
         ids.push(route.request().postDataBuffer().toString('utf8').match(/name="operationId"\r\n\r\n([^\r]+)/)?.[1]);
@@ -482,14 +484,17 @@ test('partial import failure offers a retry with the same operation id', async (
     const warning = page.locator('#toast-container .toast-error');
     await expect(warning).toContainText('1 chat(s) confirmed imported');
     await expect(warning).toContainText('multi.json');
+    await expect(warning).toBeVisible();
+    await expect(page.locator('#shadow_select_chat_popup #toast-container')).toHaveCount(1);
     await page.locator('#select_chat_cross').click();
+    await expect(warning).toBeVisible();
     await warning.click();
     await expect.poll(() => ids.length).toBe(2);
     expect(ids[1]).toBe(ids[0]);
     await expect(page.locator('#toast-container .toast-success')).toContainText('2 chat(s)');
 });
 
-test('history drop invokes the import command without a synthetic change event', async ({ page }) => {
+test('history drop invokes the import command without a change event', async ({ page }) => {
     await openCharacterHistory(page);
     const bodies = [];
     await page.route('**/api/chats/import', async route => {
@@ -497,10 +502,8 @@ test('history drop invokes the import command without a synthetic change event',
         await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ res: true, fileNames: [] }) });
     });
     await page.evaluate(() => {
-        window.__historySyntheticChanges = 0;
-        window.$('#chat_import_file').on('change.attempt16', event => {
-            if (event.isTrigger) window.__historySyntheticChanges++;
-        });
+        window.__historyChanges = 0;
+        document.querySelector('#chat_import_file').addEventListener('change', () => { window.__historyChanges++; });
         const transfer = new DataTransfer();
         transfer.items.add(new File(['{"data_visible":[]}'], 'dropped.json', { type: 'application/json' }));
         document.querySelector('#select_chat_popup').dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: transfer }));
@@ -508,10 +511,10 @@ test('history drop invokes the import command without a synthetic change event',
     await expect.poll(() => bodies.length).toBe(1);
     await expect(page.locator('#chat_import_file')).toHaveValue('');
     expect(bodies[0]).toMatch(/filename="dropped\.json"/);
-    expect(await page.evaluate(() => window.__historySyntheticChanges)).toBe(0);
+    expect(await page.evaluate(() => window.__historyChanges)).toBe(0);
 });
 
-test('history import accepts a synthetic change for compatibility', async ({ page }) => {
+test('history import accepts a dispatched native change', async ({ page }) => {
     await openCharacterHistory(page);
     const bodies = [];
     await page.route('**/api/chats/import', async route => {
@@ -523,24 +526,39 @@ test('history import accepts a synthetic change for compatibility', async ({ pag
         transfer.items.add(new File(['{}'], 'synthetic.json', { type: 'application/json' }));
         const input = document.querySelector('#chat_import_file');
         input.files = transfer.files;
-        window.$(input).trigger('change');
+        input.dispatchEvent(new Event('change', { bubbles: true }));
     });
     await expect.poll(() => bodies.length).toBe(1);
     await expect(page.locator('#chat_import_file')).toHaveValue('');
     expect(bodies[0]).toMatch(/filename="synthetic\.json"/);
 });
 
-test('options synthetic click toggles exactly once', async ({ page }) => {
+test('options programmatic native click toggles exactly once', async ({ page }) => {
     await testSetup.awaitST({ page });
-    await page.evaluate(() => window.$('#options_button').trigger('click'));
+    await page.mouse.move(1, 1);
+    await page.evaluate(() => document.activeElement?.blur());
+    await page.evaluate(() => document.querySelector('#options_button').click());
     await expect(page.locator('#options')).toBeVisible();
     await expect(page.locator('#options_button')).toHaveAttribute('aria-expanded', 'true');
-    await page.evaluate(() => window.$('#options_button').trigger('click'));
+    await page.evaluate(() => document.querySelector('#options_button').click());
     await expect(page.locator('#options')).toBeHidden();
     await expect(page.locator('#options_button')).toHaveAttribute('aria-expanded', 'false');
 });
 
-test('history synthetic import click opens a single chooser', async ({ page }) => {
+test('options keyboard activation reports expanded state and Escape restores focus', async ({ page }) => {
+    await testSetup.awaitST({ page });
+    const button = page.locator('#options_button');
+    await button.focus();
+    await page.keyboard.press('Enter');
+    await expect(page.locator('#options')).toBeVisible();
+    await expect(button).toHaveAttribute('aria-expanded', 'true');
+    await page.keyboard.press('Escape');
+    await expect(page.locator('#options')).toBeHidden();
+    await expect(button).toHaveAttribute('aria-expanded', 'false');
+    await expect(button).toBeFocused();
+});
+
+test('history programmatic native import click opens a single chooser', async ({ page }) => {
     await testSetup.awaitST({ page });
     await page.evaluate(async () => {
         const context = window.SillyTavern.getContext();
@@ -551,7 +569,7 @@ test('history synthetic import click opens a single chooser', async ({ page }) =
     let choosers = 0;
     page.on('filechooser', () => { choosers++; });
     const chooser = page.waitForEvent('filechooser');
-    await page.evaluate(() => window.$('#chat_import_button').trigger('click'));
+    await page.evaluate(() => document.querySelector('#chat_import_button').click());
     await chooser;
     await page.waitForTimeout(100);
     expect(choosers).toBe(1);
@@ -586,7 +604,7 @@ test('history closes with Escape and restores focus to options', async ({ page }
     await expect(page.locator('#options_button')).toBeFocused();
 });
 
-test('history synthetic jQuery close stays compatible', async ({ page }) => {
+test('history programmatic native close restores focus', async ({ page }) => {
     await testSetup.awaitST({ page });
     await page.evaluate(async () => {
         const context = window.SillyTavern.getContext();
@@ -595,7 +613,7 @@ test('history synthetic jQuery close stays compatible', async ({ page }) => {
     await page.locator('#options_button').click();
     await page.locator('#option_select_chat').click();
     await expect(page.locator('#shadow_select_chat_popup')).toBeVisible();
-    await page.evaluate(() => window.$('#select_chat_cross').trigger('click'));
+    await page.evaluate(() => document.querySelector('#select_chat_cross').click());
     await expect(page.locator('#shadow_select_chat_popup')).toBeHidden();
     await expect(page.locator('#options_button')).toBeFocused();
 });
@@ -796,7 +814,7 @@ test('history delete confirms and reopens after a delete request', async ({ page
     await expect(page.locator('#shadow_select_chat_popup')).toBeVisible({ timeout: 6000 });
 });
 
-test('dialogue content preserves HTML, DOM and jQuery inputs across a close and reopen', async ({ page }) => {
+test('dialogue content preserves HTML and DOM inputs across a close and reopen', async ({ page }) => {
     await testSetup.awaitST({ page });
     await page.evaluate(async () => {
         const { callPopup } = await import('/script.js');
@@ -824,19 +842,19 @@ test('dialogue content preserves HTML, DOM and jQuery inputs across a close and 
         const { callPopup } = await import('/script.js');
         document.querySelector('#dialogue_popup_ok').click();
         const node = document.createElement('span');
-        node.id = 'dialogue-jquery-proof';
-        node.textContent = 'jQuery';
-        window.__dialogueJqueryNode = node;
-        callPopup(window.$(node), 'confirm').then(value => window.__dialogueResults.push(value));
+        node.id = 'dialogue-reopen-proof';
+        node.textContent = 'Reopened DOM';
+        window.__dialogueReopenNode = node;
+        callPopup(node, 'confirm').then(value => window.__dialogueResults.push(value));
     });
-    await expect(page.locator('#dialogue-jquery-proof')).toHaveText('jQuery');
-    expect(await page.evaluate(() => document.querySelector('#dialogue-jquery-proof') === window.__dialogueJqueryNode)).toBe(true);
+    await expect(page.locator('#dialogue-reopen-proof')).toHaveText('Reopened DOM');
+    expect(await page.evaluate(() => document.querySelector('#dialogue-reopen-proof') === window.__dialogueReopenNode)).toBe(true);
     await page.locator('#dialogue_popup_cancel').click();
     await expect.poll(() => page.evaluate(() => window.__dialogueResults)).toEqual([false, true, false]);
     await expect(page.locator('#shadow_popup')).toBeHidden();
 });
 
-test('synthetic dialogue buttons resolve the mounted controller', async ({ page }) => {
+test('programmatic native dialogue buttons resolve the mounted controller', async ({ page }) => {
     await testSetup.awaitST({ page });
     await page.evaluate(async () => {
         const { callPopup } = await import('/script.js');
@@ -844,7 +862,7 @@ test('synthetic dialogue buttons resolve the mounted controller', async ({ page 
         callPopup('Confirm', 'confirm').then(value => { window.__syntheticDialogueResult = value; });
     });
     await expect(page.locator('#dialogue_popup_ok')).toBeVisible();
-    await page.evaluate(() => window.$('#dialogue_popup_ok').trigger('click'));
+    await page.evaluate(() => document.querySelector('#dialogue_popup_ok').click());
     await expect.poll(() => page.evaluate(() => window.__syntheticDialogueResult)).toBe(true);
 
     await page.evaluate(async () => {
@@ -853,7 +871,7 @@ test('synthetic dialogue buttons resolve the mounted controller', async ({ page 
         callPopup('Confirm', 'confirm').then(value => { window.__syntheticDialogueResult = value; });
     });
     await expect(page.locator('#dialogue_popup_cancel')).toBeVisible();
-    await page.evaluate(() => window.$('#dialogue_popup_cancel').trigger('click'));
+    await page.evaluate(() => document.querySelector('#dialogue_popup_cancel').click());
     await expect.poll(() => page.evaluate(() => window.__syntheticDialogueResult)).toBe(false);
 });
 
@@ -919,7 +937,7 @@ test('history new chat action creates a chat and closes the popup', async ({ pag
     await expect.poll(() => page.evaluate(() => window.SillyTavern.getContext().chatId)).not.toBe(before);
 });
 
-test('history synthetic new chat command stays compatible', async ({ page }) => {
+test('history programmatic native new chat command starts a chat', async ({ page }) => {
     await testSetup.awaitST({ page });
     await page.evaluate(async () => {
         const context = window.SillyTavern.getContext();
@@ -929,7 +947,7 @@ test('history synthetic new chat command stays compatible', async ({ page }) => 
     await page.locator('#options_button').click();
     await page.locator('#option_select_chat').click();
     await expect(page.locator('#shadow_select_chat_popup')).toBeVisible();
-    await page.evaluate(() => window.$('#newChatFromManageScreenButton').trigger('click'));
+    await page.evaluate(() => document.querySelector('#newChatFromManageScreenButton').click());
     await expect(page.locator('#shadow_select_chat_popup')).toBeHidden();
     await expect.poll(() => page.evaluate(() => window.SillyTavern.getContext().chatId)).not.toBe(before);
 });

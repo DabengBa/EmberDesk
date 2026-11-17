@@ -1,4 +1,5 @@
 import { describe, expect, test } from '@jest/globals';
+import { runInNewContext } from 'node:vm';
 
 import * as frontendFrameModule from '../public/scripts/frontend-frame.js';
 import {
@@ -107,10 +108,21 @@ describe('buildFrontendFrameDocument', () => {
         expect(documentHtml).toContain('window.EmberDeskFrame');
     });
 
-    test('defines both viewport variables and copies shared globals', () => {
+    test('defines both viewport variables and copies non-jQuery globals only', () => {
         expect(documentHtml).toContain('\'--ed-viewport-height\'');
         expect(documentHtml).toContain('\'--TH-viewport-height\'');
-        expect(documentHtml).toContain('\'_\', \'$\', \'jQuery\', \'showdown\', \'DOMPurify\', \'hljs\', \'moment\', \'SVGInject\'');
+        const sharedKeys = ['_', 'showdown', 'DOMPurify', 'hljs', 'moment', 'SVGInject'];
+        const parent = Object.fromEntries(sharedKeys.map(key => [key, { key }]));
+        parent.$ = parent.jQuery = () => {};
+        parent.addEventListener = () => {};
+        const frame = { parent, addEventListener: () => {} };
+        const scripts = [...documentHtml.matchAll(/<script>([\s\S]*?)<\/script>/g)];
+        expect(scripts).toHaveLength(2);
+        const context = { window: frame, document: { documentElement: { style: { setProperty() {} } } } };
+        for (const [, script] of scripts) runInNewContext(script, context);
+        expect(frame.$).toBeUndefined();
+        expect(frame.jQuery).toBeUndefined();
+        for (const key of sharedKeys) expect(frame[key]).toBe(parent[key]);
     });
 
     test('places user content after the injected scripts inside body', () => {

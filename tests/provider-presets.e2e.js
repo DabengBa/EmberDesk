@@ -52,7 +52,7 @@ test('preset textareas resize without field-sizing support', async ({ page }) =>
     await page.route('**/api/backends/chat-completions/status', route => route.fulfill({ json: { data: [] } }));
     await testSetup.awaitST({ page });
     await openPrompt(page);
-    await page.evaluate(() => window.jQuery(document).off('input', '#openai_settings .autoSetHeight'));
+
     await page.locator('#ai_response_configuration .inline-drawer-toggle').click();
     const textarea = page.locator('#wi_format_textarea');
     await textarea.evaluate(element => { element.style.height = ''; });

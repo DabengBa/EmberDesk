@@ -387,18 +387,6 @@ importers:
       '@types/express':
         specifier: ^5.0.6
         version: 5.0.6
-      '@types/jquery':
-        specifier: ^3.5.33
-        version: 3.5.34
-      '@types/jquery-cropper':
-        specifier: ^1.0.4
-        version: 1.0.4
-      '@types/jquery.transit':
-        specifier: ^0.9.33
-        version: 0.9.33
-      '@types/jqueryui':
-        specifier: ^1.12.24
-        version: 1.12.24
       '@types/lodash':
         specifier: ^4.17.24
         version: 4.17.25
@@ -429,9 +417,6 @@ importers:
       '@types/response-time':
         specifier: ^2.3.9
         version: 2.3.9
-      '@types/toastr':
-        specifier: ^2.1.43
-        version: 2.1.43
       '@types/write-file-atomic':
         specifier: ^4.0.3
         version: 4.0.3
@@ -1370,18 +1355,6 @@ packages:
   '@types/http-errors@2.0.5':
     resolution: {integrity: sha512-r8Tayk8HJnX0FztbZN7oVqGccWgw98T/0neJphO91KkmOzug1KkofZURD4UaD5uH8AqcFLfdPErnBod0u71/qg==}
 
-  '@types/jquery-cropper@1.0.4':
-    resolution: {integrity: sha512-YMyUoY+rhB8yc3xM1B/daNaSq5+q93rzvRx6HP8K9mmvXEviTH3/rldlYNCGd0TmE/kLlZYJsruYhu9wY350PA==}
-
-  '@types/jquery.transit@0.9.33':
-    resolution: {integrity: sha512-gEDi1Lw7qfHFxtcnm2dg0F3Z5yG+84Sn0gDpGbd+u+r2RxsCcdQzfUmFKzHGBjWflZ9CXOZiAkenKOSvwLITrg==}
-
-  '@types/jquery@3.5.34':
-    resolution: {integrity: sha512-3m3939S3erqmTLJANS/uy0B6V7BorKx7RorcGZVjZ62dF5PAGbKEDZK1CuLtKombJkFA2T1jl8LAIIs7IV6gBQ==}
-
-  '@types/jqueryui@1.12.24':
-    resolution: {integrity: sha512-E2sGULwzMhg4kAeOV+gYcXjg988RuPkviWCt09jLe6GGK9sHM7dTqS8H7JMuUWoZQBucIBzBAgM5o/ezKUFkeg==}
-
   '@types/json-schema@7.0.15':
     resolution: {integrity: sha512-5+fP8P8MFNC+AyZCDxrB2pkZFPGzqQWUzpSeuuVLvm8VMcorNYavBqoFcxK8bQz4Qsbn4oUEEem4wDLfcysGHA==}
 
@@ -1434,12 +1407,6 @@ packages:
 
   '@types/serve-static@2.2.0':
     resolution: {integrity: sha512-8mam4H1NHLtu7nmtalF7eyBH14QyOASmcxHhSfEoRyr0nP/YdoesEtU+uSRvMe96TW/HPTtkoKqQLl53N7UXMQ==}
-
-  '@types/sizzle@2.3.10':
-    resolution: {integrity: sha512-TC0dmN0K8YcWEAEfiPi5gJP14eJe30TTGjkvek3iM/1NdHHsdCA/Td6GvNndMOo/iSnIsZ4HuuhrYPDAmbxzww==}
-
-  '@types/toastr@2.1.43':
-    resolution: {integrity: sha512-sLC2fr2OXeE1iyhUixpQ64wQ2tA26awmLidn4tXTLBz4yP/VhtYUKHpmiIyDtztKkHjucdiTLH8F5uRRyhNi2Q==}
 
   '@types/trusted-types@2.0.7':
     resolution: {integrity: sha512-ScaPdn1dQczgbl0QFTeTOmVHFULt394XJgOQNoyVhZ6r2vLnMLJfBPd53SB52T/3G36VI1/g2MZaX0cwDuXsfw==}
@@ -4107,22 +4074,6 @@ snapshots:
 
   '@types/http-errors@2.0.5': {}
 
-  '@types/jquery-cropper@1.0.4':
-    dependencies:
-      '@types/jquery': 3.5.34
-
-  '@types/jquery.transit@0.9.33':
-    dependencies:
-      '@types/jquery': 3.5.34
-
-  '@types/jquery@3.5.34':
-    dependencies:
-      '@types/sizzle': 2.3.10
-
-  '@types/jqueryui@1.12.24':
-    dependencies:
-      '@types/jquery': 3.5.34
-
   '@types/json-schema@7.0.15': {}
 
   '@types/keygrip@1.0.6': {}
@@ -4176,12 +4127,6 @@ snapshots:
     dependencies:
       '@types/http-errors': 2.0.5
       '@types/node': 26.1.2
-
-  '@types/sizzle@2.3.10': {}
-
-  '@types/toastr@2.1.43':
-    dependencies:
-      '@types/jquery': 3.5.34
 
   '@types/trusted-types@2.0.7':
     optional: true

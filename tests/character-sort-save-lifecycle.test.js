@@ -34,7 +34,7 @@ function setup() {
     return { saveSettings, guard, listeners, requests, power_user, context };
 }
 
-test('real saveSettings snapshots the sort and retains the guard through concurrent responses and failure', async () => {
+test('real saveSettings serializes sort snapshots and retains the guard through failure', async () => {
     const { saveSettings, guard, listeners, requests, power_user, context } = setup();
     guard.changed();
     const old = saveSettings();
@@ -44,12 +44,15 @@ test('real saveSettings snapshots the sort and retains the guard through concurr
     const current = saveSettings();
     await new Promise(setImmediate);
     expect(JSON.parse(requests[0].request.body).power_user.sort_order).toBe('asc');
-    expect(JSON.parse(requests[1].request.body).power_user.sort_order).toBe('desc');
-    requests[1].resolve({ ok: true, json: async () => ({ result: 'ok', settings_revision: 3 }) });
-    await current;
-    expect(listeners.size).toBe(0);
+    expect(requests).toHaveLength(1);
     requests[0].resolve({ ok: true, json: async () => ({ result: 'ok', settings_revision: 2 }) });
     await old;
+    await new Promise(setImmediate);
+    expect(listeners.size).toBe(1);
+    expect(JSON.parse(requests[1].request.body).power_user.sort_order).toBe('desc');
+    expect(JSON.parse(requests[1].request.body).settings_revision).toBe(2);
+    requests[1].resolve({ ok: true, json: async () => ({ result: 'ok', settings_revision: 3 }) });
+    await current;
     expect(listeners.size).toBe(0);
     guard.changed();
     const failed = saveSettings();
