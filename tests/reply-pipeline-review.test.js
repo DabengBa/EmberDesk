@@ -74,11 +74,11 @@ test.each([false, true])('prose-only closing response succeeds (stream=%s)', asy
     expect(run.invokeTools).not.toHaveBeenCalled();
 });
 
-test.each([true, false])('required pipeline step rejects prose before completion (stream=%s)', async streaming => {
+test.each([true, false])('transport passes step prose to the completion adapter (stream=%s)', async streaming => {
     runtime.endPipelineRun();
     runtime.beginPipelineRun();
     const run = await runClosingRound({ streaming, calls: false, depth: 0 });
-    await expect(run.result).rejects.toMatchObject({ message: 'Reply pipeline: expected exactly one current-step call (submit_story).', ...(streaming ? { messageId: 7 } : {}) });
+    await expect(run.result).resolves.toBeTruthy();
     expect(run.invokeTools).not.toHaveBeenCalled();
 });
 

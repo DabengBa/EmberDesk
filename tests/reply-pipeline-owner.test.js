@@ -22,7 +22,8 @@ const runtime = await import('../public/scripts/reply-pipeline.js');
 const { executeGenerationRequestInShell, getCurrentGenerationContextIdentity, GenerationStreamSession } = await import('../public/scripts/generation-service.js');
 const { eventSource, event_types } = await import('../public/scripts/events.js');
 const { createGenerationLifecycleService, executeGenerationAttempts } = await loadTsModule('app/lib/generation/attempt-executor.ts');
-installGenerationLifecycleService(createGenerationLifecycleService(getCurrentGenerationContextIdentity));
+const actualLifecycle = createGenerationLifecycleService(getCurrentGenerationContextIdentity);
+installGenerationLifecycleService(actualLifecycle);
 globalThis.localStorage = { getItem: () => null };
 
 function setup() {
@@ -40,6 +41,47 @@ function setup() {
     registerGenerationShellContext(new Proxy(context, { get: (obj, key) => obj[key] ?? jest.fn() }));
     return { base, prepare, context };
 }
+
+test.each(['stream', 'nonstream'])('production %s adapter routes plain text into pipeline completion', async mode => {
+    setup();
+    const actual = actualLifecycle;
+    let exercised = false;
+    const dispatch = jest.spyOn(actual, 'runGenerationDispatch').mockImplementation(async (_input, ports) => {
+        const state = { type: 'normal', ownsCleanup: () => true, canPerformTools: true };
+        const recovery = { hasIdentity: false, messageId: null };
+        const saved = [];
+        if (mode === 'stream') {
+            const processor = { isStopped: false, isFinished: true, toolCalls: [], result: 'adapter prose', messageId: 0, reasoningHandler: { reasoning: 'thought' }, reasoningSignature: 'signed' };
+            const adapter = ports.stream(state, recovery, processor);
+            await actual.finishStreamAttempt({ type: 'normal', isOpenAI: true, canPerformTools: true, attemptModel: 'model', text: 'adapter prose', processor }, {
+                ...adapter, clean: value => value, deleteLast: async () => {}, clearProcessor: () => {},
+                saveInvocations: async calls => saved.push(...calls), markComplete: () => {},
+                finalizePipeline: async input => input,
+            });
+        } else {
+            const adapter = ports.response(state, recovery);
+            await actual.completeGenerationResponse({ type: 'normal', data: { choices: [{ index: 0, message: { role: 'assistant', content: 'adapter prose', reasoning_content: 'provider thought' } }] }, canPerformToolCalls: true }, {
+                ...adapter, extractMessage: () => 'adapter prose', extractTitle: () => '', extractReasoning: () => '',
+                extractImages: () => null, extractSignature: () => null, clean: value => value, cleanReasoning: value => value,
+                hasRecoveryMessage: () => false, saveReply: async ({ type, getMessage }) => ({ type, getMessage }), setType: () => {},
+                hasToolCalls: () => false, deleteLastMessage: async () => {}, saveTools: async calls => saved.push(...calls),
+                finalizePipeline: async input => input,
+            });
+        }
+        expect(saved[0]).toMatchObject({ name: 'submit_story', result: 'adapter prose', pipeline: { tool: 'analyze' } });
+        expect(getPipelineRunState().messages.at(-1)).toEqual(mode === 'stream'
+            ? { role: 'assistant', content: 'adapter prose', reasoning: 'thought', signature: 'signed' }
+            : { role: 'assistant', content: 'adapter prose', reasoning_content: 'provider thought' });
+        exercised = true;
+    });
+    try {
+        await executeGenerationRequestInShell({ type: 'normal', options: { depth: 1 }, dryRun: false, command: {} });
+        expect(exercised).toBe(true);
+    } finally {
+        dispatch.mockRestore();
+        runtime.endPipelineRun();
+    }
+});
 
 test('existing owner continuation bypasses every base WI/macro/card assembly entry', async () => {
     const { base, prepare } = setup();

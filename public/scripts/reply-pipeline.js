@@ -149,12 +149,25 @@ export function getPipelineStepMeta() {
     if (!runState || !step) {
         return null;
     }
+
     return {
         runId: runState.runId,
         stepId: step.id,
         stepIndex: runState.index,
         display: step.display,
     };
+}
+
+/** Convert plain provider output to a local card without inventing wire calls. */
+export function pipelineTextInvocations(text, reasoning = '', assistantMessage = null) {
+    const step = getCurrentPipelineStep();
+    if (!runState || runState.fallbackRound || !step || typeof text !== 'string' || !text.trim()) return null;
+    if (runState.pendingAssistant) throw new Error('Reply pipeline: a response is already pending.');
+    return [{ id: `pipeline-text-${runState.runId}-${runState.index}`, displayName: step.tool, name: 'submit_story',
+        parameters: JSON.stringify({ content: text }), result: text, error: false, signature: null, reasoning: reasoning || null,
+        pipelineRawText: assistantMessage && typeof assistantMessage === 'object' && !Array.isArray(assistantMessage)
+            ? structuredClone(assistantMessage)
+            : { role: 'assistant', content: text, ...(reasoning ? { reasoning } : {}) } }];
 }
 
 /**
@@ -168,11 +181,17 @@ export function preparePipelineRound(invocations) {
     if (!runState) {
         return null;
     }
+    if (invocations?.length === 1 && invocations[0].pipelineRawText) {
+        runState.pendingAssistant = invocations[0].pipelineRawText;
+        runState.pendingText = true;
+        delete invocations[0].pipelineRawText;
+    }
     if (runState.pendingAssistant && runState.messages) {
-        runState.messages.push(runState.pendingAssistant, ...invocations.map(invocation => ({
+        runState.messages.push(runState.pendingAssistant, ...(runState.pendingText ? [] : invocations.map(invocation => ({
             role: 'tool', tool_call_id: invocation.id, content: '已收到。',
-        })));
+        }))));
         runState.pendingAssistant = null;
+        runState.pendingText = false;
     }
     // Defensive guard; the invocation boundary rejects fallback calls before
     // execution, so they cannot restart the pipeline.

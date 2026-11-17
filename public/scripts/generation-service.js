@@ -21,6 +21,7 @@ import {
     getCurrentPipelineStep,
     isPipelineFallbackRound,
     preparePipelineRound,
+    pipelineTextInvocations,
     previewPipelineRequestShaping,
     resolvePipelineModel,
     resolvePreviewPipelineModel,
@@ -559,13 +560,6 @@ async function executeOwnedGenerationRequestInShell(generationEnvelope, lease) {
                 return await pending;
             };
 
-            const requirePipelineCall = () => {
-                const run = getPipelineRunState();
-                if (type === 'normal' && run && !run.fallbackRound) {
-                    throw new Error('Reply pipeline: expected exactly one current-step call (submit_story).');
-                }
-            };
-
             return getGenerationLifecycleService().runGenerationDispatch({
                 type, depth, canPerformTools: policy.canPerformTools, pipeline: getPipelineRunState(),
                 isOpenAI: shell().state.main_api === 'openai', command: generationEnvelope.command,
@@ -600,7 +594,6 @@ async function executeOwnedGenerationRequestInShell(generationEnvelope, lease) {
                     isStreaming: isStreamingEnabled,
                     send: requestOptions => sendGenerationRequest(dispatchState.type, generate_data, requestOptions),
                     hasToolCalls: result => shell().state.ToolManager.hasToolCalls(result),
-                    requirePipelineCall,
                     assertAllowed: () => assertPipelineResponseAllowed(1, { canPerformToolCalls: dispatchState.canPerformTools }),
                     isEmpty: result => getGenerationLifecycleService().isGenerationResultEmpty({ jsonSchema, result }, {
                         extract: extractMessageFromData,
@@ -630,7 +623,7 @@ async function executeOwnedGenerationRequestInShell(generationEnvelope, lease) {
                     assertAllowed: count => assertPipelineResponseAllowed(count, { canPerformToolCalls: dispatchState.canPerformTools }),
                     lastMessage: () => shell().state.chat[shell().state.chat.length - 1],
                     hasToolCalls: calls => shell().state.ToolManager.hasToolCalls(calls),
-                    requirePipelineCall,
+                    textInvocations: (text, reasoning, assistant) => dispatchState.type === 'normal' ? pipelineTextInvocations(text, reasoning, assistant) : null,
                     deleteLast: () => deleteRecoveryPlaceholder(recovery),
                     setModel: (id, model) => {
                         if (shell().state.chat[id]) {
@@ -697,6 +690,7 @@ async function executeOwnedGenerationRequestInShell(generationEnvelope, lease) {
                     setType: value => { dispatchState.type = value; },
                     hasToolCalls: response => shell().state.ToolManager.hasToolCalls(response),
                     hasPipeline: () => Boolean(getPipelineRunState()),
+                    textInvocations: (text, reasoning, assistant) => dispatchState.type === 'normal' ? pipelineTextInvocations(text, reasoning, assistant) : null,
                     deleteLastMessage: () => deleteRecoveryPlaceholder(recovery),
                     invokeTools: (response, reasoningText, ownsRun) => shell().state.ToolManager.invokeFunctionTools(response, { reasoningText, ownsRun }),
                     showToolErrors: errors => shell().state.ToolManager.showToolCallError(errors),

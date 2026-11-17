@@ -15,10 +15,10 @@ const call = (name = 'analyze', id = 'original-id') => ({ id, type: 'function', 
 beforeEach(() => { runtime.endPipelineRun(); runtime.beginPipelineRun(); });
 
 describe('live pipeline wire state', () => {
-    test('same wire name advances by index with logical step metadata and receipts', () => {
+    test('step wire names advance by index with logical step metadata and receipts', () => {
         const first = request();
         runtime.applyPipelineRequestShaping(first);
-        core.validatePipelineToolCalls([call('submit_story', 'one')]);
+        core.validatePipelineToolCalls([call('analyze', 'one')]);
         const one = [{ name: 'submit_story', id: 'one', result: 'first', parameters: '{"content":"first"}' }];
         expect(runtime.preparePipelineRound(one).action).toBe('continue');
         expect(one[0].pipeline).toMatchObject({ stepIndex: 0, stepId: 'step-1' });
@@ -26,15 +26,15 @@ describe('live pipeline wire state', () => {
         const second = request('drift');
         runtime.applyPipelineRequestShaping(second);
         expect(second.messages).toContainEqual({ role: 'tool', tool_call_id: 'one', content: '已收到。' });
-        core.validatePipelineToolCalls([call('submit_story', 'two')]);
+        core.validatePipelineToolCalls([call('reply', 'two')]);
         const two = [{ name: 'submit_story', id: 'two', result: 'second', parameters: '{"content":"second"}' }];
         expect(runtime.preparePipelineRound(two)).toMatchObject({ action: 'final', text: 'second' });
         expect(two[0].pipeline).toMatchObject({ stepIndex: 1, stepId: 'step-2' });
     });
-    test('runnable pipeline exposes the submit_story content interface', () => {
+    test('runnable pipeline exposes the current step content interface', () => {
         const first = request();
         runtime.applyPipelineRequestShaping(first);
-        const story = first.tools.find(tool => tool.function.name === 'submit_story');
+        const story = first.tools.find(tool => tool.function.name === 'analyze');
         expect(story?.function.parameters).toMatchObject({
             type: 'object',
             properties: { content: { type: 'string' } },
@@ -60,18 +60,18 @@ describe('live pipeline wire state', () => {
         const prefix = structuredClone(first.messages);
         first.messages[0].content = 'external mutation';
         first.tools[0].function.name = 'external mutation';
-        const assistant = { role: 'assistant', content: 'actual accompanying text', tool_calls: [call('submit_story')], reasoning_content: 'reason' };
-        core.validatePipelineToolCalls([call('submit_story')], assistant);
+        const assistant = { role: 'assistant', content: 'actual accompanying text', tool_calls: [call('analyze')], reasoning_content: 'reason' };
+        core.validatePipelineToolCalls([call('analyze')], assistant);
         runtime.preparePipelineRound([{ name: 'submit_story', id: 'original-id', result: 'result one' }]);
         const next = request('drifted WI macro must not be used');
         runtime.applyPipelineRequestShaping(next);
         expect(next.messages.slice(0, prefix.length)).toEqual(prefix);
         expect(next.messages.slice(prefix.length, -1)).toEqual([assistant, { role: 'tool', tool_call_id: 'original-id', content: '已收到。' }]);
-        expect(next.tools[0].function.name).toBe('submit_story');
+        expect(next.tools[0].function.name).toBe('reply');
         const secondPrefix = structuredClone(next.messages);
         runtime.applyPipelineRequestShaping(next);
         expect(next.messages).toEqual(secondPrefix);
-        core.validatePipelineToolCalls([call('submit_story', 'last-id')]);
+        core.validatePipelineToolCalls([call('reply', 'last-id')]);
         runtime.preparePipelineRound([{ name: 'submit_story', id: 'last-id', result: '{"ok":true}' }]);
         const fallback = request('more drift');
         runtime.applyPipelineRequestShaping(fallback);
@@ -85,8 +85,8 @@ describe('live pipeline wire state', () => {
     });
 
     test('rejects duplicate dispatch; ending the run releases all wire state', () => {
-        core.validatePipelineToolCalls([call('submit_story')]);
-        expect(() => core.validatePipelineToolCalls([call('submit_story')])).toThrow(/Reply pipeline/);
+        core.validatePipelineToolCalls([call('analyze')]);
+        expect(() => core.validatePipelineToolCalls([call('analyze')])).toThrow(/Reply pipeline/);
         runtime.endPipelineRun();
         expect(core.getPipelineRunState()).toBeNull();
         expect(() => core.validatePipelineToolCalls([call('other')])).not.toThrow();

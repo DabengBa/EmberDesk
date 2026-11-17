@@ -282,7 +282,6 @@ export interface GenerationTransportPorts<Trace, Schema, Fallback, Response, Str
     assertAllowed(): void;
     isEmpty(response: Response): boolean;
     emptyFailure(): Error;
-    requirePipelineCall?(): void;
 }
 
 /** Select and run the existing provider transport for one bounded recovery attempt. */
@@ -311,7 +310,6 @@ async function runTransportAttempt<Trace, Schema, Fallback, Response, StreamResu
     if (!ports.ownsRun()) throw new Error('Generation was aborted.');
     if (!canPerformTools && ports.hasToolCalls(result)) ports.assertAllowed();
     if (!(canPerformTools && ports.hasToolCalls(result)) && ports.isEmpty(result)) throw ports.emptyFailure();
-    if (!ports.hasToolCalls(result)) ports.requirePipelineCall?.();
     return result;
 }
 
@@ -674,7 +672,7 @@ export interface StreamAttemptPorts<ToolCalls, Invocation, Step, Meta, Result> {
     hasPipeline(): boolean;
     continueGeneration(): Promise<Result>;
     emptyFailure(messageId: number): Error;
-    requirePipelineCall?(): void;
+    textInvocations?(text: string, reasoning: string, assistant: unknown): Invocation[] | null;
     finishMessage(messageId: number, text: string): Promise<unknown>;
     refresh(): void;
     clearRecovery(messageId: number): void;
@@ -736,9 +734,23 @@ async function finishStreamAttempt<ToolCalls, Invocation, Step, Meta, Result>(in
     if (finished) {
         const id = processor.messageId;
         if (!String(messageChunk ?? '').trim()) { ports.clearProcessor(); throw ports.emptyFailure(id); }
-        try { ports.requirePipelineCall?.(); } catch (error) {
-            if (error instanceof Error) (error as Error & { messageId?: number }).messageId = id;
-            throw error;
+        const reasoning = processor.reasoningHandler.reasoning;
+        const signature = processor.reasoningSignature;
+        const assistant = { role: 'assistant', content: text, ...(reasoning ? { reasoning } : {}), ...(signature ? { signature } : {}) };
+        const textCalls = !withCalls ? ports.textInvocations?.(text, reasoning, assistant) : null;
+        if (textCalls) {
+            await ports.deleteLast();
+            check();
+            const decision = ports.prepareRound(textCalls);
+            ports.clearProcessor();
+            await ports.saveInvocations(textCalls);
+            check();
+            if (decision?.action === 'final') {
+                ports.markComplete(processor);
+                return ports.finalizePipeline({ type, text: decision.text, step: decision.step, meta: decision.meta,
+                    reasoning: processor.reasoningHandler.reasoning, reasoningSignature: processor.reasoningSignature, fromStream: true });
+            }
+            return { pipelineContinuation: true };
         }
         if (input.isOpenAI && attemptModel) ports.setModel(id, attemptModel);
         await ports.finishMessage(id, text);
@@ -1806,6 +1818,7 @@ export interface GenerationResponsePorts {
     setType(type: string): void;
     hasToolCalls(data: unknown): boolean;
     hasPipeline?(): boolean;
+    textInvocations?(text: string, reasoning: string, assistant: unknown): unknown[] | null;
     deleteLastMessage(): Promise<unknown>;
     invokeTools(data: unknown, reasoning: string, ownsRun: () => boolean): Promise<{ invocations: unknown[]; stealthCalls: unknown[]; errors?: unknown[] }>;
     showToolErrors(errors: unknown[]): void;
@@ -1844,6 +1857,7 @@ async function completeGenerationResponse(input: GenerationResponseInput, ports:
         return ports.extractJson(data, jsonSchema.returnInvalid ?? false);
     }
     let getMessage = ports.extractMessage(data);
+    const rawMessage = getMessage;
     const title = ports.extractTitle(data);
     let reasoning = ports.extractReasoning(data);
     const imageUrls = ports.extractImages(data);
@@ -1871,6 +1885,20 @@ async function completeGenerationResponse(input: GenerationResponseInput, ports:
     if (!ports.ownsRun()) return;
     if (canPerformToolCalls) {
         const hasToolCalls = ports.hasToolCalls(data);
+        const provider = data as { choices?: { index?: number; message?: unknown }[]; message?: unknown };
+        const assistant = (Array.isArray(provider.choices) ? provider.choices.find(choice => choice.index === 0)?.message : undefined) ?? provider.message;
+        const textCalls = !hasToolCalls ? ports.textInvocations?.(rawMessage, reasoning, assistant) : null;
+        if (textCalls) {
+            await ports.deleteLastMessage();
+            if (!ports.ownsRun()) return;
+            const decision = ports.preparePipeline(textCalls);
+            await ports.saveTools(textCalls, () => ports.ownsRun());
+            if (!ports.ownsRun()) return;
+            if (decision?.action === 'final') {
+                return ports.finalizePipeline({ type, text: decision.text, step: decision.step, meta: decision.meta, reasoning, reasoningSignature, title, imageUrls });
+            }
+            return ports.continueAfterTools();
+        }
         const shouldDeleteMessage = Boolean(ports.hasPipeline?.()) || (['', '...'].includes(getMessage) && !reasoning);
         if (hasToolCalls && shouldDeleteMessage) await ports.deleteLastMessage();
         if (!ports.ownsRun()) return;

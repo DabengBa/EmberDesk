@@ -55,7 +55,7 @@ import {
     resolveReasoningEffort,
     resolveVerbosity,
 } from './openai-provider-capabilities.js';
-import { buildStepPrompt, createPipelineToolCompatibilityError, getActivePipelineRunId, getPipelineRunState, PIPELINE_FALLBACK_PROMPT, PIPELINE_STORY_TOOL, pipelineModelRemovesTools } from './reply-pipeline-core.js';
+import { buildStepPrompt, createPipelineToolCompatibilityError, getActivePipelineRunId, getPipelineRunState, PIPELINE_FALLBACK_PROMPT, PIPELINE_STORY_TOOL, pipelineModelRemovesTools, pipelineStepTool } from './reply-pipeline-core.js';
 
 // Installed by the workspace composition root before any domain initialization.
 // State properties must be getters: the shell can replace them after startup.
@@ -942,7 +942,7 @@ export function getPromptRole(role) {
  * @param {object[]} options.messages - Array containing all messages.
  * @returns {Promise<void>}
  */
-async function populateChatCompletion(prompts, chatCompletion, { bias, quietPrompt: _quietPrompt, quietImage, type, messages, extensionPrompts, assemblySettings = oai_settings, pipelineHistory = false }) {
+async function populateChatCompletion(prompts, chatCompletion, { bias, quietPrompt: _quietPrompt, quietImage, type, messages, extensionPrompts, assemblySettings = oai_settings, pipelineHistory = false, pipelineBudgetStep = null }) {
     // Helper function for preparing a prompt, that already exists within the prompt collection, for completion
     const addToChatCompletion = async (source, target = null) => {
         // We need the prompts array to determine a position for the source.
@@ -1056,7 +1056,7 @@ async function populateChatCompletion(prompts, chatCompletion, { bias, quietProm
         const toolData = {};
         await ToolManager.registerFunctionToolsOpenAI(toolData);
         const toolMessage = pipelineHistory
-            ? [{ role: 'system', content: JSON.stringify([PIPELINE_STORY_TOOL]) }]
+            ? [{ role: 'system', content: JSON.stringify([pipelineBudgetStep ? pipelineStepTool(pipelineBudgetStep) : PIPELINE_STORY_TOOL]) }]
             : [{ role: 'user', content: JSON.stringify(toolData) }];
         const toolTokens = await tokenHandler.countAsync(toolMessage, pipelineHistory);
         chatCompletion.reserveBudget(toolTokens);
@@ -1283,6 +1283,7 @@ export async function prepareOpenAIMessages({
         await populateChatCompletion(prompts, chatCompletion, {
             bias, quietPrompt, quietImage, type, messages, extensionPrompts, assemblySettings,
             pipelineHistory: type === 'normal' && !!(run || pipelineStepTag || pipelineHistory),
+            pipelineBudgetStep: run && !run.fallbackRound ? run.steps[run.index] : pipelinePreviewBase?.step,
         });
     } catch (error) {
         chatCompletion.error = error;

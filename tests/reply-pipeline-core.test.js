@@ -298,13 +298,19 @@ describe('applyStepRequestOverrides tool narrowing', () => {
         tool_choice: 'auto',
     });
 
+    test.each(['auto', 'forced', undefined])('forces the current step name regardless of legacy mode %s', async enforceMode => {
+        const { applyStepRequestOverrides } = await importFreshCore();
+        const data = applyStepRequestOverrides(makeBody(), { tool: 'review' }, { enforceMode });
+        expect(data.tool_choice).toEqual({ type: 'function', function: { name: 'review' } });
+    });
+
     test('forced mode pins tool_choice and narrows tools to the step function', async () => {
         const { applyStepRequestOverrides } = await importFreshCore();
 
         const data = applyStepRequestOverrides(makeBody(), { tool: 'analyze' }, { enforceMode: 'forced' });
 
-        expect(data.tool_choice).toEqual({ type: 'function', function: { name: 'submit_story' } });
-        expect(data.tools.map(tool => tool.function.name)).toEqual(['analyze', 'review', 'respond', 'options']);
+        expect(data.tool_choice).toEqual({ type: 'function', function: { name: 'analyze' } });
+        expect(data.tools.map(tool => tool.function.name)).toEqual(['analyze']);
     });
 
     test('auto mode narrows tools to the step function too — the plan owns the tool surface', async () => {
@@ -312,8 +318,8 @@ describe('applyStepRequestOverrides tool narrowing', () => {
 
         const data = applyStepRequestOverrides(makeBody(), { tool: 'review' }, { enforceMode: 'auto' });
 
-        expect(data.tool_choice).toBe('auto');
-        expect(data.tools.map(tool => tool.function.name)).toEqual(['analyze', 'review', 'respond', 'options']);
+        expect(data.tool_choice).toEqual({ type: 'function', function: { name: 'review' } });
+        expect(data.tools.map(tool => tool.function.name)).toEqual(['review']);
     });
 
     test('keeps the list untouched when the step tool is not registered', async () => {
@@ -321,7 +327,7 @@ describe('applyStepRequestOverrides tool narrowing', () => {
 
         const data = applyStepRequestOverrides(makeBody(), { tool: 'absent' }, { enforceMode: 'auto' });
 
-        expect(data.tools).toHaveLength(4);
+        expect(data.tools).toHaveLength(1);
     });
 
     test('leaves bodies without tools alone', async () => {

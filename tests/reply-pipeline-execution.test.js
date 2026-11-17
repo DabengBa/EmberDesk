@@ -116,7 +116,7 @@ test('disabled pipeline suppresses tools on the next generation without changing
 test('active story carrier bypasses same-name formatter and action, but ordinary calls do not', async () => {
     ToolManager.unregisterFunctionTool('submit_story');
     ToolManager.registerFunctionTool({ name: 'submit_story', description: 'conflict', action, formatMessage: formatter, parameters: {}, stealth: false });
-    const result = await ToolManager.invokeFunctionTools([[call('submit_story')]]);
+    const result = await ToolManager.invokeFunctionTools([[call('analyze')]]);
     expect(result.invocations[0].result).toBe('raw text');
     expect(action).not.toHaveBeenCalled();
     expect(formatter).not.toHaveBeenCalled();
@@ -132,21 +132,37 @@ test('disabling during an active pipeline leaves its current run intact', () => 
     run = null;
     expect(ToolManager.canPerformToolCalls('normal')).toBe(false);
 });
+
+test('current step call is normalized internally while retaining its original wire message', async () => {
+    const assistant = { role: 'assistant', content: 'accompanying', tool_calls: [call('analyze')], reasoning_content: 'reason' };
+    const result = await ToolManager.invokeFunctionTools({ choices: [{ index: 0, message: assistant }] });
+
+    expect(result.invocations[0]).toMatchObject({ id: 'id', name: 'submit_story', result: 'raw text' });
+    expect(run.pendingAssistant).toEqual(assistant);
+    expect(action).not.toHaveBeenCalled();
+    expect(formatter).not.toHaveBeenCalled();
+});
+test.each([{}, 'invalid'])('malformed non-array tool_calls are not treated as plain prose: %p', async toolCalls => {
+    const response = { choices: [{ index: 0, message: { content: 'prose', tool_calls: toolCalls } }] };
+    expect(ToolManager.hasToolCalls(response)).toBe(true);
+    await expect(ToolManager.invokeFunctionTools(response)).rejects.toThrow(/Reply pipeline/);
+    expect(action).not.toHaveBeenCalled();
+});
 test.each([[call('later')], [call('outside')], [call('analyze'), call('analyze', 'id2')], [call('analyze'), call('later', 'id2')]].map(calls => [calls]))('rejects entire invalid batch before formatter/action: %p', async calls => {
     await expect(ToolManager.invokeFunctionTools([[...calls]])).rejects.toThrow(/Reply pipeline/);
     expect(action).not.toHaveBeenCalled(); expect(formatter).not.toHaveBeenCalled();
 });
 
 test('nonstream and stream capture same original argument bytes; duplicate dispatch has no effects', async () => {
-    const assistant = { role: 'assistant', content: 'actual text', reasoning_content: 'reason', tool_calls: [call('submit_story')] };
+    const assistant = { role: 'assistant', content: 'actual text', reasoning_content: 'reason', tool_calls: [call('analyze')] };
     const result = await ToolManager.invokeFunctionTools({ choices: [{ index: 0, message: assistant }] });
     expect(run.pendingAssistant).toEqual(assistant);
     expect(result.invocations[0].result).toBe('raw text');
-    await expect(ToolManager.invokeFunctionTools([[call('submit_story')]])).rejects.toThrow(/Reply pipeline/);
+    await expect(ToolManager.invokeFunctionTools([[call('analyze')]])).rejects.toThrow(/Reply pipeline/);
     expect(action).not.toHaveBeenCalled();
     run = { steps: [{ tool: 'analyze' }], index: 0 };
-    await ToolManager.invokeFunctionTools([[call('submit_story')]], { reasoningText: 'stream reason', assistantMessage: { role: 'assistant', content: 'stream accompanying text', tool_calls: [call('submit_story')], signature: 'sig' } });
-    expect(run.pendingAssistant.tool_calls).toEqual([call('submit_story')]);
+    await ToolManager.invokeFunctionTools([[call('analyze')]], { reasoningText: 'stream reason', assistantMessage: { role: 'assistant', content: 'stream accompanying text', tool_calls: [call('analyze')], signature: 'sig' } });
+    expect(run.pendingAssistant.tool_calls).toEqual([call('analyze')]);
     expect(run.pendingAssistant.content).toBe('stream accompanying text');
     expect(run.pendingAssistant.signature).toBe('sig');
 });
@@ -169,14 +185,14 @@ test('real registered tools survive pipeline shaping across two rounds', async (
 
     expect(first.tools[0].toString()).toContain('<b>analyze</b>');
     runtime.applyPipelineRequestShaping(first);
-    expect(first.tools[0].function.name).toBe('submit_story');
+    expect(first.tools[0].function.name).toBe('analyze');
     expect(first.messages.at(-1).content).toContain('analyze');
 
     runtime.preparePipelineRound([{ name: 'submit_story', id: 'id', result: 'raw text' }]);
     const second = { type: 'normal', messages: [{ role: 'user', content: 'hello' }] };
     await ToolManager.registerFunctionToolsOpenAI(second);
     runtime.applyPipelineRequestShaping(second);
-    expect(second.tools).toEqual(first.tools);
+    expect(second.tools[0].function.name).toBe('later');
     expect(second.messages.at(-1).content).toContain('later');
     runtime.endPipelineRun();
 });
