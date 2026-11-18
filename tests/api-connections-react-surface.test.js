@@ -11,7 +11,7 @@ function readRepoFile(relativePath) {
 }
 
 describe('API connections drawer retirement', () => {
-    const indexHtml = readRepoFile('public/index.html');
+    const indexHtml = readRepoFile('app/components/workspace/WorkspaceHost.tsx');
     const workspace = readRepoFile('app/workspace-panels.tsx');
     const script = readRepoFile('public/script.js');
     const settingsSurface = readRepoFile('app/components/settings/SettingsSurface.tsx');

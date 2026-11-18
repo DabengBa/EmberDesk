@@ -16,7 +16,7 @@ function extractSendFormBlock(html) {
 }
 
 describe('chat composer React surface', () => {
-    const indexHtml = readRepoFile('public/index.html');
+    const indexHtml = readRepoFile('app/components/workspace/WorkspaceHost.tsx');
     const composer = readRepoFile('app/components/composer/ChatComposer.tsx');
     const workspace = readRepoFile('app/workspace-panels.tsx');
     const script = readRepoFile('public/script.js');
@@ -24,7 +24,7 @@ describe('chat composer React surface', () => {
     test('send_form shell is preserved while owned inner markup is replaced by React host', () => {
         const block = extractSendFormBlock(indexHtml);
         expect(block).toContain('id="send_form"');
-        expect(block).toContain('class="no-connection"');
+        expect(block).toContain('className="no-connection"');
         // Owned inner markup must be gone from the shell.
         expect(block).not.toContain('id="send_textarea"');
         expect(block).not.toContain('id="nonQRFormItems"');

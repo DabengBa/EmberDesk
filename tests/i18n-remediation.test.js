@@ -4,6 +4,7 @@ import { readRepoFile } from './helpers/frontend-structure-contract.js';
 describe('locale remediation wiring', () => {
     test.each([
         ['Regenerate reply', '重新生成回复'],
+        ['Continue reply', '续写回复'],
         ['Wire Log', '链路日志'],
         ['Send requires an API connection.', '发送消息需要先连接 API。'],
     ])('workspace copy %s has a Chinese translation', (key, translation) => {
@@ -15,7 +16,7 @@ describe('locale remediation wiring', () => {
         const zh = JSON.parse(readRepoFile('public/locales/zh-cn.json'));
         const labels = [...source.matchAll(/label=(?:"([^"]+)"|\{translate\('([^']+)'\)\})/g)]
             .map(match => match[1] ?? match[2]);
-        expect(labels).toHaveLength(10);
+        expect(labels).toHaveLength(11);
         for (const label of labels) {
             expect(zh[label]).toMatch(/[\u4e00-\u9fff]/);
         }

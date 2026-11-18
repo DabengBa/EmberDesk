@@ -6,45 +6,25 @@ import {
 } from './helpers/stylex-guardrails.js';
 
 describe('StyleX/Astryx foundation (Phase 0)', () => {
-    test('wires the StyleX unplugin into every React Vite mode but not the lib boundary', () => {
+    test('wires the StyleX unplugin into the React app but not the lib boundary', () => {
         const viteConfig = readRepoFile('vite.config.ts');
 
         expect(viteConfig).toContain("import stylex from '@stylexjs/unplugin/vite'");
 
-        const characterLibraryMode = viteConfig.match(/isCharacterLibraryPanelBuild[\s\S]*?outDir: 'app\/dist'/)?.[0] ?? '';
-        const workspacePanelsMode = viteConfig.match(/isWorkspacePanelsBuild[\s\S]*?outDir: 'app\/dist'/)?.[0] ?? '';
-        const loginMode = viteConfig.match(/React application mode[\s\S]*$/)?.[0] ?? '';
+        const appMode = viteConfig.split('// React application mode')[1];
         const libMode = viteConfig.match(/if \(isLibBuild\)[\s\S]*?\n    \}/)?.[0] ?? '';
-
-        for (const [name, block] of [
-            ['character-library-panel', characterLibraryMode],
-            ['workspace-panels', workspacePanelsMode],
-            ['login', loginMode],
-        ]) {
-            expect(block).toContain('stylex()');
-            expect(name).toBeTruthy();
-        }
+        expect(appMode).toContain('stylex()');
         expect(libMode).not.toContain('stylex()');
     });
 
-    test('pins deterministic panel stylesheet assets so bridges can link them', () => {
-        const viteConfig = readRepoFile('vite.config.ts');
-
-        expect(viteConfig).toContain('cssFileName: name');
-        expect(viteConfig).toContain("reactPanelConfig('workspace-panels')");
-        expect(viteConfig).toContain("reactPanelConfig('character-library-panel')");
-        expect(viteConfig).toContain("assetFileNames: 'assets/[name][extname]'");
-    });
-
-    test('panel loaders inject their companion stylesheet before importing the bundle', () => {
+    test('panel styles are built with the SPA rather than injected by the loader', () => {
         const bridge = readRepoFile('public/scripts/workspace-panels-react-bridge.js');
         const script = readRepoFile('public/script.js');
+        const root = readRepoFile('app/routes/__root.tsx');
 
-        expect(bridge).toContain('export function ensureReactPanelStylesheet(');
-        expect(bridge).toContain("REACT_WORKSPACE_PANELS_STYLES_PATH = '/react/login/assets/workspace-panels.css'");
-        expect(bridge).toContain('ensureReactPanelStylesheet(REACT_WORKSPACE_PANELS_STYLES_PATH)');
-        expect(script).toContain('ensureReactPanelStylesheet');
-        expect(script).toContain("'/react/login/assets/character-library-panel.css'");
+        expect(root).toContain("import '@astryxdesign/core/astryx.css'");
+        expect(bridge).not.toContain('workspace-panels.css');
+        expect(script).not.toContain('character-library-panel.css');
     });
 
     test('theme token bridge maps SmartTheme runtime variables to Astryx tokens', () => {
@@ -74,9 +54,10 @@ describe('StyleX/Astryx foundation (Phase 0)', () => {
         }
     });
 
-    test('React roots wrap the tree in the EmberDesk Astryx theme', () => {
+    test('the app and portal surfaces apply the EmberDesk Astryx theme', () => {
         const client = readRepoFile('app/client.tsx');
         const workspacePanels = readRepoFile('app/workspace-panels.tsx');
+
         const characterLibraryPanel = readRepoFile('app/character-library-panel.tsx');
 
         for (const source of [client, workspacePanels, characterLibraryPanel]) {
@@ -87,12 +68,12 @@ describe('StyleX/Astryx foundation (Phase 0)', () => {
     });
 
     test('StyleX conversion keeps diagnostics DOM contract hooks on data attributes', () => {
-        const workspacePanels = readRepoFile('app/workspace-panels.tsx');
+        const panelShell = readRepoFile('app/components/panels/WorkspacePanelShell.tsx');
 
-        expect(workspacePanels).toContain("import * as stylex from '@stylexjs/stylex'");
-        expect(workspacePanels).toContain('stylex.create');
-        expect(workspacePanels).toContain('data-workspace-panel-diagnostics={kind}');
-        expect(workspacePanels).not.toContain('className="workspace-panel-diagnostics"');
+        expect(panelShell).toContain("import * as stylex from '@stylexjs/stylex'");
+        expect(panelShell).toContain('stylex.create');
+        expect(panelShell).toContain('data-workspace-panel-diagnostics={kind}');
+        expect(panelShell).not.toContain('className="workspace-panel-diagnostics"');
 
         const legacyCss = readPublicOrRepoStyle();
         expect(legacyCss).not.toContain('.workspace-panel-diagnostics');
@@ -125,7 +106,7 @@ describe('StyleX/Astryx foundation (Phase 0)', () => {
     test('keeps protected character-list and extension contracts untouched', () => {
         const script = readRepoFile('public/script.js') + readRepoFile('public/scripts/public-api.js');
         const legacyCss = readPublicOrRepoStyle() + readRepoFile('public/css/tags.css');
-        const indexHtml = readRepoFile('public/index.html');
+        const indexHtml = readRepoFile('app/components/workspace/WorkspaceHost.tsx');
 
         for (const protectedSelector of [
             '.character_select',

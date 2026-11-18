@@ -77,13 +77,14 @@ describe('character library React panel scaffold', () => {
         expect(panelSource).toContain('const entity = state.pageEntities[item.index];');
     });
 
-    test('bridges the legacy workspace shell into the React character-library panel bundle', () => {
+    test('bridges the legacy workspace shell into the SPA character-library panel', () => {
         const scriptSource = read('public/script.js');
+        const entrySource = read('app/compat/workspace-panels-entry.ts');
 
         expect(scriptSource).toContain('globalThis.__emberDeskCharacterLibraryPanelBridge');
-        expect(scriptSource).toContain('/react/login/assets/character-library-panel.js');
-        expect(scriptSource).toContain('function getReactCharacterLibraryPanelAssetPath()');
-        expect(scriptSource).toContain('import(getReactCharacterLibraryPanelAssetPath())');
+        expect(scriptSource).not.toContain('/react/login/assets/character-library-panel.js');
+        expect(scriptSource).toContain('await loadWorkspacePanelsModule()');
+        expect(entrySource).toContain("from '../character-library-panel'");
         expect(scriptSource).toContain('const characterLibraryToolbarState = {');
         expect(scriptSource).toContain('updateCharacterLibraryToolbarOwnerState({ searchQuery });');
         expect(scriptSource).toContain('updateCharacterLibraryToolbarOwnerState({ sortValue: getSelectedCharacterLibrarySortValue() });');

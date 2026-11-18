@@ -35,7 +35,7 @@ describe('secrets input map', () => {
     test('legacy drawer secret inputs are retired; the React Providers tab owns the key field', () => {
         const frontendSecrets = readRepoFile('public/scripts/secrets.js');
         const settingsSurface = readRepoFile('app/components/settings/SettingsSurface.tsx');
-        const indexHtml = readRepoFile('public/index.html');
+        const indexHtml = readRepoFile('app/components/workspace/WorkspaceHost.tsx');
 
         // The drawer INPUT_MAP, its key-manager popup entry point, and the
         // datalist autosuggest plumbing were removed with the drawer.

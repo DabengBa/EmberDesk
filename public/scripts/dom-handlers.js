@@ -665,6 +665,7 @@ export async function bindLegacyShellHandlers() {
         button.setAttribute('aria-expanded', 'true');
         showBranchChatButtons();
         setOptionsMenuRegenerateAvailability(canRegenerateLastReply());
+        shell().syncOptionsMenuContinueAvailability();
         if (getComputedStyle(menu).display === 'none') { menu.style.opacity = '0'; menu.style.display = 'block'; }
         transitionOpacity(menu, { opacity: 1, duration: state.animation_duration, easing: state.animation_easing });
         getOptionsPopper()?.update();
@@ -687,6 +688,10 @@ export async function bindLegacyShellHandlers() {
     ///////////// OPTIMIZED LISTENERS FOR LEFT SIDE OPTIONS POPUP MENU //////////////////////
     // React-owned menu items invoke this command directly.
     optionsMenuCommand = async function (id) {
+        if (id === 'option_continue') {
+            menuController.close();
+            return shell().continueLastReply();
+        }
         return shell().getHistoryCommands().runHistoryMenuAction(id, false, {
             hasCharacter: () => state.this_chid !== undefined,
             isSending: () => Boolean(state.is_send_press),

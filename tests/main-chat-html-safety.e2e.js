@@ -1,14 +1,11 @@
 import { test, expect } from '@playwright/test';
 import { testSetup } from './frontend/frontent-test-utils.js';
+import { openWorkspacePanelFixture } from './helpers/workspace-panel-fixture.js';
 
 test('rich message fragments reject executable HTML while preserving unchanged mounted children', async ({ page }) => {
-    await page.route('**/main-chat-html-safety', route => route.fulfill({
-        contentType: 'text/html',
-        body: '<!doctype html><html><body><div id="sheld"><div id="chat"></div></div></body></html>',
-    }));
-    await page.goto('/main-chat-html-safety');
+    await openWorkspacePanelFixture(page, '<div id="sheld"><div id="chat"></div></div>');
     await page.evaluate(async () => {
-        const panels = await import('/react/login/assets/workspace-panels.js');
+        const panels = await (await import('/scripts/workspace-panels-react-bridge.js')).loadWorkspacePanelsModule();
         window.renderSafetyRow = (name, messageHtml) => panels.mountWorkspacePanel('mainChatMessageList', document.getElementById('chat'), {
             state: { mainChatSnapshot: { orderedMessageIds: ['0'], messagesById: { '0': {
                 id: '0', name, content: 'test', render: {
@@ -50,7 +47,7 @@ test('real formatter and attachment output survives every mounted rich-body bran
     const expected = await page.evaluate(async () => {
         const { messageFormatting } = await import('/scripts/message-service.js');
         const { buildChatMessageRichBodyRender } = await import('/scripts/chat-message-render-service.js');
-        const panels = await import('/react/login/assets/workspace-panels.js');
+        const panels = await (await import('/scripts/workspace-panels-react-bridge.js')).loadWorkspacePanelsModule();
         const message = {
             name: 'System', is_system: true, is_user: false,
             mes: '<style>.probe{color:rgb(1,2,3);background-image:url(https://row-policy.invalid/blocked)}</style><div class="probe">formatted</div><button class="menu_button">system action</button><a href="https://example.com">link</a><details open><summary>details</summary><em>content</em></details><svg viewBox="0 0 8 8"><circle cx="4" cy="4" r="2"></circle></svg><div data-example="custom" style="color:rgb(7,8,9)">inline</div>',
@@ -124,7 +121,7 @@ test('mounted rows preserve character CSS authorization and gallery controls', a
         const { messageFormatting } = await import('/scripts/message-service.js');
         const { buildChatMessageRichBodyRender } = await import('/scripts/chat-message-render-service.js');
         const { getMessageShellContext, registerMessageShellContext } = await import('/scripts/message-shell-context.js');
-        const panels = await import('/react/login/assets/workspace-panels.js');
+        const panels = await (await import('/scripts/workspace-panels-react-bridge.js')).loadWorkspacePanelsModule();
         const original = getMessageShellContext();
         const messagesById = {};
         try {

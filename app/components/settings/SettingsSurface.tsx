@@ -65,7 +65,7 @@ const settingsSchema = z.object({
         frontendFramesDepthIgnoreHidden: z.boolean(),
         frontendFramesCollapseCodeBlock: z.enum(['all', 'none']),
         frontendFramesSkipHighlight: z.boolean(),
-        frontendFramesUseBlobUrl: z.boolean(),
+
     }),
 });
 
@@ -1067,14 +1067,7 @@ export function SettingsSurface({
                                         disabled={isBusy}
                                         onValueChange={clearTransientState}
                                     />
-                                    <SettingField
-                                        form={settingsForm}
-                                        name="rendering.frontendFramesUseBlobUrl"
-                                        label={t('Use blob URL (debug)')}
-                                        variant="toggle"
-                                        disabled={isBusy}
-                                        onValueChange={clearTransientState}
-                                    />
+
                                 </SettingsSection>
                             ) : null}
 

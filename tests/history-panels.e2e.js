@@ -355,15 +355,15 @@ test('slash delchat does not delete when the refreshed history has no selected r
 });
 
 
-test('workspace bundle loading failure leaves startup on the splash screen', async ({ page }) => {
+test('workspace panel preparation failure leaves startup on the splash screen', async ({ page }) => {
     await testSetup.awaitST({ page });
     let requests = 0;
-    await page.route('**/react/login/assets/workspace-panels.js?*', route => { requests++; return route.abort('failed'); });
+    await page.route('**/scripts/workspace-panels-react-bridge.js', route => { requests++; return route.abort('failed'); });
     await page.reload();
     await expect.poll(() => requests).toBeGreaterThan(0);
-    await expect(page.getByText('Initializing…')).toBeVisible();
+    await expect(page.locator('#preloader')).toHaveAttribute('aria-busy', 'false');
     await expect(page.locator('#preloader')).toHaveCount(1);
-    await page.unroute('**/react/login/assets/workspace-panels.js?*');
+    await page.unroute('**/scripts/workspace-panels-react-bridge.js');
     await page.reload();
     await testSetup.awaitST({ page });
     await expect(page.locator('#preloader')).toHaveCount(0);

@@ -5,27 +5,17 @@ import {
 } from './workspace-panel-mount-contract.js';
 import { getMainChatFailure } from './main-chat-failure.js';
 
-export const REACT_WORKSPACE_PANELS_ASSET_PATH = '/react/login/assets/workspace-panels.js';
-export const REACT_WORKSPACE_PANELS_STYLES_PATH = '/react/login/assets/workspace-panels.css';
-const REACT_WORKSPACE_PANELS_ASSET_CACHE_KEY = Date.now().toString(36);
+let preparedPanels;
 
-export function getReactWorkspacePanelsAssetPath() {
-    const cacheKey = globalThis.__emberDeskReactWorkspacePanelsAssetCacheKey ??= REACT_WORKSPACE_PANELS_ASSET_CACHE_KEY;
-    return `${REACT_WORKSPACE_PANELS_ASSET_PATH}?v=${encodeURIComponent(String(cacheKey))}`;
+export function installWorkspacePanelsModule(panels) {
+    preparedPanels = panels;
 }
 
-export function ensureReactPanelStylesheet(href, doc = globalThis.document) {
-    if (!doc?.head || !href) {
-        return;
+export async function loadWorkspacePanelsModule() {
+    if (!preparedPanels) {
+        throw new Error('Workspace panels have not been prepared');
     }
-    if (doc.head.querySelector(`link[data-emberdesk-react-panel-styles="${href}"]`)) {
-        return;
-    }
-    const link = doc.createElement('link');
-    link.rel = 'stylesheet';
-    link.href = href;
-    link.dataset.emberdeskReactPanelStyles = href;
-    doc.head.appendChild(link);
+    return preparedPanels;
 }
 
 export function getDefaultWorkspaceReactFeatures() {
@@ -45,23 +35,6 @@ export function isReactWorkspacePanelEnabled(kind, features = getDefaultWorkspac
     return Boolean(features?.reactPanels?.[kind]);
 }
 
-export function createWorkspacePanelsModuleLoader(importModule = assetPath => import(assetPath)) {
-    let modulePromise = null;
-
-    return function loadWorkspacePanelsModule() {
-        if (!modulePromise) {
-            ensureReactPanelStylesheet(REACT_WORKSPACE_PANELS_STYLES_PATH);
-            modulePromise = importModule(getReactWorkspacePanelsAssetPath()).catch(error => {
-                modulePromise = null;
-                throw error;
-            });
-        }
-
-        return modulePromise;
-    };
-}
-
-export const loadWorkspacePanelsModule = createWorkspacePanelsModuleLoader();
 
 export async function mountReactWorkspacePanel({
     kind,

@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { openWorkspacePanelFixture } from './helpers/workspace-panel-fixture.js';
 
 for (const viewport of [
     { width: 1440, height: 900, label: 'wide desktop' },
@@ -6,23 +7,15 @@ for (const viewport of [
 ]) {
     test(`workspace toolbar stays outside chat and drawer bounds at ${viewport.label}`, async ({ page }) => {
         await page.setViewportSize(viewport);
-        await page.route('**/workspace-shell-geometry', route => route.fulfill({
-            contentType: 'text/html',
-            body: `<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1">
-                <link rel="stylesheet" href="/style.css">
-                <link rel="stylesheet" href="/css/mobile-styles.css">
-                <link rel="stylesheet" href="/react/login/assets/workspace-panels.css">
-            </head><body>
+        await openWorkspacePanelFixture(page, `
                 <div id="top-settings-holder">
                     <div id="rightNavHolder" class="drawer"><nav id="right-nav-panel" class="drawer-content openDrawer fillRight"></nav></div>
                 </div>
                 <div id="emberdesk-react-workspace-shell-chrome-host"></div>
                 <div id="sheld"><div id="chat"></div><div id="send_form"></div></div>
-            </body></html>`,
-        }));
-        await page.goto('/workspace-shell-geometry');
+        `);
         await page.evaluate(async () => {
-            const module = await import('/react/login/assets/workspace-panels.js');
+            const module = await (await import('/scripts/workspace-panels-react-bridge.js')).loadWorkspacePanelsModule();
             const runtime = {
                 getSnapshot: () => ({ chat: { id: null, characterId: null, title: '' }, generation: { phase: 'idle' }, provider: { status: 'idle' } }),
                 subscribe: () => () => {},

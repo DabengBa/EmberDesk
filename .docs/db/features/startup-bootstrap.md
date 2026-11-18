@@ -21,8 +21,7 @@ Bring the user from the root EmberDesk URL to a usable main workspace while slow
 - The overlay disappears when the main shell is usable for real interaction, even if secondary surfaces such as world info are still warming. Active chat background application is chat context, not a background-library panel.
 - Deferred panel failures surface in their own areas instead of returning the whole workspace to global loading.
 - Compatibility facades used during startup remain available without changing the visible startup experience; the workspace can finish core initialization before secondary compatibility work continues.
-- The root workspace remains the long-term runtime facade for `/`; feature-flagged React routes or guarded panel islands may enhance surfaces, but disabled flags or missing bundles must not invalidate the same root shell.
-- Same-entry React shell takeover diagnostics may be published during startup after the main shell has a host to attach diagnostic state. Development and CI should treat an enabled but unmountable takeover foundation as a failure, while production safety paths may leave the existing shell visible with a recorded failure reason instead of showing an empty migration host.
+- `/` opens the authenticated workspace in the same React application as login, setup, and settings. There is no second workspace UI to fall back to.
 - Refreshing the root URL repeats the same visible readiness contract and must not strand the user between shell and panel states.
 - The root entry invokes the explicit `bootstrapWorkspace()` composition-root bootstrap. This names the startup contract without implying that all remaining legacy domain and DOM owners have already moved out of `script.js`.
 
@@ -35,15 +34,12 @@ Bring the user from the root EmberDesk URL to a usable main workspace while slow
 
 - As a returning workspace user who wants to start chatting, from the root URL open or reload EmberDesk; EmberDesk must show startup feedback only until the main shell can be used, secondary panels may still show local loading, and reload must repeat the same readiness contract. Failure is a blocked core shell or a global loading state that does not clear when the main workspace is ready.
 - As a user encountering a secondary surface failure during startup, from the usable workspace open the affected panel surface or apply an active chat background; EmberDesk must keep the main shell usable and show local retry, refresh, or error behavior, and failure is returning to global loading or leaving a blank surface with no recovery cue.
-- As a user on a build with React routes or panel islands disabled or unavailable, from `/` open the workspace; EmberDesk must still present the established root shell and fallback surfaces, refresh must preserve that root entry, and failure is a missing bundle or flag-off state replacing the workspace with an empty migration host.
-- As a user on a build where same-entry React shell takeover diagnostics are enabled, from `/` open the workspace; EmberDesk must keep the existing workspace visible until later shell takeover stages actually change layout, development and CI must fail when required takeover conditions are missing, and production safety fallback must record a reason rather than silently masking the problem.
 - As a user opening the root workspace with World Info or other compatibility-dependent surfaces available, EmberDesk must finish main-shell initialization and remove the startup overlay before secondary panel work continues; failure is a compatibility initialization error that leaves the user stuck on global `Initializing...` feedback.
 
 ## Feature-Specific Evidence
 
 - Startup overlay disappearance, usable workspace controls, and local panel loading/error states are primary evidence.
 - Performance timings and profiler stages are supporting evidence only after the visible readiness contract is satisfied.
-- React bundle availability and feature flags are migration evidence, not alternate user-visible contracts.
 
 ## Failure Signals
 
@@ -52,8 +48,6 @@ Bring the user from the root EmberDesk URL to a usable main workspace while slow
 - A secondary panel load failure blocks the whole workspace.
 - Refreshing the root URL leaves the user between a hidden overlay and unusable shell.
 - A compatibility surface fails during core initialization and blocks the shell from reaching ready.
-- Flag-off or bundle-missing React paths produce an empty workspace instead of the established shell.
-- Enabled shell takeover diagnostics fail silently in development or CI instead of exposing the missing host, invalid payload, or mount failure reason.
 
 ## Boundaries
 

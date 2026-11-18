@@ -29,11 +29,11 @@ It is not optimized for users who want a managed cloud product or a minimal one-
 - Runtime: Node.js 26.12.1 Current (`>=26.12.1 <27`)
 - Package manager and task runner: pnpm 12.0.0-rc.5
 - Server: Express-based API and startup pipeline
-- Frontend: HTML/CSS/jQuery compatibility substrate plus progressive React page/panel islands; the root `/` workspace shell boundary has been reopened as an opt-in same-entry React chrome/layout takeover path rather than a separate SPA route
-- Build: pnpm-managed scripts plus Vite for shared browser library output, the shared React app, and workspace panel bundles
+- Frontend: one React 19 / TypeScript SPA for the workspace, login, setup, and settings. Existing first-party controllers are reused behind the React workspace host.
+- Build: pnpm-managed Vite builds for the shared browser library and the React SPA.
 - Entry point: `server.js` -> `src/server-main.ts`
 - React migration: `/login`, `/setup`, `/settings`, Character Library, Main Chat Message List, World Info, Character Authoring, and the same-entry `/` shell run on React. There is no group chat, global background library, third-party extension, or persona surface; active chat backgrounds and avatar media remain separate retained contracts, and user identity is a fixed default. Migrated surfaces are React sole-runtime-owner surfaces; the program remains same-entry and does not introduce `/workspace-next`.
-- Workspace panel and shell bootstrap: the workspace shell renders the React chrome with guarded panel bundles. Active chat background settings/metadata, static `backgrounds/*` compatibility, and avatar media remain supported. Release rollback is a previous application version rather than a live legacy path.
+- Workspace panel and shell bootstrap: workspace panels render under the same React root and load from the same application build. Active chat background settings/metadata, static `backgrounds/*` compatibility, and avatar media remain supported. Release rollback is a previous application version rather than a live legacy path.
 - React state migration: Zustand stores and the internal compatibility bridge are migration foundations. Internal contracts such as `globalThis.SillyTavern`, `eventSource` / `event_types`, selectors, macro behavior, and regex behavior remain owned by first-party modules.
 - Main-chat React boundary: React is the sole runtime owner of the main-chat typed message list, direct-child row output, row actions including reasoning controls, mutation zones, long-chat windowing, and reading-position restore inside `#chat`. The existing `#send_textarea` / `#send_but` remain the composer input/write owner; React only captures their generation commands. One framework-neutral generation service owns request commands and lifecycle for visible and quiet/background families; provider transport and reasoning parser/template/stream behavior remain compatibility-owned. `chat-message-render-service` produces formatted HTML without owning DOM insertion. Product list dual-path flags are retired. Public aliases such as `Generate()`, `printMessages`, and `showMoreMessages` remain thin compatibility adapters, not product dual-owner surfaces.
 - World Info facade boundary: `public/scripts/world-info.js` remains the World Info compatibility facade, while `public/scripts/world-info-shell-context.js` provides a narrow internal shell-context seam for startup-safe access to shell-owned state and `eventSource` methods.
@@ -80,7 +80,7 @@ EmberDesk currently provides:
 
 - a main browser workspace for chat-centric LLM use
 - character-card management and large-library browsing
-- a guarded React character-library panel island inside the main workspace, keeping the same entry point while making the React toolbar/list path the normal visible owner for large-library browsing and keeping only a documented emergency compatibility facade for flag-off or build-missing cases
+- a React Character Library in the main workspace, using the existing character data and selection contracts
 - React Character Authoring remains the sole owner of character create/edit fields inside the existing right drawer, with field-local validation, one visible dirty/save state, create/edit destructive-action separation, single visible owner behavior over the retained legacy compatibility host, and legacy popup/file-write seams preserved only as compatibility boundaries.
 - a same-entry React workspace chrome for current context, shell status, and the `角色库`/`世界书`/`正则`/`设置` primary navigation; settings navigate to the React `/settings` sole-owner surface as an in-workspace overlay or direct route (missing build fails closed), visible status copy stays in short human-readable phrases, mobile status chrome hides when width is tight, and panel entries expose only transient active/status coordination instead of persistent shell-owned drawer state
 - chat history storage and recovery
@@ -88,7 +88,7 @@ EmberDesk currently provides:
 - world info / lorebook workflows
 - active chat backgrounds and chat-local background metadata, plus retained avatar images and compatibility paths
 - a documented shared browser library for common frontend utilities
-- React sole-owner page routes for login, setup, and Settings, plus remaining guarded workspace islands and the same-entry shell takeover path; TanStack Form, Zod, TanStack Query, and TanStack Virtual are used where React owns the migrated slice, while same-entry rollback facades and explicit compatibility owners stay documented for unfinished surfaces
+- one React application owns login, setup, Settings, and the workspace UI, with typed adapters for retained native controllers
 - Zustand-backed React state stores and an allowlisted compatibility bridge that let React-owned slices observe workspace/main-chat state without exposing broad panel internals or breaking legacy extension globals
 - Docker-friendly deployment and browser access across devices
 - focused startup and interaction performance work for daily-use paths
@@ -139,7 +139,7 @@ EmberDesk does not currently aim to:
 - Keep compatibility-facing character row selectors and accessibility state synchronized when list rows are reused instead of re-rendered.
 - Treat main-chat message rows, send-form controls, `eventSource` / `event_types`, macros, and regex behavior as protected compatibility points; Slash commands are retired and `/`-prefixed input is ordinary chat text; add focused browser and compatibility proof before changing rendering or streaming behavior.
 - Keep startup-time compatibility facades lazy around shell-owned constants and preserve emitter binding when proxying `eventSource`; eager registration reads must not block the workspace readiness overlay from clearing.
-- Treat React modernization as successor-gated, not an open-ended rewrite: React routes, islands, and the same-entry shell takeover can expand only through focused proof, and any future narrowing of compatibility exports or same-entry rollback facades requires new proof and a new design boundary.
+- Keep one runtime owner per surface and preserve existing first-party contracts when moving ownership.
 - Keep maintainer governance state in tech docs, not in end-user UI. Users should see task-relevant shell/panel/chat status, not internal cutover verdict labels.
 
 ## One-Line Summary

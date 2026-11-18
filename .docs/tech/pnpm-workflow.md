@@ -31,8 +31,6 @@ Use pnpm for local install and task execution:
 pnpm install --frozen-lockfile --ignore-scripts
 pnpm run build:lib
 pnpm run build:react
-pnpm run build:react:character-library
-pnpm run build:react:workspace-panels
 pnpm run docs:build
 pnpm run typecheck
 pnpm run lint
@@ -72,16 +70,14 @@ Node/Jest proof boundary. `pnpm run typecheck` checks both frontend and server
 projects, and `pnpm run lint` includes migrated server TypeScript.
 
 - `pnpm run build:lib` builds the shared `/lib.js` browser library.
-- `pnpm run build:react` builds the shared React page app used by `/login`, `/setup`, and `/settings`.
-- `pnpm run build:react:character-library` builds the guarded character-library workspace panel bundle.
-- `pnpm run build:react:workspace-panels` builds the shared guarded workspace-panel action-island bundle for World Info and Extensions Host; the former Background Library scaffold is historical and the global gallery is retired. React owns the visible host controls and action bridges, while prompt/regex/background file/extension protocol behavior remains with the relevant retained owners. Slash commands are retired.
+- `pnpm run build:react` builds one application for `/`, `/login`, `/setup`, and `/settings`. Workspace panels are chunks of that application, not separate builds.
 
 For local development, `pnpm run dev:all` starts Express and Vite; `pnpm run dev:express` and `pnpm run dev` start them separately. Vite defaults to port `3001` and proxies backend routes and legacy assets to `http://127.0.0.1:8000`. Set `VITE_DEV_PORT` or `VITE_BACKEND_ORIGIN` to match a custom local setup. Vite uses multi-page mode, so unknown HTML paths do not fall back to the root page. The proxy configuration is owned by `vite-dev-server-config.mjs` and exercised by `tests/vite-dev-proxy.integration.test.js`.
 
 Docker and release install verification also use pnpm:
 
-- Image build installs the full pnpm dependency tree first (`NODE_ENV=development pnpm install --frozen-lockfile --ignore-scripts`) so Vite can prebuild React page/panel bundles, then reinstalls production-only dependencies after `build:react`, `build:react:character-library`, and `build:react:workspace-panels` succeed and `app/dist` is verified.
-- The runtime image must contain `app/dist/index.html` plus the character-library and workspace-panels assets; without them `/login`, `/setup`, and `/settings` return HTTP 503.
+- Image build installs the full pnpm dependency tree first (`NODE_ENV=development pnpm install --frozen-lockfile --ignore-scripts`) so Vite can prebuild the browser library and React app, then reinstalls production-only dependencies after the builds succeed and `app/dist` is verified.
+- Deploy the complete `app/dist` directory, including its entry document and generated assets. If `app/dist/index.html` is missing, the React routes return HTTP 503 after any applicable setup and authentication redirects.
 - PR workflows install with `pnpm install --frozen-lockfile --ignore-scripts`.
 - Use `pnpm publish` for registry publication when a release workflow requires it.
 
@@ -105,7 +101,7 @@ Validated migration surfaces should include:
 - `pnpm run test:unit`.
 - `pnpm run test:e2e` when runtime or startup compatibility must be proven end to end.
 - `docker run --rm node:26.12.1-alpine3.23 node --version`.
-- `docker build .` through full pnpm install, Vite builds (`build:lib`, `build:react`, `build:react:character-library`, `build:react:workspace-panels`), production prune, and `app/dist` verification.
+- `docker build .` through full pnpm install, Vite builds (`build:lib`, `build:react`), production prune, and `app/dist` verification.
 
 Known local boundary:
 

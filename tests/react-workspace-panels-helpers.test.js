@@ -4,11 +4,12 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import {
-    createWorkspacePanelsModuleLoader,
+
     getDefaultWorkspaceReactFeatures,
     isReactWorkspacePanelEnabled,
     mountReactWorkspacePanel,
 } from '../public/scripts/workspace-panels-react-bridge.js';
+import * as workspacePanelsBridge from '../public/scripts/workspace-panels-react-bridge.js';
 import {
     WORKSPACE_PANEL_MOUNT_FALLBACK_REASONS,
     WORKSPACE_PANEL_MOUNT_STATUSES,
@@ -312,9 +313,9 @@ describe('React workspace panels bridge helpers', () => {
         expect(workspacePanelSource).not.toContain('data-workspace-shell-slot-recovery-action="retry"');
     });
 
-    test('ships a main-chat message-list panel contract through the shared workspace panel asset', () => {
+    test('ships a main-chat message-list panel contract through the shared workspace entry', () => {
         const configSource = read('default/config.yaml');
-        const packageSource = read('package.json');
+        const entrySource = read('app/compat/workspace-panels-entry.ts');
         const seedScriptSource = read('scripts/seed-dev-environment.mjs');
         const workspaceFeatureSource = read('src/workspace-react-features.js');
         const bridgeSource = read('public/scripts/workspace-panels-react-bridge.js');
@@ -324,7 +325,7 @@ describe('React workspace panels bridge helpers', () => {
         expect(configSource).not.toContain('mainChatMessageList:');
         expect(configSource).not.toContain('characterAuthoring:');
         expect(configSource).not.toContain('groupAuthoring:');
-        expect(packageSource).toContain('vite build --mode workspace-panels');
+        expect(entrySource).toContain("from '../workspace-panels'");
         expect(seedScriptSource).not.toContain('EMBERDESK_FEATURES_REACT_PANELS_MAINCHATMESSAGELIST');
         expect(seedScriptSource).not.toContain('features:');
         expect(workspaceFeatureSource).toContain('// Main Chat message list is React sole-owner; product flag is retired.');
@@ -339,7 +340,7 @@ describe('React workspace panels bridge helpers', () => {
     });
 
     test('retires the legacy group drawer, shell entry, bookmark conversion, and group-only settings fields', () => {
-        const indexHtmlSource = read('public/index.html');
+        const indexHtmlSource = read('app/components/workspace/WorkspaceHost.tsx');
         const scriptSource = read('public/script.js');
         const tagsSource = read('public/scripts/tags.js');
         const bookmarksSource = read('public/scripts/chat-branch.js');
@@ -545,22 +546,13 @@ describe('React workspace panels bridge helpers', () => {
         expect(workspacePanelSource).not.toContain('mainChatQuietTransportSchema');
     });
 
-    test('loads the shared workspace panels bundle once and resets the cache after failure', async () => {
-        const importedModule = { mountWorkspacePanel: jest.fn() };
-        const importModule = jest.fn()
-            .mockResolvedValueOnce(importedModule)
-            .mockRejectedValueOnce(new Error('missing bundle'))
-            .mockResolvedValueOnce(importedModule);
-        const loadModule = createWorkspacePanelsModuleLoader(importModule);
-
-        await expect(loadModule()).resolves.toBe(importedModule);
-        await expect(loadModule()).resolves.toBe(importedModule);
-        expect(importModule).toHaveBeenCalledTimes(1);
-        expect(importModule).toHaveBeenCalledWith(expect.stringMatching(/^\/react\/login\/assets\/workspace-panels\.js\?v=.+/));
-
-        const failingLoader = createWorkspacePanelsModuleLoader(importModule);
-        await expect(failingLoader()).rejects.toThrow('missing bundle');
-        await expect(failingLoader()).resolves.toBe(importedModule);
+    test('loads only the workspace panel exports installed by the SPA', async () => {
+        const panels = { mountWorkspacePanel: jest.fn() };
+        expect(workspacePanelsBridge.installWorkspacePanelsModule).toEqual(expect.any(Function));
+        await expect(workspacePanelsBridge.loadWorkspacePanelsModule()).rejects.toThrow('Workspace panels have not been prepared');
+        workspacePanelsBridge.installWorkspacePanelsModule(panels);
+        await expect(workspacePanelsBridge.loadWorkspacePanelsModule()).resolves.toBe(panels);
+        await expect(workspacePanelsBridge.loadWorkspacePanelsModule()).resolves.toBe(panels);
     });
 
     test('mounts enabled panels and returns structured results for fallback and success', async () => {
@@ -757,14 +749,12 @@ describe('React workspace panels bridge helpers', () => {
         expect(hostControllerSource).toContain('if (shouldRemount(commandResult, commandName, args)) {');
     });
 
-    test('uses a shared Query-backed workspace panel shell with safe legacy slot markers', () => {
+    test('renders the command port projection in the shared workspace panel shell with safe legacy slot markers', () => {
         const workspacePanelSource = read('app/workspace-panels.tsx');
         const shellSource = read('app/components/panels/WorkspacePanelShell.tsx');
 
-        expect(workspacePanelSource).toContain('import { QueryClient, QueryClientProvider, useQuery } from \'@tanstack/react-query\';');
-        expect(workspacePanelSource).toContain('function workspacePanelStateQueryKey(kind: WorkspacePanelKind)');
-        expect(workspacePanelSource).toContain('queryKey: workspacePanelStateQueryKey(kind)');
-        expect(workspacePanelSource).toContain('queryClient.setQueryData(workspacePanelStateQueryKey(mount.kind), mount.state ?? null);');
+        expect(workspacePanelSource).toContain('renderPanel(mount.kind, mount.state ?? null, mount.commands)');
+        expect(workspacePanelSource).not.toContain('new QueryClient');
         expect(workspacePanelSource).toContain('import { WorkspacePanelShell }');
         expect(shellSource).toContain('function WorkspacePanelShell');
         expect(shellSource).toContain('data-react-workspace-panel-shell={kind}');
@@ -944,7 +934,7 @@ describe('React workspace panels bridge helpers', () => {
     });
 
     test('retires the Extensions Host panel, drawer, and third-party extension surface', () => {
-        const indexHtmlSource = read('public/index.html');
+        const indexHtmlSource = read('app/components/workspace/WorkspaceHost.tsx');
         const scriptSource = read('public/script.js');
         const extensionsSource = read('public/scripts/feature-settings.js');
         const workspacePanelSource = read('app/workspace-panels.tsx');
@@ -1075,16 +1065,17 @@ describe('React workspace panels bridge helpers', () => {
         expect(compatSource).not.toContain('mountStreamingFrames');
         // Depth eligibility is computed before any iframe exists
         expect(compatSource).toContain('computeDepthEligible');
-        // EmberDeskFrame event bridge resolves through the shell eventSource
-        expect(compatSource).toContain('getContextSnapshot');
-        expect(compatSource).toContain('eventSource');
-        // Frame scripts may only run for trusted, finalized message bodies
+        // Host lifecycle notifications still resolve through the shell event source.
+        expect(compatSource).toContain('SillyTavern?.getContext?.()');
+        expect(compatSource).toContain('shell?.eventSource?.emit?.(eventName, frameId)');
+        // Finalized frame scripts run in an isolated document; the retired child bridge does not return.
         expect(frameModuleSource).toContain('FRONTEND_FRAME_MARKERS');
         expect(frameModuleSource).toContain('iframe.srcdoc');
-        // Bridge lifecycle is host-owned: whitelisted events, disposed on unmount
-        expect(frameModuleSource).toContain('FRONTEND_FRAME_ALLOWED_EVENTS');
-        expect(frameModuleSource).toContain('createFrameBridge');
-        expect(frameModuleSource).toContain('disposeFrameBridge');
+        expect(frameModuleSource).toContain("iframe.setAttribute('sandbox', 'allow-scripts')");
+        expect(frameModuleSource).toContain('emit?.(FRONTEND_FRAME_EVENTS.started, frameId)');
+        expect(frameModuleSource).toContain('emit?.(FRONTEND_FRAME_EVENTS.ended, frameId)');
+        expect(frameModuleSource).not.toContain('createFrameBridge');
+        expect(compatSource).toContain('unmountFrontendFrames(mesTextEl)');
         expect(frameModuleSource).not.toContain('mountStreamingFrames');
         expect(frameModuleSource).not.toContain('findClosedFrontendDocuments');
     });

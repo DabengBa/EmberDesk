@@ -1,6 +1,5 @@
 import { StrictMode } from 'react';
-import { createRoot, type Root } from 'react-dom/client';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { createWorkspacePortalMount, type WorkspacePortalMount } from './compat/workspace-portals';
 import {
     CharacterLibraryPanel,
     type CharacterLibraryPanelBridge,
@@ -15,29 +14,25 @@ import { Theme } from '@astryxdesign/core';
 import { emberDeskTheme } from './lib/theme-tokens';
 import '@astryxdesign/core/astryx.css';
 
-let reactRoot: Root | null = null;
+let panelPortal: WorkspacePortalMount | null = null;
 let mountContainer: HTMLElement | null = null;
 let bridgeRef: CharacterLibraryPanelBridge | null = null;
 let currentState: CharacterLibraryPanelState | null = null;
-let toolbarRoot: Root | null = null;
+let toolbarPortal: WorkspacePortalMount | null = null;
 let toolbarContainer: HTMLElement | null = null;
 let toolbarBridgeRef: CharacterLibraryToolbarBridge | null = null;
 let currentToolbarState: CharacterLibraryToolbarState | null = null;
-
-const queryClient = new QueryClient();
 
 function renderPanel() {
     if (!mountContainer || !bridgeRef || !currentState) {
         return;
     }
 
-    reactRoot ??= createRoot(mountContainer);
-    reactRoot.render(
+    panelPortal ??= createWorkspacePortalMount(mountContainer);
+    panelPortal.render(
         <StrictMode>
             <Theme theme={emberDeskTheme} mode="dark">
-                <QueryClientProvider client={queryClient}>
-                    <CharacterLibraryPanel bridge={bridgeRef} state={currentState} />
-                </QueryClientProvider>
+                <CharacterLibraryPanel bridge={bridgeRef} state={currentState} />
             </Theme>
         </StrictMode>,
     );
@@ -48,6 +43,10 @@ export function mountCharacterLibraryPanel(
     bridge: CharacterLibraryPanelBridge,
     initialState: CharacterLibraryPanelState,
 ) {
+    if (mountContainer !== container) {
+        panelPortal?.unmount();
+        panelPortal = null;
+    }
     mountContainer = container;
     bridgeRef = bridge;
     currentState = initialState;
@@ -55,6 +54,7 @@ export function mountCharacterLibraryPanel(
 }
 
 export function updateCharacterLibraryPanel(nextState: CharacterLibraryPanelState) {
+    if (!panelPortal?.isMounted()) return;
     currentState = nextState;
     renderPanel();
 }
@@ -64,13 +64,11 @@ function renderToolbar() {
         return;
     }
 
-    toolbarRoot ??= createRoot(toolbarContainer);
-    toolbarRoot.render(
+    toolbarPortal ??= createWorkspacePortalMount(toolbarContainer);
+    toolbarPortal.render(
         <StrictMode>
             <Theme theme={emberDeskTheme} mode="dark">
-                <QueryClientProvider client={queryClient}>
-                    <CharacterLibraryToolbar bridge={toolbarBridgeRef} state={currentToolbarState} />
-                </QueryClientProvider>
+                <CharacterLibraryToolbar bridge={toolbarBridgeRef} state={currentToolbarState} />
             </Theme>
         </StrictMode>,
     );
@@ -81,6 +79,10 @@ export function mountCharacterLibraryToolbar(
     bridge: CharacterLibraryToolbarBridge,
     initialState: CharacterLibraryToolbarState,
 ) {
+    if (toolbarContainer !== container) {
+        toolbarPortal?.unmount();
+        toolbarPortal = null;
+    }
     toolbarContainer = container;
     toolbarBridgeRef = bridge;
     currentToolbarState = initialState;
@@ -88,15 +90,16 @@ export function mountCharacterLibraryToolbar(
 }
 
 export function updateCharacterLibraryToolbar(nextState: CharacterLibraryToolbarState) {
+    if (!toolbarPortal?.isMounted()) return;
     currentToolbarState = nextState;
     renderToolbar();
 }
 
 export function unmountCharacterLibraryPanel() {
-    reactRoot?.unmount();
-    toolbarRoot?.unmount();
-    reactRoot = null;
-    toolbarRoot = null;
+    panelPortal?.unmount();
+    toolbarPortal?.unmount();
+    panelPortal = null;
+    toolbarPortal = null;
     mountContainer = null;
     toolbarContainer = null;
     bridgeRef = null;

@@ -410,7 +410,7 @@ import {
     parseCharacterLibraryFetchResponse,
     projectCharacterLibraryQueryAgainstDeletedAvatars,
 } from './scripts/character-library-query-helpers.js';
-import { ensureReactPanelStylesheet, mountReactWorkspaceShellChrome, mountReactSettingsPanel, loadWorkspacePanelsModule } from './scripts/workspace-panels-react-bridge.js';
+import { mountReactWorkspaceShellChrome, mountReactSettingsPanel, loadWorkspacePanelsModule } from './scripts/workspace-panels-react-bridge.js';
 import { initChatMemory, getChatMemoryDisplayItems } from './scripts/chat-memory-service.js';
 import { getRequestHeaders, loadCsrfToken } from './scripts/request-context.js';
 import { installPublicBrowserApi } from './scripts/public-api.js';
@@ -1043,6 +1043,7 @@ registerDomHandlersShellContext({
     cancelStatusCheck: (...args) => cancelStatusCheck(...args),
     cancelTtsPlay: (...args) => cancelTtsPlay(...args),
     canRegenerateLastReply: (...args) => canRegenerateLastReply(...args),
+    continueLastReply,
     chooseBogusFolder: (...args) => chooseBogusFolder(...args),
     closeCharacterExportPopup: (...args) => closeCharacterExportPopup(...args),
     closeCurrentChat: (...args) => closeCurrentChat(...args),
@@ -1156,6 +1157,7 @@ registerDomHandlersShellContext({
     setCharacterSettingsOverrides: (...args) => setCharacterSettingsOverrides(...args),
     setMainChatMessageUiState: (...args) => setMainChatMessageUiState(...args),
     setOptionsMenuRegenerateAvailability: (...args) => setOptionsMenuRegenerateAvailability(...args),
+    syncOptionsMenuContinueAvailability,
     showBranchChatButtons: (...args) => showBranchChatButtons(...args),
     showDeleteConfirmWithCascade: (...args) => showDeleteConfirmWithCascade(...args),
     stopGeneration: (...args) => stopGeneration(...args),
@@ -1182,10 +1184,7 @@ const CHARACTER_AUTHORING_REACT_HOST_ID = 'emberdesk-react-character-authoring-p
 const WORKSPACE_SHELL_CHROME_HOST_ID = 'emberdesk-react-workspace-shell-chrome-host';
 const MAIN_CHAT_SCROLL_RESTORE_THRESHOLD_PX = 12;
 const STREAMING_TRANSPORT_TERMINAL_PHASES = new Set(['stopped', 'completed', 'error']);
-const REACT_CHARACTER_LIBRARY_PANEL_ASSET_PATH = '/react/login/assets/character-library-panel.js';
-const REACT_CHARACTER_LIBRARY_PANEL_ASSET_CACHE_KEY = Date.now().toString(36);
 const REACT_CHARACTER_LIBRARY_TOOLBAR_HOST_ID = 'emberdesk-react-character-library-toolbar';
-let reactCharacterLibraryPanelModulePromise = null;
 let reactCharacterLibraryPanelMounted = false;
 let reactCharacterLibraryToolbarMounted = false;
 const characterLibraryToolbarState = {
@@ -1208,10 +1207,6 @@ const mainChatVisibleStartIndices = new Map();
 const mainChatVisibleGenerationMutex = new SimpleMutex(submitComposerMessage);
 const mainChatMessageUiState = new Map();
 
-function getReactCharacterLibraryPanelAssetPath() {
-    const cacheKey = globalThis.__emberDeskReactCharacterLibraryPanelAssetCacheKey ??= REACT_CHARACTER_LIBRARY_PANEL_ASSET_CACHE_KEY;
-    return `${REACT_CHARACTER_LIBRARY_PANEL_ASSET_PATH}?v=${encodeURIComponent(String(cacheKey))}`;
-}
 
 function ensureWorkspaceShellChromeHost() {
     let host = document.getElementById(WORKSPACE_SHELL_CHROME_HOST_ID);
@@ -3646,17 +3641,6 @@ function getReactCharacterLibraryPanelBridge() {
     };
 }
 
-async function loadReactCharacterLibraryPanelModule() {
-    if (!reactCharacterLibraryPanelModulePromise) {
-        ensureReactPanelStylesheet('/react/login/assets/character-library-panel.css');
-        reactCharacterLibraryPanelModulePromise = import(getReactCharacterLibraryPanelAssetPath()).catch(error => {
-            reactCharacterLibraryPanelModulePromise = null;
-            throw error;
-        });
-    }
-
-    return reactCharacterLibraryPanelModulePromise;
-}
 
 function getCharacterLibraryEntityTags(entityId) {
     const tagKey = getTagKeyForEntity(entityId);
@@ -3772,7 +3756,7 @@ async function mountReactCharacterLibraryPanel(state) {
     const panelBridge = getReactCharacterLibraryPanelBridge();
 
     try {
-        const panelModule = await loadReactCharacterLibraryPanelModule();
+        const panelModule = await loadWorkspacePanelsModule();
         if (!reactCharacterLibraryPanelMounted) {
             listElement.replaceChildren();
             panelModule.mountCharacterLibraryPanel(listElement, panelBridge, state);
@@ -3790,7 +3774,7 @@ async function mountReactCharacterLibraryPanel(state) {
         listElement.replaceChildren();
         const errorBlock = document.createElement('div');
         errorBlock.className = 'character_list_empty empty_block';
-        errorBlock.textContent = 'Character Library React build is missing. Run pnpm run build:react:character-library.';
+        errorBlock.textContent = 'Character Library React build is missing. Run pnpm run build:react.';
         listElement.appendChild(errorBlock);
         return false;
     }
@@ -3806,7 +3790,7 @@ async function mountReactCharacterLibraryToolbar(state = createCharacterLibraryT
     ensureCharacterLibraryToolbarCompatBridges();
 
     try {
-        const panelModule = await loadReactCharacterLibraryPanelModule();
+        const panelModule = await loadWorkspacePanelsModule();
         const toolbarBridge = getReactCharacterLibraryPanelBridge();
         if (!reactCharacterLibraryToolbarMounted) {
             panelModule.mountCharacterLibraryToolbar(host, toolbarBridge, state);
@@ -3874,7 +3858,7 @@ async function resetCharacterLibraryPanelForPerf() {
         throw new Error('Character list element is unavailable.');
     }
 
-    const panelModule = await loadReactCharacterLibraryPanelModule();
+    const panelModule = await loadWorkspacePanelsModule();
     panelModule.unmountCharacterLibraryPanel();
     reactCharacterLibraryPanelMounted = false;
     reactCharacterLibraryToolbarMounted = false;
@@ -6354,6 +6338,9 @@ const workspaceGeneration = createWorkspaceGeneration({
     changed() {
         document.body.toggleAttribute('data-workspace-generation-running', Boolean(workspaceGeneration.current()));
         scheduleMainChatMessageListPanelRefresh();
+        if (document.getElementById('options_button')?.getAttribute('aria-expanded') === 'true') {
+            syncOptionsMenuContinueAvailability();
+        }
     },
     lockStep: (id, run) => navigator.locks?.request(`emberdesk-generation-step:${id}`, run) ?? run(),
     async executeStep({ actionBody, args }) {
@@ -6599,6 +6586,20 @@ export async function regenerateLastReply() {
  */
 export function setOptionsMenuRegenerateAvailability(canRegenerate) {
     return Boolean(optionsMenuModuleRef?.updateOptionsMenuState?.({ canRegenerate: Boolean(canRegenerate) }));
+}
+
+function canContinueLastReply() {
+    if (is_send_press || workspaceGeneration.busy() || !usesWorkspaceGeneration() || chat.length < 2) return false;
+    const tail = chat.at(-1);
+    return tail?.is_user === false && !tail.is_system && Boolean(getCurrentChatGenerationTarget()?.version);
+}
+
+function continueLastReply() {
+    return canContinueLastReply() && startWorkspaceGeneration('continue');
+}
+
+function syncOptionsMenuContinueAvailability() {
+    optionsMenuModuleRef?.updateOptionsMenuState({ canContinue: canContinueLastReply() });
 }
 
 /**
@@ -9756,5 +9757,7 @@ async function mountDialogueDelMesControls() {
 if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', bindLegacyShellHandlers, { once: true });
 } else {
-    bindLegacyShellHandlers();
+    // A dynamic import after DOMContentLoaded can still be evaluating the
+    // i18n cycle when it reaches this module. Start after that graph settles.
+    setTimeout(bindLegacyShellHandlers, 0);
 }

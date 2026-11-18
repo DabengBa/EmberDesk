@@ -11,14 +11,14 @@ function readRepoFile(relativePath) {
 }
 
 describe('Advanced Definitions popup React surface', () => {
-    const indexHtml = readRepoFile('public/index.html');
+    const indexHtml = readRepoFile('app/components/workspace/WorkspaceHost.tsx');
     const popup = readRepoFile('app/components/character-popup/CharacterPopup.tsx');
     const script = readRepoFile('public/script.js');
 
-    test('popup shell stays in index.html while inner markup is React-owned', () => {
+    test('popup shell stays in WorkspaceHost while inner markup is React-owned', () => {
         expect(indexHtml).toContain('id="character_popup"');
         const block = indexHtml.match(/<div id="character_popup"[^>]*>([\s\S]*?)<\/div>/)?.[0] ?? '';
-        expect(block).toContain('class="flex-container flexFlowColumn flexNoGap"');
+        expect(block).toContain('className="flex-container flexFlowColumn flexNoGap"');
         expect(block).not.toContain('id="character_popup_ok"');
         expect(block).not.toContain('id="system_prompt_textarea"');
     });
@@ -49,11 +49,12 @@ describe('Advanced Definitions popup React surface', () => {
         expect(script).toContain('module.mountCharacterPopup(host)');
         const mountIdx = script.indexOf("measureStartupStage('mountCharacterPopup'");
         const secretsIdx = script.indexOf("measureStartupStage('initSecrets'");
-        const legacyBindIdx = script.indexOf('await bindLegacyShellHandlers()');
         const domHandlersSource = readRepoFile('public/scripts/dom-handlers.js');
-        expect(domHandlersSource).toContain("$('#character_cross').on('click'");
-        expect(mountIdx).toBeGreaterThan(-1);
+        const startupMountIdx = domHandlersSource.indexOf('mountCharacterPopup(),');
+        const closeBindIdx = domHandlersSource.indexOf("document.getElementById('character_cross')?.addEventListener('click'");
+        expect(startupMountIdx).toBeGreaterThan(domHandlersSource.indexOf('export async function bindLegacyShellHandlers()'));
+        expect(closeBindIdx).toBeGreaterThan(startupMountIdx);
+        expect(mountIdx).toBeGreaterThan(script.indexOf('async function bootstrapWorkspace()'));
         expect(mountIdx).toBeLessThan(secretsIdx);
-        expect(mountIdx).toBeLessThan(legacyBindIdx);
     });
 });

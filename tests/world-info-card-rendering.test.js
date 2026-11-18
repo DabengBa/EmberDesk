@@ -27,7 +27,7 @@ function getTopSettingsDrawerIds(indexHtml) {
 
         if (!isClose) {
             const id = tag.match(/id="([^"]+)"/)?.[1] ?? '';
-            const className = tag.match(/class="([^"]+)"/)?.[1] ?? '';
+            const className = tag.match(/className="([^"]+)"/)?.[1] ?? '';
 
             if (id === 'top-settings-holder') {
                 inTopSettings = true;
@@ -90,31 +90,31 @@ describe('world info card rendering', () => {
     });
 
     test('entry template exposes the collapsed card shell before edit controls', () => {
-        const indexHtml = read('public/index.html');
-        const templateStart = indexHtml.indexOf('<div id="entry_edit_template" class="template_element">');
+        const indexHtml = read('app/components/workspace/WorkspaceHost.tsx');
+        const templateStart = indexHtml.indexOf('<div id="entry_edit_template" className="template_element">');
         const templateEnd = indexHtml.indexOf('<div id="character_template"', templateStart);
         const entryTemplate = indexHtml.slice(templateStart, templateEnd);
-        const cardIndex = entryTemplate.indexOf('<div class="world_entry">');
-        const editIndex = entryTemplate.indexOf('<div class="world_entry_edit">');
+        const cardIndex = entryTemplate.indexOf('<div className="world_entry">');
+        const editIndex = entryTemplate.indexOf('<div className="world_entry_edit">');
 
         expect(templateStart).toBeGreaterThanOrEqual(0);
         expect(templateEnd).toBeGreaterThan(templateStart);
         expect(cardIndex).toBeGreaterThanOrEqual(0);
         expect(editIndex).toBeGreaterThan(cardIndex);
-        expect(entryTemplate).toContain('class="wi-card-expand-button');
+        expect(entryTemplate).toContain('className="wi-card-expand-button');
         expect(entryTemplate).toContain('aria-expanded="false"');
         expect(entryTemplate).toContain('aria-label="Expand entry"');
         expect(entryTemplate).toContain('data-i18n="[title]Expand entry"');
-        expect(entryTemplate).toContain('<div class="inline-drawer-content inline-drawer-outlet flex-container paddingBottom5px wide100p">');
+        expect(entryTemplate).toContain('<div className="inline-drawer-content inline-drawer-outlet flex-container paddingBottom5px wide100p">');
     });
 
     test('collapsed cards expose explicit controls instead of hidden click targets', () => {
-        const indexHtml = read('public/index.html');
+        const indexHtml = read('app/components/workspace/WorkspaceHost.tsx');
         const source = read('public/scripts/world-info.js');
 
-        expect(indexHtml).toContain('class="wi-card-position-control"');
+        expect(indexHtml).toContain('className="wi-card-position-control"');
         expect(indexHtml).toContain('name="position"');
-        expect(indexHtml).toContain('class="wi-card-active-toggle');
+        expect(indexHtml).toContain('className="wi-card-active-toggle');
         expect(source).not.toContain('worldEntriesList.find(');
         expect(read('app/world-info-workbench.tsx')).toContain('data-world-info-react-entry-toggle');
     });
@@ -222,7 +222,7 @@ describe('world info card rendering', () => {
     });
 
     test('world info drawer keeps the remaining top menu drawers in the top bar', () => {
-        const indexHtml = read('public/index.html');
+        const indexHtml = read('app/components/workspace/WorkspaceHost.tsx');
 
         // sys-settings-button hosted the retired rm_api_block drawer,
         // advanced-formatting-button hosted the retired AdvancedFormatting
@@ -253,17 +253,17 @@ describe('world info card rendering', () => {
     });
 
     test('expanded card uses explicit edit affordances and dense content layout', () => {
-        const indexHtml = read('public/index.html');
+        const indexHtml = read('app/components/workspace/WorkspaceHost.tsx');
         const css = read('public/css/world-info.css');
 
-        expect(indexHtml).toContain('class="wi-card-title-edit fa-solid fa-pencil"');
-        expect(indexHtml).toContain('class="world_entry_thin_controls wi-content-grid flex2"');
-        expect(indexHtml).toContain('class="wi-content-open"');
-        expect(indexHtml).toContain('class="wi-content-preview is-empty"');
-        expect(indexHtml).toContain('class="wi-content-editor-modal" role="dialog" aria-modal="true" aria-labelledby="wi-content-editor-title"');
-        expect(indexHtml).toContain('class="wi-content-editor-title" id="wi-content-editor-title"');
-        expect(indexHtml).toContain('class="wi-content-editor-meta"');
-        expect(indexHtml).not.toContain('data-i18n="Content" class="mdhotkey_location"');
+        expect(indexHtml).toContain('className="wi-card-title-edit fa-solid fa-pencil"');
+        expect(indexHtml).toContain('className="world_entry_thin_controls wi-content-grid flex2"');
+        expect(indexHtml).toContain('className="wi-content-open"');
+        expect(indexHtml).toContain('className="wi-content-preview is-empty"');
+        expect(indexHtml).toContain('className="wi-content-editor-modal" role="dialog" aria-modal="true" aria-labelledby="wi-content-editor-title"');
+        expect(indexHtml).toContain('className="wi-content-editor-title" id="wi-content-editor-title"');
+        expect(indexHtml).toContain('className="wi-content-editor-meta"');
+        expect(indexHtml).not.toContain('data-i18n="Content" className="mdhotkey_location"');
         expect(css).toContain('.wi-content-grid');
         expect(css).toContain('.wi-content-open');
         expect(css).toContain('.wi-content-editor-modal');

@@ -168,13 +168,20 @@ async function openCharacterManagement(page) {
 
 async function closeCharacterAuthoringAfterSelection(page) {
     const authoringPanel = page.locator('[data-react-authoring-owner="characterAuthoring"]');
-    if (!await authoringPanel.isVisible()) {
-        return;
+    const openAuthoringDrawer = page.locator('#right-nav-panel.openDrawer').filter({ has: authoringPanel });
+    if (await openAuthoringDrawer.count()) {
+        // The seeded desktop drawer can be pinned independently of dock navigation.
+        await openAuthoringDrawer.evaluate(element => element.classList.remove('pinnedOpen'));
+        const activePanelButton = page.locator('[data-react-workspace-shell-chrome] nav button[aria-pressed="true"]').first();
+        if (await activePanelButton.isVisible()) {
+            await activePanelButton.click();
+        } else {
+            await page.evaluate(async () => {
+                const { closeWorkspaceChildSlotHost } = await import('/script.js');
+                closeWorkspaceChildSlotHost('right-nav-panel');
+            });
+        }
     }
-
-    const activePanelButton = page.locator('[data-react-workspace-shell-chrome] nav button[aria-pressed="true"]').first();
-    await expect(activePanelButton).toBeVisible();
-    await activePanelButton.click();
     await expect(authoringPanel).toBeHidden();
 }
 
@@ -436,6 +443,7 @@ test.describe('main chat message list walkthrough', () => {
         const consoleErrors = createConsoleErrorCollector(page);
 
         await testSetup.awaitST({ page });
+        await page.evaluate(() => { window.SillyTavern.getContext().chatCompletionSettings.chat_memory_enabled = false; });
         await grantClipboardPermissions(page);
         await selectCharacterFromVisibleList(page, characterName);
         await openPastChat(page, reasoningChatName);
@@ -537,10 +545,23 @@ test.describe('main chat message list walkthrough', () => {
 
         for (const viewport of mobileViewports) {
             await page.setViewportSize({ width: viewport.width, height: viewport.height });
+            // This walkthrough exercises chat history with side drawers dismissed.
+            // A wide desktop boot can pin both independently of the React dock.
+            await page.evaluate(async () => {
+                const { closeWorkspaceChildSlotHost } = await import('/script.js');
+                for (const id of ['left-nav-panel', 'right-nav-panel']) {
+                    document.getElementById(id)?.classList.remove('pinnedOpen');
+                    closeWorkspaceChildSlotHost(id);
+                }
+            });
+            await expect(page.locator('#left-nav-panel')).toBeHidden();
+            await expect(page.locator('#right-nav-panel')).toBeHidden();
             await openPastChat(page, alternateChatName);
+            await closeCharacterAuthoringAfterSelection(page);
             await openPastChat(page, longChatName);
+            await closeCharacterAuthoringAfterSelection(page);
 
-            const composer = page.getByRole('textbox', { name: 'Chat message' });
+            const composer = page.getByRole('textbox', { name: /^(Chat message|聊天消息)$/ });
             await expect(composer, `${viewport.name} composer`).toBeVisible();
             await expect.poll(async () => {
                 return page.locator('#chat .mes[mesid]').count();

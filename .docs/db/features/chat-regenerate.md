@@ -68,3 +68,5 @@ The menu starts regeneration of the current turn without submitting the composer
 - Automatic retry/fallback mechanics belong to [Chat Generation Auto Recovery](feature.chat_generation_auto_recovery).
 - Pipeline step execution and card folding belong to [Reply Pipeline](feature.reply_pipeline).
 - The chat workspace layout belongs to [Chat Workspace](page.chat_workspace).
+
+- The same menu offers Continue when the last saved reply can be extended. It appends to that reply without consuming the composer draft or creating a second assistant message. If the attempt fails, the previous reply stays saved.

@@ -121,16 +121,16 @@ describe('settings React route flag', () => {
         const settingFieldSource = fs.readFileSync(path.join(repoRoot, 'app', 'components', 'settings', 'SettingField.tsx'), 'utf8');
         const settingsStyleSource = fs.readFileSync(path.join(repoRoot, 'app', 'styles', 'settings-surface.styles.ts'), 'utf8');
         const publicStyleSource = fs.readFileSync(path.join(repoRoot, 'public', 'style.css'), 'utf8');
-        const indexSource = fs.readFileSync(path.join(repoRoot, 'public', 'index.html'), 'utf8');
+        const workspaceHostSource = fs.readFileSync(path.join(repoRoot, 'app', 'components', 'workspace', 'WorkspaceHost.tsx'), 'utf8');
         const helperModule = await import(`../app/lib/settings-helpers.js?settingsHelpers=${Date.now()}-${Math.random()}`);
 
         expect(routeSource).not.toContain('waifuMode');
         expect(helperModule.settingsFormFieldPaths.some(path => path.startsWith('userInterface.'))).toBe(false);
         expect(helperModule.settingsCoverage.reactOwned.userInterface).toBeUndefined();
         expect(helperModule.defaultSettingsFormValues.userInterface).toBeUndefined();
-        expect(indexSource).not.toContain('id="waifuMode"');
-        expect(indexSource).toContain('id="bg1"');
-        expect(indexSource).not.toContain('id="rm_group_hidemutedsprites"');
+        expect(workspaceHostSource).not.toContain('id="waifuMode"');
+        expect(workspaceHostSource).toContain('id="bg1"');
+        expect(workspaceHostSource).not.toContain('id="rm_group_hidemutedsprites"');
 
         expect(routeSource).toContain("import { useMutation, useQuery } from '@tanstack/react-query';");
         expect(routeSource).toContain("import { z } from 'zod';");
@@ -263,9 +263,8 @@ describe('settings React route flag', () => {
             'power_user.frontend_frames.depth_ignore_hidden',
             'power_user.frontend_frames.collapse_code_block',
             'power_user.frontend_frames.skip_highlight',
-            'power_user.frontend_frames.use_blob_url',
         ]));
-        expect(helperModule.settingsCoverage.reactOwned.providers).toHaveLength(15);
+        expect(helperModule.settingsCoverage.reactOwned.providers).toHaveLength(14);
         // The interface tab is retired; UI keys are stripped from saved payloads.
         expect(helperModule.settingsCoverage.reactOwned.userInterface).toBeUndefined();
         // The advanced tab is retired entirely; no react-owned advanced paths.
@@ -784,7 +783,7 @@ describe('settings React route flag', () => {
         expect(saved.power_user.context).toBeUndefined();
     });
 
-    test('a stale allow_streaming key never survives a settings save', async () => {
+    test('stale frame streaming and blob preferences never survive a settings save', async () => {
         const helperModule = await import(`../app/lib/settings-helpers.js?settingsStreamingSave=${Date.now()}-${Math.random()}`);
         const fixture = {
             power_user: {
@@ -793,6 +792,7 @@ describe('settings React route flag', () => {
                     depth: 2,
                     collapse_code_block: 'all',
                     allow_streaming: true,
+                    use_blob_url: true,
                 },
             },
         };
@@ -801,13 +801,14 @@ describe('settings React route flag', () => {
         const savedUnchanged = helperModule.buildSettingsSavePayload(fixture, defaults);
         expect(savedUnchanged.power_user.frontend_frames.allow_streaming).toBeUndefined();
         expect(Object.keys(savedUnchanged.power_user.frontend_frames).sort()).toEqual([
-            'collapse_code_block', 'depth', 'depth_ignore_hidden', 'enabled', 'skip_highlight', 'use_blob_url',
+            'collapse_code_block', 'depth', 'depth_ignore_hidden', 'enabled', 'skip_highlight',
         ]);
 
         const edited = structuredClone(defaults);
         edited.rendering.frontendFramesCollapseCodeBlock = 'none';
         const savedEdited = helperModule.buildSettingsSavePayload(fixture, edited, { baselineFormValues: defaults });
         expect(savedEdited.power_user.frontend_frames.allow_streaming).toBeUndefined();
+        expect(savedEdited.power_user.frontend_frames.use_blob_url).toBeUndefined();
         expect(savedEdited.power_user.frontend_frames.collapse_code_block).toBe('none');
     });
 
@@ -870,15 +871,15 @@ describe('settings React route flag', () => {
     test('settings surface hosts merged Frontend Frames fields with no drawer links left', () => {
         const routeSource = fs.readFileSync(path.join(repoRoot, 'app', 'components', 'settings', 'SettingsSurface.tsx'), 'utf8');
         const helperSource = fs.readFileSync(path.join(repoRoot, 'app', 'lib', 'settings-helpers.js'), 'utf8');
-        const indexHtml = fs.readFileSync(path.join(repoRoot, 'public', 'index.html'), 'utf8');
+        const workspaceHostSource = fs.readFileSync(path.join(repoRoot, 'app', 'components', 'workspace', 'WorkspaceHost.tsx'), 'utf8');
         const portSource = fs.readFileSync(path.join(repoRoot, 'app', 'compat', 'runtime-port.ts'), 'utf8');
         const providerSource = fs.readFileSync(path.join(repoRoot, 'public', 'scripts', 'react-runtime-provider.js'), 'utf8');
         const scriptSource = fs.readFileSync(path.join(repoRoot, 'public', 'script.js'), 'utf8');
 
         // The user-settings-block drawer is retired: its Frontend Frames
         // controls merged into the providers tab as bound form fields.
-        expect(indexHtml).not.toContain('id="user-settings-block"');
-        expect(indexHtml).not.toContain('id="user-settings-button"');
+        expect(workspaceHostSource).not.toContain('id="user-settings-block"');
+        expect(workspaceHostSource).not.toContain('id="user-settings-button"');
         for (const binding of [
             "settingsPath: 'power_user.frontend_frames.enabled'",
             "settingsPath: 'power_user.frontend_frames.depth'",
@@ -909,8 +910,8 @@ describe('settings React route flag', () => {
         // Formatting drawers are gone from both surfaces.
         expect(routeSource).not.toContain("'rm_api_block'");
         expect(routeSource).not.toContain("'AdvancedFormatting'");
-        expect(indexHtml).not.toContain('id="rm_api_block"');
-        expect(indexHtml).not.toContain('id="AdvancedFormatting"');
+        expect(workspaceHostSource).not.toContain('id="rm_api_block"');
+        expect(workspaceHostSource).not.toContain('id="AdvancedFormatting"');
         expect(scriptSource).not.toContain("'rm_api_block'");
         expect(scriptSource).not.toContain("'AdvancedFormatting'");
     });

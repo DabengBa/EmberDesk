@@ -1,6 +1,5 @@
 import { useLayoutEffect, useRef, useState, type KeyboardEvent, type MouseEvent } from 'react';
-import { flushSync } from 'react-dom';
-import { createRoot } from 'react-dom/client';
+import { createWorkspacePortalMount } from '../../compat/workspace-portals';
 import { Theme } from '@astryxdesign/core';
 import { emberDeskTheme } from '../../lib/theme-tokens';
 import type { Popup, PopupOptions, CustomPopupButton, CustomPopupInput } from '../../../public/scripts/popup.js';
@@ -213,12 +212,12 @@ export const createPopupRuntime: PopupRuntimeFactory = request => {
     let resolve!: (value: PopupValue) => void;
     let reject!: (error: unknown) => void;
     const result = new Promise<PopupValue>((yes, no) => { resolve = yes; reject = no; });
-    const root = createRoot(host, { onUncaughtError: error => queueMicrotask(() => fail(error)) });
+    const portal = createWorkspacePortalMount(host, error => fail(error));
     const cleanup = () => {
         if (disposed) return;
         disposed = true;
         if (refs.dlg?.open) refs.dlg.close();
-        root.unmount();
+        portal.unmount();
         host.remove();
         services.dispose();
         services.fixToast();
@@ -280,7 +279,7 @@ export const createPopupRuntime: PopupRuntimeFactory = request => {
         if (phase !== 'open' || disposed) return;
         void Promise.resolve().then(() => popup.onOpen?.(popup)).catch(fail);
     };
-    const render = () => flushSync(() => root.render(<Theme theme={emberDeskTheme} mode="dark"><PopupDialog request={request} refs={refs} phase={phase} complete={complete} cancel={cancel} opened={opened} close={() => { void close(); }} setAutoFocus={setAutoFocus} setCropper={value => { cropper = value; }} /></Theme>));
+    const render = () => portal.render(<Theme theme={emberDeskTheme} mode="dark"><PopupDialog request={request} refs={refs} phase={phase} complete={complete} cancel={cancel} opened={opened} close={() => { void close(); }} setAutoFocus={setAutoFocus} setCropper={value => { cropper = value; }} /></Theme>, true);
     try { render(); } catch (error) { cleanup(); throw error; }
     return {
         refs, complete, setAutoFocus,

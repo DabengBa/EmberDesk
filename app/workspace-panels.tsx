@@ -1,7 +1,6 @@
 import { Component, Fragment, StrictMode, useCallback, useEffect, useRef, useState, type ReactElement, type ReactNode } from 'react';
-import { createRoot, type Root } from 'react-dom/client';
 import { flushSync } from 'react-dom';
-import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query';
+import { createWorkspacePortalMount, type WorkspacePortalMount } from './compat/workspace-portals';
 
 import {
     attachGlobalCompatibilityBridge,
@@ -101,7 +100,7 @@ import '@astryxdesign/core/astryx.css';
 
 export type WorkspacePanelKind = 'worldInfo' | 'mainChatMessageList' | 'characterAuthoring';
 interface WorkspacePanelMount {
-    root: Root;
+    portal: WorkspacePortalMount;
     container: HTMLElement;
     kind: WorkspacePanelKind;
     runtime: RuntimePort;
@@ -178,7 +177,7 @@ interface WorkspacePanelDockSnapshot {
 }
 
 interface WorkspaceShellChromeMount {
-    root: Root;
+    portal: WorkspacePortalMount;
     container: HTMLElement;
     runtime: RuntimePort;
     state?: WorkspaceShellChromeState;
@@ -211,12 +210,12 @@ interface MainChatMessageListWorkspacePanelState {
     mainChatSnapshot?: MainChatSnapshot;
 }
 
-const queryClient = new QueryClient();
+
 const mountedPanels = new Map<WorkspacePanelKind, WorkspacePanelMount>();
 let mountedShellChrome: WorkspaceShellChromeMount | null = null;
 
 interface SettingsPanelMount {
-    root: Root;
+    portal: WorkspacePortalMount;
     host: HTMLElement;
     runtime: RuntimePort;
     initialTab: string | null;
@@ -236,9 +235,6 @@ function asMainChatMessageListState(state: unknown): MainChatMessageListWorkspac
     };
 }
 
-function workspacePanelStateQueryKey(kind: WorkspacePanelKind) {
-    return ['workspace-panel', kind, 'bridge-state'] as const;
-}
 
 function WorkspacePanelPlaceholder({ kind }: { kind: WorkspacePanelKind }) {
     return (
@@ -309,22 +305,6 @@ function renderPanel(
     }
 }
 
-function WorkspacePanelRoot({
-    kind,
-    commands,
-}: {
-    kind: WorkspacePanelKind;
-    commands?: WorkspacePanelBridge;
-}) {
-    const { data: panelState } = useQuery({
-        queryKey: workspacePanelStateQueryKey(kind),
-        queryFn: async () => queryClient.getQueryData(workspacePanelStateQueryKey(kind)) ?? null,
-        initialData: () => queryClient.getQueryData(workspacePanelStateQueryKey(kind)) ?? null,
-        staleTime: Number.POSITIVE_INFINITY,
-    });
-
-    return renderPanel(kind, panelState, commands);
-}
 
 const workspaceShellNavigationEntries: WorkspaceShellNavigationEntry[] = [
     { command: 'openPromptManager', icon: 'fa-sliders', label: 'Prompt', panelKind: 'promptManager', slotKey: 'promptManager' },
@@ -608,12 +588,10 @@ function ReactWorkspaceShellChrome({
 }
 
 function renderIntoShellChrome(mount: WorkspaceShellChromeMount) {
-    mount.root.render(
+    mount.portal.render(
         <StrictMode>
             <Theme theme={emberDeskTheme} mode="dark">
-                <QueryClientProvider client={queryClient}>
-                    <ReactWorkspaceShellChrome state={mount.state} commands={mount.commands} runtime={mount.runtime} />
-                </QueryClientProvider>
+                <ReactWorkspaceShellChrome state={mount.state} commands={mount.commands} runtime={mount.runtime} />
             </Theme>
         </StrictMode>,
     );
@@ -639,13 +617,8 @@ function renderIntoPanel(mount: WorkspacePanelMount, mainChatFailure: Element | 
     if (mount.kind === 'mainChatMessageList') {
         updateMainChatObservation(mount.state ?? {});
     }
-    queryClient.setQueryData(workspacePanelStateQueryKey(mount.kind), mount.state ?? null);
-    const panel = (
-        <QueryClientProvider client={queryClient}>
-            <WorkspacePanelRoot kind={mount.kind} commands={mount.commands} />
-        </QueryClientProvider>
-    );
-    mount.root.render(
+    const panel = renderPanel(mount.kind, mount.state ?? null, mount.commands);
+    mount.portal.render(
         <StrictMode>
             {mount.kind === 'mainChatMessageList'
                 // Theme creates a DOM wrapper; the legacy #chat surface requires
@@ -699,15 +672,10 @@ function SettingsDrawerHost({
 }
 
 function renderSettingsPanel(mount: SettingsPanelMount) {
-    mount.root.render(
+    mount.portal.render(
         <StrictMode>
             <Theme theme={emberDeskTheme} mode="dark">
-                <QueryClientProvider client={queryClient}>
-                    <SettingsDrawerHost
-                        initialTab={mount.initialTab}
-                        runtime={mount.runtime}
-                    />
-                </QueryClientProvider>
+                <SettingsDrawerHost initialTab={mount.initialTab} runtime={mount.runtime} />
             </Theme>
         </StrictMode>,
     );
@@ -715,7 +683,7 @@ function renderSettingsPanel(mount: SettingsPanelMount) {
 
 /**
  * Mounts the settings surface inside the #SettingsPanel drawer-content host.
- * The React root persists while the drawer toggles, so form state survives
+ * The portal persists while the drawer toggles, so form state survives
  * close/reopen; the surface only re-renders when a new initialTab is passed.
  */
 export function mountSettingsPanel(options: {
@@ -724,7 +692,7 @@ export function mountSettingsPanel(options: {
 }) {
     attachGlobalCompatibilityBridge();
     const initialTab = typeof options.initialTab === 'string' ? options.initialTab : null;
-    if (mountedSettingsPanel) {
+    if (mountedSettingsPanel?.host.isConnected) {
         mountedSettingsPanel.initialTab = initialTab;
         mountedSettingsPanel.runtime = options.runtime;
         renderSettingsPanel(mountedSettingsPanel);
@@ -741,7 +709,7 @@ export function mountSettingsPanel(options: {
     drawer.replaceChildren(host);
 
     mountedSettingsPanel = {
-        root: createRoot(host),
+        portal: createWorkspacePortalMount(host),
         host,
         runtime: options.runtime,
         initialTab,
@@ -754,7 +722,7 @@ export function unmountSettingsPanel() {
     if (!mountedSettingsPanel) {
         return;
     }
-    mountedSettingsPanel.root.unmount();
+    mountedSettingsPanel.portal.unmount();
     mountedSettingsPanel.host.remove();
     mountedSettingsPanel = null;
     (globalThis as Record<string, unknown>).__emberDeskSettingsDirty = false;
@@ -769,7 +737,7 @@ export function mountWorkspacePanel(kind: WorkspacePanelKind, container: HTMLEle
     const existingPanel = mountedPanels.get(kind);
     if (existingPanel) {
         if (existingPanel.container !== container) {
-            existingPanel.root.unmount();
+            existingPanel.portal.unmount();
             mountedPanels.delete(kind);
         } else {
             existingPanel.state = options.state;
@@ -782,7 +750,7 @@ export function mountWorkspacePanel(kind: WorkspacePanelKind, container: HTMLEle
     }
 
     const mount = {
-        root: createRoot(container),
+        portal: createWorkspacePortalMount(container),
         container,
         kind,
         runtime: options.runtime,
@@ -798,7 +766,7 @@ export function mountWorkspaceShellChrome(container: HTMLElement, options: Works
     attachGlobalCompatibilityBridge();
     if (mountedShellChrome) {
         if (mountedShellChrome.container !== container) {
-            mountedShellChrome.root.unmount();
+            mountedShellChrome.portal.unmount();
         } else {
             mountedShellChrome.state = options.state;
             mountedShellChrome.commands = options.commands;
@@ -809,7 +777,7 @@ export function mountWorkspaceShellChrome(container: HTMLElement, options: Works
     }
 
     mountedShellChrome = {
-        root: createRoot(container),
+        portal: createWorkspacePortalMount(container),
         container,
         runtime: options.runtime,
         state: options.state,
@@ -823,7 +791,7 @@ export function unmountWorkspaceShellChrome() {
         return;
     }
 
-    mountedShellChrome.root.unmount();
+    mountedShellChrome.portal.unmount();
     mountedShellChrome = null;
     if (mountedPanels.size === 0) {
         detachGlobalCompatibilityBridge();
@@ -832,7 +800,7 @@ export function unmountWorkspaceShellChrome() {
 
 export function updateWorkspacePanel(kind: WorkspacePanelKind, options: { state?: unknown } = {}) {
     const mount = mountedPanels.get(kind);
-    if (!mount) {
+    if (!mount?.portal.isMounted()) {
         return;
     }
 
@@ -848,7 +816,7 @@ export function unmountWorkspacePanel(kind: WorkspacePanelKind) {
         return;
     }
 
-    mount.root.unmount();
+    mount.portal.unmount();
     mountedPanels.delete(kind);
     recordWorkspacePanelUnmount(kind);
     if (kind === 'mainChatMessageList') {
@@ -860,7 +828,7 @@ export function unmountWorkspacePanel(kind: WorkspacePanelKind) {
 }
 
 interface ChatBackupsMount {
-    root: Root;
+    portal: WorkspacePortalMount;
     host: HTMLElement;
     options: ChatBackupsMountOptions;
 }
@@ -876,7 +844,7 @@ interface ChatBackupsMountOptions {
 let mountedChatBackups: ChatBackupsMount | null = null;
 
 function renderChatBackupsBrowser(mount: ChatBackupsMount) {
-    mount.root.render(
+    mount.portal.render(
         <StrictMode>
             <Theme theme={emberDeskTheme} mode="dark">
                 <ChatBackupsBrowser
@@ -905,7 +873,7 @@ export function mountChatBackupsBrowser(options: ChatBackupsMountOptions) {
     document.body.appendChild(host);
 
     mountedChatBackups = {
-        root: createRoot(host),
+        portal: createWorkspacePortalMount(host),
         host,
         options,
     };
@@ -917,7 +885,7 @@ export function unmountChatBackupsBrowser() {
         return;
     }
 
-    mountedChatBackups.root.unmount();
+    mountedChatBackups.portal.unmount();
     mountedChatBackups.host.remove();
     mountedChatBackups = null;
     if (mountedPanels.size === 0 && !mountedShellChrome && !mountedSettingsPanel) {
@@ -925,26 +893,27 @@ export function unmountChatBackupsBrowser() {
     }
 }
 
-const mountedSmallPanels = new Map<HTMLElement, Root>();
+const mountedSmallPanels = new WeakMap<HTMLElement, WorkspacePortalMount>();
 
 
 function mountSmallPanel(container: HTMLElement, element: ReactElement) {
     attachGlobalCompatibilityBridge();
-    if (mountedSmallPanels.has(container)) {
+    if (mountedSmallPanels.get(container)?.isMounted()) {
         return;
     }
 
-    const root = createRoot(container);
-    mountedSmallPanels.set(container, root);
+    const portal = createWorkspacePortalMount(container);
+    mountedSmallPanels.set(container, portal);
     // Commit synchronously: adapters bind legacy handlers to the rendered
     // IDs immediately after the mount call returns.
-    flushSync(() => root.render(
+    portal.render(
         <StrictMode>
             <Theme theme={emberDeskTheme} mode="dark">
                 {element}
             </Theme>
         </StrictMode>,
-    ));
+        true,
+    );
 }
 
 
@@ -1211,7 +1180,7 @@ export function mountSelectChatPopup(container: HTMLElement, controller: ReturnT
     mountSmallPanel(container, <SelectChatPopup controller={controller} onSearch={onSearch} onClose={onClose} onNewChat={onNewChat} onImportFile={onImportFile} recovery={recovery} />);
 }
 
-let selectChatListRoot: Root | null = null;
+let selectChatListPortal: WorkspacePortalMount | null = null;
 let selectChatListContainer: HTMLElement | null = null;
 let selectChatListBridge: SelectChatListBridge | null = null;
 let selectChatListState: SelectChatListState | null = null;
@@ -1221,15 +1190,12 @@ function renderSelectChatList() {
         return;
     }
     if (!selectChatListContainer.isConnected) {
-        // Popup shell replaces children on remount; drop the stale root.
-        selectChatListRoot = null;
-        selectChatListContainer = null;
         return;
     }
-    selectChatListRoot ??= createRoot(selectChatListContainer);
+    selectChatListPortal ??= createWorkspacePortalMount(selectChatListContainer);
     // Synchronous commit: delegated handlers and post-render measurements
     // (highlight scroll/flash) run immediately after this returns.
-    flushSync(() => selectChatListRoot?.render(
+    selectChatListPortal.render(
         <StrictMode>
             <Theme theme={emberDeskTheme} mode="dark">
                 {selectChatListBridge?.controller
@@ -1237,7 +1203,8 @@ function renderSelectChatList() {
                     : <SelectChatList state={selectChatListState as SelectChatListState} bridge={selectChatListBridge as SelectChatListBridge} />}
             </Theme>
         </StrictMode>,
-    ));
+        true,
+    );
 }
 
 /**
@@ -1251,6 +1218,10 @@ export function mountSelectChatList(container: HTMLElement, bridge: SelectChatLi
         return false;
     }
     attachGlobalCompatibilityBridge();
+    if (selectChatListContainer !== container) {
+        selectChatListPortal?.unmount();
+        selectChatListPortal = null;
+    }
     selectChatListContainer = container;
     selectChatListBridge = bridge;
     selectChatListState = state;
@@ -1275,23 +1246,24 @@ export function mountCharacterContextMenu(container: HTMLElement) {
     mountSmallPanel(container, <CharacterContextMenu />);
 }
 
-let optionsMenuRoot: Root | null = null;
+let optionsMenuPortal: WorkspacePortalMount | null = null;
 let optionsMenuContainer: HTMLElement | null = null;
-let optionsMenuState: { showBackToMain: boolean; canRegenerate: boolean } = { showBackToMain: false, canRegenerate: false };
+let optionsMenuState = { showBackToMain: false, canRegenerate: false, canContinue: false };
 let optionsMenuCommand: ((id: string) => void) | undefined;
 
 function renderOptionsMenu() {
     if (!optionsMenuContainer?.isConnected) {
         return;
     }
-    optionsMenuRoot ??= createRoot(optionsMenuContainer);
-    flushSync(() => optionsMenuRoot?.render(
+    optionsMenuPortal ??= createWorkspacePortalMount(optionsMenuContainer);
+    optionsMenuPortal.render(
         <StrictMode>
             <Theme theme={emberDeskTheme} mode="dark">
-                <OptionsMenu showBackToMain={optionsMenuState.showBackToMain} canRegenerate={optionsMenuState.canRegenerate} onCommand={optionsMenuCommand} />
+                <OptionsMenu {...optionsMenuState} onCommand={optionsMenuCommand} />
             </Theme>
         </StrictMode>,
-    ));
+        true,
+    );
 }
 
 /**
@@ -1301,8 +1273,12 @@ function renderOptionsMenu() {
  * state-driven via updateOptionsMenuState so legacy jQuery .show()/.hide()
  * calls are retired.
  */
-export function mountOptionsMenu(container: HTMLElement, state?: { showBackToMain?: boolean; canRegenerate?: boolean }, onCommand?: (id: string) => void) {
+export function mountOptionsMenu(container: HTMLElement, state?: Partial<typeof optionsMenuState>, onCommand?: (id: string) => void) {
     attachGlobalCompatibilityBridge();
+    if (optionsMenuContainer !== container) {
+        optionsMenuPortal?.unmount();
+        optionsMenuPortal = null;
+    }
     optionsMenuContainer = container;
     optionsMenuCommand = onCommand;
     optionsMenuState = { ...optionsMenuState, ...state };
@@ -1313,6 +1289,8 @@ export function updateOptionsMenuState(patch: Partial<typeof optionsMenuState>):
     if (!optionsMenuContainer?.isConnected) {
         return false;
     }
+    const keys = Object.keys(patch) as (keyof typeof optionsMenuState)[];
+    if (keys.every(key => patch[key] === optionsMenuState[key])) return true;
     optionsMenuState = { ...optionsMenuState, ...patch };
     renderOptionsMenu();
     return true;

@@ -1,10 +1,6 @@
 import { fileURLToPath } from 'node:url';
 
 import { defineConfig } from '@playwright/test';
-import {
-    shouldBuildCharacterLibraryPanel,
-    shouldBuildWorkspacePanels,
-} from './helpers/workspace-react-playwright-flags.js';
 
 const repoRoot = fileURLToPath(new URL('..', import.meta.url));
 const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? `http://127.0.0.1:${process.env.PLAYWRIGHT_PORT ?? '8000'}`;
@@ -17,8 +13,7 @@ const chromeExecutablePath = process.env.PLAYWRIGHT_CHROME_EXECUTABLE || undefin
 const shouldReuseExistingServer = !process.env.CI
     && process.env.PLAYWRIGHT_REUSE_SERVER !== '0';
 const webServerCommand = [
-    shouldBuildCharacterLibraryPanel(process.env) ? 'pnpm run build:react:character-library' : null,
-    shouldBuildWorkspacePanels(process.env) ? 'pnpm run build:react:workspace-panels' : null,
+    process.env.PLAYWRIGHT_SKIP_REACT_BUILD === '1' ? null : 'pnpm run build:react',
     `node scripts/seed-dev-environment.mjs --data-root "${dataRoot}" --config "${configPath}" --user-handle "${testUser}" --user-password "${testPassword}"`,
     `node server.js --configPath "${configPath}" --port ${port}`,
 ].filter(Boolean).join(' && ');

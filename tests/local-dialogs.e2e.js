@@ -308,23 +308,16 @@ test('showModal failure rejects without a leaked host', async ({ page }) => {
     await expect(page.locator('[data-local-dialog-host]')).toHaveCount(0);
 });
 
-test('bundle loading failure rejects and abort while loading resolves null', async ({ page }) => {
+test('a dialog requested before SPA preparation rejects, while cancellation resolves null', async ({ page }) => {
     await page.goto('/robots.txt');
-    let release;
-    await page.route('**/react/login/assets/workspace-panels.js?*', async route => {
-        await new Promise(resolve => { release = resolve; });
-        await route.abort();
-    });
     await page.evaluate(async () => {
         const { showLocalDialog } = await import('/scripts/local-dialogs.js');
-        window.controller = new AbortController();
-        window.aborted = showLocalDialog({ title: 'Pending', actions: [], signal: window.controller.signal });
+        const controller = new AbortController();
+        window.aborted = showLocalDialog({ title: 'Pending', actions: [], signal: controller.signal });
+        controller.abort();
         window.failed = showLocalDialog({ title: 'Fail', actions: [] }).then(() => 'resolved', error => error instanceof Error ? 'rejected' : 'unexpected');
     });
-    await expect.poll(() => Boolean(release)).toBe(true);
-    await page.evaluate(() => window.controller.abort());
     expect(await page.evaluate(() => window.aborted)).toBeNull();
-    release();
     expect(await page.evaluate(() => window.failed)).toBe('rejected');
     await expect(page.locator('[data-local-dialog-host]')).toHaveCount(0);
 });

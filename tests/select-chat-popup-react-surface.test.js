@@ -28,7 +28,7 @@ describe('select chat popup React surface', () => {
         expect(readRepoFile('app/components/select-chat/SelectChatPopup.tsx')).toContain('onClick={onNewChat}');
         expect(readRepoFile('public/script.js')).toContain("runHistoryRowCommand('newChat')");
     });
-    const indexHtml = readRepoFile('public/index.html');
+    const indexHtml = readRepoFile('app/components/workspace/WorkspaceHost.tsx');
     const popup = readRepoFile('app/components/select-chat/SelectChatPopup.tsx');
     const script = readRepoFile('public/script.js');
 
@@ -101,15 +101,19 @@ describe('select chat popup React surface', () => {
         expect(calls).toEqual([['delete', 'a', { fromSlashCommand: true }], ['options', 'option_delete_mes', { fromSlashCommand: true }], ['confirm']]);
     });
 
-    test('mount is wired before the ready-callback button bindings', () => {
+    test('mounts the history popup during startup and wires its close button to the history command', () => {
         expect(script).toContain('async function mountSelectChatPopup()');
         expect(script).toContain('module.mountSelectChatPopup(host, controller,');
         const mountIdx = script.indexOf('measureStartupStage(\'mountSelectChatPopup\'');
-        const legacyBindIdx = script.indexOf('await bindLegacyShellHandlers()');
         const domHandlersSource = readRepoFile('public/scripts/dom-handlers.js');
-        expect(domHandlersSource).toContain('$(\'#select_chat_cross\').on(\'click\'');
-        expect(mountIdx).toBeGreaterThan(-1);
-        expect(mountIdx).toBeLessThan(legacyBindIdx);
+        const startIdx = domHandlersSource.indexOf('export async function bindLegacyShellHandlers()');
+        const eagerMountIdx = domHandlersSource.indexOf('mountSelectChatPopup(),', startIdx);
+        expect(eagerMountIdx).toBeGreaterThan(startIdx);
+        expect(domHandlersSource.indexOf('await bootstrapWorkspace();', startIdx)).toBeGreaterThan(eagerMountIdx);
+        expect(mountIdx).toBeGreaterThan(script.indexOf('async function bootstrapWorkspace()'));
+        const popup = readRepoFile('app/components/select-chat/SelectChatPopup.tsx');
+        expect(popup).toMatch(/id="select_chat_cross"[^>]*onClick=\{onClose\}/);
+        expect(script).toContain("() => runHistoryRowCommand('close')");
     });
 
     test('React list replicates the past_chat_template row contract', () => {

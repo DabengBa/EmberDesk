@@ -26,9 +26,9 @@ describe('prompt panel + side-nav defaults', () => {
         expect(service).toContain("model: typeof step?.model === 'string' ? step.model : ''");
     });
     test('left nav drawer host lives in the top-settings holder with fillLeft', () => {
-        const indexHtml = read('public/index.html');
-        expect(indexHtml).toContain('id="left-nav-panel" class="drawer-content closedDrawer fillLeft"');
-        expect(indexHtml).toContain('id="leftNavHolder" class="drawer"');
+        const indexHtml = read('app/components/workspace/WorkspaceHost.tsx');
+        expect(indexHtml).toContain('id="left-nav-panel" className="drawer-content closedDrawer fillLeft"');
+        expect(indexHtml).toContain('id="leftNavHolder" className="drawer"');
     });
 
     test('fillLeft styles mirror the right side panel', () => {

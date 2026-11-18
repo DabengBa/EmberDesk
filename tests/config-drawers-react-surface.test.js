@@ -3,7 +3,7 @@ import { readRepoFile } from './helpers/frontend-compatibility-contract.js';
 
 describe('retired Advanced Formatting drawer', () => {
     test('drawer host, mount adapter, and panel component are gone', () => {
-        const indexHtml = readRepoFile('public/index.html');
+        const indexHtml = readRepoFile('app/components/workspace/WorkspaceHost.tsx');
         const adapter = readRepoFile('public/scripts/power-user.js');
         const workspacePanels = readRepoFile('app/workspace-panels.tsx');
         const script = readRepoFile('public/script.js');

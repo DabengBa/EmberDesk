@@ -45,14 +45,14 @@ describe('legacy dialogue popup structure', () => {
     });
 
     test('popup shells stay legacy markup while control containers are React mount targets', () => {
-        const index = read('public/index.html');
+        const index = read('app/components/workspace/WorkspaceHost.tsx');
 
         expect(index).toContain('id="dialogue_popup_holder"');
         expect(index).toContain('id="dialogue_popup_text"');
         expect(index).toContain('id="dialogue_popup_input"');
         expect(index).toContain('id="dialogue_popup_controls"');
         expect(index).toContain('id="dialogue_del_mes"');
-        expect(index).not.toContain('id="dialogue_popup_ok" class="menu_button"');
+        expect(index).not.toContain('id="dialogue_popup_ok" className="menu_button"');
         expect(index).not.toContain('id="dialogue_del_mes_ok"');
     });
 
