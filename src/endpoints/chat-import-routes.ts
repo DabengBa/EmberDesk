@@ -49,7 +49,7 @@ export function registerChatImportRoute(context: ChatRouteContext): void {
 
             if (!importPlan.ok) {
                 warnAboutChatImportFailure(importPlan);
-                return response.send({ error: true });
+                return response.send({ error: true, report: { reason: importPlan.errorKind } });
             }
 
             if (!importPlan.writes.length) return response.status(400).send({ error: 'empty_chat_import' });

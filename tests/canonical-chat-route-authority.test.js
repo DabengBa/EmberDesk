@@ -3,6 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 import { afterEach, describe, expect, jest, test } from '@jest/globals';
+import { createChatImportOperation } from '../public/scripts/chat-import-protocol.js';
 
 import { setConfigFilePath } from '../src/util.js';
 import { canonicalSqliteManager } from '../src/canonical-sqlite.ts';
@@ -90,6 +91,28 @@ describe('canonical chat route authority', () => {
     // Each case spins up a fresh data root and lazy canonical init (migrations
     // + shadow import + audit), which can exceed the default 5s under load.
     jest.setTimeout(20000);
+
+    test('reports detected chat format rejections without changing the legacy error response', async () => {
+        const root = fs.mkdtempSync(path.join(os.tmpdir(), 'emberdesk-chat-import-rejection-'));
+        roots.push(root);
+        const directories = { root, chats: path.join(root, 'chats') };
+        for (const [format, upload, reason] of [
+            ['json', '{', 'parse-failed'],
+            ['json', '{}', 'unsupported-json-format'],
+            ['jsonl', '{}', 'invalid-jsonl-format'],
+        ]) {
+            const filename = `${reason}.upload`;
+            fs.writeFileSync(path.join(root, filename), upload);
+            const response = makeResponse();
+            await getRouteHandler('/import')({
+                body: { file_type: format, avatar_url: 'alice.png', character_name: 'Alice', user_name: 'User', operationId: reason },
+                file: { destination: root, filename },
+                user: { directories, profile: { handle: 'alice' } },
+            }, response);
+            expect(response.statusCode).toBe(200);
+            expect(response.body).toEqual({ error: true, report: { reason } });
+        }
+    });
 
     test('keeps getChatData on JSONL even when canonical chat flags are enabled', () => {
         const root = fs.mkdtempSync(path.join(os.tmpdir(), 'emberdesk-canonical-chat-route-'));
@@ -448,6 +471,46 @@ describe('chats projection off', () => {
         await auditCanonicalChatShadowImport({ handle: 'alice', directories, db, projection: 'off' });
         return { db, chatPath };
     }
+
+    test('JSONL import explains an unregistered attachment without exposing its path', async () => {
+        const directories = makeDirectories();
+        const { db } = await seedCanonicalChat(directories, [{ chat_metadata: {} }, { mes: 'Before' }]);
+        const user = { directories, profile: { handle: 'alice' } };
+        const attachment = 'files/unregistered.txt';
+        const upload = new File([
+            '{"chat_metadata":{}}\n',
+            JSON.stringify({ name: 'User', mes: 'Attachment', extra: { file: attachment } }),
+        ], 'history.jsonl');
+        const form = new FormData();
+        for (const [key, value] of Object.entries({ file_type: 'jsonl', avatar_url: 'alice.png', character_name: 'Alice', user_name: 'User', avatar: upload })) {
+            form.set(key, value);
+        }
+        const send = jest.fn(async (_url, { body }) => {
+            const filename = 'attachment-upload.jsonl';
+            fs.writeFileSync(path.join(directories.root, filename), await body.get('avatar').text());
+            const response = makeResponse();
+            await getRouteHandler('/import')({
+                user, body: Object.fromEntries(body), file: { destination: directories.root, filename },
+            }, response);
+            expect(response.statusCode).toBe(400);
+            expect(response.body).toMatchObject({ error: 'canonical_chat_write_rejected', reason: 'unregistered_attachment' });
+            return Response.json(response.body, { status: response.statusCode });
+        });
+        const source = fs.readFileSync(new URL('../public/script.js', import.meta.url), 'utf8');
+        const entry = source.match(/export (async function importCharacterChat\([\s\S]*?\n}\n)/)[1];
+        const toastr = { error: jest.fn() };
+        const t = (strings, ...values) => String.raw(strings, ...values);
+        const importChat = new Function('fetch', 'getRequestHeaders', 'createChatImportOperation', 'toastr', 't', `return (${entry});`)(send, () => ({}), createChatImportOperation, toastr, t);
+        expect(await importChat(form, { refresh: false })).toEqual([]);
+        expect(send).toHaveBeenCalledTimes(1);
+        expect(db.prepare('SELECT COUNT(*) AS count FROM chat_sessions').get().count).toBe(1);
+        expect(toastr.error).toHaveBeenCalledWith(expect.stringContaining('A referenced attachment is missing from this account'), 'Chat import', expect.any(Object));
+        expect(toastr.error.mock.calls[0][0]).not.toContain(attachment);
+        const [message, , options] = toastr.error.mock.calls[0];
+        expect(message).not.toMatch(/retry the same upload|other results may be unknown/);
+        expect(options?.onclick).toBeUndefined();
+        expect(options?.timeOut).not.toBe(0);
+    });
 
     test('save, rename, delete, import and text replacement each write statistics only in their session transaction', async () => {
         process.env[PROJECTION_ENV] = 'off';

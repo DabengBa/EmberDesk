@@ -39,3 +39,10 @@ test('independent files receive distinct operation ids and failed imports are no
     expect((await second.run()).ok).toBe(false);
     expect(send.mock.calls[0][0].get('operationId')).not.toBe(send.mock.calls[1][0].get('operationId'));
 });
+
+test('uses the reported format rejection as the reason without retrying the upload', async () => {
+    const send = jest.fn().mockResolvedValue(response(200, { error: true, report: { reason: 'unsupported-json-format' } }));
+    const operation = createChatImportOperation(new FormData(), { send });
+    expect(await operation.run()).toEqual({ ok: false, error: 'unsupported-json-format', completed: [], status: 200 });
+    expect(send).toHaveBeenCalledTimes(1);
+});

@@ -1245,7 +1245,7 @@ async function importFromYaml(uploadPath, context, preservedFileName) {
  * @param {object} params
  * @param {import('express').Request} params.request
  * @param {string|undefined} preservedFileName Preserved file name
- * @returns {Promise<string>} Internal name of the character
+ * @returns {Promise<import('./character-import-service.ts').CharacterImportResult>}
  */
 async function importFromCharX(uploadPath, { request }, preservedFileName) {
     const fileBuffer = fs.readFileSync(uploadPath);
@@ -1254,7 +1254,7 @@ async function importFromCharX(uploadPath, { request }, preservedFileName) {
     fs.unlinkSync(uploadPath);
 
     const parser = new CharXParser(data);
-    const { card, avatar, auxiliaryAssets, extractedBuffers } = await parser.parse();
+    const { card, avatar, auxiliaryAssets, extractedBuffers, skippedExpressions } = await parser.parse();
 
     // Apply standard character transformations
     if (card.data?.name) {
@@ -1270,25 +1270,30 @@ async function importFromCharX(uploadPath, { request }, preservedFileName) {
     // Character-specific backgrounds and miscellaneous CharX assets use this folder.
     const characterFolder = processedCard.name;
 
+    /** @type {import('./character-import-service.ts').CharacterImportResult['auxiliaryMedia']} */
+    let auxiliaryMedia = skippedExpressions > 0 ? { imported: 0, skipped: skippedExpressions, failed: 0 } : undefined;
     if (auxiliaryAssets.length > 0) {
         try {
             const summary = await persistCharXAssets(auxiliaryAssets, extractedBuffers, request.user.directories, characterFolder, {
                 handle: request.user?.profile?.handle ?? request.user?.handle ?? null,
             });
+            auxiliaryMedia = { imported: summary.backgrounds + summary.misc, skipped: skippedExpressions + summary.skipped, failed: summary.failed };
             if (summary.backgrounds || summary.misc) {
                 console.log(`CharX: Imported ${summary.backgrounds} background(s), ${summary.misc} misc asset(s) for ${characterFolder}`);
             }
         } catch (error) {
             console.warn(`CharX: Failed to persist auxiliary assets for ${characterFolder}`, error);
+            auxiliaryMedia = { unconfirmed: true };
         }
     }
 
-    return persistImportedCharacter({
+    const result = await persistImportedCharacter({
         request,
         fileName,
         characterData: JSON.stringify(processedCard),
         sourceImage: avatar,
     });
+    return result.ok && auxiliaryMedia ? { ...result, auxiliaryMedia } : result;
 }
 
 async function importFromByaf(uploadPath, { request }, preservedFileName) {

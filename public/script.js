@@ -8287,7 +8287,7 @@ export async function saveMetadata() {
  * @returns {Promise<string[]>} List of imported file names.
  */
 export async function importCharacterChat(formData, { refresh = true } = {}) {
-    const fileName = formData.get('avatar')?.name || 'chat file';
+    const fileName = formData.get('avatar')?.name;
     const operation = createChatImportOperation(formData, {
         send: body => fetch('/api/chats/import', {
             method: 'POST', body, headers: getRequestHeaders({ omitContentType: true }), cache: 'no-cache',
@@ -8300,8 +8300,21 @@ export async function importCharacterChat(formData, { refresh = true } = {}) {
             return result.fileNames;
         }
         const completed = result.completed.length;
+        let rejection;
+        switch (result.error) {
+            case 'parse-failed': rejection = t`The file could not be read as chat JSON.`; break;
+            case 'invalid-jsonl-format': rejection = t`The JSONL file does not start with a chat header.`; break;
+            case 'unsupported-format':
+            case 'unsupported-json-format': rejection = t`This chat format is not supported.`; break;
+            case 'empty_chat_import': rejection = t`No chats were found in the file.`; break;
+            case 'unregistered_attachment': rejection = t`A referenced attachment is missing from this account. Add the missing attachment or correct the file before importing again.`; break;
+        }
+        if (rejection !== undefined) {
+            toastr.error(t`${fileName || t`chat file`}: ${rejection} ${completed} chat(s) confirmed imported.`, t`Chat import`, { closeButton: true, escapeHtml: true });
+            return [];
+        }
         const reason = result.error === 'chat_conflict' ? 'A destination already exists' : result.error === 'chat_operation_mismatch' ? 'The import operation does not match' : 'The import could not be confirmed';
-        toastr.error(`${fileName}: ${reason}. ${completed} chat(s) confirmed imported; other results may be unknown. Close any open dialog, then click to retry the same upload. Keep this page open to retry.`, 'Chat import', {
+        toastr.error(`${fileName || 'chat file'}: ${reason}. ${completed} chat(s) confirmed imported; other results may be unknown. Close any open dialog, then click to retry the same upload. Keep this page open to retry.`, 'Chat import', {
             timeOut: 0, extendedTimeOut: 0, closeButton: true, escapeHtml: true,
             onclick: async () => {
                 const names = await run();
@@ -8676,9 +8689,11 @@ async function importCharacter(file, { preserveFileName = '', importTags = false
 
         if (data.file_name !== undefined) {
             let avatarFileName = `${data.file_name}.png`;
+            const replacementIgnored = data.report?.ignored?.includes('replacement-target-not-found');
+            const replaced = !replacementIgnored && (exists || preserveFileName === avatarFileName);
 
             // Refresh existing thumbnail
-            if (exists && this_chid !== undefined) {
+            if (replaced && this_chid !== undefined) {
                 await fetch(getThumbnailUrl('avatar', avatarFileName), { cache: 'reload' });
             }
 
@@ -8688,10 +8703,19 @@ async function importCharacter(file, { preserveFileName = '', importTags = false
                 searchInput.dispatchEvent(new Event('input', { bubbles: true }));
             }
 
-            if (exists) {
+            if (replaced) {
                 toastr.success(t`Character Replaced: ${String(data.file_name).replace('.png', '')}`);
             } else {
                 toastr.success(t`Character Created: ${String(data.file_name).replace('.png', '')}`);
+            }
+            if (replacementIgnored) {
+                toastr.warning(t`The replacement target was not found. A new character was created.`, t`Character import`);
+            }
+            const auxiliaryMedia = data.report?.auxiliaryMedia;
+            if (auxiliaryMedia?.unconfirmed) {
+                toastr.warning(t`The CharX auxiliary media import could not be confirmed.`, t`Character import`);
+            } else if (auxiliaryMedia?.skipped || auxiliaryMedia?.failed) {
+                toastr.warning(t`CharX auxiliary media: ${auxiliaryMedia.imported} imported, ${auxiliaryMedia.skipped} skipped, ${auxiliaryMedia.failed} failed.`, t`Character import`);
             }
             if (importTags) {
                 await importCharactersTags([avatarFileName]);

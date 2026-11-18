@@ -19,6 +19,7 @@ Let a user export the active [character card](term.character_card) from the work
 
 - The feature starts only after a character is already active in [Chat Workspace](page.chat_workspace) and the user chooses Export and Download from the character controls.
 - EmberDesk shows a format popup with distinct PNG and JSON actions; the choices must be keyboard reachable and must not be presented as inert text.
+- Choose PNG to carry the card and its portrait together, or JSON for card data without the portrait image. Neither choice packages the character's separate chats or auxiliary media files.
 - Opening the popup moves focus into the format choice area, Escape cancels export and returns focus to the opener, and clicking outside closes the popup without starting a download.
 - Before export starts, EmberDesk preserves current character edits so the downloaded file reflects the visible active character state.
 - Success and failure both produce visible toast feedback; a failed export must not imply that a download was prepared.

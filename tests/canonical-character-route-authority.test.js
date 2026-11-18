@@ -2,10 +2,13 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { runInNewContext } from 'node:vm';
 
 import archiver from 'archiver';
 import express from 'express';
+import { zipSync } from 'fflate';
 import multer from 'multer';
+import extractPngChunks from 'png-chunks-extract';
 import { afterEach, describe, expect, jest, test } from '@jest/globals';
 
 import { humanizedDateTime, setConfigFilePath } from '../src/util.js';
@@ -68,11 +71,19 @@ fs.writeFileSync(configPath, [
     '          reads: true',
     '          writes: true',
     '          projection: off',
+    '        worldInfo:',
+    '          enabled: true',
+    '          shadowImport: true',
+    '          reads: true',
+    '          writes: true',
+    '          projection: off',
 ].join('\n'), 'utf8');
 setConfigFilePath(configPath);
 
-const { router } = await import('../src/endpoints/characters.js');
+const { applyAvatarCropResize, router } = await import('../src/endpoints/characters.js');
 const { router: settingsRouter } = await import('../src/endpoints/settings.js');
+const { router: chatRouter } = await import('../src/endpoints/chats.js');
+const { router: worldRouter } = await import('../src/endpoints/worldinfo-routes.ts');
 
 function makeResponse() {
     return {
@@ -94,6 +105,9 @@ function makeResponse() {
             this.body = payload;
             return this;
         },
+        json(payload) {
+            return this.send(payload);
+        },
         status(statusCode) {
             this.statusCode = statusCode;
             return this;
@@ -105,8 +119,8 @@ function makeResponse() {
     };
 }
 
-function getRouteHandler(routePath) {
-    const layer = router.stack.find(entry => entry.route?.path === routePath);
+function getRouteHandler(routePath, owner = router) {
+    const layer = owner.stack.find(entry => entry.route?.path === routePath);
     if (!layer?.route?.stack?.length) {
         throw new Error(`Missing characters route ${routePath}`);
     }
@@ -151,9 +165,9 @@ async function writeByafArchive(filePath, entries) {
     });
 }
 
-function openDb(directories) {
+function openDb(directories, handle = 'alice') {
     const db = canonicalSqliteManager.open({
-        handle: 'alice',
+        handle,
         directories,
         featureFlags: { enabled: true, strict: false },
     });
@@ -175,9 +189,10 @@ function makeCard(name) {
     };
 }
 
-async function seedCanonicalCharacter(directories, { avatarFilename = 'alice.png', name = 'Alice' } = {}) {
+async function seedCanonicalCharacter(directories, { avatarFilename = 'alice.png', name = 'Alice', world = '' } = {}) {
     const db = openDb(directories);
     const cardData = makeCard(name);
+    cardData.data.extensions.world = world;
     const cardJson = JSON.stringify(cardData);
     upsertCanonicalCharacter(db, {
         id: `character-${avatarFilename}`,
@@ -230,6 +245,69 @@ afterEach(() => {
 });
 
 describe('characters projection off', () => {
+    test.each([false, true])('CharX import reports filtered expressions in the character notification (expression only: %s)', async expressionOnly => {
+        const directories = makeDirectories();
+        const db = openDb(directories);
+        const card = makeCard('CharX Example');
+        card.data.assets = [{ type: 'expression', name: 'Happy', uri: 'embedded://happy.png' }];
+        if (!expressionOnly) card.data.assets.push(
+            { type: 'misc', name: 'Gallery', uri: 'embedded://gallery.png' },
+            { type: 'misc', name: 'Missing', uri: 'embedded://missing.png' },
+            { type: 'background', name: 'Blocked', uri: 'embedded://background.png' },
+        );
+        const blocked = path.join(directories.characters, card.name, 'backgrounds');
+        fs.mkdirSync(path.dirname(blocked));
+        fs.writeFileSync(blocked, 'not a directory');
+        const zip = zipSync({
+            'card.json': Buffer.from(JSON.stringify(card)),
+            'gallery.png': REAL_AVATAR_PNG,
+            'background.png': REAL_AVATAR_PNG,
+            'happy.png': REAL_AVATAR_PNG,
+        });
+        const app = express();
+        app.use(multer({ dest: directories.root }).single('avatar'));
+        app.use((request, _response, next) => {
+            request.user = { directories, profile: { handle: 'alice' } };
+            next();
+        });
+        app.use('/api/characters', router);
+        const server = await new Promise(resolve => {
+            const instance = app.listen(0, '127.0.0.1', () => resolve(instance));
+        });
+
+        try {
+            const source = fs.readFileSync(path.join(repoRoot, 'public/script.js'), 'utf8');
+            const entry = source.match(/async function importCharacter\([\s\S]*?\n}\n/)[0];
+            const toastr = { success: jest.fn(), warning: jest.fn(), error: jest.fn() };
+            let response;
+            const importCharacter = runInNewContext(`(${entry})`, {
+                is_send_press: false, document: { getElementById: () => null },
+                name1: 'User', FormData, HTMLInputElement: class {}, toastr, console,
+                t: (parts, ...values) => String.raw({ raw: parts }, ...values),
+                getRequestHeaders: () => ({}),
+                fetch: async (url, options) => {
+                    const result = await fetch(`http://127.0.0.1:${server.address().port}${url}`, options);
+                    response = { status: result.status, body: await result.clone().json() };
+                    return result;
+                },
+            });
+
+            expect(await importCharacter(new File([zip], 'example.charx'))).toBe('CharX Example.png');
+            expect(toastr.success).toHaveBeenCalledWith('Character Created: CharX Example');
+            const auxiliaryMedia = expressionOnly ? { imported: 0, skipped: 1, failed: 0 } : { imported: 1, skipped: 2, failed: 1 };
+            expect(toastr.warning).toHaveBeenCalledWith(`CharX auxiliary media: ${auxiliaryMedia.imported} imported, ${auxiliaryMedia.skipped} skipped, ${auxiliaryMedia.failed} failed.`, 'Character import');
+            expect(toastr.error).not.toHaveBeenCalled();
+            expect(response).toEqual({ status: 200, body: {
+                file_name: 'CharX Example',
+                report: { auxiliaryMedia },
+            } });
+            expect(db.prepare('SELECT display_name FROM media_references').all()).toEqual(expressionOnly ? [] : [{ display_name: 'gallery.png' }]);
+            expect(fs.readdirSync(directories.userImages)).toEqual([]);
+        } finally {
+            await new Promise((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
+        }
+    });
+
     test('independent HTTP reads protect a character from a stale edit', async () => {
         const directories = makeDirectories();
         const { db } = await seedCanonicalCharacter(directories);
@@ -514,6 +592,99 @@ describe('characters projection off', () => {
         const cardJson = read(Buffer.from(response.body));
         expect(JSON.parse(cardJson)).toEqual(expect.objectContaining({ name: 'Alice' }));
         expect(fs.existsSync(path.join(directories.characters, 'alice.png'))).toBe(false);
+    });
+
+    test('a fileless PNG moves between isolated users and only a local live card can be replaced', async () => {
+        const directories = makeDirectories();
+        const target = makeDirectories();
+        const { db } = await seedCanonicalCharacter(directories, { world: 'Lorebook' });
+        const targetDb = openDb(target, 'bob');
+        const sourceUser = { directories, profile: { handle: 'alice' } };
+        const targetUser = { directories: target, profile: { handle: 'bob' } };
+
+        const avatar = fs.readFileSync(path.join(repoRoot, 'public/img/user-default.png'));
+        expect((await recordCharacterAvatarBlob({
+            handle: 'alice', directories, avatarFilename: 'alice.png', contents: avatar,
+        })).authorityCommitted).toBe(true);
+
+        const invoke = async (owner, route, user, options) => {
+            const response = makeResponse();
+            await getRouteHandler(route, owner)({ user, get: () => undefined, ...options }, response);
+            return response;
+        };
+        const world = { entries: { 0: { uid: 0, key: ['test'], content: 'A canonical world entry' } } };
+        const importWorld = async (user, contents) => {
+            fs.writeFileSync(path.join(user.directories.root, 'world.json'), contents);
+            return invoke(worldRouter, '/import', user, {
+                body: {}, file: { originalname: 'Lorebook.json', destination: user.directories.root, filename: 'world.json' },
+            });
+        };
+        expect(await importWorld(sourceUser, JSON.stringify(world))).toMatchObject({ statusCode: 200, body: { name: 'Lorebook' } });
+        const exportedWorld = await invoke(worldRouter, '/get', sourceUser, { body: { name: 'Lorebook' } });
+        expect(exportedWorld).toMatchObject({ statusCode: 200, body: world });
+        expect(await importWorld(targetUser, JSON.stringify(exportedWorld.body))).toMatchObject({ statusCode: 200, body: { name: 'Lorebook' } });
+        expect(await invoke(worldRouter, '/get', targetUser, { body: { name: 'Lorebook' } })).toMatchObject({ statusCode: 200, body: world });
+
+        const exported = makeResponse();
+        await getRouteHandler('/export')({ body: { format: 'png', avatar_url: 'alice.png' }, user: sourceUser }, exported);
+        expect(exported.statusCode).toBe(200);
+
+        const importCard = async preservedName => {
+            fs.writeFileSync(path.join(target.root, 'upload.png'), exported.body);
+            const response = makeResponse();
+            await getRouteHandler('/import')({
+                body: { file_type: 'png', preserved_name: preservedName },
+                file: { destination: target.root, filename: 'upload.png' },
+                user: targetUser,
+            }, response);
+            expect(response.statusCode).toBe(200);
+            return response.body;
+        };
+
+        expect(await importCard('alice.png')).toEqual({ file_name: 'Alice', report: { ignored: ['replacement-target-not-found'] } });
+        const readTargetCard = () => targetDb.prepare('SELECT id, avatar_filename, world_name FROM characters WHERE deleted_at_ms IS NULL').all();
+        const imported = readTargetCard();
+        expect(imported).toEqual([{ id: expect.any(String), avatar_filename: 'Alice.png', world_name: 'Lorebook' }]);
+        expect(await importCard('Alice.png')).toEqual({ file_name: 'Alice' });
+        expect(readTargetCard()).toEqual(imported);
+        expect(db.prepare('SELECT avatar_filename FROM characters WHERE deleted_at_ms IS NULL').all())
+            .toEqual([{ avatar_filename: 'alice.png' }]);
+
+        const reexported = makeResponse();
+        await getRouteHandler('/export')({ body: { format: 'png', avatar_url: 'Alice.png' }, user: targetUser }, reexported);
+        expect(reexported.statusCode).toBe(200);
+        expect(JSON.parse(read(Buffer.from(reexported.body)))).toMatchObject({ name: 'Alice', description: 'Alice description' });
+        const imageData = buffer => extractPngChunks(buffer).filter(chunk => chunk.name === 'IDAT');
+        expect(imageData(reexported.body)).toEqual(imageData(await applyAvatarCropResize(avatar)));
+
+        await seedCanonicalChat(directories, db);
+        const exportChat = (user, avatarUrl, file) => invoke(chatRouter, '/export', user, {
+            body: { avatar_url: avatarUrl, file, format: 'jsonl', exportfilename: file },
+        });
+        const chat = await exportChat(sourceUser, 'alice.png', 'first.jsonl');
+        expect(chat).toMatchObject({ statusCode: 200, body: { result: expect.stringContaining('Hello Alice') } });
+        const importChat = async () => {
+            fs.writeFileSync(path.join(target.root, 'upload.jsonl'), chat.body.result);
+            return invoke(chatRouter, '/import', targetUser, {
+                body: { avatar_url: 'Alice.png', file_type: 'jsonl', operationId: 'round-trip', character_name: 'Alice', user_name: 'User' },
+                file: { destination: target.root, filename: 'upload.jsonl' },
+            });
+        };
+        const importedChat = await importChat();
+        expect(importedChat).toMatchObject({ statusCode: 200, body: { res: true, fileNames: [expect.stringMatching(/ imported\.jsonl$/)] } });
+        expect((await importChat()).body).toEqual(importedChat.body);
+        const [chatFile] = importedChat.body.fileNames;
+        const exportedChat = await exportChat(targetUser, 'Alice.png', chatFile);
+        expect(exportedChat).toMatchObject({ statusCode: 200, body: { result: chat.body.result } });
+        expect(targetDb.prepare('SELECT owner_id, source_path FROM chat_sessions').all()).toEqual([
+            { owner_id: 'Alice', source_path: `chats/Alice/${chatFile}` },
+        ]);
+        expect(fs.existsSync(path.join(directories.chats, 'alice', 'first.jsonl'))).toBe(false);
+        expect(fs.existsSync(path.join(target.chats, 'Alice', chatFile))).toBe(false);
+        expect(fs.readdirSync(directories.characters)).toEqual([]);
+        expect(fs.readdirSync(target.characters)).toEqual([]);
+        expect(fs.readdirSync(directories.worlds)).toEqual([]);
+        expect(fs.readdirSync(target.worlds)).toEqual([]);
     });
 
     test('/delete removes the canonical row and owned chat sessions with no PNG on disk', async () => {

@@ -45,6 +45,7 @@ function findZipStart(buffer) {
  * @property {Object} card - Parsed card.json (CCv2 or CCv3 spec)
  * @property {string|Buffer} avatar - Avatar image buffer or DEFAULT_AVATAR_PATH
  * @property {CharXAsset[]} auxiliaryAssets - Assets mapped for storage
+ * @property {number} skippedExpressions - Recognized expression assets excluded from storage
  * @property {Map<string, Buffer>} extractedBuffers - Map of zipPath to extracted buffer
  */
 
@@ -79,7 +80,8 @@ export class CharXParser {
 
         const embeddedAssets = this.collectCharXAssets(card);
         const iconAsset = this.pickCharXIconAsset(embeddedAssets);
-        const auxiliaryAssets = this.mapCharXAssetsForStorage(embeddedAssets);
+        const report = { skippedExpressions: 0 };
+        const auxiliaryAssets = this.mapCharXAssetsForStorage(embeddedAssets, report);
 
         const archivePaths = new Set();
 
@@ -106,7 +108,7 @@ export class CharXParser {
             }
         }
 
-        return { card, avatar, auxiliaryAssets, extractedBuffers };
+        return { card, avatar, auxiliaryAssets, extractedBuffers, skippedExpressions: report.skippedExpressions };
     }
 
     getEmbeddedZipPathFromUri(uri) {
@@ -236,7 +238,7 @@ export class CharXParser {
         return (sanitized || fallback).toLowerCase();
     }
 
-    mapCharXAssetsForStorage(assets) {
+    mapCharXAssetsForStorage(assets, report = { skippedExpressions: 0 }) {
         return assets.reduce((acc, asset) => {
             if (!asset?.zipPath) {
                 return acc;
@@ -253,6 +255,7 @@ export class CharXParser {
 
             if (CHARX_EXPRESSION_TYPES.has(asset.type)) {
                 // Expressions are no longer persisted as character sprite assets.
+                report.skippedExpressions += 1;
                 return acc;
             }
 
@@ -302,11 +305,10 @@ function deleteExistingByBaseName(dirPath, baseName) {
  * @param {Map<string, Buffer>} bufferMap - Extracted file buffers
  * @param {Object} directories - User directories object
  * @param {string} characterFolder - Character folder name (sanitized)
- * @returns {{backgrounds: number, misc: number}}
+ * @returns {Promise<{backgrounds: number, misc: number, skipped: number, failed: number}>}
  */
 export async function persistCharXAssets(assets, bufferMap, directories, characterFolder, { handle = null } = {}) {
-    /** @type {{backgrounds: number, misc: number}} */
-    const summary = { backgrounds: 0, misc: 0 };
+    const summary = { backgrounds: 0, misc: 0, skipped: 0, failed: 0 };
     if (!Array.isArray(assets) || assets.length === 0) {
         return summary;
     }
@@ -328,11 +330,13 @@ export async function persistCharXAssets(assets, bufferMap, directories, charact
 
     for (const asset of assets) {
         if (!asset?.zipPath) {
+            summary.skipped += 1;
             continue;
         }
         const buffer = bufferMap.get(asset.zipPath);
         if (!buffer) {
             console.warn(`CharX: Asset ${asset.zipPath} missing or unsupported, skipping.`);
+            summary.skipped += 1;
             continue;
         }
 
@@ -341,6 +345,7 @@ export async function persistCharXAssets(assets, bufferMap, directories, charact
                 // Store in character-specific backgrounds folder: characters/{charName}/backgrounds/
                 const backgroundDir = path.join(directories.characters, characterFolder, 'backgrounds');
                 if (!ensureDirectory(backgroundDir)) {
+                    summary.failed += 1;
                     continue;
                 }
                 // Delete existing background with same base name
@@ -382,6 +387,7 @@ export async function persistCharXAssets(assets, bufferMap, directories, charact
                 if (!committed) {
                     const miscDir = ensureMiscPath();
                     if (!miscDir) {
+                        summary.failed += 1;
                         continue;
                     }
                     // Overwrite existing misc asset with same name
@@ -391,6 +397,7 @@ export async function persistCharXAssets(assets, bufferMap, directories, charact
                 summary.misc += 1;
             }
         } catch (error) {
+            summary.failed += 1;
             console.warn(`CharX: Failed to save asset "${asset.name}": ${error.message}`);
         }
     }
