@@ -979,6 +979,15 @@ body .panelControlBar {
     color: var(--clay-warning);
 }
 
+/* Override the composer's StyleX visibility only while the server run is cancellable. */
+body[data-workspace-generation-running] #send_form .mes_stop {
+    display: flex !important;
+}
+
+body[data-workspace-generation-running] #rightSendForm > #send_but {
+    display: none !important;
+}
+
 
 #options_button {
     width: var(--bottomFormBlockSize);

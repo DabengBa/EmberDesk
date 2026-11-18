@@ -9,7 +9,7 @@ import { updateMessageBlock } from './message-service.js';
 import { chat_completion_sources, getChatCompletionModel, model_list, oai_settings } from './openai.js';
 import { Popup } from './popup.js';
 import { hasEnabledToolBindings } from './tool-bindings-core.js';
-import { getPipelineRunState, validatePipelineToolCalls } from './reply-pipeline-core.js';
+import { formatPipelineTagMarkup, getPipelineRunState, validatePipelineToolCalls } from './reply-pipeline-core.js';
 
 /**
  * @typedef {object} ToolInvocation
@@ -984,49 +984,7 @@ export class ToolManager {
      * @returns {string} Tag markup for `mes`
      */
     static formatPipelineTagMarkup(invocations, finalText = '') {
-        const safeTag = name => /^[a-zA-Z][a-zA-Z0-9_-]*$/.test(String(name)) ? String(name) : 'step';
-        const escape = value => String(value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-        const primaryText = invocation => {
-            const params = typeof invocation?.parameters === 'string' ? tryParse(invocation.parameters) : invocation?.parameters;
-            if (typeof params?.content === 'string' && params.content.length) {
-                return params.content;
-            }
-            if (typeof invocation?.result === 'string' && invocation.result.length) {
-                return invocation.result;
-            }
-            return params && typeof params === 'object' ? JSON.stringify(params) : String(invocation?.result ?? '');
-        };
-        const blocks = [];
-        invocations.forEach((invocation, index) => {
-            const isLast = index === invocations.length - 1;
-            const tag = safeTag(invocation?.pipeline?.tool ?? invocation?.name);
-            // Earlier steps escape their text too (literal inner content); the
-            // last tag carries the reply RAW so <plot-options>-style markup
-            // stays live for display-time regexes and the chip row.
-            const text = isLast && finalText ? finalText : escape(primaryText(invocation));
-            const chips = isLast ? ToolManager.#optionChipsOf(invocation) : [];
-            blocks.push(`&lt;${tag}&gt;${text}${chips}&lt;/${tag}&gt;`);
-        });
-        return blocks.join('\n');
-    }
-
-    /**
-     * Renders lifted option chips inside a step tag (escaped text context —
-     * chips stay raw markup so the click delegation finds them).
-     * @param {ToolInvocation} invocation Invocation to inspect
-     * @returns {string} Chip row markup or ''
-     */
-    static #optionChipsOf(invocation) {
-        const params = typeof invocation?.parameters === 'string' ? tryParse(invocation.parameters) : invocation?.parameters;
-        if (!params || typeof params !== 'object') {
-            return '';
-        }
-        const items = Object.values(params).filter(Array.isArray).flat();
-        if (!items.length) {
-            return '';
-        }
-        const chips = items.map(item => `<div data-respond-option="" role="button" tabindex="0">▸ ${typeof item === 'string' ? item : JSON.stringify(item)}</div>`).join('');
-        return `<div data-respond-options="">${chips}</div>`;
+        return formatPipelineTagMarkup(invocations, finalText);
     }
 
     /**
@@ -1041,6 +999,29 @@ export class ToolManager {
             chipRow.append(this.#renderOptionChip(item));
         }
         return chipRow;
+    }
+
+    /** Build the same card for persisted tool calls and transient Pipeline progress. */
+    static createToolInvocationMessage(invocations) {
+        const pipelineMeta = invocations.find(invocation => invocation?.pipeline)?.pipeline ?? null;
+        return {
+            name: systemUserName,
+            force_avatar: system_avatar,
+            is_system: true,
+            is_user: false,
+            mes: getRegexedString(ToolManager.#formatToolInvocationMessage(invocations), regex_placement.AI_OUTPUT),
+            extra: {
+                isSmallSys: true,
+                tool_invocations: invocations,
+                api: getGeneratingApi(),
+                model: pipelineMeta ? null : getGeneratingModel(),
+                ...(pipelineMeta ? {
+                    reply_pipeline_run: pipelineMeta.runId ?? null,
+                    reply_pipeline_step: invocations.at(-1)?.pipeline?.stepId ?? null,
+                    reply_pipeline_display: ToolManager.#pipelineCardDisplay(invocations),
+                } : {}),
+            },
+        };
     }
 
     /**
@@ -1079,25 +1060,7 @@ export class ToolManager {
             }
         }
 
-        const pipelineMeta = invocations.find(invocation => invocation?.pipeline)?.pipeline ?? null;
-        const message = {
-            name: systemUserName,
-            force_avatar: system_avatar,
-            is_system: true,
-            is_user: false,
-            mes: getRegexedString(ToolManager.#formatToolInvocationMessage(invocations), regex_placement.AI_OUTPUT),
-            extra: {
-                isSmallSys: true,
-                tool_invocations: invocations,
-                api: getGeneratingApi(),
-                model: pipelineMeta ? null : getGeneratingModel(),
-                ...(pipelineMeta ? {
-                    reply_pipeline_run: pipelineMeta.runId ?? null,
-                    reply_pipeline_step: pipelineMeta.stepId ?? null,
-                    reply_pipeline_display: ToolManager.#pipelineCardDisplay(invocations),
-                } : {}),
-            },
-        };
+        const message = ToolManager.createToolInvocationMessage(invocations);
         chat.push(message);
         addOneMessage(message);
         await eventSource.emit(event_types.TOOL_CALLS_RENDERED, invocations);

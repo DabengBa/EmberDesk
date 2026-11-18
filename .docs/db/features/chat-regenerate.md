@@ -21,18 +21,17 @@ Let users re-roll the current turn — the reply the AI produced after the last 
 
 - The chat-options menu (the button opening 开始新聊天 / 关闭聊天 / 管理聊天文件 / 删除消息) exposes a `重新生成` entry between 管理聊天文件 and the destructive 删除消息 section.
 - The entry stays mounted at all times; it is disabled while a generation is in flight, while a message is being edited, when no provider is connected, and when there is no active chat or the chat is empty. Availability is re-evaluated every time the menu opens, and the handler re-validates on click.
-- Clicking 重新生成 removes the generated tail of the current turn — the assistant reply plus its same-turn tool/pipeline cards and failure recovery rows — and generates a replacement with the same preceding context.
+- For a server-generated OpenAI-compatible turn, clicking 重新生成 generates a replacement without including the previous reply in the request. The saved reply stays in history until the replacement succeeds.
 - Regeneration never creates a duplicate user message, never reads or clears the composer draft, never fires `send_if_empty`, and never attaches pending composer files.
 - When the chat's last message is a user message, the action is still available and fills in the missing assistant reply without deleting anything.
 - Manually inserted rows stop the cleanup: historical narrator notes, manually inserted assistant messages, and plain system notices are never removed; if such a row sits at the end, regenerate appends a new reply after it instead.
 - A generation-only greeting can be re-rolled the same way — the old first message is replaced.
-- The replacement runs through the normal visible generation path: streaming, tool calls, reply-pipeline rounds, prompt triggers, and bounded automatic recovery behave exactly like a fresh send.
-- When regeneration fails after automatic recovery is exhausted, the removed turn is restored verbatim and a toast announces the restore. Restore is skipped — with a visible error toast — when the active chat changed mid-flight or the chat tail no longer matches the snapshot shape; in those cases the failed attempt's rows are kept rather than destroying both turns.
-- When the user stops an in-flight regeneration, whatever the new attempt already produced is kept and the old turn is not restored — including the edge case where the stop lands before any new output, which leaves the turn empty.
+- On the server-generated path, a stopped or failed replacement leaves the previous saved reply unchanged and does not save partial replacement text. Switching chats or refreshing does not stop the replacement; reopening the chat shows its current progress or saved result.
+
 
 ## Generation Boundary
 
-The menu dispatches the `regenerate` command kind into the same visible-generation lifecycle as composer submission (`lifecycleType: 'normal'`). The service owns tail removal, snapshot, provider transport, recovery, and final result persistence; the menu and React item only project availability. Removing the tail happens before prompt assembly so the previous reply never feeds the new request.
+The menu starts regeneration of the current turn without submitting the composer. On the server-generated path, the replacement is shown as temporary output until it is saved.
 
 ## Semantic Interaction IDs
 
@@ -45,7 +44,7 @@ The menu dispatches the `regenerate` command kind into the same visible-generati
 
 - As a user unhappy with the last reply, open the chat-options menu, pick 重新生成, and wait for the new reply; EmberDesk must replace the old turn with exactly one new reply, send no second user message, and leave the composer draft untouched — failure is a duplicated user row, a cleared draft, or the old reply's content reaching the new request.
 - As a user whose last send got no reply, open the menu and pick 重新生成; EmberDesk must generate the missing assistant reply while keeping the user message — failure is a deleted or re-sent user row.
-- As a user on a flaky connection, regenerate and watch every retry fail; EmberDesk must put the previous turn back in place with a visible notice — failure is losing the old reply or leaving both old and failed rows in the chat.
+- As a user regenerating a server-generated reply, stop midway or let the attempt fail, then reopen the chat. The original reply must still be there exactly once, with no partial replacement saved.
 - As a user mid-edit or mid-generation, open the menu; EmberDesk must show 重新生成 disabled rather than allowing a conflicting run — failure is starting a second generation or deleting the message being edited.
 
 ## Feature-Specific Evidence
@@ -53,7 +52,7 @@ The menu dispatches the `regenerate` command kind into the same visible-generati
 - The `option_regenerate` item ID, its enabled/disabled state on menu open, and its position relative to other items are primary evidence.
 - Request bodies captured at the transport boundary must not contain the removed turn's text or tool invocations.
 - Chat state after success must contain exactly one replacement tail; after total failure it must equal the pre-regenerate snapshot.
-- `tests/chat-regenerate.test.js` covers tail identification and snapshot integrity; `tests/chat-regenerate.e2e.js` covers menu flow, prompt content, failure restore, and user-stop behavior.
+- `tests/chat-regenerate.test.js` covers tail identification and snapshot integrity; `tests/chat-regenerate.e2e.js` covers reopening a running server-generated replacement and stopping it without overwriting the saved reply.
 
 ## Failure Signals
 

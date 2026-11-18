@@ -574,6 +574,25 @@ export const CANONICAL_SQLITE_MIGRATIONS = Object.freeze([
         name: 'preset_revision_tombstones',
         sql: 'ALTER TABLE preset_documents ADD COLUMN deleted INTEGER NOT NULL DEFAULT 0;',
     }),
+    Object.freeze({
+        version: 20,
+        name: 'chat_generation_runs',
+        sql: `
+            CREATE TABLE chat_generation_runs (
+                id TEXT PRIMARY KEY,
+                chat_id TEXT NOT NULL REFERENCES chat_sessions(id) ON DELETE CASCADE,
+                request_id TEXT NOT NULL,
+                kind TEXT NOT NULL CHECK (kind IN ('send', 'regenerate', 'continue')),
+                status TEXT NOT NULL CHECK (status IN ('running', 'completed', 'cancelled', 'failed', 'interrupted')),
+                version TEXT NOT NULL,
+                error TEXT,
+                created_at_ms INTEGER NOT NULL,
+                finished_at_ms INTEGER,
+                UNIQUE (chat_id, request_id)
+            );
+            CREATE UNIQUE INDEX chat_generation_one_active ON chat_generation_runs (chat_id) WHERE status = 'running';
+        `,
+    }),
 ]);
 
 export class CanonicalMigrationBlockedError extends Error {

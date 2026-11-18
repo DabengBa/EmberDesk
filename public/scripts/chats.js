@@ -183,7 +183,7 @@ export async function unhideChatMessage(messageId, _messageBlock) {
  * @param {ChatMessage} message Message object
  * @returns {Promise<void>} A promise that resolves when file is uploaded.
  */
-export async function populateFileAttachment(message, inputId = 'file_form_input', { isCurrent = () => true } = {}) {
+export async function populateFileAttachment(message, inputId = 'file_form_input', { isCurrent = () => true, reset = true } = {}) {
     const fileInput = document.getElementById(inputId);
     const files = fileInput instanceof HTMLInputElement ? Array.from(fileInput.files ?? []) : [];
     const characterName = name2;
@@ -256,7 +256,7 @@ export async function populateFileAttachment(message, inputId = 'file_form_input
         toastr.error(t`Either the file is corrupted or its format is not supported.`, t`Could not upload the file`);
     } finally {
         const selected = Array.from(fileInput?.files ?? []);
-        if (files.length && isCurrent() && selected.length === files.length && selected.every((file, index) => file === files[index])) {
+        if (reset && files.length && isCurrent() && selected.length === files.length && selected.every((file, index) => file === files[index])) {
             document.getElementById('file_form')?.reset();
         }
     }

@@ -57,7 +57,7 @@ function normalizeStep(raw, index) {
 /**
  * Normalizes a preset-carried reply pipeline definition.
  * @param {*} raw Raw `oai_settings.reply_pipeline` value
- * @returns {{enabled: boolean, enforceMode: 'auto'|'forced', resultField: string, final: string, steps: object[]}}
+ * @returns {{enabled: boolean, enforceMode: 'auto'|'forced', resultField: string, final: string, steps: NonNullable<ReturnType<typeof normalizeStep>>[]}}
  */
 export function normalizeReplyPipeline(raw) {
     const empty = { enabled: false, enforceMode: 'auto', resultField: '', final: '', steps: [] };
@@ -125,6 +125,27 @@ export function buildStepPrompt(step, index, total) {
  * Closing-round instruction: no tools, write the final reply from step results.
  */
 export const PIPELINE_FALLBACK_PROMPT = '[Reply pipeline] All pipeline steps are complete. Write the final user-facing reply now, based on the step results above. Do not call any tools in this round.';
+
+/** Format a settled pipeline reply identically in the browser and on the server. */
+export function formatPipelineTagMarkup(invocations, finalText = '') {
+    const escape = value => String(value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    return invocations.map((invocation, index) => {
+        const name = invocation?.pipeline?.tool ?? invocation?.name;
+        const tag = /^[a-zA-Z][a-zA-Z0-9_-]*$/.test(String(name)) ? name : 'step';
+        let params = invocation?.parameters;
+        if (typeof params === 'string') {
+            try { params = JSON.parse(params); } catch { params = null; }
+        }
+        const primaryText = typeof params?.content === 'string' && params.content.length ? params.content
+            : typeof invocation?.result === 'string' && invocation.result.length ? invocation.result
+                : params && typeof params === 'object' ? JSON.stringify(params) : String(invocation?.result ?? '');
+        const isLast = index === invocations.length - 1;
+        const text = isLast && finalText ? finalText : escape(primaryText);
+        const options = isLast && params && typeof params === 'object' ? Object.values(params).filter(Array.isArray).flat() : [];
+        const chips = options.map(item => `<div data-respond-option="" role="button" tabindex="0">▸ ${escape(typeof item === 'string' ? item : JSON.stringify(item))}</div>`).join('');
+        return `&lt;${tag}&gt;${text}${chips ? `<div data-respond-options="">${chips}</div>` : ''}&lt;/${tag}&gt;`;
+    }).join('\n');
+}
 
 /** Create the same step-specific schema for request shaping and token budgeting. */
 export function pipelineStepTool(step) {

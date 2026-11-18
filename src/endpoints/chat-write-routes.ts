@@ -1,5 +1,6 @@
 import type { ChatRouteContext } from './chat-route-context.ts';
 import type { Request, Response } from 'express';
+import { ChatGenerationBusyError } from '../server-generation-lock.ts';
 
 export function registerChatSaveRoute(context: ChatRouteContext): void {
     const { router, path, sanitize, validateAvatarUrlMiddleware, rejectGroupChatRequest, coordinateWorkspaceWrite, openRequestCoordinationDatabase, getCanonicalChatOperation, getCanonicalChatWriteState, getCanonicalChatLocator, chatOperationIdentity, getChatsProjectionMode, sendCanonicalChatWriteBlocked, sendCanonicalChatWriteRejected, writeCanonicalChatPayload, invalidateCanonicalAuditStatus, getCanonicalStorageSlice, writeChatProjection, getBackupFunction, IntegrityMismatchError, applyInteractionPerfChatTimestamp, syncCanonicalChatStatsAfterCharacterChatMutation, isPathUnderParent } = context;
@@ -79,6 +80,7 @@ export function registerChatSaveRoute(context: ChatRouteContext): void {
                 return response.status(400).send({ error: 'The request\'s body.chat is not an array.' });
             }
         } catch (error) {
+            if (error instanceof ChatGenerationBusyError) return response.status(409).send({ error: error.message });
             if (error instanceof IntegrityMismatchError) {
                 console.error(error.message);
                 return response.status(400).send({ error: 'integrity' });
@@ -168,6 +170,7 @@ export function registerChatRenameRoute(context: ChatRouteContext): void {
 
             return sendCanonicalChatWriteBlocked(response, writeState);
         } catch (error) {
+            if (error instanceof ChatGenerationBusyError) return response.status(409).send({ error: error.message });
             console.error('Error renaming chat file:', error);
             return response.status(500).send({ error: true });
         }
@@ -237,6 +240,7 @@ export function registerChatDeleteRoute(context: ChatRouteContext): void {
             }
             return sendCanonicalChatWriteBlocked(response, writeState);
         } catch (error) {
+            if (error instanceof ChatGenerationBusyError) return response.status(409).send({ error: error.message });
             console.error(error);
             return response.sendStatus(500);
         }
