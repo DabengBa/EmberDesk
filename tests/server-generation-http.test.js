@@ -120,6 +120,31 @@ function call(route, body, user = 'alice') {
     });
 }
 
+test('runs a temporary assistant prompt over SSE without saving a chat or exposing the run to another user', async () => {
+    const user = users.get('alice');
+    const db = canonicalSqliteManager.open({ handle: 'alice', directories: user.directories, featureFlags: { enabled: true } });
+    const counts = () => ['chat_sessions', 'chat_generation_runs'].map(table => Number(db.prepare(`SELECT count(*) AS count FROM ${table}`).get().count));
+    const before = counts();
+    const command = { temporary: true, action: 'send', text: 'Temporary follow-up', history: [
+        { is_user: true, name: 'User', mes: 'Earlier question' },
+        { is_user: false, name: 'Assistant', mes: 'Earlier answer' },
+    ] };
+    const preview = await call('/generation/preview', command);
+    expect(preview.status).toBe(200);
+    const { messages } = await preview.json();
+    const created = await call('/generation/create', { ...command, requestId: 'temp-send' });
+    expect(created.status).toBe(202);
+    const { id } = await created.json();
+    expect((await call(`/generation/${id}/events`, undefined, 'bob')).status).toBe(404);
+    const events = await call(`/generation/${id}/events`);
+    expect(events.headers.get('content-type')).toContain('text/event-stream');
+    expect(await events.text()).toMatch(/"status":"completed"[^\n]+"assistant":\{[^\n]+"mes":"Hello"/);
+    expect(calls.at(-1).messages).toEqual(messages);
+    expect(messages.some(message => message.role === 'assistant' && message.content.includes('Earlier answer'))).toBe(true);
+    expect(counts()).toEqual(before);
+    calls.pop();
+});
+
 test('real chat router assembles preview and send equally, commits, replays and isolates users', async () => {
     const target = { avatar_url: 'mira.png', file_name: 'first' };
     const command = { ...target, action: 'send', text: 'Orion' };

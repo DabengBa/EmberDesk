@@ -11,7 +11,7 @@ const test = base.extend({
         const requests = [];
         let model;
         try {
-            await use(async (responses, { streamOpenAi = false } = {}) => {
+            await use(async (responses, { streamOpenAi = false, temporary = false } = {}) => {
                 model = createServer(async (req, res) => {
                     if (req.method === 'GET' && req.url === '/v1/models') {
                         res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -39,14 +39,14 @@ const test = base.extend({
                 });
                 await new Promise(resolve => model.listen(0, '127.0.0.1', resolve));
                 await testSetup.awaitST({ page });
-                await selectCharacterInFreshChat(page, characterName);
+                if (!temporary) await selectCharacterInFreshChat(page, characterName);
                 await enableOpenAi(page, { streamOpenAi });
                 await page.evaluate(endpoint => {
                     Object.assign(window.SillyTavern.getContext().chatCompletionSettings, {
                         custom_url: endpoint, reply_pipeline: { enabled: false },
                     });
                 }, `http://127.0.0.1:${model.address().port}/v1`);
-                await page.getByRole('button', { name: '取消并关闭' }).click();
+                if (!temporary) await page.getByRole('button', { name: '取消并关闭' }).click();
                 return requests;
             });
         } finally {
@@ -110,140 +110,6 @@ async function enableOpenAi(page, { streamOpenAi = false } = {}) {
         script.setOnlineStatus('Valid');
         script.activateSendButtons();
     });
-}
-
-/**
- * Intercepts /api/backends/chat-completions/generate with a per-request
- * response sequence. Each entry: { content } for a JSON reply,
- * { status, error } for an HTTP failure, { chunks, keepOpenAfterChunks } for
- * a streaming response.
- */
-async function installGenerationStub(page, { responses }) {
-    await page.evaluate(({ sequence }) => {
-        window.__emberdeskRegenerateRequests = [];
-        window.__emberdeskRegenerateOriginalFetch ??= window.fetch.bind(window);
-
-        window.fetch = async (input, init = {}) => {
-            const url = typeof input === 'string' ? input : input.url;
-            if (!String(url).endsWith('/api/backends/chat-completions/generate')) {
-                return window.__emberdeskRegenerateOriginalFetch(input, init);
-            }
-
-            const requestBody = JSON.parse(String(init.body ?? '{}'));
-            window.__emberdeskRegenerateRequests.push(requestBody);
-            const config = sequence[Math.min(window.__emberdeskRegenerateRequests.length - 1, sequence.length - 1)] ?? {};
-
-            if (config.status && config.status !== 200) {
-                return new Response(JSON.stringify(config.error ?? { error: { message: 'provider boom' } }), {
-                    status: config.status,
-                    headers: { 'Content-Type': 'application/json' },
-                });
-            }
-
-            if (Array.isArray(config.chunks) || (requestBody.stream && config.content !== undefined)) {
-                const encoder = new TextEncoder();
-                const chunks = config.chunks ?? [config.content];
-                const body = new ReadableStream({
-                    async start(controller) {
-                        const abort = () => {
-                            try {
-                                controller.error(new DOMException('Aborted', 'AbortError'));
-                            } catch {
-                                // The stream may already be closed.
-                            }
-                        };
-                        init.signal?.addEventListener('abort', abort, { once: true });
-                        try {
-                            for (const chunk of chunks) {
-                                if (init.signal?.aborted) {
-                                    abort();
-                                    return;
-                                }
-                                controller.enqueue(encoder.encode(`data: ${JSON.stringify({
-                                    choices: [{ index: 0, delta: { content: chunk }, finish_reason: null }],
-                                })}\n\n`));
-                                await new Promise(resolve => setTimeout(resolve, config.delayMs ?? 40));
-                            }
-                            if (config.keepOpenAfterChunks) {
-                                await new Promise(resolve => {
-                                    if (init.signal?.aborted) {
-                                        resolve();
-                                        return;
-                                    }
-                                    init.signal?.addEventListener('abort', resolve, { once: true });
-                                });
-                                return;
-                            }
-                            controller.enqueue(encoder.encode('data: [DONE]\n\n'));
-                            controller.close();
-                        } finally {
-                            init.signal?.removeEventListener('abort', abort);
-                        }
-                    },
-                });
-                return new Response(body, {
-                    status: 200,
-                    headers: { 'Content-Type': 'text/event-stream' },
-                });
-            }
-
-            await new Promise(resolve => setTimeout(resolve, config.delayMs ?? 60));
-            return new Response(JSON.stringify({
-                choices: [{ message: { content: config.content ?? 'generated' } }],
-            }), {
-                status: 200,
-                headers: { 'Content-Type': 'application/json' },
-            });
-        };
-    }, { sequence: responses });
-}
-
-async function sendUserAndGenerate(page, text) {
-    await page.evaluate(async (messageText) => {
-        const script = await import('/script.js');
-        const context = window.SillyTavern.getContext();
-        await script.sendMessageAsUser(messageText);
-        window.__emberdeskRegeneratePending = context.generate('normal', { automatic_trigger: false })
-            .catch(error => {
-                window.__emberdeskRegenerateError = String(error?.message ?? error);
-                throw error;
-            });
-    }, text);
-    await waitForGenerationDone(page);
-}
-
-async function waitForGenerationDone(page, { allowFailure = false, allowAbort = false } = {}) {
-    await page.evaluate(async ({ acceptFailure, acceptAbort }) => {
-        try {
-            await window.__emberdeskRegeneratePending;
-        } catch (error) {
-            const message = String(error?.message ?? error);
-            const ok = (acceptFailure && message.length > 0)
-                || (acceptAbort && message.includes('Generation was aborted'));
-            if (!ok) {
-                throw error;
-            }
-        }
-        window.__emberdeskRegeneratePending = null;
-    }, { acceptFailure: allowFailure, acceptAbort: allowAbort });
-    await expect(page.locator('body')).not.toHaveAttribute('data-generating', 'true');
-    await expect.poll(async () => page.evaluate(() => window.SillyTavern.getContext().streamingProcessor === null)).toBe(true);
-}
-
-/**
- * Clicks the real options-menu "Regenerate" entry and waits until the
- * fire-and-forget generation it dispatched actually reached the fetch stub.
- * The delegated menu handler voids the promise, so there is nothing to await
- * directly — the request counter only increments once generation is in
- * flight (by then is_send_press is set).
- */
-async function clickRegenerateMenuItem(page) {
-    const baseline = await page.evaluate(() => window.__emberdeskRegenerateRequests?.length ?? 0);
-    await chooseRegenerate(page);
-    await expect.poll(
-        async () => page.evaluate(n => window.__emberdeskRegenerateRequests.length > n, baseline),
-        { timeout: 15_000 },
-    ).toBe(true);
 }
 
 async function chooseRegenerate(page) {
@@ -526,18 +392,21 @@ test.describe('chat regenerate', () => {
                 return context.characters[context.characterId].chat;
             }, `http://127.0.0.1:${model.address().port}/v1`);
             await page.getByRole('button', { name: '取消并关闭' }).click();
+            await page.locator('#file_form_input').setInputFiles({ name: 'read-me.txt', mimeType: 'text/plain', buffer: Buffer.from('Managed browser attachment marker') });
             const drawer = page.locator('[data-react-workspace-shell-chrome] nav button').filter({ hasText: '提示词' }).first();
             await drawer.click();
             const preview = page.waitForResponse(response => response.url().endsWith('/generation/preview'));
             await page.getByRole('button', { name: '查看 Prompt' }).first().click();
             const previewPrompt = JSON.stringify((await (await preview).json()).messages);
+            expect(previewPrompt).toContain('Managed browser attachment marker');
+            expect(await page.locator('#file_form_input').evaluate(input => input.files.length)).toBe(1);
             expect(previewPrompt).toContain('Browser temporary lore marker');
             expect(previewPrompt).toContain('Browser scan lore marker');
             expect(previewPrompt).not.toMatch(/Original world marker|Filtered lore marker/);
             await page.keyboard.press('Escape');
-            await page.locator('#file_form_input').setInputFiles({ name: 'read-me.txt', mimeType: 'text/plain', buffer: Buffer.from('Managed browser attachment marker') });
             await page.evaluate(async () => (await import('/script.js')).sendTextareaMessage());
             await expect.poll(() => lastMessageText(page)).toBe('OLD_REPLY');
+            expect(JSON.stringify(JSON.parse(firstPrompt).messages)).toBe(previewPrompt);
             expect(firstPrompt).toContain('Managed browser attachment marker');
             expect(firstPrompt).toContain('Browser temporary lore marker');
             expect(firstPrompt).toContain('Browser scan lore marker');
@@ -837,35 +706,35 @@ test.describe('chat regenerate', () => {
         expect(wire).not.toContain('PENDING_ATTACHMENT_BODY');
     });
 
-    test('restores the previous reply in the assistant scratch chat (no chat id)', async ({ page }) => {
-        await testSetup.awaitST({ page });
-        await enableOpenAi(page);
-        await installGenerationStub(page, {
-            responses: [
-                { content: 'SCRATCH_REPLY' },
-                { status: 500 },
-                { status: 500 },
-                { status: 500 },
-            ],
+    test('uses server generation in the assistant scratch chat and preserves the reply on failure', async ({ page, characterModel }) => {
+        const requests = await characterModel([{ content: 'SCRATCH_REPLY' }, { status: 500 }], { temporary: true });
+        const legacyRequests = [];
+        page.on('request', request => {
+            if (request.url().endsWith('/api/backends/chat-completions/generate')) legacyRequests.push(request);
         });
-
-        // Assistant scratch chat: this_chid stays undefined, so the snapshot's
-        // chatId normalizes to null — the restore guard used to compare the
-        // raw undefined against null and always skip, losing the old reply.
-        await page.evaluate(async () => {
-            const script = await import('/script.js');
-            await script.newAssistantChat();
-        });
-        await sendUserAndGenerate(page, 'scratch question');
+        await page.locator('#send_textarea').fill('scratch question');
+        const drawer = page.locator('[data-react-workspace-shell-chrome] nav button').filter({ hasText: '提示词' }).first();
+        await drawer.click();
+        const preview = page.waitForResponse(response => response.url().endsWith('/generation/preview'));
+        await page.getByRole('button', { name: '查看 Prompt' }).first().click();
+        const { messages } = await (await preview).json();
+        expect(messages).toContainEqual(expect.objectContaining({ role: 'user', content: 'scratch question' }));
+        await page.keyboard.press('Escape');
+        await expectRunStatus(page, await startCharacterRun(page, 'send', () => page.locator('#send_but').click()), 'completed');
+        await expect(page.locator('#chat').getByText('SCRATCH_REPLY', { exact: true })).toBeVisible();
+        expect(requests[0].messages).toEqual(messages);
+        await expect(page.locator('#send_textarea')).toHaveValue('');
         const snapshotBefore = await chatSnapshot(page);
         expect(snapshotBefore.at(-1).mes).toContain('SCRATCH_REPLY');
 
-        await clickRegenerateMenuItem(page);
-        await waitForRegenerateSettled(page);
+        await expectRunStatus(page, await regenerateCharacter(page), 'failed');
+        await expect(page.locator('body')).not.toHaveAttribute('data-workspace-generation-running', '');
 
         const snapshotAfter = await chatSnapshot(page);
         expect(snapshotAfter).toHaveLength(snapshotBefore.length);
         expect(snapshotAfter.at(-1).mes).toContain('SCRATCH_REPLY');
+        expect(requests).toHaveLength(2);
+        expect(legacyRequests).toHaveLength(0);
     });
 
     test('reports unavailable while editing, offline, or without an active chat', async ({ page, characterModel }) => {

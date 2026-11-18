@@ -2,7 +2,7 @@ import toastr from './scripts/notifications.js';
 import {
     generation_started, generatingAttemptModel, scrollLock, streamingProcessor, is_send_press, abortController,
     setGenerationStarted, setGeneratingAttemptModel, setScrollLock, setStreamingProcessor, setSending, setAbortController,
-    withGeneratingModel,
+    withGeneratingModel, findRegenerateTurnStart,
 } from './scripts/generation-shared-state.js';
 export { streamingProcessor, is_send_press, withGeneratingModel };
 
@@ -5752,16 +5752,16 @@ async function submitComposerMessage(composerSubmission) {
         return;
     }
 
-    if (textareaText && this_chid === undefined && name2 !== neutralCharacterName) {
+    if ((textareaText || hasPendingFileAttachment()) && this_chid === undefined && name2 !== neutralCharacterName) {
         await newAssistantChat({ temporary: false });
         if (this_chid !== undefined || name2 !== neutralCharacterName) return;
         const currentComposer = getComposerSnapshot();
         composerSubmission = { ...composerSubmission, contextKey: currentComposer.contextKey, contextRevision: currentComposer.contextRevision };
     }
 
-    if (usesWorkspaceGeneration() && this_chid !== undefined && (textareaText.trim() || hasPendingFileAttachment())) {
+    if (usesWorkspaceGeneration() && (textareaText.trim() || hasPendingFileAttachment())) {
         const accepted = await startWorkspaceGeneration('send', textareaText);
-        if (accepted) setComposerValue('', { expected: currentComposer });
+        if (accepted) setComposerValue('', { expected: composerSubmission });
         return accepted;
     }
     return await Generate('normal', { composerSubmission });
@@ -6308,7 +6308,7 @@ function removeLastMessage() {
  * @returns {Promise<any>} Returns a promise that resolves when the text is done generating.
  */
 export async function Generate(type, options = {}, dryRun = false) {
-    if (type === 'continue' && !dryRun && usesWorkspaceGeneration() && this_chid !== undefined) {
+    if (type === 'continue' && !dryRun && usesWorkspaceGeneration() && getWorkspaceGenerationTarget()) {
         return startWorkspaceGeneration('continue');
     }
     return generationCaller.Generate(...arguments);
@@ -6316,6 +6316,14 @@ export async function Generate(type, options = {}, dryRun = false) {
 
 function usesWorkspaceGeneration() {
     return main_api === 'openai' && oai_settings.chat_completion_source === chat_completion_sources.OPENAI;
+}
+
+function getWorkspaceGenerationTarget({ preview = false } = {}) {
+    return this_chid === undefined && (name2 === neutralCharacterName || (preview && (getComposerValue().trim() || hasPendingFileAttachment())))
+        ? { temporary: true, history: chat.filter(message => !message.is_system).map(({ is_user, mes, extra }) => ({
+            is_user, mes, extra: { files: extra?.files, media: extra?.media, tool_invocations: extra?.tool_invocations },
+        })) }
+        : getCurrentChatGenerationTarget();
 }
 
 async function workspaceGenerationRequest(route, body) {
@@ -6348,6 +6356,16 @@ const workspaceGeneration = createWorkspaceGeneration({
         return typeof result === 'string' ? result : JSON.stringify(result) ?? '';
     },
     finished(run, { discovered = false, reconciledChatVersion } = {}) {
+        if (run.temporary) {
+            if (run.user) chat.push(run.user);
+            if (run.assistant) {
+                const start = run.kind === 'regenerate' ? findRegenerateTurnStart(chat)
+                    : run.kind === 'continue' ? chat.length - 1 : chat.length;
+                chat.splice(start, chat.length - start, run.assistant);
+            }
+            if (run.status === 'failed') toastr.error(run.error ?? run.status);
+            return;
+        }
         const current = getCurrentChatGenerationTarget();
         // A historical run version does not describe the current chat returned by /find.
         const version = discovered ? run.chatVersion : run.version;
@@ -6393,7 +6411,7 @@ function flushWorkspaceGenerationSettings() {
 
 async function startWorkspaceGeneration(action, text) {
     if (workspaceGeneration.busy()) return false;
-    const target = getCurrentChatGenerationTarget();
+    const target = getWorkspaceGenerationTarget();
     if (!target) {
         toastr.warning('Load or finish saving this chat before generating.');
         return false;
@@ -6435,17 +6453,24 @@ async function startWorkspaceGeneration(action, text) {
 }
 
 async function previewWorkspaceGeneration(round = 0) {
-    const target = getCurrentChatGenerationTarget();
-    if (!target) return { kind: 'prompt-preview-empty', reason: 'No saved chat selected', warnings: [] };
+    const target = getWorkspaceGenerationTarget({ preview: true });
+    if (!target) return { kind: 'prompt-preview-empty', reason: 'No chat selected', warnings: [] };
     const text = getComposerValue();
     const composer = getComposerSnapshot();
+    const draftAttachments = [];
+    if (hasPendingFileAttachment()) {
+        await populateFileAttachment({ extra: {} }, 'file_form_input', {
+            reset: false, isCurrent: () => ownsWorkspaceComposer(composer),
+            stageFile: file => String(draftAttachments.push(file)),
+        });
+    }
     const worldRuntime = await captureWorkspaceWorldRuntime([...WorldInfoBuffer.externalActivations.entries()]);
     if (!ownsWorkspaceComposer(composer)) return { kind: 'prompt-preview-empty', reason: 'Selected chat changed', warnings: [] };
     await flushWorkspaceGenerationSettings();
     if (!ownsWorkspaceComposer(composer)) return { kind: 'prompt-preview-empty', reason: 'Selected chat changed', warnings: [] };
     const { connection, messages, budget, tools, toolChoice, maxTokens, reasoningEffort, previewPipeline } = await workspaceGenerationRequest('/preview', {
         ...target, action: 'send', text: text || undefined, locale: readStoredUiLocale(), round,
-        ...worldRuntime,
+        ...worldRuntime, ...(draftAttachments.length ? { draftAttachments } : {}),
     });
     return {
         kind: 'prompt-preview', type: 'normal', model: connection.model, stream: true,
@@ -6575,7 +6600,7 @@ export function canRegenerateLastReply() {
  * @returns {Promise<boolean>}
  */
 export async function regenerateLastReply() {
-    if (usesWorkspaceGeneration() && this_chid !== undefined) return canRegenerateLastReply() && startWorkspaceGeneration('regenerate');
+    if (usesWorkspaceGeneration() && (this_chid !== undefined || name2 === neutralCharacterName)) return canRegenerateLastReply() && startWorkspaceGeneration('regenerate');
     return generationCaller.regenerateLastReply(...arguments);
 }
 
@@ -6591,7 +6616,8 @@ export function setOptionsMenuRegenerateAvailability(canRegenerate) {
 function canContinueLastReply() {
     if (is_send_press || workspaceGeneration.busy() || !usesWorkspaceGeneration() || chat.length < 2) return false;
     const tail = chat.at(-1);
-    return tail?.is_user === false && !tail.is_system && Boolean(getCurrentChatGenerationTarget()?.version);
+    const target = getWorkspaceGenerationTarget();
+    return tail?.is_user === false && !tail.is_system && Boolean(target?.temporary || target?.version);
 }
 
 function continueLastReply() {
@@ -8938,12 +8964,15 @@ async function removeCharacterFromUI(deletedAvatars = [], { deleteContext = null
  * @returns {Promise<void>} - A promise that resolves when the new assistant chat is created
  */
 export async function newAssistantChat({ temporary: _temporary = false } = {}) {
+    if (workspaceGeneration.current()?.run.temporary) void workspaceGeneration.cancel().catch(() => {});
+    workspaceGeneration.close();
     await clearChat();
     chat.splice(0, chat.length);
     chat_metadata = {};
     setCharacterName(neutralCharacterName);
     setTemporaryChatStatus(true);
     sendSystemMessage(system_message_types.ASSISTANT_NOTE);
+    await printMessages();
 }
 
 function addDebugFunctions() {
@@ -9314,7 +9343,7 @@ function getPromptInspectorBridge() {
     }
 
     globalThis.__emberDeskPromptInspectorBridge = {
-        preview: (round = 0) => usesWorkspaceGeneration() && this_chid !== undefined
+        preview: (round = 0) => usesWorkspaceGeneration()
             ? previewWorkspaceGeneration(round) : previewNextGenerationRequest({ round }),
         close: () => closePromptInspectorOverlay(),
     };

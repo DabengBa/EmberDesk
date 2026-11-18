@@ -2,15 +2,17 @@ import fs from 'node:fs';
 import path from 'node:path';
 import type { Request, Response } from 'express';
 import type { DatabaseSync } from 'node:sqlite';
+import mime from 'mime-types';
 import { resolveUiLocale } from '../../public/scripts/ui-locale.js';
 import { isPathUnderParent } from '../util.js';
 import { canonicalSqliteManager, withCanonicalTransaction } from '../canonical-sqlite.ts';
-import { createServerGenerationService, ServerGenerationExecutionError, type GenerationChat, type GenerationEvent } from '../server-generation-service.ts';
+import { MEDIA_EXTENSIONS } from '../constants.js';
+import { createServerGenerationService, getRegenerateChatPrefix, ServerGenerationExecutionError, type GenerationChat, type GenerationEvent } from '../server-generation-service.ts';
 import { ChatGenerationBusyError } from '../server-generation-lock.ts';
 import { streamServerModel } from '../server-generation-model-transport.ts';
 import { applyGenerationOutputRegex, DEFAULT_GENERATION_USER_NAME, prepareGenerationUserMessage, readServerPromptSnapshot, ServerPromptError, type ServerPromptCommand, type ServerPromptRuntime, type ServerPromptSnapshot } from '../server-prompt.ts';
 import { prepareServerGeneration, previewServerGeneration, runServerPipeline } from '../server-generation-pipeline.ts';
-import { array, record, string } from '../server-prompt/snapshot.ts';
+import { array, readTemporaryPromptSnapshot, record, string } from '../server-prompt/snapshot.ts';
 import type { WorldInfoActivation } from '../server-prompt/world-info.ts';
 import { getCanonicalCharacter } from './character-store.ts';
 
@@ -47,6 +49,31 @@ function readAttachment(db: DatabaseSync, directories: Directories, url: string)
     if (!fs.existsSync(file) || !isPathUnderParent(fs.realpathSync(directories.storage), fs.realpathSync(file))) return null;
     const blob = readManagedMediaContent(db, directories, ref);
     return blob.ok && blob.contents ? { contents: blob.contents, mediaType: blob.mediaType } : null;
+}
+
+function previewAttachments(value: unknown) {
+    const blobs = new Map<string, { contents: Buffer; mediaType: string }>();
+    const files: { url: string; name: string }[] = [];
+    const media: { url: string; type: string; title: string; source: string }[] = [];
+    if (!Array.isArray(value)) throw new InvalidAttachmentError();
+    for (const item of value) {
+        const { base64, type, extension, name } = record(item);
+        if (typeof base64 !== 'string' || typeof name !== 'string') throw new InvalidAttachmentError();
+        const url = `draft:${blobs.size}`;
+        const contents = Buffer.from(base64, 'base64');
+        if (type === undefined) {
+            files.push({ url, name });
+            blobs.set(url, { contents, mediaType: 'text/plain' });
+        } else {
+            if (typeof type !== 'string' || typeof extension !== 'string' || !MEDIA_EXTENSIONS.includes(extension)) throw new InvalidAttachmentError();
+            const mediaType = mime.lookup(`attachment.${extension}`);
+            if (!mediaType || !mediaType.startsWith(`${type}/`)) throw new InvalidAttachmentError();
+            media.push({ url, type, title: name, source: 'upload' });
+            blobs.set(url, { contents, mediaType });
+        }
+    }
+    return { blobs, extra: { ...(files.length ? { files } : {}),
+        ...(media.length ? { media, media_index: media.length - 1, inline_image: true } : {}) } };
 }
 
 function sendAttachments(db: DatabaseSync, value: unknown) {
@@ -91,13 +118,14 @@ function parseWorldRuntime(worldInfo: unknown, scanPrompts: unknown): Pick<Serve
 }
 
 type WorldRuntime = ReturnType<typeof parseWorldRuntime>;
-function promptRuntime(db: DatabaseSync, directories: Directories, locale: string, worldRuntime: WorldRuntime): ServerPromptRuntime {
+function promptRuntime(db: DatabaseSync, directories: Directories, locale: string, worldRuntime: WorldRuntime,
+    draft?: ReturnType<typeof previewAttachments>['blobs']): ServerPromptRuntime {
     return {
         ...worldRuntime,
         translateMemory: text => resolveUiLocale(locale) === 'zh-cn' ? zhTranslations[text] ?? text : text,
-        resolveFile: url => /^\/?user\/files\//.test(url) ? readAttachment(db, directories, url)?.contents.toString('utf8') ?? '' : '',
+        resolveFile: url => (/^\/?user\/files\//.test(url) ? readAttachment(db, directories, url) : draft?.get(url))?.contents.toString('utf8') ?? '',
         async resolveMedia({ url, type }) {
-            const blob = readAttachment(db, directories, url);
+            const blob = draft?.get(url) ?? readAttachment(db, directories, url);
             if (!blob?.mediaType?.startsWith(`${type}/`)) return null;
             return { dataUrl: `data:${blob.mediaType};base64,${blob.contents.toString('base64')}` };
         },
@@ -169,33 +197,63 @@ export function registerChatGenerationRoutes(context: ChatRouteContext) {
 
     const draftHeader = () => ({ user_name: DEFAULT_GENERATION_USER_NAME, chat_metadata: {} });
 
+    function temporarySnapshot(db: DatabaseSync, handle: string, history: unknown) {
+        if (!Array.isArray(history)) throw new ServerPromptError('invalid_config', 'Temporary history must be an array');
+        const chat = history.map(item => {
+            const { is_user, mes, extra } = record(item);
+            if (typeof is_user !== 'boolean' || typeof mes !== 'string') throw new ServerPromptError('invalid_config', 'Invalid temporary message');
+            return { is_user, mes, name: is_user ? DEFAULT_GENERATION_USER_NAME : 'Assistant',
+                extra: { ...sendAttachments(db, extra), tool_invocations: record(extra).tool_invocations } };
+        });
+        return readTemporaryPromptSnapshot(db, handle, [draftHeader(), ...chat]);
+    }
+
     router.post('/generation/preview', (request, response) => run(request, response, false, async (db, handle) => {
-        const chat = target(request, db);
-        const { action, text, locale, attachments, worldInfo, scanPrompts, round = 0 } = record(request.body);
-        if (!chat || !isAction(action) || (text !== undefined && typeof text !== 'string') || typeof round !== 'number' || !Number.isInteger(round) || round < 0) return errorResponse(response, 400, 'invalid_generation_command');
+        const { action, text, locale, attachments, draftAttachments, worldInfo, scanPrompts, round = 0, temporary, history } = record(request.body);
+        const chat = temporary === true ? null : target(request, db);
+        if ((!chat && temporary !== true) || !isAction(action) || (text !== undefined && typeof text !== 'string') || typeof round !== 'number' || !Number.isInteger(round) || round < 0) return errorResponse(response, 400, 'invalid_generation_command');
         const worldRuntime = parseWorldRuntime(worldInfo, scanPrompts);
+        const draft = action === 'send' && draftAttachments !== undefined ? previewAttachments(draftAttachments) : undefined;
         const { snapshot, extra } = withCanonicalTransaction(db, txn => ({
-            snapshot: readServerPromptSnapshot(txn, {
+            snapshot: chat ? readServerPromptSnapshot(txn, {
                 ...chat, userId: handle, draftHeader: action === 'send' ? draftHeader() : undefined,
-            }),
-            extra: action === 'send' ? sendAttachments(txn, attachments) : {},
+            }) : temporarySnapshot(txn, handle, history),
+            extra: action === 'send' ? draft?.extra ?? sendAttachments(txn, attachments) : {},
         }));
         const prompt = await previewServerGeneration(snapshot, { action,
             pendingUserText: action === 'send' ? (text as string | undefined) ?? (Object.keys(extra).length ? '' : undefined) : undefined,
             pendingUserExtra: extra,
-        }, promptRuntime(db, request.user.directories, string(locale), worldRuntime), round);
+        }, promptRuntime(db, request.user.directories, string(locale), worldRuntime, draft?.blobs), round);
         return response.json(prompt);
     }));
 
     router.post('/generation/create', (request, response) => run(request, response, true, (db, handle) => {
-        const chat = target(request, db);
-        const { action, text, requestId, version, locale, attachments, worldInfo, scanPrompts } = record(request.body);
-        if (!chat || !isAction(action) || typeof requestId !== 'string' || !/^[\w-]{1,128}$/.test(requestId)
+        const { action, text, requestId, version, locale, attachments, worldInfo, scanPrompts, temporary, history } = record(request.body);
+        const chat = temporary === true ? null : target(request, db);
+        if ((!chat && temporary !== true) || !isAction(action) || typeof requestId !== 'string' || !/^[\w-]{1,128}$/.test(requestId)
             || (version !== undefined && (typeof version !== 'string' || !/^[0-9a-f]{32}$/.test(version)))
-            || (action === 'send' ? typeof text !== 'string' : typeof version !== 'string')) {
+            || (action === 'send' ? typeof text !== 'string' : chat !== null && typeof version !== 'string')) {
             return errorResponse(response, 400, 'invalid_generation_command');
         }
         const { directories } = request.user;
+        if (!chat) {
+            const worldRuntime = parseWorldRuntime(worldInfo, scanPrompts);
+            const { snapshot, original, user } = withCanonicalTransaction(db, txn => {
+                const source = temporarySnapshot(txn, handle, history);
+                if (action === 'send') {
+                    const extra = sendAttachments(txn, attachments);
+                    if (!Object.keys(extra).length && !string(text).trim()) throw new ServerPromptError('invalid_config', 'Send requires text or attachments');
+                    const user = { ...prepareGenerationUserMessage(source, string(text)), send_date: Date.now(), extra };
+                    return { snapshot: { ...source, chat: [...source.chat, user] }, original: null, user };
+                }
+                const tail = source.chat.at(-1);
+                if (record(tail).is_user !== false) throw new Error('assistant_reply_required');
+                return action === 'continue' ? { snapshot: source, original: tail ?? null }
+                    : { snapshot: { ...source, chat: getRegenerateChatPrefix(source.chat) }, original: null };
+            });
+            const result = service.createTemporary(db, requestId, action, original, { snapshot, directories, handle, locale: string(locale), worldRuntime }, user);
+            return response.status(202).json(result);
+        }
         let sendSnapshot: ServerPromptSnapshot | undefined;
         const common = {
             requestId, locator: chat.locator,

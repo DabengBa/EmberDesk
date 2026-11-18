@@ -40,7 +40,14 @@ export function readServerPromptSnapshot(db: DatabaseSync, { userId, locator, av
     if (!chat) throw new ServerPromptError('source_not_found', 'Chat not found');
     const character = getCanonicalCharacter(db, avatar ?? locator.ownerId, { includeChatStats: false });
     if (!character) throw new ServerPromptError('source_not_found', 'Character not found');
+    return readPromptSources(db, userId, chat, character, session?.concurrency_token ?? null, (avatar ?? locator.ownerId).replace(/\.png$/i, ''));
+}
 
+export function readTemporaryPromptSnapshot(db: DatabaseSync, userId: string, chat: readonly object[]) {
+    return readPromptSources(db, userId, chat, { name: 'Assistant' }, null);
+}
+
+function readPromptSources(db: DatabaseSync, userId: string, chat: readonly object[], character: RecordView, version: string | null, loreOwner?: string): ServerPromptSnapshot {
     const settings = record(getCanonicalSettingsDocument(db, { userId })?.payload);
     const oai = record(settings.oai_settings);
     const presetName = string(oai.preset_settings_openai) || 'Default';
@@ -48,8 +55,7 @@ export function readServerPromptSnapshot(db: DatabaseSync, { userId, locator, av
     const header = record(chat[0]);
     const selection = worldInfoSettings(settings).world_info;
     const world = record(selection);
-    const loreOwner = (avatar ?? locator.ownerId).replace(/\.png$/i, '');
-    const extra = array(world.charLore).map(record).find(item => item.name === loreOwner);
+    const extra = loreOwner ? array(world.charLore).map(record).find(item => item.name === loreOwner) : undefined;
     const globalNames = typeof selection === 'string' ? [selection] : Array.isArray(selection) ? selection : array(world.globalSelect);
     const chatName = record(header.chat_metadata).world_info;
     const sources = [
@@ -67,5 +73,5 @@ export function readServerPromptSnapshot(db: DatabaseSync, { userId, locator, av
             if (book) books.push({ name, scope, entries: Object.values(record(record(book).entries)).map(record) });
         }
     }
-    return { version: session?.concurrency_token ?? null, character, settings, preset: preset ? record(JSON.parse(preset.payloadJson)) : {}, chat, books };
+    return { version, character, settings, preset: preset ? record(JSON.parse(preset.payloadJson)) : {}, chat, books };
 }
