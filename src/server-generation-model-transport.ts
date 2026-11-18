@@ -4,6 +4,7 @@ import type { Readable } from 'node:stream';
 import { Agent } from 'agent-base';
 import fetch, { FetchError } from 'node-fetch';
 import { ProxyAgent } from 'proxy-agent';
+import { PrivateRequestAgent } from './private-request-filter.ts';
 import { CHAT_COMPLETION_SOURCES, isChatCompletionStreaming } from '../public/scripts/openai-provider-capabilities.js';
 
 type ModelStream = {
@@ -61,11 +62,16 @@ export async function streamServerModel(input: ModelStream): Promise<string> {
             const current = target;
             const agent = new class extends Agent {
                 async connect(request: http.ClientRequest): Promise<http.Agent> {
-                    const globalAgent = current.protocol === 'https:' ? https.globalAgent : http.globalAgent;
-                    if (globalAgent instanceof ProxyAgent && await globalAgent.getProxyForUrl(current.href, request)) {
-                        throw new Error('Model request through an unverified proxy is not permitted');
+                    const secure = current.protocol === 'https:';
+                    let directAgent = secure ? https.globalAgent : http.globalAgent;
+                    if (directAgent instanceof ProxyAgent) {
+                        if (await directAgent.getProxyForUrl(current.href, request)) {
+                            throw new Error('Model request through an unverified proxy is not permitted');
+                        }
+                        directAgent = secure ? directAgent.httpsAgent : directAgent.httpAgent;
                     }
-                    return current.protocol === 'https:' ? httpsAgent : httpAgent;
+                    if (directAgent instanceof PrivateRequestAgent) return directAgent;
+                    return secure ? httpsAgent : httpAgent;
                 }
             }();
             const headers: Record<string, string> = { 'content-type': 'application/json' };

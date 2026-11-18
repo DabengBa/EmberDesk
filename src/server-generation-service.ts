@@ -14,7 +14,7 @@ type RunRow = {
     id: string; chatId: string; requestId: string; kind: Kind; status: Status; version: string;
     error: string | null; createdAtMs: number; finishedAtMs: number | null;
 };
-export type GenerationRun = Readonly<RunRow>;
+export type GenerationRun = Readonly<RunRow & { temporary?: true; user?: object; assistant?: object }>;
 export type BrowserGenerationStep = { id: string; name: string; args: object; actionBody: string };
 export type PipelineInvocation = {
     id: string; name: string; displayName: string; parameters: string; result: string; error: boolean;
@@ -52,7 +52,7 @@ export type CreateGeneration<T> = {
     | { kind: 'regenerate' | 'continue'; version: string }
 );
 export type ExecuteGeneration<T> = (input: {
-    run: GenerationRun; chat: GenerationChat; prompt: T; signal: AbortSignal; emit: (text: string, reset?: boolean) => void;
+    run: GenerationRun; chat: Pick<GenerationChat, 'kind' | 'original'>; prompt: T; signal: AbortSignal; emit: (text: string, reset?: boolean) => void;
     waitForStep: (step: Omit<BrowserGenerationStep, 'id'>) => Promise<string>;
     emitInvocation: (invocation: PipelineInvocation) => void;
 }) => Promise<object>;
@@ -114,6 +114,21 @@ export function getRegenerateChatPrefix(payload: readonly object[]) {
 
 /** One instance per server process, using DB handles from the authenticated user's canonical manager. */
 export function createServerGenerationService<T>({ execute }: { execute: ExecuteGeneration<T> }) {
+    const temporary = new Map<string, { database: Live['database']; run: GenerationRun }>();
+
+    function temporaryFor(db: DatabaseSync, id: string) {
+        const entry = temporary.get(id);
+        return entry?.database === generationDatabaseIdentity(db) ? entry : undefined;
+    }
+
+    function finishTemporary(id: string, status: 'completed' | 'failed' | 'cancelled', error: string | null = null, assistant?: object) {
+        const entry = temporary.get(id)!;
+        if (entry.run.status !== 'running') return entry.run;
+        entry.run = { ...entry.run, status, error, assistant, finishedAtMs: Date.now() };
+        setTimeout(() => temporary.delete(id), 60_000).unref();
+        notifyTerminal(entry.run);
+        return entry.run;
+    }
     function recoverInTransaction(db: DatabaseSync) {
         for (const row of db.prepare("SELECT id FROM chat_generation_runs WHERE status = 'running'").all()) {
             const id = String(row.id);
@@ -122,6 +137,8 @@ export function createServerGenerationService<T>({ execute }: { execute: Execute
     }
 
     function query(db: DatabaseSync, id: string): GenerationRun | null {
+        const scratch = temporaryFor(db, id);
+        if (scratch) return scratch.run;
         return withCanonicalTransaction(db, txn => {
             recoverInTransaction(txn);
             return getRun(txn, id);
@@ -160,6 +177,7 @@ export function createServerGenerationService<T>({ execute }: { execute: Execute
     }
 
     function cancel(db: DatabaseSync, id: string): GenerationRun | null {
+        if (temporaryFor(db, id)) return finishTemporary(id, 'cancelled');
         const result = withCanonicalTransaction(db, txn => {
             recoverInTransaction(txn);
             const changed = transition(txn, id, 'cancelled');
@@ -274,9 +292,30 @@ export function createServerGenerationService<T>({ execute }: { execute: Execute
         });
         if (!created.chat) return created.run;
         const { run, chat, prompt, finish } = created;
-        const live: Live = { database: generationDatabaseIdentity(db), untrack: trackLiveChatGeneration(db, run.id), controller: new AbortController(), text: '', sequence: 0, pending: [], delivering: false, listeners: new Map() };
-        active.set(run.id, live);
+        const untrack = trackLiveChatGeneration(db, run.id);
         if (finish) finishProjection(finish);
+        launch(db, run, chat, prompt, untrack,
+            assistant => complete(db, run.id, chat, assistant, projection), error => fail(db, run.id, error));
+        return run;
+    }
+
+    function createTemporary(db: DatabaseSync, requestId: string, kind: Kind, original: object | null, prompt: T, user?: object) {
+        const database = generationDatabaseIdentity(db);
+        const replay = [...temporary.values()].find(entry => entry.database === database && entry.run.requestId === requestId);
+        if (replay) return replay.run;
+        const id = randomUUID();
+        const run: GenerationRun = { id, requestId, kind, status: 'running', temporary: true, user,
+            chatId: '', version: '', error: null, createdAtMs: Date.now(), finishedAtMs: null };
+        temporary.set(id, { database, run });
+        launch(db, run, { kind, original }, prompt, () => {},
+            assistant => finishTemporary(id, 'completed', null, assistant), error => finishTemporary(id, 'failed', error));
+        return run;
+    }
+
+    function launch(db: DatabaseSync, run: GenerationRun, chat: Parameters<ExecuteGeneration<T>>[0]['chat'], prompt: T,
+        untrack: () => void, onComplete: (assistant: object) => void, onFailed: (error: string) => void) {
+        const live: Live = { database: generationDatabaseIdentity(db), untrack, controller: new AbortController(), text: '', sequence: 0, pending: [], delivering: false, listeners: new Map() };
+        active.set(run.id, live);
         const emit = (text: string, reset = false) => {
             if (active.get(run.id) !== live || (!text && !reset)) return;
             live.text = reset ? text : live.text + text;
@@ -305,13 +344,14 @@ export function createServerGenerationService<T>({ execute }: { execute: Execute
                         }
                     } });
             } catch (error) {
-                fail(db, run.id, error instanceof ServerGenerationExecutionError ? error.code : 'generation_failed');
+                if (active.get(run.id) === live) onFailed(error instanceof ServerGenerationExecutionError ? error.code : 'generation_failed');
                 return;
             }
+            if (active.get(run.id) !== live) return;
             try {
-                complete(db, run.id, chat, assistant, projection);
+                onComplete(assistant);
             } catch {
-                fail(db, run.id, 'chat_commit_failed');
+                onFailed('chat_commit_failed');
             }
         }
         void Promise.resolve().then(start).catch(() => {
@@ -320,8 +360,7 @@ export function createServerGenerationService<T>({ execute }: { execute: Execute
             live.untrack();
             console.error('Could not persist generation terminal state:', run.id);
         });
-        return run;
     }
 
-    return { create, query, find, subscribe, cancel, submitStep, getStep: (db: DatabaseSync, id: string) => pendingStep(db, id)?.message };
+    return { create, createTemporary, query, find, subscribe, cancel, submitStep, getStep: (db: DatabaseSync, id: string) => pendingStep(db, id)?.message };
 }

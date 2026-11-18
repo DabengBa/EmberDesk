@@ -183,7 +183,7 @@ export async function unhideChatMessage(messageId, _messageBlock) {
  * @param {ChatMessage} message Message object
  * @returns {Promise<void>} A promise that resolves when file is uploaded.
  */
-export async function populateFileAttachment(message, inputId = 'file_form_input', { isCurrent = () => true, reset = true } = {}) {
+export async function populateFileAttachment(message, inputId = 'file_form_input', { isCurrent = () => true, reset = true, stageFile = undefined } = {}) {
     const fileInput = document.getElementById(inputId);
     const files = fileInput instanceof HTMLInputElement ? Array.from(fileInput.files ?? []) : [];
     const characterName = name2;
@@ -202,7 +202,8 @@ export async function populateFileAttachment(message, inputId = 'file_form_input
 
             const mediaType = MEDIA_TYPE.getFromMime(file.type);
             if (mediaType) {
-                const imageUrl = await saveBase64AsFile(base64Data, characterName, fileNamePrefix, extension);
+                const imageUrl = stageFile ? stageFile({ base64: base64Data, name: file.name, type: mediaType, extension })
+                    : await saveBase64AsFile(base64Data, characterName, fileNamePrefix, extension);
                 if (!isCurrent()) return;
                 if (!Array.isArray(message.extra.media)) {
                     message.extra.media = [];
@@ -232,7 +233,8 @@ export async function populateFileAttachment(message, inputId = 'file_form_input
                 }
 
                 if (!isCurrent()) return;
-                const fileUrl = await uploadFileAttachment(uniqueFileName, base64Data);
+                const fileUrl = stageFile ? stageFile({ base64: base64Data, name: file.name })
+                    : await uploadFileAttachment(uniqueFileName, base64Data);
                 if (!isCurrent()) return;
 
                 if (!fileUrl) {
