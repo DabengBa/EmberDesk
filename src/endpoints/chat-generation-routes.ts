@@ -116,7 +116,7 @@ const service = createServerGenerationService<GenerationPrompt>({
             const prepared = await prepareServerGeneration(snapshot, command, runtime);
             const { messages, connection } = prepared.prompt;
             const apiKey = readSecret(prompt.directories, SECRET_KEYS.OPENAI) || undefined;
-            const pipeline = prepared.pipeline ? await runServerPipeline({ prepared, snapshot, command, runtime, apiKey, ...ports }) : null;
+            const pipeline = prepared.pipeline ? await runServerPipeline({ prepared, snapshot, runtime, apiKey, ...ports }) : null;
             const text = pipeline?.text ?? await streamServerModel({ ...connection, messages, maxTokens: connection.responseTokens, apiKey, signal: ports.signal, emit: ports.emit });
             if (!text.trim()) throw new Error('Model returned an empty reply');
             const original = record(chat.original);

@@ -522,10 +522,10 @@ function renderSummaryWrap(template, { summary, turnIndex, name1 = '', name2 = '
  * the assembly copy — canonical chat items are never touched.
  * @param {object[]} coreChat Assembly-stage items (post system-record filter)
  * @param {object[]} activeSummaries Records with status ACTIVE
- * @param {{role: string, wrap: string, name1: string, name2: string}} options
+ * @param {{role: string, wrap: string, name1: string, name2: string, includeTurns?: boolean}} options
  * @returns {{items: object[], summarized: object[]}}
  */
-function applySummariesToCoreChat(coreChat, activeSummaries, { role = 'system', wrap = '', name1 = '', name2 = '' } = {}) {
+function applySummariesToCoreChat(coreChat, activeSummaries, { role = 'system', wrap = '', name1 = '', name2 = '', includeTurns = false } = {}) {
     const items = Array.isArray(coreChat) ? coreChat : [];
     if (!items.length || !Array.isArray(activeSummaries) || !activeSummaries.length) {
         return { items, summarized: [] };
@@ -613,6 +613,10 @@ function applySummariesToCoreChat(coreChat, activeSummaries, { role = 'system', 
             turnIndex: turnIndices[0],
             turnIndices,
             coveredIds,
+            ...(includeTurns ? { turns: members.map(({ summary }) => ({
+                key: summary.turnKey ?? summary.id,
+                text: renderSummaryWrap(wrap, { summary: String(summary.text ?? ''), turnIndex: summary.turnIndex ?? 0, name1, name2 }),
+            })) } : {}),
         };
         next.push({
             name: roleName,
