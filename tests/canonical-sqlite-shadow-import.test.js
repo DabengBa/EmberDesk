@@ -5,6 +5,7 @@ import path from 'node:path';
 import { afterEach, describe, expect, jest, test } from '@jest/globals';
 
 import { createCanonicalSqliteManager } from '../src/canonical-sqlite.ts';
+import { runCanonicalChatShadowImport } from '../src/canonical-chat-shadow-import.ts';
 import {
     CANONICAL_SQLITE_MIGRATIONS,
     runCanonicalMigrations,
@@ -142,6 +143,20 @@ describe('canonical sqlite shadow import', () => {
 
         const alphaStatBefore = fs.statSync(path.join(directories.characters, 'alpha.png')).mtimeMs;
 
+        const db = manager.open({
+            handle: 'alice',
+            directories,
+            featureFlags: { enabled: true, strict: false },
+        });
+        await runCanonicalChatShadowImport({
+            handle: 'alice',
+            directories,
+            db,
+            featureFlags: { enabled: true, shadowImport: true, strict: false },
+            nowMs: 1735689600000,
+        });
+        writeChatFile(directories, 'alpha.png', 'unimported.jsonl', '{"mes":"not canonical"}\n');
+
         const first = await runCanonicalShadowImport({
             handle: 'alice',
             directories,
@@ -149,12 +164,6 @@ describe('canonical sqlite shadow import', () => {
             manager,
             buildSnapshotRow,
             nowMs: 1735689600000,
-        });
-
-        const db = manager.open({
-            handle: 'alice',
-            directories,
-            featureFlags: { enabled: true, strict: false },
         });
 
         expect(first).toEqual(expect.objectContaining({
@@ -268,6 +277,19 @@ describe('canonical sqlite shadow import', () => {
         fs.mkdirSync(path.join(directories.chats, 'my.character.png'), { recursive: true });
         fs.writeFileSync(path.join(directories.chats, 'my.character.png', 'odd.jsonl'), '{"mes":"edge"}\n', 'utf8');
 
+        const db = manager.open({
+            handle: 'alice',
+            directories,
+            featureFlags: { enabled: true, strict: false },
+        });
+        await runCanonicalChatShadowImport({
+            handle: 'alice',
+            directories,
+            db,
+            featureFlags: { enabled: true, shadowImport: true, strict: false },
+            nowMs: 1735689600000,
+        });
+
         const result = await runCanonicalShadowImport({
             handle: 'alice',
             directories,
@@ -275,12 +297,6 @@ describe('canonical sqlite shadow import', () => {
             manager,
             buildSnapshotRow,
             nowMs: 1735689600000,
-        });
-
-        const db = manager.open({
-            handle: 'alice',
-            directories,
-            featureFlags: { enabled: true, strict: false },
         });
 
         expect(result).toEqual(expect.objectContaining({

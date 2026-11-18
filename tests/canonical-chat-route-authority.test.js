@@ -251,7 +251,7 @@ describe('canonical chat route authority', () => {
         ]);
     });
 
-    test('commits /save to canonical rows before projecting the JSONL compatibility file', async () => {
+    test('commits /save to canonical rows without changing the JSONL file despite legacy YAML sync', async () => {
         const root = fs.mkdtempSync(path.join(os.tmpdir(), 'emberdesk-canonical-chat-route-'));
         roots.push(root);
         const directories = {
@@ -314,7 +314,7 @@ describe('canonical chat route authority', () => {
         `).get()).toEqual({
             header_payload_json: JSON.stringify(nextPayload[0]),
         });
-        expect(fs.readFileSync(chatPath, 'utf8')).toBe(nextPayload.map(line => JSON.stringify(line)).join('\n'));
+        expect(fs.readFileSync(chatPath, 'utf8')).toBe(initialPayload.map(line => JSON.stringify(line)).join('\n'));
     });
 
     test('rejects /save when the canonical chats slice is frozen', async () => {
@@ -640,7 +640,7 @@ describe('chats projection off', () => {
         }
     });
 
-    test('canonical /rename projects current authority rather than stale file contents', async () => {
+    test('canonical /rename preserves authority without creating a projection despite legacy sync', async () => {
         process.env[PROJECTION_ENV] = 'sync';
         try {
             const directories = makeDirectories();
@@ -652,7 +652,13 @@ describe('chats projection off', () => {
                 user: { directories, profile: { handle: 'alice' } },
             }, response);
             expect(response.statusCode).toBe(200);
-            expect(fs.readFileSync(path.join(directories.chats, 'alice', 'renamed.jsonl'), 'utf8')).toContain('authority');
+            expect(fs.existsSync(path.join(directories.chats, 'alice', 'renamed.jsonl'))).toBe(false);
+            const readResponse = makeResponse();
+            await getRouteHandler('/get')({
+                body: { avatar_url: 'alice.png', file_name: 'renamed' },
+                user: { directories, profile: { handle: 'alice' } },
+            }, readResponse);
+            expect(readResponse.body).toContainEqual({ name: 'User', mes: 'authority' });
         } finally {
             delete process.env[PROJECTION_ENV];
         }

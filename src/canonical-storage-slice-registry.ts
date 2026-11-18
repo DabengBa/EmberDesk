@@ -131,8 +131,7 @@ function createSliceFlagCapabilities({
     flagKey,
     supportsChatStats = false,
     fallbackToGlobal = true,
-    defaultProjection = 'sync',
-}: { flagKey: string; supportsChatStats?: boolean; fallbackToGlobal?: boolean; defaultProjection?: 'sync' | 'off' }) {
+}: { flagKey: string; supportsChatStats?: boolean; fallbackToGlobal?: boolean }) {
     const getFeatureFlagSnapshot = (overrides: FlagOverrides = null) => getCanonicalStorageSliceFeatureFlagSnapshot({
         flagKey,
         supportsChatStats,
@@ -145,9 +144,7 @@ function createSliceFlagCapabilities({
         getFeatureFlags(overrides: FlagOverrides = null) {
             return getFeatureFlagSnapshot(overrides).featureFlags;
         },
-        getProjectionMode() {
-            return getCanonicalSliceProjectionMode(flagKey, defaultProjection);
-        },
+        getProjectionMode: getCanonicalSliceProjectionMode,
         getAuditTrackingFeatureFlags() {
             const featureFlags = getFeatureFlagSnapshot().featureFlags;
             return featureFlags.enabled || !fallbackToGlobal
@@ -161,7 +158,7 @@ function createCharacterSlice() {
     const flags = createSliceFlagCapabilities({
         flagKey: 'characters',
         supportsChatStats: true,
-        defaultProjection: 'off',
+
     });
     return {
         key: 'characters',
@@ -201,7 +198,7 @@ function createCharacterSlice() {
 }
 
 function createWorldInfoSlice() {
-    const flags = createSliceFlagCapabilities({ flagKey: 'worldInfo', defaultProjection: 'off' });
+    const flags = createSliceFlagCapabilities({ flagKey: 'worldInfo' });
     return {
         key: 'world_info',
         ...flags,
@@ -241,28 +238,12 @@ function createWorldInfoSlice() {
     };
 }
 
-let warnedDeprecatedSettingsProjection = false;
-
-export function resetDeprecatedSettingsProjectionWarningForTests() {
-    warnedDeprecatedSettingsProjection = false;
-}
-
 function createSettingsSlice() {
-    const flags = createSliceFlagCapabilities({ flagKey: 'settings', defaultProjection: 'off' });
+    const flags = createSliceFlagCapabilities({ flagKey: 'settings' });
     return {
         key: 'settings',
         ...flags,
-        getProjectionMode() {
-            const configured = getCanonicalSliceProjectionMode('settings', 'off');
-            if (configured !== 'off' && !warnedDeprecatedSettingsProjection) {
-                warnedDeprecatedSettingsProjection = true;
-                console.warn(
-                    'Ignoring features.storage.canonicalSqlite.slices.settings.projection:',
-                    'the settings compatibility projection was removed and canonical SQLite is authoritative.',
-                );
-            }
-            return 'off';
-        },
+
         auditScope: SETTINGS_AUDIT_SCOPE,
         listOpenRepairs(db: DatabaseSync) {
             return listOpenSettingsProjectionRepairs(db);
@@ -297,28 +278,12 @@ function createSettingsSlice() {
     };
 }
 
-let warnedDeprecatedPresetsProjection = false;
-
-export function resetDeprecatedPresetsProjectionWarningForTests() {
-    warnedDeprecatedPresetsProjection = false;
-}
-
 function createPresetsSlice() {
-    const flags = createSliceFlagCapabilities({ flagKey: 'presets', defaultProjection: 'off' });
+    const flags = createSliceFlagCapabilities({ flagKey: 'presets' });
     return {
         key: 'presets',
         ...flags,
-        getProjectionMode() {
-            const configured = getCanonicalSliceProjectionMode('presets', 'off');
-            if (configured !== 'off' && !warnedDeprecatedPresetsProjection) {
-                warnedDeprecatedPresetsProjection = true;
-                console.warn(
-                    'Ignoring features.storage.canonicalSqlite.slices.presets.projection:',
-                    'presets never had a file projection; canonical SQLite is authoritative.',
-                );
-            }
-            return 'off';
-        },
+
         auditScope: PRESETS_AUDIT_SCOPE,
         // Presets never had a projection era: no repair table, nothing open.
         listOpenRepairs() {
@@ -354,7 +319,7 @@ function createPresetsSlice() {
 }
 
 function createSecretsSlice() {
-    const flags = createSliceFlagCapabilities({ flagKey: 'secrets', defaultProjection: 'off' });
+    const flags = createSliceFlagCapabilities({ flagKey: 'secrets' });
     return {
         key: 'secrets',
         ...flags,
@@ -395,7 +360,7 @@ function createSecretsSlice() {
 function createManagedMediaSlice() {
     const flags = createSliceFlagCapabilities({
         flagKey: 'managedMedia',
-        defaultProjection: 'off',
+
     });
     return {
         key: 'managed_media',
@@ -439,7 +404,7 @@ function createManagedMediaSlice() {
 }
 
 function createChatsSlice() {
-    const flags = createSliceFlagCapabilities({ flagKey: 'chats', defaultProjection: 'off' });
+    const flags = createSliceFlagCapabilities({ flagKey: 'chats' });
     return {
         key: 'chats',
         ...flags,

@@ -90,7 +90,7 @@ test.each([false, true])('native Node preserves config and account behavior (acc
                 const uploads = path.join(globalThis.DATA_ROOT, constants.UPLOADS_DIRECTORY);
                 fs.mkdirSync(uploads, { recursive: true });
                 fs.writeFileSync(path.join(uploads, 'temporary-file'), 'temporary');
-                directories.cleanUploads();
+                directories.cleanUploads(list);
                 assert.deepEqual(fs.readdirSync(uploads), []);
                 assert.ok(fs.existsSync(aliceDirectories.storage));
                 getConfig().cookieSecret = 'legacy-cookie-secret';

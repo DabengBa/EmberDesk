@@ -177,6 +177,7 @@ const CASE_TIMEOUT_MS = 20000;
 describe('chat memory persistence', () => {
     test('round-trips chat_metadata.chat_memory through /save and /get', async () => {
         const { directories, chatPath } = await createSeededUser();
+        const originalJsonl = fs.readFileSync(chatPath);
         const chatMemory = makeChatMemoryMetadata();
         const payload = [
             { chat_metadata: { integrity: 'clean', chat_memory: chatMemory } },
@@ -187,8 +188,7 @@ describe('chat memory persistence', () => {
         const saveResponse = await saveExistingChat(directories, payload);
         expect(saveResponse.statusCode).toBe(200);
         expect(saveResponse.body).toEqual({ ok: true, version: expect.any(String) });
-        expect(JSON.parse(fs.readFileSync(chatPath, 'utf8').split('\n')[0]).chat_metadata.chat_memory)
-            .toEqual(chatMemory);
+        expect(fs.readFileSync(chatPath)).toEqual(originalJsonl);
 
         const getResponse = await callRoute('/get', {
             body: { avatar_url: 'alice.png', file_name: 'memory' },

@@ -5355,6 +5355,7 @@ async function beforeClearRecovery() {
         toastr.error('The recovery draft could not be saved. The current chat has not been cleared.', 'Recovery storage error', { timeOut: 0 });
         throw error;
     }
+    workspaceGeneration.leaveTemporary();
 }
 
 async function beginChatRecovery(identity) {
@@ -6326,9 +6327,9 @@ function getWorkspaceGenerationTarget({ preview = false } = {}) {
         : getCurrentChatGenerationTarget();
 }
 
-async function workspaceGenerationRequest(route, body) {
+async function workspaceGenerationRequest(route, body, { keepalive = false } = {}) {
     const response = await fetch(`/api/chats/generation${route}`, {
-        method: body === undefined ? 'GET' : 'POST', headers: getRequestHeaders(), body: JSON.stringify(body),
+        method: body === undefined ? 'GET' : 'POST', headers: getRequestHeaders(), body: JSON.stringify(body), keepalive,
     });
     if (response.status === 204) return;
     const result = await response.json();
@@ -6358,6 +6359,9 @@ const workspaceGeneration = createWorkspaceGeneration({
         const result = await createToolAction(actionBody)(args);
         return typeof result === 'string' ? result : JSON.stringify(result) ?? '';
     },
+    stepFailed(error) {
+        toastr.error(error.message);
+    },
     finished(run, { discovered = false, reconciledChatVersion } = {}) {
         if (run.temporary) {
             if (run.user) chat.push(run.user);
@@ -6383,6 +6387,7 @@ const workspaceGeneration = createWorkspaceGeneration({
 });
 
 eventSource.on(event_types.CHAT_CHANGED, () => workspaceGeneration.close());
+window.addEventListener('pagehide', () => workspaceGeneration.leaveTemporary());
 eventSource.on(event_types.CHAT_LOADED, event => {
     if (usesWorkspaceGeneration()) {
         void workspaceGeneration.select(getCurrentChatGenerationTarget(), event?.detail?.reconciledChatVersion).catch(error => toastr.error(error.message));
@@ -6443,7 +6448,8 @@ async function startWorkspaceGeneration(action, text) {
         if (!isCurrent()) return false;
         await flushWorkspaceGenerationSettings();
         if (!isCurrent() || workspaceGeneration.busy()) return false;
-        await workspaceGeneration.create(target, { action, text, attachments, ...worldRuntime, requestId: crypto.randomUUID(), locale: readStoredUiLocale() });
+        const run = await workspaceGeneration.create(target, { action, text, attachments, ...worldRuntime, requestId: crypto.randomUUID(), locale: readStoredUiLocale() });
+        if (target.temporary && !run) return false;
         clearFiles?.();
         for (const [key, entry] of activations) {
             if (WorldInfoBuffer.externalActivations.get(key) === entry) WorldInfoBuffer.externalActivations.delete(key);
@@ -8745,6 +8751,9 @@ async function importCharacter(file, { preserveFileName = '', importTags = false
                 toastr.warning(t`The CharX auxiliary media import could not be confirmed.`, t`Character import`);
             } else if (auxiliaryMedia?.skipped || auxiliaryMedia?.failed) {
                 toastr.warning(t`CharX auxiliary media: ${auxiliaryMedia.imported} imported, ${auxiliaryMedia.skipped} skipped, ${auxiliaryMedia.failed} failed.`, t`Character import`);
+            }
+            if (data.report?.scenarios?.conflicts > 0) {
+                toastr.warning(t`BYAF: ${data.report.scenarios.conflicts} chat scenario(s) skipped due to a conflict. Existing chats were kept.`, t`Character import`);
             }
             if (importTags) {
                 await importCharactersTags([avatarFileName]);

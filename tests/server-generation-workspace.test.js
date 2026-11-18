@@ -33,6 +33,7 @@ test('a reattached workspace retries the result without rerunning the browser st
     const step = { id: 'pending-step', name: 'custom', args: { content: 'input' }, actionBody: 'return args.content;' };
     const listeners = [];
     const submitted = [];
+    const feedback = [];
     let executions = 0;
     const workspace = createWorkspaceGeneration({
         async request(route, body) {
@@ -43,7 +44,7 @@ test('a reattached workspace retries the result without rerunning the browser st
         },
         subscribe(_id, listener) { listeners.push(listener); return () => {}; },
         async executeStep() { executions++; return 'browser'; },
-        changed() {}, finished() {},
+        changed() {}, finished() {}, stepFailed: error => feedback.push(error),
     });
     await workspace.select({ file_name: 'one' });
     listeners[0]({ type: 'step', step });
@@ -54,38 +55,91 @@ test('a reattached workspace retries the result without rerunning the browser st
     await new Promise(setImmediate);
     expect(executions).toBe(1);
     expect(submitted).toEqual([{ stepId: step.id, result: 'browser' }, { stepId: step.id, result: 'browser' }]);
+    expect(feedback).toEqual([]);
 });
 
-test('leaving a temporary chat cancels its run even if creation is still in flight', async () => {
-    const requests = [];
-    let resolveCreate;
-    const creating = new Promise(resolve => { resolveCreate = resolve; });
+test.each(['creating', 'running'])('intentional exit cancels a %s temporary run by request ID and ignores late results', async state => {
+    const creation = Promise.withResolvers();
+    const run = { id: 'temporary-run', temporary: true, status: 'running' };
+    const cancellations = [];
+    const listeners = [];
+    const finished = [];
     const workspace = createWorkspaceGeneration({
-        async request(route) { requests.push(route); if (route === '/create') return creating; },
-        subscribe() { throw new Error('A closed view must not subscribe'); },
-        changed() {}, finished() {},
+        async request(route, body, options) {
+            if (route === '/create') return creation.promise;
+            cancellations.push([route, body, options]);
+        },
+        subscribe(_id, listener) { listeners.push(listener); return () => {}; },
+        changed() {}, finished: result => finished.push(result),
     });
-    const operation = workspace.create({ temporary: true }, { text: 'hello' });
+    const creating = workspace.create({ temporary: true }, { requestId: 'temporary-request', text: 'question' });
+    if (state === 'running') { creation.resolve(run); await creating; }
     workspace.close();
-    resolveCreate({ id: 'temporary', temporary: true, status: 'running' });
-    await operation;
-    expect(requests).toEqual(['/create', '/temporary/cancel']);
+    creation.resolve(run);
+    await creating;
+    listeners[0]?.({ type: 'terminal', run: { ...run, status: 'completed' } });
+    expect(cancellations).toEqual([['/cancel', { temporary: true, requestId: 'temporary-request' }, { keepalive: true }]]);
     expect(workspace.busy()).toBe(false);
+    expect(listeners).toHaveLength(state === 'running' ? 1 : 0);
+    expect(finished).toEqual([]);
 });
+
+test.each(['execution', 'submission'])('temporary browser step %s failure reports once and cancels', async stage => {
+    const run = { id: 'temporary-run', temporary: true, status: 'running' };
+    const step = { id: 'temporary-step' };
+    const error = new Error('browser step failed');
+    const requests = [];
+    const feedback = [];
+    let online = false;
+    let listener;
+    const workspace = createWorkspaceGeneration({
+        async request(route) {
+            requests.push(route);
+            if (route === '/create') return run;
+            if (route === '/temporary-run') {
+                if (!online) throw new Error('disconnected before the step could be validated');
+                return { ...run, step };
+            }
+            if (route.endsWith('/step')) throw error;
+        },
+        subscribe(_id, callback) { listener = callback; return () => {}; },
+        changed() {}, finished() {}, stepFailed: value => feedback.push(value),
+        async executeStep() {
+            if (stage === 'execution') throw error;
+            return 'result';
+        },
+    });
+    await workspace.create({ temporary: true }, { requestId: 'temporary-request' });
+    listener({ type: 'step', step });
+    await new Promise(setImmediate);
+    expect(feedback).toEqual([]);
+    expect(requests).toEqual(['/create', '/temporary-run']);
+    online = true;
+    listener({ type: 'step', step });
+    listener({ type: 'snapshot', run, step });
+    await new Promise(setImmediate);
+    expect(feedback).toEqual([error]);
+    expect(requests.filter(route => route === '/temporary-run/cancel')).toHaveLength(1);
+});
+
 
 test('a permanently disconnected temporary stream releases the workspace', async () => {
     const run = { id: 'temporary', temporary: true, status: 'running' };
     let deliver;
     let detached = false;
     const terminal = [];
+    const requests = [];
     const workspace = createWorkspaceGeneration({
-        async request() { return run; },
+        async request(route) { requests.push(route); return run; },
         subscribe(_id, listener) { deliver = listener; return () => { detached = true; }; },
         changed() {}, finished(result) { terminal.push(result); },
     });
-    await workspace.create({ temporary: true }, { text: 'hello' });
+    await workspace.create({ temporary: true }, { text: 'hello', requestId: 'temporary-request' });
     deliver({ type: 'disconnected' });
     expect(workspace.busy()).toBe(false);
     expect(detached).toBe(true);
     expect(terminal).toEqual([{ ...run, status: 'interrupted' }]);
+    expect(requests).toEqual(['/create']);
+    workspace.close();
+    expect(requests).toEqual(['/create', '/cancel']);
 });

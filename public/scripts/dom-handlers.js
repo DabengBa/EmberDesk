@@ -618,6 +618,9 @@ export async function bindLegacyShellHandlers() {
                 const body = { avatar_url: state.characters[state.this_chid]?.avatar, file: `${filename}.jsonl`, exportfilename: `${filename}.${format}`, format };
                 console.log(body);
                 const response = await fetch('/api/chats/export', { method: 'POST', body: JSON.stringify(body), headers: getRequestHeaders() });
+                if (response.ok && format === 'zip') {
+                    return { ok: true, data: { message: t`Chat archive exported.`, result: await response.blob() } };
+                }
                 return { ok: response.ok, data: await response.json() };
             },
             wait: () => delay(250),
@@ -972,7 +975,7 @@ export async function bindLegacyShellHandlers() {
         }
 
         await shell().getHistoryImportCommand()(targetElement.files, {
-            invalid: () => toastr.warning(t`Only JSON and JSONL files are supported for chat imports.`),
+            invalid: () => toastr.warning(t`Only JSON, JSONL, and chat ZIP files are supported for chat imports.`),
             importFile: (file, format) => {
                 const formData = new FormData(formElement);
                 formData.set('file_type', format);

@@ -110,7 +110,7 @@ export function SelectChatPopup({ controller, onSearch, onClose, onNewChat, onIm
             <div name="selectChatPopupHeader" className="flex-container alignitemscenter justifySpaceBetween flexGap10">
                 <div id="select_chat_import"> {/* import chat popup header */}
                     <form id="form_import_chat" method="post" encType="multipart/form-data" style={{ display: 'none' }} onSubmit={(event) => event.preventDefault()}>
-                        <input type="file" id="chat_import_file" accept=".json, .jsonl" multiple name="avatar" ref={importInput} onChange={event => onImportFile(event.currentTarget)} />
+                        <input type="file" id="chat_import_file" accept=".json, .jsonl, .zip" multiple name="avatar" ref={importInput} onChange={event => onImportFile(event.currentTarget)} />
                         <input id="chat_import_file_type" name="file_type" className="text_pole" defaultValue="" autoComplete="off" style={{ display: 'none' }} />
                         <input id="chat_import_avatar_url" name="avatar_url" className="text_pole" defaultValue="" autoComplete="off" style={{ display: 'none' }} />
                         <input id="chat_import_character_name" name="character_name" className="text_pole" defaultValue="" autoComplete="off" style={{ display: 'none' }} />

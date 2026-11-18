@@ -1,13 +1,13 @@
 import { extractFinalStepText, formatPipelineTagMarkup, normalizeReplyPipeline, pipelineModelRemovesTools } from '../public/scripts/reply-pipeline-core.js';
 import { DEFAULT_PIPELINE_ACTION, normalizeToolBindings } from '../public/scripts/tool-bindings-core.js';
 import { buildGenerationLifecycleAttempts, getFallbackOpenAIModel, isRecoverableGenerationFailure } from '../app/lib/generation/shared-state.ts';
-import { assembleServerPipelineTail, assembleServerPrompt, type ServerPromptCommand, type ServerPromptRuntime, type ServerPromptSnapshot } from './server-prompt.ts';
+import { assembleServerPipelineTail, assembleServerPrompt, isTemporaryRegenerate, type ServerPromptCommand, type ServerPromptRuntime, type ServerPromptSnapshot } from './server-prompt.ts';
 import { record, ServerPromptError } from './server-prompt/snapshot.ts';
 import { streamServerModel, type ModelToolCall } from './server-generation-model-transport.ts';
 import type { ExecuteGeneration, PipelineInvocation } from './server-generation-service.ts';
 
 function pipelineFor(snapshot: ServerPromptSnapshot, command: ServerPromptCommand) {
-    if (command.action !== 'send') return null;
+    if (command.action !== 'send' && !isTemporaryRegenerate(command)) return null;
     const settings = record(snapshot.settings.oai_settings);
     const pipeline = normalizeReplyPipeline(settings.reply_pipeline);
     if (!pipeline.enabled) return null;
@@ -41,7 +41,7 @@ export async function previewServerGeneration(snapshot: ServerPromptSnapshot, co
     const active = round === 0 ? { ...prompt, tools: prompt.pipeline.tools, promptTokens: prompt.budget.promptTokens }
         : await assembleServerPipelineTail(snapshot,
             { ...runtime, pipeline: step ? { step, steps: pipeline.steps, index: round, total, currentInput: prompt.pipeline.currentInput } : { fallback: true, steps: pipeline.steps } },
-            prompt.messages, prompt.pipeline.mediaCosts, messageCallIds(prompt.messages), command.pendingUserText);
+            prompt.messages, prompt.pipeline.mediaCosts, messageCallIds(prompt.messages), command);
     const rounds = pipeline.steps.map(({ id, tool, display }, index) => ({ index, id, tool, display }));
     const { contextTokens, responseTokens } = active.connection;
     return { messages: active.messages, connection: active.connection, budget: { contextTokens, responseTokens,
@@ -86,13 +86,14 @@ export async function runServerPipeline({ prepared, snapshot, runtime, apiKey, r
     const { pipeline, prompt } = prepared;
     if (!pipeline || !prompt.pipeline) throw new Error('Missing pipeline plan');
     const fallbackModel = getFallbackOpenAIModel(record(snapshot.settings.oai_settings));
+    const command = { action: run.kind, temporary: run.temporary };
     const transcript: object[] = [...prompt.pipeline.baseMessages];
     const callIds = messageCallIds(prompt.pipeline.baseMessages);
     const invocations: PipelineInvocation[] = [];
     for (const [index, step] of pipeline.steps.entries()) {
         const round = index === 0 ? { connection: prompt.connection, ...prompt.pipeline } : await assembleServerPipelineTail(snapshot,
             { ...runtime, pipeline: { step, steps: pipeline.steps, index, total: pipeline.steps.length, currentInput: prompt.pipeline.currentInput } },
-            transcript, prompt.pipeline.mediaCosts, callIds);
+            transcript, prompt.pipeline.mediaCosts, callIds, command);
         transcript.push(...round.tail);
         for (const message of round.tail) {
             if ('tool_calls' in message) for (const call of message.tool_calls) callIds.add(call.id);
@@ -129,7 +130,7 @@ export async function runServerPipeline({ prepared, snapshot, runtime, apiKey, r
         const last = invocations.at(-1)!;
         invocations[invocations.length - 1] = { ...last, pipeline: { ...last.pipeline, display: 'summary' } };
         const { connection, messages, tools } = await assembleServerPipelineTail(snapshot,
-            { ...runtime, pipeline: { fallback: true, steps: pipeline.steps } }, transcript, prompt.pipeline.mediaCosts, callIds);
+            { ...runtime, pipeline: { fallback: true, steps: pipeline.steps } }, transcript, prompt.pipeline.mediaCosts, callIds, command);
         ({ text: reply } = await runPipelineRound({ ...connection, messages,
             maxTokens: connection.responseTokens, apiKey, signal, emit, tools, toolChoice: 'none' }, fallbackModel, () => emit('', true)));
     } else {

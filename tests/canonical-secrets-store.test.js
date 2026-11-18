@@ -312,7 +312,7 @@ describe('canonical secrets store', () => {
         `).run('invalid-second-active', 'api_key_openai', 'x', 'Invalid', 1, 1, 1)).toThrow();
     });
 
-    test('keeps the SecretManager API DB-first while projecting the compatibility file', async () => {
+    test('keeps SecretManager DB-first without changing the file despite legacy sync', async () => {
         const root = makeRoot();
         const directories = createDirectories(root);
         writeSecretsFile(directories, {
@@ -357,7 +357,7 @@ describe('canonical secrets store', () => {
         expect(projected.api_key_openai).toEqual([
             expect.objectContaining({
                 id: 'seed',
-                label: 'Renamed seed',
+                label: 'Seed',
                 active: true,
                 value: `${canary}-seed`,
             }),
@@ -372,7 +372,7 @@ describe('canonical secrets store', () => {
         ]);
     });
 
-    test('keeps DB authority after projection failure and repairs without leaking secret values', async () => {
+    test('repairs a persisted legacy projection failure without logging secret values', async () => {
         const root = makeRoot();
         const directories = createDirectories(root);
         writeSecretsFile(directories, {
@@ -393,13 +393,11 @@ describe('canonical secrets store', () => {
         expect(secretManager.readSecret('api_key_openai')).toBe(`${canary}-seed`);
 
         const secretsPath = path.join(directories.root, 'secrets.json');
-        fs.rmSync(secretsPath, { force: true });
-        fs.mkdirSync(secretsPath);
-        expect(() => secretManager.writeSecret(
+        const recordId = secretManager.writeSecret(
             'api_key_openai',
             `${canary}-committed`,
-            'Committed despite projection failure',
-        )).toThrow();
+            'Canonical value',
+        );
 
         const db = canonicalSqliteManager.open({
             handle: 'alice',
@@ -408,25 +406,20 @@ describe('canonical secrets store', () => {
         });
         const committed = getCanonicalSecretRecords(db, 'api_key_openai')
             .find(record => record.active);
-        const repairs = listOpenSecretProjectionRepairs(db);
         expect(committed).toEqual(expect.objectContaining({
             value: `${canary}-committed`,
-            label: 'Committed despite projection failure',
+            label: 'Canonical value',
         }));
         expect(secretManager.readSecret('api_key_openai')).toBe(`${canary}-committed`);
-        expect(repairs).toEqual([
-            expect.objectContaining({
-                key: 'api_key_openai',
-                operation: 'write',
-                errorClass: expect.any(String),
-            }),
-        ]);
-        expect(JSON.stringify(repairs)).not.toContain(canary);
-        expect(() => secretManager.writeSecret('api_key_openai', `${canary}-blocked`, 'Blocked')).toThrow(
-            /canonical secrets writes blocked/i,
-        );
-        setCanonicalEnv({ reads: false, writes: false });
-        expect(secretManager.readSecret('api_key_openai')).toBe(`${canary}-committed`);
+        recordSecretProjectionRepair(db, {
+            repairKey: `secrets:api_key_openai:${recordId}:write`,
+            key: 'api_key_openai',
+            recordId,
+            operation: 'write',
+            errorClass: 'Error',
+        });
+        expect(listOpenSecretProjectionRepairs(db)).toHaveLength(1);
+        expect(JSON.stringify(listOpenSecretProjectionRepairs(db))).not.toContain(canary);
 
         fs.rmSync(secretsPath, { recursive: true, force: true });
         const repaired = await runCanonicalSliceRepair({

@@ -183,6 +183,12 @@ async function initializeSlice(slice, handle, directories, featureFlags, options
         return { ok: true, db, handle, featureFlags, migrationStatus, auditResult: persistedAudit, postInitResult };
     }
 
+    if (action === 'import' && slice.key === 'characters') {
+        // The character library may be opened before chats. Seed canonical
+        // sessions through their own import gate before deriving chat stats.
+        await ensureCanonicalSliceBackend('chats', directories, handle);
+    }
+
     const importResult = action === 'import'
         ? await runners.runImport({
             handle,

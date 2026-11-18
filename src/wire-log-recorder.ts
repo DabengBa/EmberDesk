@@ -56,7 +56,7 @@ export function normalizeWireLogOptions(raw: unknown) {
 
     return {
         enabled: source.enabled !== false,
-        captureBody: source.captureBody !== false,
+        captureBody: source.captureBody === true,
         maxFileBytes: Number.isFinite(maxFileBytes) && maxFileBytes > 0
             ? Math.ceil(maxFileBytes)
             : DEFAULT_MAX_FILE_BYTES,
@@ -82,7 +82,7 @@ export function normalizeWireLogOptions(raw: unknown) {
 export function createWireLogRecorder({
     storeRoot,
     enabled = true,
-    captureBody = true,
+    captureBody,
     maxFileBytes = DEFAULT_MAX_FILE_BYTES,
     retentionDays = DEFAULT_RETENTION_DAYS,
     redact = [],

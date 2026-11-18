@@ -116,43 +116,9 @@ features:
       # ignored: runtime reads/writes are always canonical while enabled.
       enabled: true
       shadowImport: true
-      slices:
-        # secrets.json is an export-only surface by default: the canonical DB
-        # is authoritative, runtime writes no longer re-project the file, and
-        # `canonical-sqlite-repair.mjs export-all` materializes it on demand.
-        # Set projection: sync to restore continuous file projection.
-        secrets:
-          projection: off
-        # settings.json no longer exists as a runtime artifact: the canonical
-        # document is the authority and the file is only an import/export
-        # surface. This key is deprecated — it is ignored (with a warning) and
-        # the resolved mode is always off. Kept here only to silence configs
-        # that still set it; it will be removed entirely in a later release.
-        settings:
-          projection: off
-        # worlds/*.json files are export-only: the canonical world_books table
-        # is authoritative, character world bindings come from the
-        # characters.world_name column, and export-all regenerates the files.
-        world_info:
-          projection: off
-        # chats/*.jsonl files are export-only: canonical chat_sessions and
-        # chat_messages are authoritative, chat backups still materialize the
-        # canonical payload, and export-all regenerates the files.
-        chats:
-          projection: off
-        # assets/user-images/user-files compatibility copies are export-only:
-        # canonical managed_blobs (content-addressed bytes under storage/) plus
-        # media_references are authoritative, the /assets, /user/images and
-        # /user/files routes serve blob bytes when the file is absent, and
-        # export-all materializes the file tree on demand.
-        managed_media:
-          projection: off
-        # characters/*.png cards are export-only: the canonical characters
-        # table plus character-avatars blobs are authoritative, card reads and
-        # name dedup consult canonical rows, /export synthesizes the PNG on
-        # demand, and export-all materializes the file tree.
-        characters:
-          projection: off
+      # Runtime file projection is always off. Old slices.*.projection YAML
+      # keys and environment variables are ignored. Use explicit export or
+      # repair commands to materialize compatibility files when needed.
 
 # -- SSO LOGIN CONFIGURATION --
 sso:

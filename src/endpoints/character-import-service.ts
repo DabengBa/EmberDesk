@@ -1,6 +1,7 @@
 import type { Request, Response } from 'express';
 
 type AuxiliaryMediaReport = { imported: number; skipped: number; failed: number } | { unconfirmed: true };
+type ScenarioReport = { conflicts: number };
 
 export type CharacterImportResult = {
     ok: boolean;
@@ -10,6 +11,7 @@ export type CharacterImportResult = {
     message?: string;
     refreshHandled?: boolean;
     auxiliaryMedia?: AuxiliaryMediaReport;
+    scenarios?: ScenarioReport;
 };
 
 export type CharacterImportHandler = (
@@ -35,7 +37,7 @@ export type CharacterImportOptions = {
 };
 
 type NormalizedImportResult =
-    | { ok: true; fileName: string; auxiliaryMedia?: AuxiliaryMediaReport }
+    | { ok: true; fileName: string; auxiliaryMedia?: AuxiliaryMediaReport; scenarios?: ScenarioReport }
     | { ok: false; reason: string; message?: string };
 
 function getAvatarName(fileName: string): string {
@@ -70,6 +72,7 @@ function normalizeImportResult(importResult: string | CharacterImportResult | nu
         ok: true,
         fileName,
         ...(importResult.auxiliaryMedia && { auxiliaryMedia: importResult.auxiliaryMedia }),
+        ...(importResult.scenarios && { scenarios: importResult.scenarios }),
     };
 }
 
@@ -133,6 +136,7 @@ export function createCharacterImportCoordinator({
             fileName,
             avatarName: getAvatarName(fileName),
             ...(importResult.auxiliaryMedia && { auxiliaryMedia: importResult.auxiliaryMedia }),
+            ...(importResult.scenarios && { scenarios: importResult.scenarios }),
         };
     };
 }

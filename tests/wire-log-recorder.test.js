@@ -20,12 +20,12 @@ afterEach(async () => {
 });
 
 describe('normalizeWireLogOptions', () => {
-    test('defaults to enabled with a 48h retention window', async () => {
+    test('defaults to enabled without body capture and with a 48h retention window', async () => {
         const { normalizeWireLogOptions } = await importRecorder();
 
         expect(normalizeWireLogOptions(undefined)).toEqual({
             enabled: true,
-            captureBody: true,
+            captureBody: false,
             maxFileBytes: 2097152,
             retentionDays: 2,
             redact: ['authorization', 'x-api-key', 'cookie', 'set-cookie', 'proxy-authorization'],
@@ -121,7 +121,7 @@ describe('createWireLogRecorder — non-streaming', () => {
     });
     test('persists request and response on completion', async () => {
         const { createWireLogRecorder } = await importRecorder();
-        const recorder = createWireLogRecorder({ storeRoot, enabled: true });
+        const recorder = createWireLogRecorder({ storeRoot, captureBody: true });
         const session = recorder.begin({
             url: 'https://example.test/v1/chat/completions',
             headers: { Authorization: 'Bearer sk-x', 'Content-Type': 'application/json' },
@@ -316,7 +316,7 @@ describe('createWireLogRecorder — non-streaming', () => {
 describe('createWireLogRecorder — streaming', () => {
     test('assembles SSE chunks and records timing', async () => {
         const { createWireLogRecorder } = await importRecorder();
-        const recorder = createWireLogRecorder({ storeRoot, enabled: true });
+        const recorder = createWireLogRecorder({ storeRoot, captureBody: true });
         const session = recorder.begin({ url: 'u', headers: {}, body: { stream: true } });
 
         const tap = session.stream({
@@ -343,9 +343,9 @@ describe('createWireLogRecorder — streaming', () => {
         expect(records[0].response.body.assembled.usage ?? null).toBeNull();
     });
 
-    test('captureBody false keeps byte and message/tool metadata', async () => {
+    test('omitting captureBody keeps byte and message/tool metadata without bodies', async () => {
         const { createWireLogRecorder } = await importRecorder();
-        const recorder = createWireLogRecorder({ storeRoot, captureBody: false });
+        const recorder = createWireLogRecorder({ storeRoot });
         const session = recorder.begin({ url: 'u', headers: {}, body: { messages: [{ role: 'user' }], tools: [{ type: 'function' }] } });
         const tap = session.stream({ status: 200, headers: {} });
         tap.onChunk(Buffer.from('data: {"choices":[]}\n\n'));
@@ -353,13 +353,14 @@ describe('createWireLogRecorder — streaming', () => {
         await recorder.flush();
         const records = await collectRecords(storeRoot);
         expect(records[0].request.bytes).toBeGreaterThan(0);
-        expect(records[0].request.body).toBeNull();
+        expect(records[0].request).toMatchObject({ body: null, messageCount: 1, toolCount: 1 });
         expect(records[0].response.bytes).toBeGreaterThan(0);
+        expect(records[0].response).toMatchObject({ body: null, chunks: 1 });
     });
 
     test('does not retain streamed bodies beyond maxFileBytes', async () => {
         const { createWireLogRecorder } = await importRecorder();
-        const recorder = createWireLogRecorder({ storeRoot, maxFileBytes: 32 });
+        const recorder = createWireLogRecorder({ storeRoot, captureBody: true, maxFileBytes: 32 });
         const session = recorder.begin({ url: 'u', headers: {}, body: {} });
         const tap = session.stream({ status: 200, headers: {} });
         tap.onChunk(Buffer.from('data: {"choices":[{"delta":{"content":"' + 'x'.repeat(200) + '"}}]}\n\n'));
@@ -373,7 +374,7 @@ describe('createWireLogRecorder — streaming', () => {
 
     test('bounds persisted SSE content and tool calls while retaining total bytes', async () => {
         const { createWireLogRecorder } = await importRecorder();
-        const recorder = createWireLogRecorder({ storeRoot, maxFileBytes: 96 });
+        const recorder = createWireLogRecorder({ storeRoot, captureBody: true, maxFileBytes: 96 });
         const session = recorder.begin({ url: 'u', headers: {}, body: {} });
         const tap = session.stream({ status: 200, headers: {} });
         for (const event of [
@@ -391,7 +392,7 @@ describe('createWireLogRecorder — streaming', () => {
 
     test('marks an aborted stream instead of losing the record', async () => {
         const { createWireLogRecorder } = await importRecorder();
-        const recorder = createWireLogRecorder({ storeRoot, enabled: true });
+        const recorder = createWireLogRecorder({ storeRoot, captureBody: true });
         const session = recorder.begin({ url: 'u', headers: {}, body: { stream: true } });
         const tap = session.stream({ status: 200, headers: {} });
         tap.onChunk(Buffer.from('data: {"choices":[{"delta":{"content":"par"}}]}\n\n', 'utf8'));
@@ -436,7 +437,7 @@ describe('createWireLogRecorder — token usage', () => {
 
     test('keeps the usage event of a streamed response', async () => {
         const { createWireLogRecorder } = await importRecorder();
-        const recorder = createWireLogRecorder({ storeRoot, enabled: true });
+        const recorder = createWireLogRecorder({ storeRoot, captureBody: true });
         const session = recorder.begin({ url: 'u', headers: {}, body: { stream: true } });
 
         const tap = session.stream({ status: 200, headers: {} });

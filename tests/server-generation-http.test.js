@@ -120,6 +120,91 @@ function call(route, body, user = 'alice') {
     });
 }
 
+test('temporary exit cancels before create or after an SSE disconnect, scoped to the authenticated user', async () => {
+    const command = { temporary: true, action: 'send', text: 'Hold this chat', history: [] };
+    const cancel = (requestId, user) => call('/generation/cancel', { temporary: true, requestId }, user);
+    expect((await cancel('cancel-before-create')).status).toBe(204);
+    const offset = calls.length;
+    const early = await call('/generation/create', { ...command, requestId: 'cancel-before-create' });
+    expect(early.status).toBe(202);
+    expect(await early.json()).toMatchObject({ status: 'cancelled', temporary: true });
+    expect(calls).toHaveLength(offset);
+
+    const requestId = 'cancel-after-disconnect';
+    const created = await call('/generation/create', { ...command, requestId });
+    expect(created.status).toBe(202);
+    const { id } = await created.json();
+    try {
+        const events = await call(`/generation/${id}/events`);
+        await events.body.cancel();
+        expect((await cancel(requestId, 'bob')).status).toBe(204);
+        expect(await (await call(`/generation/${id}`)).json()).toMatchObject({ status: 'running' });
+        expect((await cancel(requestId)).status).toBe(204);
+        expect(await (await call(`/generation/${id}/events`)).text()).toContain('"status":"cancelled"');
+        expect(await (await call('/generation/create', { ...command, requestId })).json()).toMatchObject({ id, status: 'cancelled' });
+    } finally {
+        await call(`/generation/${id}/cancel`, {});
+    }
+});
+
+test('temporary regenerate previews and executes the custom pipeline with uploaded history, then continue remains plain', async () => {
+    const { directories } = users.get('alice');
+    const db = canonicalSqliteManager.open({ handle: 'alice', directories, featureFlags: { enabled: true } });
+    const counts = () => ['chat_sessions', 'chat_messages', 'chat_generation_runs'].map(table => db.prepare(`SELECT count(*) AS count FROM ${table}`).get().count);
+    const before = counts();
+    const saved = getCanonicalSettingsDocument(db, { userId: 'alice' });
+    const setSettings = payload => upsertCanonicalSettingsDocument(db, { userId: 'alice', expectedRevision: getCanonicalSettingsDocument(db, { userId: 'alice' }).revision, payload });
+    setSettings({ ...saved.payload, oai_settings: { ...saved.payload.oai_settings, reply_pipeline: { enabled: true, steps: [{ tool: 'custom' }, { tool: 'last' }] } },
+        feature_settings: { tool_bindings: [{ name: 'custom', enabled: true, actionBody: 'return "browser:" + args.content;' }] } });
+    let id;
+    try {
+        const upload = await call('/../files/upload', { name: 'temporary-history.txt', data: Buffer.from('TEMPORARY_FILE_CONTENT').toString('base64') });
+        expect(upload.status).toBe(200);
+        const { path: url } = await upload.json();
+        const command = { temporary: true, action: 'regenerate', history: [
+            { is_user: true, mes: 'Previous question' }, { is_user: false, mes: 'Previous answer' },
+            { is_user: true, mes: 'Regenerate this question', extra: { files: [{ name: 'temporary-history.txt', url }] } },
+            { is_user: false, mes: 'REMOVE_OLD_DRAFT' }, { is_user: false, mes: 'REMOVE_OLD_REPLY' },
+        ] };
+        const preview = await (await call('/generation/preview', command)).json();
+        expect(preview.previewPipeline).toMatchObject({ round: 0, total: 2, step: { tool: 'custom' } });
+        const second = await (await call('/generation/preview', { ...command, round: 1 })).json();
+        expect(second.previewPipeline.step.tool).toBe('last');
+        const offset = calls.length;
+        const created = await call('/generation/create', { ...command, requestId: 'temp-regenerate' });
+        expect(created.status).toBe(202);
+        ({ id } = await created.json());
+        let pending;
+        for (let attempt = 0; attempt < 100 && !pending; attempt++) {
+            pending = (await (await call(`/generation/${id}`)).json()).step;
+            if (!pending) await new Promise(resolve => setTimeout(resolve, 10));
+        }
+        expect(pending).toMatchObject({ name: 'custom', args: { content: 'from custom' } });
+        expect(calls[offset]).toMatchObject({ messages: preview.messages, tool_choice: preview.toolChoice });
+        const wire = JSON.stringify(preview.messages);
+        for (const text of ['Previous answer', 'Regenerate this question', 'TEMPORARY_FILE_CONTENT', 'The current user input is the submit_story call']) expect(wire).toContain(text);
+        expect(wire).not.toContain('REMOVE_OLD_');
+        const step = { stepId: pending.id, result: 'BROWSER RESULT' };
+        expect((await call(`/generation/${id}/step`, step, 'bob')).status).toBe(404);
+        expect((await call(`/generation/${id}/step`, step)).status).toBe(204);
+        expect((await call(`/generation/${id}/step`, step)).status).toBe(409);
+        expect(await (await call(`/generation/${id}/events`)).text()).toMatch(/"status":"completed"[^\n]+from last/);
+        expect(calls[offset + 1].tool_choice).toEqual(second.toolChoice);
+        expect(calls[offset + 1].messages.at(-1)).toEqual(second.messages.at(-1));
+        expect(calls[offset + 1].messages).toContainEqual(expect.objectContaining({ role: 'tool', content: 'BROWSER RESULT' }));
+
+        const continued = await call('/generation/create', { ...command, action: 'continue', requestId: 'temp-continue' });
+        expect(continued.status).toBe(202);
+        ({ id } = await continued.json());
+        expect(await (await call(`/generation/${id}/events`)).text()).toContain('"mes":"REMOVE_OLD_REPLYHello"');
+        expect(calls[offset + 2].tool_choice).toBeUndefined();
+        expect(counts()).toEqual(before);
+    } finally {
+        if (id) await call(`/generation/${id}/cancel`, {});
+        setSettings(saved.payload);
+    }
+});
+
 test('runs a temporary assistant prompt over SSE without saving a chat or exposing the run to another user', async () => {
     const user = users.get('alice');
     const db = canonicalSqliteManager.open({ handle: 'alice', directories: user.directories, featureFlags: { enabled: true } });
@@ -146,6 +231,7 @@ test('runs a temporary assistant prompt over SSE without saving a chat or exposi
 });
 
 test('real chat router assembles preview and send equally, commits, replays and isolates users', async () => {
+    const offset = calls.length;
     const target = { avatar_url: 'mira.png', file_name: 'first' };
     const command = { ...target, action: 'send', text: 'Orion' };
     const preview = await call('/generation/preview', command);
@@ -158,8 +244,8 @@ test('real chat router assembles preview and send equally, commits, replays and 
     const events = await call(`/generation/${id}/events`);
     expect(events.headers.get('content-type')).toContain('text/event-stream');
     expect(await events.text()).toMatch(/event: snapshot[\s\S]*"status":"completed"/);
-    expect(calls).toHaveLength(1);
-    expect(calls[0].messages).toEqual(messages);
+    expect(calls).toHaveLength(offset + 1);
+    expect(calls[offset].messages).toEqual(messages);
     expect((await (await call('/get', target)).json()).slice(1).map(row => row.mes)).toEqual(['Orion', 'Hello']);
     expect((await (await call('/generation/find', target)).json()).id).toBe(id);
     expect((await (await call('/generation/create', { ...command, requestId: 'first-send' })).json()).id).toBe(id);
@@ -447,6 +533,10 @@ test('default pipeline completes without a browser; custom step resumes once fro
         expect(closingPreview.toolChoice).toBe('none');
         expect(calls[offset + 1].messages).toContainEqual(expect.objectContaining({ role: 'tool', content: '已收到。' }));
         expect((await (await call('/get', target)).json()).at(-1).extra.tool_invocations).toHaveLength(2);
+
+        const roleRegenerate = await (await call('/generation/preview', { ...target, action: 'regenerate' })).json();
+        expect(roleRegenerate.previewPipeline).toBeUndefined();
+        expect(roleRegenerate.messages).toContainEqual({ role: 'user', content: 'Pipeline input' });
 
         const retryOffset = calls.length;
         const retry = await open('pipeline-fallback', 'Pipeline fallback input');

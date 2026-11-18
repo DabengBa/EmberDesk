@@ -586,13 +586,11 @@ describe('world info projection recovery protocol', () => {
         expect(explainCanonicalRolloutBlockers({ db, featureFlags: flags, phase: 'writes', sliceKey: 'world_info' }).ok).toBe(true);
     });
 
-    test('character text replace commits authority and intent together and leaves a replayable pending intent when the file is blocked', async () => {
+    test('character text replace ignores legacy sync and commits only the canonical world book', async () => {
         const root = makeRoot();
         const directories = createDirectories(root);
         const db = openDb(directories);
         upsertCanonicalWorldInfoBook(db, { name: 'Bound Lore', payload: payload('Bound Lore', 'Seraphina rules') });
-        // A directory at the projection path makes the atomic file write fail.
-        fs.mkdirSync(worldFile(directories, 'Bound Lore'));
         process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_SLICES_WORLDINFO_PROJECTION = 'sync';
 
         const cardJson = JSON.stringify({
@@ -624,21 +622,23 @@ describe('world info projection recovery protocol', () => {
 
         expect(result.ok).toBe(true);
         expect(result.applied.worldBook).toBe(true);
-        expect(result.areas.worldBook.projectionFailed).toBe(true);
-        expect(result.warnings).toEqual(expect.arrayContaining([
-            expect.objectContaining({ code: 'world_book_projection_failed' }),
-        ]));
         const book = getCanonicalWorldInfoBook(db, 'Bound Lore');
         expect(book.entries.one.content).toBe('塞拉菲娜 rules');
-        const intent = openIntent(db, 'Bound Lore');
-        expect(intent.repair_key).toMatch(/^world-path-v1:/);
-        expect(intent.resolved_at_ms).toBeNull();
-        expect(db.prepare('SELECT COUNT(*) AS count FROM world_info_projection_repairs WHERE repair_key LIKE ?').get('world_info:%').count).toBe(0);
+        expect(fs.existsSync(worldFile(directories, 'Bound Lore'))).toBe(false);
+    });
 
-        fs.rmdirSync(worldFile(directories, 'Bound Lore'));
-        const replay = await repairCanonicalWorldInfoProjection({ db, directories, repairKeys: [intent.repair_key] });
+    test('explicit operator repair still replays a persisted sync intent', async () => {
+        const directories = createDirectories(makeRoot());
+        const db = openDb(directories);
+        const repairKey = commitWorldBookWithProjectionIntent(db, {
+            directories,
+            name: 'Bound Lore',
+            payload: payload('Bound Lore', 'repair value'),
+            mode: 'sync',
+        });
+        const replay = await repairCanonicalWorldInfoProjection({ db, directories, repairKeys: [repairKey] });
         expect(replay.ok).toBe(true);
-        expect(JSON.parse(fs.readFileSync(worldFile(directories, 'Bound Lore'), 'utf8')).entries.one.content).toBe('塞拉菲娜 rules');
+        expect(JSON.parse(fs.readFileSync(worldFile(directories, 'Bound Lore'), 'utf8')).entries.one.content).toBe('repair value');
         expect(openIntent(db, 'Bound Lore').resolved_at_ms).not.toBeNull();
     });
 

@@ -46,6 +46,7 @@ Let users browse, search, filter, sort, bulk-select, and choose [character cards
 - Membership changes from data refreshes — create, import, duplicate, rename, edit, and delete fallback reprints — keep the current page and scroll offset; only the explicit navigation re-entry gesture resets the library to page one and the top of the list.
 - Import can replace an existing card only in the importing user's library. If the requested replacement target no longer exists there, EmberDesk creates a newly named card instead and shows both the creation result and a warning that the replacement target was not found.
 - When a CharX card imports successfully but auxiliary media are skipped or fail to save, the character import notice shows the media outcomes separately from the card's success. Recognized expression images count as skipped; they are not installed as character sprites.
+- When a BYAF card imports successfully but an included scenario chat conflicts with an existing chat, the character import notice counts the skipped conflicts separately from the card's success. Existing chats are not overwritten, and skipped scenarios do not become the imported card's default chat.
 
 ## Ownership Notes
 

@@ -1,6 +1,6 @@
 import { translate, useTranslated } from '../../compat/i18n.js';
 import { useLayoutEffect, useRef, useSyncExternalStore } from 'react';
-import type { createHistoryPanelController } from '../../lib/history-panel-service';
+import type { createHistoryPanelController, HistoryExportFormat } from '../../lib/history-panel-service';
 
 /**
  * React-owned past-chat rows rendered inside the legacy #select_chat_div
@@ -32,7 +32,7 @@ export interface SelectChatListBridge {
     clearSearch?(): void;
     openChat?(fileName: string): void | Promise<void>;
     renameChat?(fileName: string): void | Promise<void>;
-    exportChat?(fileName: string, format: 'jsonl' | 'txt'): void | Promise<void>;
+    exportChat?(fileName: string, format: HistoryExportFormat): void | Promise<void>;
     deleteChat?(fileName: string): void | Promise<void>;
     highlightRow?(row: HTMLElement): void;
     controller?: ReturnType<typeof createHistoryPanelController<SelectChatListItem>>;
@@ -71,6 +71,7 @@ function SelectChatRow({ item, avatarImg, isCurrent, bridge }: { item: SelectCha
                         </div>
                         <div className="select_chat_actions flex-container gap10px">
                             <button type="button" title={translate('Export JSONL chat file')} aria-label={translate('Export JSONL chat file')} data-format="jsonl" className="exportRawChatButton chat-file-action fa-solid fa-file-export" data-i18n="[title][aria-label]Export JSONL chat file" onClick={bridge.exportChat ? event => { event.stopPropagation(); void bridge.exportChat?.(item.fileName, 'jsonl'); } : undefined} />
+                            <button type="button" title={translate('Export chat with attachments (ZIP)')} aria-label={translate('Export chat with attachments (ZIP)')} data-format="zip" className="chat-file-action fa-solid fa-file-zipper" data-i18n="[title][aria-label]Export chat with attachments (ZIP)" onClick={bridge.exportChat ? event => { event.stopPropagation(); void bridge.exportChat?.(item.fileName, 'zip'); } : undefined} />
                             <button type="button" title={translate('Download chat as plain text document')} aria-label={translate('Download chat as plain text document')} data-format="txt" className="exportChatButton chat-file-action fa-solid fa-file-lines" data-i18n="[title][aria-label]Download chat as plain text document" onClick={bridge.exportChat ? event => { event.stopPropagation(); void bridge.exportChat?.(item.fileName, 'txt'); } : undefined} />
                             <button type="button" title={translate('Delete chat file')} aria-label={translate('Delete chat file')} {...{ file_name: item.fileName }} className="PastChat_cross chat-file-action fa-solid fa-trash-can" data-i18n="[title][aria-label]Delete chat file" onClick={bridge.deleteChat ? event => { event.stopPropagation(); void bridge.deleteChat?.(item.fileName); } : undefined} />
                         </div>

@@ -90,7 +90,9 @@ export async function deleteHistoryChat(file: string, slash: boolean, ports: {
     }
 }
 
-export async function exportHistoryChat(format: string, alreadySaved: boolean, ports: {
+export type HistoryExportFormat = 'jsonl' | 'txt' | 'zip';
+
+export async function exportHistoryChat(format: HistoryExportFormat, alreadySaved: boolean, ports: {
     save(): Promise<unknown>; request(): Promise<{ ok: boolean; data: { message: string; result?: unknown } }>;
     wait(): Promise<unknown>; success(data: { message: string; result?: unknown }): void;
     failure(message: string): void; download(data: unknown, mime: string): void; log(data: unknown): void;
@@ -102,7 +104,7 @@ export async function exportHistoryChat(format: string, alreadySaved: boolean, p
         await ports.wait();
         if (!ok) { ports.failure(data.message); return; }
         ports.success(data);
-        ports.download(data.result, format === 'txt' ? 'text/plain' : 'application/octet-stream');
+        ports.download(data.result, format === 'zip' ? 'application/zip' : format === 'txt' ? 'text/plain' : 'application/octet-stream');
     } catch (error) {
         const message = (error as Error).message;
         ports.log(`An error has occurred: ${message}`);
@@ -195,7 +197,7 @@ export async function importHistoryFiles<T extends { name: string }>(files: Iter
     const names: string[] = [];
     for (const file of files) {
         const format = file.name.match(/\.(\w+)$/)?.[1]?.toLowerCase();
-        if (!format || !['json', 'jsonl'].includes(format)) {
+        if (!format || !['json', 'jsonl', 'zip'].includes(format)) {
             ports.invalid(file);
             continue;
         }
@@ -248,7 +250,7 @@ export interface HistoryPanelPorts<T> {
     restoreFocus(): void;
     openChat?(fileName: string): Promise<void>;
     saveChat?(): Promise<void>;
-    exportChat?(fileName: string, format: 'jsonl' | 'txt'): Promise<void>;
+    exportChat?(fileName: string, format: HistoryExportFormat): Promise<void>;
     renameChat?(fileName: string): Promise<void>;
     deleteChat?(fileName: string): Promise<void>;
 }
@@ -318,7 +320,7 @@ export function createHistoryPanelController<T>(ports: HistoryPanelPorts<T>) {
             await ports.openChat(fileName);
         }, true);
     }
-    function exportChat(fileName: string, format: 'jsonl' | 'txt') {
+    function exportChat(fileName: string, format: HistoryExportFormat) {
         return runAction(async () => {
             if (!ports.saveChat || !ports.exportChat) throw new Error('History export ports are not installed');
             await ports.saveChat();

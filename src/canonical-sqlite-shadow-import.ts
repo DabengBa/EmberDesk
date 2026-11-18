@@ -67,7 +67,7 @@ function buildCanonicalChatStatsRecord(directories: Directories, snapshotRow: Sn
     let chatCount;
     let chatSize;
     let dateLastChat;
-    if (db && getCanonicalSliceProjectionMode('chats') === 'off') {
+    if (db && getCanonicalSliceProjectionMode() === 'off') {
         // JSONL files are export surfaces; canonical sessions carry the stats.
         ({ chatCount, chatSize, dateLastChat } = calculateCanonicalCharacterChatStats(
             db,

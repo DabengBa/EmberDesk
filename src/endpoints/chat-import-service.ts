@@ -201,6 +201,12 @@ function createJsonlChatImportPlan({
 }
 
 export function createCharacterChatImportPlan(options: ChatImportOptions): ChatImportPlan {
+    if (options.format === 'zip') {
+        // ZIP exchange already validated the canonical payload. Legacy JSONL
+        // format detection/Chub conversion does not apply to this envelope.
+        const { fileName, write } = createChatWritePlan({ ...options, contents: options.data });
+        return { ok: true, fileNames: [fileName], shouldMarkChatStatsDirty: true, uploadCleanup: CHAT_IMPORT_UPLOAD_CLEANUP.NONE, writes: [write] };
+    }
     if (options.format === 'json') {
         return createJsonChatImportPlan(options);
     }
