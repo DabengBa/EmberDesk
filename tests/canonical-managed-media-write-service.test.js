@@ -150,21 +150,25 @@ describe('canonical managed media write service', () => {
         expect(result.contents.toString()).toBe('new bytes');
     });
 
-    test('retains installed bytes after a failed reference transaction', async () => {
+    test.each([false, true])('failed reference transaction preserves only pre-existing bytes (pre-existing: %s)', async (preExisting) => {
         const directories = makeDirectories();
         const manager = createManager();
         const db = seedCleanAudit(manager, directories);
-        db.exec(`CREATE TRIGGER fail_reference BEFORE INSERT ON media_references
+        db.exec(`CREATE TRIGGER fail_reference BEFORE INSERT ON managed_media_repairs
             BEGIN SELECT RAISE(ABORT, 'injected reference failure'); END`);
         const contents = Buffer.from('possibly shared bytes');
+        const managedPath = path.join(directories.storage, 'managed-media', hashCanonicalManagedMediaBuffer(contents));
+        if (preExisting) {
+            fs.mkdirSync(path.dirname(managedPath), { recursive: true });
+            fs.writeFileSync(managedPath, contents);
+        }
         await expect(writeCanonicalManagedMedia({
-            handle: 'alice', directories, dependencies: dependencies(manager), projection: 'off',
+            handle: 'alice', directories, dependencies: dependencies(manager),
             compatibilityPath: 'assets/sky.png', ownerType: 'asset', ownerId: 'sky',
             role: 'asset', displayName: 'sky.png', contents,
         })).rejects.toThrow('injected reference failure');
-        const { hashCanonicalManagedMediaBuffer } = await import('../src/endpoints/canonical-managed-media-store.ts');
-        const managedPath = path.join(directories.storage, 'managed-media', hashCanonicalManagedMediaBuffer(contents));
-        expect(fs.readFileSync(managedPath)).toEqual(contents);
+        expect(fs.existsSync(managedPath)).toBe(preExisting);
+        if (preExisting) expect(fs.readFileSync(managedPath)).toEqual(contents);
         expect(listCanonicalManagedMediaReferences(db)).toHaveLength(0);
     });
 

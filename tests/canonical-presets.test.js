@@ -152,9 +152,9 @@ describe('presets canonical store', () => {
         const db = openDb(directories);
 
         upsertCanonicalPreset(db, { name: 'Alpha', payload: {} });
-        expect(deleteCanonicalPreset(db, { name: 'Alpha' }).deleted).toBe(true);
+        expect(deleteCanonicalPreset(db, { name: 'Alpha', expectedRevision: 1 }).deleted).toBe(true);
         expect(getCanonicalPreset(db, { name: 'Alpha' })).toBeNull();
-        expect(deleteCanonicalPreset(db, { name: 'Alpha' }).deleted).toBe(false);
+        expect(deleteCanonicalPreset(db, { name: 'Alpha', expectedRevision: 1 }).deleted).toBe(false);
     });
 
     test('v18 preset survives upgrade and revisions advance across repeated deletes and recreations', () => {
@@ -165,14 +165,14 @@ describe('presets canonical store', () => {
         expect(runCanonicalMigrations(db).ok).toBe(true);
         expect(getCanonicalPreset(db, { name: 'Alpha' }).revision).toBe(7);
         for (let oldRevision = 7; oldRevision < 10; oldRevision++) {
-            expect(deleteCanonicalPreset(db, { name: 'Alpha' }).deleted).toBe(true);
+            expect(deleteCanonicalPreset(db, { name: 'Alpha', expectedRevision: oldRevision }).deleted).toBe(true);
             expect(listCanonicalPresets(db)).toEqual([]);
             expect(upsertCanonicalPreset(db, { name: 'Alpha', payload: { v: 'stale' }, expectedRevision: oldRevision }).ok).toBe(false);
             const recreated = upsertCanonicalPreset(db, { name: 'Alpha', payload: { v: oldRevision }, expectedRevision: 0 });
             expect(recreated.created).toBe(true);
             expect(recreated.revision).toBe(oldRevision + 1);
         }
-        expect(deleteCanonicalPreset(db, { name: 'Alpha' }).deleted).toBe(true);
+        expect(deleteCanonicalPreset(db, { name: 'Alpha', expectedRevision: 10 }).deleted).toBe(true);
         const reseeded = ensureCanonicalPreset(db, { name: 'Alpha', payload: { seeded: true } });
         expect(reseeded.inserted).toBe(true);
         expect(reseeded.preset.revision).toBe(11);
@@ -275,17 +275,31 @@ describe('presets routes', () => {
 
         const del = await invokeRoute(presetsRouter, '/delete', {
             directories,
-            body: { apiId: 'openai', name: 'Route Preset' },
+            body: { apiId: 'openai', name: 'Route Preset', expectedRevision: save.body.revision },
         });
         expect(del.statusCode).toBe(200);
         expect(getCanonicalPreset(db, { name: 'Route Preset' })).toBeNull();
 
         const missing = await invokeRoute(presetsRouter, '/delete', {
             directories,
-            body: { apiId: 'openai', name: 'Route Preset' },
+            body: { apiId: 'openai', name: 'Route Preset', expectedRevision: save.body.revision },
         });
         expect(missing.statusCode).toBe(404);
     });
+
+    test('/delete rejects a missing revision without deleting the preset', async () => {
+        const directories = makeDirectories();
+        const db = openDb(directories);
+        upsertCanonicalPreset(db, { name: 'Alpha', payload: { value: 'current' } });
+
+        const response = await invokeRoute(presetsRouter, '/delete', {
+            directories,
+            body: { apiId: 'openai', name: 'Alpha' },
+        });
+        expect(response.statusCode).toBe(400);
+        expect(JSON.parse(getCanonicalPreset(db, { name: 'Alpha' }).payloadJson)).toEqual({ value: 'current' });
+    });
+
 
     test('/save never writes a preset file', async () => {
         const directories = makeDirectories();
@@ -324,7 +338,7 @@ describe('settings /get preset integration', () => {
             const before = await (await post('/settings/get')).json();
             const staleRevision = before.openai_setting_revisions.Alpha;
             expect(staleRevision).toBe(1);
-            expect((await post('/presets/delete', { apiId: 'openai', name: 'Alpha' })).status).toBe(200);
+            expect((await post('/presets/delete', { apiId: 'openai', name: 'Alpha', expectedRevision: staleRevision })).status).toBe(200);
             const deleted = await (await post('/settings/get')).json();
             expect(deleted.openai_setting_names).not.toContain('Alpha');
             const recreated = await post('/presets/save', { apiId: 'openai', name: 'Alpha', preset: { value: 'recreated' }, expectedRevision: 0 });
@@ -333,7 +347,14 @@ describe('settings /get preset integration', () => {
             const stale = await post('/presets/save', { apiId: 'openai', name: 'Alpha', preset: { value: 'stale' }, expectedRevision: staleRevision });
             expect(stale.status).toBe(409);
             expect(recreatedRevision).toBeGreaterThan(staleRevision);
+            const staleDelete = await post('/presets/delete', { apiId: 'openai', name: 'Alpha', expectedRevision: staleRevision });
+            expect(staleDelete.status).toBe(409);
+            expect(await staleDelete.json()).toEqual({ error: 'preset_conflict', revision: recreatedRevision });
             expect(JSON.parse(getCanonicalPreset(db, { name: 'Alpha' }).payloadJson)).toEqual({ value: 'recreated' });
+            const current = await (await post('/settings/get')).json();
+            expect(current.openai_setting_revisions.Alpha).toBe(recreatedRevision);
+            expect((await post('/presets/delete', { apiId: 'openai', name: 'Alpha', expectedRevision: current.openai_setting_revisions.Alpha })).status).toBe(200);
+            expect(getCanonicalPreset(db, { name: 'Alpha' })).toBeNull();
         } finally {
             await new Promise(resolve => server.close(resolve));
         }

@@ -100,4 +100,20 @@ describe('settings get route', () => {
         expect(response.body).not.toHaveProperty('novelai_settings');
         expect(response.body).not.toHaveProperty('quickReplyPresets');
     });
+
+    test('does not return retired proxy passwords from existing settings or legacy presets', async () => {
+        const directories = makeDirectories();
+        const { canonicalSqliteManager } = await import('../src/canonical-sqlite.ts');
+        const { runCanonicalMigrations } = await import('../src/canonical-sqlite-migrations.ts');
+        const { upsertCanonicalSettingsDocument } = await import('../src/endpoints/settings-store.ts');
+        const db = canonicalSqliteManager.open({ handle: 'default-user', directories, featureFlags: { enabled: true, strict: false } });
+        runCanonicalMigrations(db);
+        upsertCanonicalSettingsDocument(db, { userId: 'default-user', expectedRevision: 0, payload: { oai_settings: { custom_url: 'http://example.test', proxy_password: 'old-settings-password' } } });
+        fs.writeFileSync(path.join(directories.openAI_Settings, 'old.json'), JSON.stringify({ name: 'Old', proxy_password: 'old-preset-password' }));
+
+        const response = await invokeSettingsGet(directories);
+        expect(response.statusCode).toBe(200);
+        expect(JSON.parse(response.body.settings)).toEqual({ oai_settings: { custom_url: 'http://example.test' } });
+        expect(response.body.openai_settings.map(value => JSON.parse(value))).toContainEqual({ name: 'Old' });
+    });
 });

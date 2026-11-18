@@ -43,11 +43,8 @@ function summarizeImportResult({ handle, skipped = false, reason = null, entries
 }
 
 /**
- * Settings have no file-side surface: canonical storage is authoritative, the
- * legacy `settings.json` contract path was retired, and the legacy
- * `public/settings.json` migration path writes the document directly. The
- * import pass only needs to guarantee schema migrations ran; there is nothing
- * left to ingest.
+ * Settings have no file projection. Document bootstrap can ingest legacy
+ * per-user settings once; the shadow import only ensures the schema exists.
  */
 export async function runCanonicalSettingsShadowImport({
     handle,

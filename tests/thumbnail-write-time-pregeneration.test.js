@@ -658,17 +658,18 @@ describe('thumbnail write-time pregeneration hooks', () => {
         const { router, mocks } = await importCharacterRoutes();
         const avatarPath = path.join(directories.characters, 'Tester.png');
         fs.writeFileSync(avatarPath, Buffer.from('png'));
+        const user = { directories, profile: { handle: 'default-user' } };
+        const card = await invokeRoute(router, 'post', '/get', { user, body: { avatar_url: 'Tester.png' } });
+        expect(card.statusCode).toBe(200);
         const request = {
             body: {
                 avatar_url: 'Tester.png',
                 ch_name: 'Tester',
                 field: 'name',
                 value: 'Updated Tester',
+                expected_card_json: card.body.canonical_card_version,
             },
-            user: {
-                directories,
-                profile: { handle: 'default-user' },
-            },
+            user,
         };
 
         const response = await invokeRoute(router, 'post', '/edit-attribute', request);

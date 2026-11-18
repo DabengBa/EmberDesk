@@ -21,6 +21,7 @@ import {
 } from './canonical-secrets-shadow-import.ts';
 import {
     auditCanonicalManagedMediaShadowImport,
+    backfillCanonicalManagedMediaContents,
     runCanonicalManagedMediaShadowImport,
 } from './canonical-managed-media-shadow-import.ts';
 import {
@@ -87,6 +88,7 @@ const SLICE_RUNNERS = {
     managed_media: {
         runImport: runCanonicalManagedMediaShadowImport,
         runAudit: auditCanonicalManagedMediaShadowImport,
+        postInit: backfillCanonicalManagedMediaContents,
     },
     chats: {
         runImport: runCanonicalChatShadowImport,
@@ -242,7 +244,7 @@ export function ensureCanonicalSliceBackend(sliceKey, directories, handle = null
     const prior = perSlice.get(sliceKey);
     const resolvedHandle = handle ?? getHandle(directories);
     const initPromise = Promise.resolve(prior)
-        .then(prev => {
+        .then(async prev => {
             // A handle closed under the cache (e.g. reset-step2) must not be
             // reused: re-initialize so the manager opens a fresh connection.
             if (prev?.ok && prev.db && prev.db.isOpen !== false) {
@@ -250,6 +252,9 @@ export function ensureCanonicalSliceBackend(sliceKey, directories, handle = null
                 if (decideCanonicalBackendInitAction(freshAudit) === 'skip') {
                     return prev;
                 }
+            }
+            if (slice.key === 'chats') {
+                await ensureCanonicalSliceBackend('managed_media', directories, resolvedHandle);
             }
             return initializeSlice(slice, resolvedHandle, directories, featureFlags, options);
         });

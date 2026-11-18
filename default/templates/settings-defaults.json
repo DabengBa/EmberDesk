@@ -162,7 +162,7 @@
         "max_context_unlocked": false,
         "api_url_scale": "",
         "show_external_models": false,
-        "proxy_password": "",
+
         "squash_system_messages": false
     }
 }

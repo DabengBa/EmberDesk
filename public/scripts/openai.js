@@ -283,8 +283,9 @@ export function installOpenAIPresetService(factory) {
         remove: async name => {
             const response = await fetch('/api/presets/delete', {
                 method: 'POST', headers: getRequestHeaders(),
-                body: JSON.stringify({ apiId: 'openai', name }),
+                body: JSON.stringify({ apiId: 'openai', name, expectedRevision: openai_setting_revisions[name] }),
             });
+            if (response.status === 409) throw new Error('预设删除冲突（HTTP 409）：此预设已在其他会话中修改，请重新加载后再删除。');
             if (!response.ok) throw new Error('Failed to delete preset');
             delete openai_setting_revisions[name];
         },

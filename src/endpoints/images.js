@@ -8,6 +8,7 @@ import sanitize from 'sanitize-filename';
 import { clientRelativePath, removeFileExtension, getImages, isPathUnderParent } from '../util.js';
 import { MEDIA_EXTENSIONS, MEDIA_REQUEST_TYPE } from '../constants.js';
 import {
+    collectCanonicalManagedMediaGarbage,
     deleteCanonicalManagedMediaReference,
     writeCanonicalManagedMedia,
 } from './canonical-managed-media-write-service.ts';
@@ -212,16 +213,28 @@ router.post('/delete', async (request, response) => {
         // Under projection 'off' the compatibility file may not exist while the
         // canonical reference does — let the canonical delete decide.
         const fileExists = fs.existsSync(pathToDelete);
-        const compatibilityPath = clientRelativePath(request.user.directories.root, pathToDelete).split(path.sep).join(path.posix.sep);
-        await ensureCanonicalSliceBackend('managed_media', request.user.directories, getRequestHandle(request));
+        const compatibilityPath = path.relative(request.user.directories.root, pathToDelete).split(path.sep).join(path.posix.sep);
+        const handle = getRequestHandle(request);
+        await ensureCanonicalSliceBackend('managed_media', request.user.directories, handle);
+        // An image can be deleted before the first chat request imports its attachments.
+        await ensureCanonicalSliceBackend('chats', request.user.directories, handle);
         const canonicalResult = await deleteCanonicalManagedMediaReference({
-            handle: getRequestHandle(request),
+            handle,
             directories: request.user.directories,
             compatibilityPath,
         });
         if (canonicalResult.authorityCommitted) {
             if (!canonicalResult.ok) {
                 return response.status(500).send('Image deletion committed but compatibility projection failed');
+            }
+            const collected = await collectCanonicalManagedMediaGarbage({
+                handle,
+                directories: request.user.directories,
+                blobId: canonicalResult.reference.blobId,
+                dryRun: false,
+            });
+            if (!collected.ok) {
+                return response.status(500).send('Image deletion committed but managed media collection failed');
             }
             console.info(`Deleted image: ${request.body.path} from ${request.user.profile.handle}`);
             return response.sendStatus(200);

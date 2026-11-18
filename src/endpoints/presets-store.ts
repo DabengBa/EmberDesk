@@ -136,12 +136,24 @@ export function ensureCanonicalPreset(db: DatabaseSync, {
     return { ok: result.ok, inserted: result.ok === true, preset: result.preset ?? null };
 }
 
-export function deleteCanonicalPreset(db: DatabaseSync, { apiId = PRESETS_OPENAI_API_ID, name }: PresetOptions = {}) {
-    const result = db.prepare(`
-        UPDATE preset_documents SET deleted = 1, payload_json = '{}', content_hash = ''
-        WHERE api_id = ? AND name = ? AND deleted = 0
-    `).run(String(apiId), normalizePresetName(name));
-    return { ok: true, deleted: Number(result.changes) > 0 };
+export function deleteCanonicalPreset(db: DatabaseSync, {
+    apiId = PRESETS_OPENAI_API_ID, name, expectedRevision,
+}: PresetOptions & { expectedRevision: number }): { ok: true; deleted: boolean } | { ok: false; revision: number } {
+    return withCanonicalTransaction(db, () => {
+        const args = [String(apiId), normalizePresetName(name)] as const;
+        const row = db.prepare(`
+            SELECT revision FROM preset_documents WHERE api_id = ? AND name = ? AND deleted = 0
+        `).get(...args);
+        if (!row) return { ok: true, deleted: false };
+        const revision = Number(row.revision);
+        if (revision !== expectedRevision) return { ok: false, revision };
+
+        db.prepare(`
+            UPDATE preset_documents SET deleted = 1, payload_json = '{}', content_hash = ''
+            WHERE api_id = ? AND name = ? AND deleted = 0
+        `).run(...args);
+        return { ok: true, deleted: true };
+    });
 }
 
 export function getPresetMigrationMarker(db: DatabaseSync, markerKey: unknown) {

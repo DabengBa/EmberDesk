@@ -106,9 +106,14 @@ test('refresh during an in-flight chat switch keeps the requested save destinati
         const description = 'chat switch realtime race proof';
         await other.evaluate(async ({ avatar, description }) => {
             const { getRequestHeaders } = await import('/scripts/request-context.js');
+            const card = await fetch('/api/characters/get', {
+                method: 'POST', headers: getRequestHeaders(), body: JSON.stringify({ avatar_url: avatar }),
+            });
+            if (!card.ok) throw new Error(`character read failed: ${card.status}`);
+            const { canonical_card_version: expected_card_json } = await card.json();
             const response = await fetch('/api/characters/edit-attribute', {
                 method: 'POST', headers: getRequestHeaders(),
-                body: JSON.stringify({ avatar_url: avatar, ch_name: 'Dev Character 001', field: 'description', value: description }),
+                body: JSON.stringify({ avatar_url: avatar, ch_name: 'Dev Character 001', field: 'description', value: description, expected_card_json }),
             });
             if (!response.ok) throw new Error(`character update failed: ${response.status}`);
         }, { avatar, description });

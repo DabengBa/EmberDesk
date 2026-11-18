@@ -154,6 +154,10 @@ function isManagedAttachmentCandidate(value: string) {
     return /^(files|assets|user-images)\//.test(value);
 }
 
+function attachmentLookupPath(leaf: ReturnType<typeof listStringLeaves>[number]) {
+    return leaf.fieldPath[0] === 'mes' ? leaf.value : leaf.value.replace(/^\//, '');
+}
+
 function getManagedMediaByCompatibilityPath(db: DatabaseSync) {
     try {
         return new Map(db.prepare(`
@@ -192,15 +196,17 @@ function buildChatRecord(projection: ChatProjection, db: DatabaseSync, nowMs: nu
             occurrenceByBase.set(base, occurrence + 1);
             const identityKey = hashIdentity(base, occurrence);
             const attachments = listStringLeaves(message.payload)
-                .filter(leaf => mediaByPath.has(leaf.value))
-                .map(leaf => ({
-                    blobId: mediaByPath.get(leaf.value),
-                    role: 'attachment',
-                    compatibility: {
-                        path: leaf.value,
-                        fieldPath: leaf.fieldPath,
-                    },
-                }));
+                .flatMap(leaf => {
+                    const blobId = mediaByPath.get(attachmentLookupPath(leaf));
+                    return typeof blobId === 'string' ? [{
+                        blobId,
+                        role: 'attachment',
+                        compatibility: {
+                            path: leaf.value,
+                            fieldPath: leaf.fieldPath,
+                        },
+                    }] : [];
+                });
             return {
                 id: `chat-message-${hashIdentity(sourceKey, identityKey)}`,
                 order: message.order,
@@ -433,7 +439,7 @@ function buildAuditEntry({ projection, stored, status, driftTypes, details, audi
 
 function collectDanglingAttachments(projection: ChatProjection, mediaByPath: ReturnType<typeof getManagedMediaByCompatibilityPath>) {
     return projection.messages.flatMap(message => listStringLeaves(message.payload)
-        .filter(leaf => isManagedAttachmentCandidate(leaf.value) && !mediaByPath.has(leaf.value))
+        .filter(leaf => isManagedAttachmentCandidate(leaf.value) && !mediaByPath.has(attachmentLookupPath(leaf)))
         .map(leaf => ({ messageOrder: message.order, path: leaf.value, fieldPath: leaf.fieldPath })));
 }
 
