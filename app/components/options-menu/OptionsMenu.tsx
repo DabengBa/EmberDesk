@@ -24,13 +24,13 @@ const optionStyles = stylex.create({ item: { justifyContent: 'flex-start', textA
  * so delegated trigger('click') paths keep working; the delegated handler
  * re-checks eligibility before dispatching.
  */
-export function OptionsMenu({ showBackToMain = false, canRegenerate = false, onCommand }: { showBackToMain?: boolean; canRegenerate?: boolean; onCommand?: (id: string) => void }) {
+export function OptionsMenu({ showBackToMain = false, canRegenerate = false, canContinue = false, onCommand }: { showBackToMain?: boolean; canRegenerate?: boolean; canContinue?: boolean; onCommand?: (id: string) => void }) {
     return (
         <>
         <div className="options-content" onClick={event => {
             if (!onCommand || !(event.target instanceof Element)) return;
             const id = event.target.closest('button[id]')?.id;
-            if (!id || !['option_start_new_chat', 'option_close_chat', 'option_select_chat', 'option_regenerate', 'option_chat_memory', 'option_wire_log', 'option_delete_mes', 'option_back_to_main', 'attachFile'].includes(id)) return;
+            if (!id || !['option_start_new_chat', 'option_close_chat', 'option_select_chat', 'option_regenerate', 'option_continue', 'option_chat_memory', 'option_wire_log', 'option_delete_mes', 'option_back_to_main', 'attachFile'].includes(id)) return;
             event.stopPropagation();
             onCommand(id);
         }}>
@@ -42,6 +42,7 @@ export function OptionsMenu({ showBackToMain = false, canRegenerate = false, onC
             <ContractButton id="option_close_chat" variant="ghost" xstyle={optionStyles.item} label="Close chat" icon={<i className="fa-lg fa-solid fa-times" aria-hidden="true" />} />
             <ContractButton id="option_select_chat" variant="ghost" xstyle={optionStyles.item} label="Manage chat files" icon={<i className="fa-lg fa-solid fa-address-book" aria-hidden="true" />} tabIndex={0} />
             <ContractButton id="option_regenerate" variant="ghost" xstyle={optionStyles.item} label="Regenerate reply" icon={<i className="fa-lg fa-solid fa-rotate-right" aria-hidden="true" />} tabIndex={0} disabled={!canRegenerate} />
+            <ContractButton id="option_continue" variant="ghost" xstyle={optionStyles.item} label="Continue reply" icon={<i className="fa-lg fa-solid fa-forward" aria-hidden="true" />} tabIndex={0} disabled={!canContinue} />
             <ContractButton id="option_chat_memory" variant="ghost" xstyle={optionStyles.item} label="Chat memory" icon={<i className="fa-lg fa-solid fa-brain" aria-hidden="true" />} tabIndex={0} />
             <ContractButton id="option_wire_log" variant="ghost" xstyle={optionStyles.item} label="Wire Log" icon={<i className="fa-lg fa-solid fa-diagram-project" aria-hidden="true" />} tabIndex={0} />
             <ContractButton id="attachFile" variant="ghost" xstyle={optionStyles.item} label="Attach a File" icon={<i className="fa-lg fa-solid fa-paperclip" aria-hidden="true" />} tabIndex={0} />

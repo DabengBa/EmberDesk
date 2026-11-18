@@ -45,21 +45,19 @@ describe('workspace React shell retirement', () => {
         expect(seedSource).not.toContain('    shell:');
     });
 
-    test('keeps the workspace panels build entry available', () => {
+    test('generates workspace dependencies before the single React build', () => {
         const scripts = JSON.parse(read('package.json')).scripts;
-        const viteSource = read('vite.config.ts');
 
-        const buildSteps = scripts['build:react:workspace-panels'].split(/\s*&&\s*/);
-        const generationStep = buildSteps.indexOf('pnpm run build:generation-state');
-        const viteStep = buildSteps.indexOf('vite build --mode workspace-panels');
-        expect(generationStep).toBeGreaterThanOrEqual(0);
-        expect(viteStep).toBeGreaterThan(generationStep);
+        expect(scripts['build:react'].split(/\s*&&\s*/)).toEqual([
+            'pnpm run build:generation-state',
+            'pnpm run build:workspace-drawer-domain',
+            'node scripts/build-settings-write-owner.mjs',
+            'vite build --mode login',
+        ]);
+        expect(scripts['build:react:workspace-panels']).toBe('pnpm run build:react');
         expect(scripts['build:generation-state']).toBe('node scripts/build-generation-state.mjs');
         // Check the real generator output, rather than only the package command.
         execFileSync(process.execPath, ['scripts/build-generation-state.mjs', '--check'], { cwd: repoRoot });
-        expect(viteSource).toContain('const isWorkspacePanelsBuild = mode === \'workspace-panels\';');
-        expect(viteSource).toContain('return reactPanelConfig(\'workspace-panels\')');
-        expect(viteSource).toContain('entry: path.resolve(process.cwd(), `app/${name}.tsx`)');
-        expect(viteSource).toContain('fileName: () => `assets/${name}.js`');
+
     });
 });

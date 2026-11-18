@@ -153,6 +153,7 @@ body.noShadows * {
 .ed-frontend-frame__iframe {
     display: block;
     width: 100%;
+    height: clamp(12rem, 50vh, 32rem);
     border: none;
     background: transparent;
     color-scheme: normal;

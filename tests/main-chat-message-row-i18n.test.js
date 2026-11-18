@@ -7,7 +7,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const repoRoot = path.resolve(__dirname, '..');
 
-const indexHtml = fs.readFileSync(path.join(repoRoot, 'public/index.html'), 'utf8');
+const indexHtml = fs.readFileSync(path.join(repoRoot, 'app/components/workspace/WorkspaceHost.tsx'), 'utf8');
 const rowSource = fs.readFileSync(path.join(repoRoot, 'app/components/main-chat/MainChatMessageRow.tsx'), 'utf8');
 
 function extractTemplateRegion(source, startMarker, endMarker) {

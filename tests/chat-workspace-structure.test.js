@@ -23,16 +23,19 @@ describe('chat workspace structure', () => {
         expect(frameStyleSource).toContain('max-width: 100%;');
     });
 
-    test('keeps the first-paint preloader visible before startup scripts run', () => {
-        const indexHtml = readRepoFile('public/index.html');
+    test('renders the workspace preloader before native startup scripts run', () => {
+        const host = readRepoFile('app/components/workspace/WorkspaceHost.tsx');
         const loaderCss = readRepoFile('public/css/loader.css');
 
-        expect(indexHtml).toMatch(/id="preloader"[^>]*\brole="status"[^>]*\baria-live="polite"[^>]*\baria-busy="true"/);
-        expect(indexHtml).toContain('class="preloader-content"');
-        expect(indexHtml).toContain('class="preloader-logo"');
-        expect(indexHtml).toContain('class="preloader-spinner fa-solid fa-gear fa-spin"');
-        expect(indexHtml).toContain('class="preloader-message"');
-        expect(indexHtml).toContain('Initializing…');
+        expect(host).toContain('const [failed, setFailed] = useState(false);');
+        expect(host).toMatch(/id="preloader"[^>]*\brole="status"[^>]*\baria-live="polite"[^>]*\baria-busy=\{!failed\}/);
+        expectContainsMarkers(host, [
+            'className="preloader-content"',
+            'className="preloader-logo"',
+            'className="preloader-spinner fa-solid fa-gear fa-spin"',
+            'className="preloader-message"',
+            'Initializing…',
+        ]);
         expect(loaderCss).toContain('#preloader,');
         expect(loaderCss).toContain('.preloader-content');
         expect(loaderCss).toContain('max-width: min(320px, calc(100vw - 3rem));');
@@ -133,7 +136,7 @@ describe('chat workspace structure', () => {
     });
 
     test('keeps send-form controls discoverable by role and accessible name', () => {
-        const indexHtml = readRepoFile('public/index.html');
+        const host = readRepoFile('app/components/workspace/WorkspaceHost.tsx');
         const composerSource = readRepoFile('app/components/composer/ChatComposer.tsx');
         const scriptSource = readRepoFile('public/script.js');
         const keyboardSource = readRepoFile('public/scripts/keyboard.js');
@@ -158,7 +161,7 @@ describe('chat workspace structure', () => {
         expect(composerSource).toMatch(/id="send_textarea"[^>]*\baria-describedby="send_textarea_hint"/);
         expect(composerSource).toContain('id="send_textarea_hint"');
         expect(composerSource).toContain("translate('Send requires an API connection.')");
-        expect(indexHtml).toContain('id="send_form"');
+        expect(host).toContain('id="send_form"');
         expect(scriptSource).toContain("const sendTextareaHint = document.getElementById('send_textarea_hint');");
         expect(scriptSource).toContain('const hint = t`Send requires an API connection.`;');
         expect(scriptSource).toContain('if (sendTextareaHint) sendTextareaHint.textContent = hint;');
@@ -186,35 +189,33 @@ describe('chat workspace structure', () => {
     });
 
     test('keeps message template DOM identity stable', () => {
-        const indexHtml = readRepoFile('public/index.html');
+        const host = readRepoFile('app/components/workspace/WorkspaceHost.tsx');
 
-        const messageRootTag = getTagByClass(indexHtml, 'mes');
+        const messageRootTag = getTagByClass(host, 'mes');
         [
-            'mesid=""',
-            'ch_name=""',
-            'is_user=""',
-            'is_system=""',
+            "mesid: ''",
+            "ch_name: ''",
+            "is_user: ''",
+            "is_system: ''",
         ].forEach(attribute => expect(messageRootTag).toContain(attribute));
 
         [
             'id="message_template"',
-            'class="mes"',
-            'class="mes_block"',
-            'class="mes_buttons"',
-            'class="mes_edit_buttons"',
-            'class="mes_reasoning_details"',
-            'class="mes_reasoning"',
-            'class="mes_text"',
-            'class="mes_media_wrapper"',
-            'class="mes_file_wrapper"',
-            'class="mes_bias"',
-        ].forEach(marker => expect(indexHtml).toContain(marker));
+            'className="mes"',
+            'className="mes_block"',
+            'className="mes_buttons"',
+            'className="mes_edit_buttons"',
+            'className="mes_reasoning_details"',
+            'className="mes_reasoning"',
+            'className="mes_text"',
+            'className="mes_media_wrapper"',
+            'className="mes_file_wrapper"',
+            'className="mes_bias"',
+        ].forEach(marker => expect(host).toContain(marker));
 
-        expect(indexHtml.indexOf('class="mes_reasoning_details"')).toBeLessThan(indexHtml.indexOf('class="mes_text"'));
-        expect(indexHtml.indexOf('class="mes_text"')).toBeLessThan(indexHtml.indexOf('class="mes_media_wrapper"'));
-        expect(indexHtml.indexOf('class="mes_media_wrapper"')).toBeLessThan(indexHtml.indexOf('class="mes_file_wrapper"'));
-        expect(getTagByClass(indexHtml, 'mes_img_swipe_left')).toContain('mes_img_swipe_left');
-        expect(getTagByClass(indexHtml, 'mes_img_swipe_right')).toContain('mes_img_swipe_right');
+        expectDocumentOrder(host, ['className="mes_reasoning_details"', 'className="mes_text"', 'className="mes_media_wrapper"', 'className="mes_file_wrapper"']);
+        expect(getTagByClass(host, 'mes_img_swipe_left')).toContain('mes_img_swipe_left');
+        expect(getTagByClass(host, 'mes_img_swipe_right')).toContain('mes_img_swipe_right');
     });
 
     test('routes message body formatting through the framework-neutral render service without DOM insertion', () => {
@@ -273,7 +274,7 @@ describe('chat workspace structure', () => {
     });
 
     test('keeps message row actions discoverable by role and accessible name', () => {
-        const indexHtml = readRepoFile('public/index.html');
+        const host = readRepoFile('app/components/workspace/WorkspaceHost.tsx');
 
         [
             ['extraMesButtonsHint', 'Message Actions'],
@@ -304,10 +305,10 @@ describe('chat workspace structure', () => {
             ['mes_img_swipe_left', 'Swipe left'],
             ['mes_img_swipe_right', 'Swipe right'],
         ].forEach(([className, label]) => {
-            expectButtonAffordance(getTagByClass(indexHtml, className), label);
+            expectButtonAffordance(getTagByClass(host, className), label);
         });
 
-        expect(indexHtml).toMatch(/class="[^"]*\bmes_edit_cancel\b[^"]*"[^>]*\bdata-action="cancel-edit"/);
+        expect(getTagByClass(host, 'mes_edit_cancel')).toContain('data-action="cancel-edit"');
     });
 
     test('keeps workspace message projections stable for memoized summary work', () => {

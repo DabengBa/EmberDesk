@@ -4,7 +4,7 @@ import { testSetup } from './frontend/frontent-test-utils.js';
 
 const characterName = 'Dev Character 001';
 const chatFolder = 'dev-character-001';
-const frontendChatName = 'Dev Character 001 Frontend Frames Proof';
+const frontendChatName = () => `Frontend Frames ${test.info().title.replace(/\W+/g, ' ')}`;
 
 const FRAME_DOCUMENT_ONE = [
     '<!DOCTYPE html>',
@@ -12,7 +12,7 @@ const FRAME_DOCUMENT_ONE = [
     '<body>',
     '<div id="ed-e2e-app" style="min-height: 50vh">FRAME CONTENT ONE</div>',
     '<style>#ed-e2e-app { background-color: rgb(18, 52, 86); }</style>',
-    '<script>window.__e2eMarker = 42;</scr' + 'ipt>',
+    '<script>document.querySelector("#ed-e2e-app").dataset.marker = "42";</scr' + 'ipt>',
     '</body>',
     '</html>',
 ].join('\n');
@@ -64,7 +64,7 @@ async function seedFrontendChat(page) {
         page,
         characterName,
         avatarUrl: `${chatFolder}.png`,
-        fileName: frontendChatName,
+        fileName: frontendChatName(),
         chat: buildFrontendFramesChat(),
     });
 }
@@ -108,15 +108,16 @@ async function selectCharacterByName(page, name) {
 }
 
 async function openFrontendChat(page) {
+    const name = frontendChatName();
     await page.evaluate(async (chatToOpen) => {
         const context = window.SillyTavern.getContext();
         await context.openCharacterChat(chatToOpen);
-    }, frontendChatName);
+    }, name);
     await page.waitForFunction((chatName) => {
         const context = window.SillyTavern.getContext();
         return context.characters[context.characterId]?.chat === chatName
             && document.querySelectorAll('#chat .mes[mesid]').length === 4;
-    }, frontendChatName, { timeout: 30_000 });
+    }, name, { timeout: 30_000 });
 }
 
 async function setFrontendFramesSettings(page, patch) {
@@ -140,7 +141,7 @@ test.describe('chat message frontend frames', () => {
         await seedFrontendChat(page);
     });
 
-    test('renders complete HTML documents as live same-origin frames', async ({ page }) => {
+    test('renders complete HTML documents as live isolated frames', async ({ page }) => {
         await testSetup.awaitST({ page });
         await selectCharacterByName(page, characterName);
         await openFrontendChat(page);
@@ -156,48 +157,15 @@ test.describe('chat message frontend frames', () => {
         // Frame ids are derived from the stable message uid, not the array index.
         await expect(firstFrame).toHaveAttribute('title', /^ed-frame--[\w-]+--0$/);
 
-        const frameFacts = await page.evaluate(() => {
-            const iframe = document.querySelector('.mes[mesid="1"] iframe');
-            const frameWindow = iframe?.contentWindow;
-            return {
-                hasSrcdoc: typeof iframe?.srcdoc === 'string' && iframe.srcdoc.includes('ed-e2e-app'),
-                marker: frameWindow?.__e2eMarker,
-                frameId: frameWindow?.EmberDeskFrame?.frameId,
-                messageId: frameWindow?.EmberDeskFrame?.messageId,
-                appExists: Boolean(frameWindow?.document?.querySelector('#ed-e2e-app')),
-                lodashCopied: typeof frameWindow?._ === 'function',
-                frameBackground: frameWindow ? getComputedStyle(frameWindow.document.body).backgroundColor : null,
-                appBackground: frameWindow ? getComputedStyle(frameWindow.document.querySelector('#ed-e2e-app')).backgroundColor : null,
-            };
-        });
-        expect(frameFacts).toEqual({
-            hasSrcdoc: true,
-            marker: 42,
-            frameId: expect.stringMatching(/^ed-frame--[\w-]+--0$/),
-            messageId: '1',
-            appExists: true,
-            lodashCopied: true,
-            frameBackground: 'rgba(0, 0, 0, 0)',
-            appBackground: 'rgb(18, 52, 86)',
-        });
-
-        // Auto-height: the predefine script sizes the iframe to its content.
-        await expect.poll(async () => page.evaluate(() => {
-            const iframe = document.querySelector('.mes[mesid="1"] iframe');
-            return iframe?.style.height ?? '';
-        }), { timeout: 15_000 }).toMatch(/^\d+px$/);
-
-        // min-height: 50vh is rewritten against the parent viewport variable.
-        const rewrittenHeight = await page.evaluate(() => {
-            const iframe = document.querySelector('.mes[mesid="1"] iframe');
-            const app = iframe?.contentWindow?.document?.querySelector('#ed-e2e-app');
-            return app ? Math.round(app.getBoundingClientRect().height) : 0;
-        });
-        const viewportHeight = await page.evaluate(() => window.innerHeight);
-        expect(Math.abs(rewrittenHeight - viewportHeight * 0.5)).toBeLessThan(8);
+        await expect(firstFrame).toHaveAttribute('sandbox', 'allow-scripts');
+        expect(await firstFrame.evaluate(iframe => iframe.contentDocument)).toBeNull();
+        const app = firstFrame.contentFrame().locator('#ed-e2e-app');
+        await expect(app).toHaveText('FRAME CONTENT ONE');
+        await expect(app).toHaveAttribute('data-marker', '42');
+        await expect(app).toHaveCSS('background-color', 'rgb(18, 52, 86)');
     });
 
-    test('shows only the card without a frontend source control', async ({ page }) => {
+    test('discloses the original fenced HTML as text', async ({ page }) => {
         await testSetup.awaitST({ page });
         await selectCharacterByName(page, characterName);
         await openFrontendChat(page);
@@ -205,11 +173,12 @@ test.describe('chat message frontend frames', () => {
         const slot = page.locator('.mes[mesid="1"] .ed-frontend-frame');
         await expect(slot).toHaveCount(1, { timeout: 15_000 });
         const sourcePre = slot.locator('pre');
-        const toggle = slot.locator('.ed-frontend-frame__toggle');
 
         await expect(sourcePre).toBeHidden();
-        await expect(toggle).toHaveCount(0);
         await expect(slot.locator('iframe')).toBeVisible();
+        await slot.locator('summary').click();
+        await expect(sourcePre).toBeVisible();
+        expect((await sourcePre.textContent()).trimEnd()).toBe(FRAME_DOCUMENT_ONE);
     });
 
     test('preserves ordinary code collapse and restores card sources on teardown', async ({ page }) => {
@@ -233,8 +202,8 @@ test.describe('chat message frontend frames', () => {
                 const ordinaryCollapsed = plain.style.display === 'none';
                 toggle.click();
                 const ordinaryExpanded = plain.style.display === '';
-                const cardSourcesHidden = source.closest('.ed-frontend-frame').querySelector('pre').style.display === 'none'
-                    && second.closest('.ed-frontend-frame').querySelector('pre').style.display === 'none';
+                const cardSourcesHidden = !source.closest('.ed-frontend-frame details').open
+                    && !second.closest('.ed-frontend-frame details').open;
                 frames.unmountFrontendFrames(text);
                 const inlineRestored = source.style.display === ''
                     && second.style.display === ''
@@ -338,7 +307,7 @@ test.describe('chat message frontend frames', () => {
             mesTexts.forEach((el, index) => { el.__e2eMark = `t${index}`; });
             return {
                 frameMarks: frames.map(frame => frame.__e2eMark),
-                heights: frames.map(frame => frame.style.height),
+                heights: frames.map(frame => getComputedStyle(frame).height),
             };
         });
         expect(before.frameMarks).toEqual(['f0', 'f1']);
@@ -358,7 +327,7 @@ test.describe('chat message frontend frames', () => {
             return {
                 srcdocSets: window.__e2eSrcdocSets,
                 frameMarks: frames.map(frame => frame.__e2eMark ?? 'RECREATED'),
-                heights: frames.map(frame => frame.style.height),
+                heights: frames.map(frame => getComputedStyle(frame).height),
                 mesTextMarks: [...document.querySelectorAll('#chat .mes .mes_text')]
                     .map(el => el.__e2eMark ?? 'REWRITTEN'),
             };
@@ -371,57 +340,6 @@ test.describe('chat message frontend frames', () => {
         expect(after.mesTextMarks).toEqual(['t1', 't2', 't3']);
     });
 
-    test('bridges whitelisted events and a frozen getContext snapshot into frames', async ({ page }) => {
-        await testSetup.awaitST({ page });
-        await selectCharacterByName(page, characterName);
-        await openFrontendChat(page);
-        await expect(page.locator('.mes[mesid="1"] .ed-frontend-frame iframe')).toHaveCount(1, { timeout: 15_000 });
-
-        const snapshot = await page.evaluate(() => {
-            const frameWindow = document.querySelector('.mes[mesid="1"] iframe')?.contentWindow;
-            const ctx = frameWindow?.EmberDeskFrame?.getContext?.();
-            return ctx ? {
-                frameId: ctx.frameId,
-                messageId: ctx.messageId,
-                userName: ctx.userName,
-                characterName: ctx.characterName,
-                frozen: Object.isFrozen(ctx),
-            } : null;
-        });
-        expect(snapshot?.frameId).toMatch(/^ed-frame--[\w-]+--0$/);
-        expect(snapshot?.messageId).toBe('1');
-        expect(typeof snapshot?.userName).toBe('string');
-        expect(snapshot?.frozen).toBe(true);
-
-        // Whitelisted subscription delivers; non-whitelisted refused; off()
-        // unsubscribes. Run in one evaluate — the frame's contentWindow object
-        // identity can drift between evaluates when the row re-commits.
-        const bridged = await page.evaluate(async () => {
-            window.__bridgeDeliveries = [];
-            const handler = payload => window.__bridgeDeliveries.push(payload);
-            const emit = (payload) => window.SillyTavern.getContext().eventSource.emit('message_received', payload);
-            const frameWindow = document.querySelector('.mes[mesid="1"] iframe').contentWindow;
-            const accepted = frameWindow.EmberDeskFrame.on('message_received', handler);
-            const rejected = frameWindow.EmberDeskFrame.on('not_a_real_event', () => {});
-            await emit({ e2e: 1 });
-            const afterOn = window.__bridgeDeliveries.length;
-            frameWindow.EmberDeskFrame.off('message_received', handler);
-            await emit({ e2e: 2 });
-            const afterOff = window.__bridgeDeliveries.length;
-            // Host-side re-subscribe through the same registry the frame uses.
-            window.__ED_FRAME_API__.on(frameWindow.EmberDeskFrame.frameId, 'message_received', handler);
-            await emit({ e2e: 3 });
-            return { accepted, rejected, afterOn, afterOff, afterRe: window.__bridgeDeliveries.length };
-        });
-        expect(bridged).toEqual({ accepted: true, rejected: false, afterOn: 1, afterOff: 1, afterRe: 2 });
-
-        // Host-side dispose on unmount: disable → emit → no further delivery.
-        await setFrontendFramesSettings(page, { enabled: false });
-        await expect(page.locator('.ed-frontend-frame')).toHaveCount(0, { timeout: 15_000 });
-        await page.evaluate(() => window.SillyTavern.getContext().eventSource.emit('message_received', { e2e: 4 }));
-        await page.waitForTimeout(300);
-        expect(await page.evaluate(() => window.__bridgeDeliveries.length)).toBe(2);
-    });
 });
 
 const STREAMING_FRAME_DOC = [
@@ -455,6 +373,7 @@ async function enableOpenAiStreaming(page) {
 async function installStreamingFetchStub(page, { chunks, delayMs = 150, keepStreamOpen = true }) {
     await page.evaluate(({ streamChunks, streamDelayMs, holdStreamOpen }) => {
         window.__edStreamGeneration = null;
+        const finishStream = new Promise(resolve => { window.__edFinishStream = resolve; });
         window.__edStreamOriginalFetch ??= window.fetch.bind(window);
         window.fetch = async (input, init = {}) => {
             const url = typeof input === 'string' ? input : input.url;
@@ -485,6 +404,7 @@ async function installStreamingFetchStub(page, { chunks, delayMs = 150, keepStre
                         }
                         // Natural completion: the provider terminator ends the
                         // generation without an abort.
+                        await finishStream;
                         controller.enqueue(encoder.encode('data: [DONE]\n\n'));
                         controller.close();
                     } finally {
@@ -597,6 +517,7 @@ test.describe('chat message frontend frames — streaming', () => {
         await expect(page.locator('#chat .mes.last_mes .mes_text iframe')).toHaveCount(0);
         await expect(page.locator('.ed-frontend-stream')).toHaveCount(0);
 
+        await page.evaluate(() => window.__edFinishStream());
         await settleGeneration(page);
         await expect(page.locator('#chat .mes.last_mes .mes_text .ed-frontend-frame iframe')).toHaveCount(1, { timeout: 15_000 });
         await expect(streamingCardSource(page)).toBeHidden();

@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { testSetup } from './frontend/frontent-test-utils.js';
+import { openWorkspacePanelFixture } from './helpers/workspace-panel-fixture.js';
 
 test('bulk message checkbox selects a deletion range with Space', async ({ page }) => {
     await testSetup.awaitST({ page });
@@ -30,13 +31,16 @@ test('bulk message checkbox selects a deletion range with Space', async ({ page 
 });
 
 test('tool editor controller uses latest draft and is cleared on unmount', async ({ page }) => {
-    await page.goto('/login');
-    await page.setContent('<div id="host"></div>');
+    await openWorkspacePanelFixture(page);
     await page.evaluate(async () => {
-        const workspace = await import('/react/login/assets/workspace-panels.js');
+        const workspace = await (await import('/scripts/workspace-panels-react-bridge.js')).loadWorkspacePanelsModule();
         window.editorWorkspace = workspace;
         window.editorController = { submit: () => null };
-        workspace.mountToolBindingEditor(document.getElementById('host'), { existing: null, bindings: [], controller: window.editorController });
+        const host = document.createElement('div');
+        host.id = 'host';
+        workspace.mountToolBindingEditor(host, { existing: null, bindings: [], controller: window.editorController });
+        if (!host.querySelector('#tb_name')) throw new Error('Detached mount must be synchronous');
+        document.body.append(host);
     });
     await page.locator('#tb_name').fill('first_name');
     await expect.poll(() => page.evaluate(() => window.editorController.submit()?.name)).toBe('first_name');
@@ -44,4 +48,22 @@ test('tool editor controller uses latest draft and is cleared on unmount', async
     await expect.poll(() => page.evaluate(() => window.editorController.submit()?.name)).toBe('latest_name');
     await page.evaluate(() => window.editorWorkspace.unmountSmallPanel(document.getElementById('host')));
     expect(await page.evaluate(() => window.editorController.submit())).toBeNull();
+});
+
+test('tool editor releases its controller when the connected host is removed', async ({ page }) => {
+    await openWorkspacePanelFixture(page, '<div id="host"><span id="native-child"></span></div>');
+    await page.evaluate(async () => {
+        const workspace = await (await import('/scripts/workspace-panels-react-bridge.js')).loadWorkspacePanelsModule();
+        window.editorController = { submit: () => null };
+        window.editorHost = document.getElementById('host');
+        workspace.mountToolBindingEditor(window.editorHost, { existing: null, bindings: [], controller: window.editorController });
+    });
+    await page.locator('#tb_name').fill('owned_draft');
+    await expect.poll(() => page.evaluate(() => window.editorController.submit()?.name)).toBe('owned_draft');
+    await page.locator('#host').evaluate(host => host.remove());
+    await expect.poll(() => page.evaluate(() => ({
+        draft: window.editorController.submit(),
+        reactChild: Boolean(window.editorHost.querySelector('#tb_name')),
+        nativeChild: Boolean(window.editorHost.querySelector('#native-child')),
+    }))).toEqual({ draft: null, reactChild: false, nativeChild: true });
 });

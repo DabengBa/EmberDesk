@@ -36,18 +36,12 @@ RUN \
   chown -R node:node config data plugins public/scripts/extensions/third-party backups && \
   ln -s "./config/config.yaml" "config.yaml"
 
-# Pre-compile Vite library, React page, and panel bundles required at runtime.
-# Login/setup/settings need app/dist/index.html; panel islands need their assets.
-# Build order matters: login may empty app/dist; panel modes keep emptyOutDir=false.
+# Pre-compile the legacy library and the shared React application.
 RUN \
-  echo "*** Build Vite library, React page, and panel bundles ***" && \
+  echo "*** Build Vite library and React application ***" && \
   pnpm run build:lib && \
   pnpm run build:react && \
-  pnpm run build:react:character-library && \
-  pnpm run build:react:workspace-panels && \
-  test -f app/dist/index.html && \
-  test -f app/dist/assets/character-library-panel.js && \
-  test -f app/dist/assets/workspace-panels.js
+  test -f app/dist/index.html
 
 # Drop build-time tooling from the runtime image.
 RUN \

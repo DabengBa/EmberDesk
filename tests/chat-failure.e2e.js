@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { testSetup } from './frontend/frontent-test-utils.js';
+import { openWorkspacePanelFixture } from './helpers/workspace-panel-fixture.js';
 
 test('failure notice fits the real mobile workspace without covering the composer', async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
@@ -46,13 +47,9 @@ for (const viewport of [{ width: 1280, height: 800 }, { width: 390, height: 844 
 });
 
 test('main chat reports a React effect failure and clears it after a successful commit', async ({ page }) => {
-    await page.route('**/chat-failure-test', route => route.fulfill({
-        contentType: 'text/html',
-        body: '<!doctype html><html><body><div id="sheld"><div id="chat"></div><div id="form_sheld"></div></div></body></html>',
-    }));
-    await page.goto('/chat-failure-test');
+    await openWorkspacePanelFixture(page, '<div id="sheld"><div id="chat"></div><div id="form_sheld"></div></div>');
     await page.evaluate(async () => {
-        const panels = await import('/react/login/assets/workspace-panels.js');
+        const panels = await (await import('/scripts/workspace-panels-react-bridge.js')).loadWorkspacePanelsModule();
         const failure = await import('/scripts/main-chat-failure.js');
         window.testPanels = panels;
         const host = document.getElementById('chat');
@@ -75,13 +72,9 @@ test('main chat reports a React effect failure and clears it after a successful 
 });
 
 test('main chat keeps messages visible during a failure-clearing effect failure', async ({ page }) => {
-    await page.route('**/chat-failure-preserves-message', route => route.fulfill({
-        contentType: 'text/html',
-        body: '<!doctype html><html><body><div id="sheld"><div id="chat"></div><div id="form_sheld"></div></div></body></html>',
-    }));
-    await page.goto('/chat-failure-preserves-message');
+    await openWorkspacePanelFixture(page, '<div id="sheld"><div id="chat"></div><div id="form_sheld"></div></div>');
     await page.evaluate(async () => {
-        const panels = await import('/react/login/assets/workspace-panels.js');
+        const panels = await (await import('/scripts/workspace-panels-react-bridge.js')).loadWorkspacePanelsModule();
         window.testFailure = await import('/scripts/main-chat-failure.js');
         const host = document.getElementById('chat');
         window.testPanels = panels;
@@ -127,10 +120,9 @@ test('main chat keeps messages visible during a failure-clearing effect failure'
 });
 
 test('an earlier React commit cannot clear a later snapshot failure', async ({ page }) => {
-    await page.route('**/chat-failure-race', route => route.fulfill({ contentType: 'text/html', body: '<div id="sheld"><div id="chat"></div></div>' }));
-    await page.goto('/chat-failure-race');
+    await openWorkspacePanelFixture(page, '<div id="sheld"><div id="chat"></div></div>');
     await page.evaluate(async () => {
-        const panels = await import('/react/login/assets/workspace-panels.js');
+        const panels = await (await import('/scripts/workspace-panels-react-bridge.js')).loadWorkspacePanelsModule();
         const failure = await import('/scripts/main-chat-failure.js');
         const host = document.getElementById('chat');
         window.testPanels = panels;
@@ -149,8 +141,7 @@ test('an earlier React commit cannot clear a later snapshot failure', async ({ p
 });
 
 test('a pending host snapshot cannot clear a newer host failure', async ({ page }) => {
-    await page.route('**/chat-host-race', route => route.fulfill({ contentType: 'text/html', body: '<div id="sheld"><div id="chat"></div></div>' }));
-    await page.goto('/chat-host-race');
+    await openWorkspacePanelFixture(page, '<div id="sheld"><div id="chat"></div></div>');
     await page.evaluate(async () => {
         const { mountWorkspacePanelHost } = await import('/scripts/workspace-panel-host-controller.js');
         const { showMainChatFailure } = await import('/scripts/main-chat-failure.js');
@@ -175,35 +166,23 @@ test('a pending host snapshot cannot clear a newer host failure', async ({ page 
     await expect(page.locator('#chat > .mes[mesid="0"] .mes_text')).toContainText('Recovered C');
 });
 
-test('a pending bridge bundle cannot clear a newer host failure', async ({ page }) => {
-    let releaseBundle;
-    let bundleRequested;
-    const requested = new Promise(resolve => { bundleRequested = resolve; });
-    const gate = new Promise(resolve => { releaseBundle = resolve; });
-    await page.route('**/workspace-panels.js*', async route => { bundleRequested(); await gate; await route.continue(); });
-    await page.route('**/chat-bridge-race', route => route.fulfill({ contentType: 'text/html', body: '<div id="sheld"><div id="chat"></div></div>' }));
-    await page.goto('/chat-bridge-race');
+test('a pending bridge mount cannot clear a newer host failure', async ({ page }) => {
+    await openWorkspacePanelFixture(page, '<div id="sheld"><div id="chat"></div></div>');
     await page.evaluate(async () => {
-        const { mountWorkspacePanelHost } = await import('/scripts/workspace-panel-host-controller.js');
+        const { loadWorkspacePanelsModule, mountReactWorkspacePanel } = await import('/scripts/workspace-panels-react-bridge.js');
         const { showMainChatFailure } = await import('/scripts/main-chat-failure.js');
-        const host = document.getElementById('chat');
+        const container = document.getElementById('chat');
         const features = { reactPanels: { mainChatMessageList: true } };
         const state = { mainChatSnapshot: { orderedMessageIds: ['0'], messagesById: { '0': { id: '0', render: { messageHtml: 'Recovered C' } } } } };
-        const mount = async getState => {
-            const result = await mountWorkspacePanelHost({ kind: 'mainChatMessageList', features, ensureContainer: () => host, getState, commands: {}, runtime: {} });
-            if (!result.mounted) showMainChatFailure(host, 'Snapshot B failed');
-            return result;
-        };
-        window.mountC = () => mount(() => state);
-        window.failB = () => mount(() => { throw new Error('injected snapshot B'); });
-        window.pendingA = mount(() => state);
+        const mount = loadModule => mountReactWorkspacePanel({ kind: 'mainChatMessageList', features, container, state, commands: {}, runtime: {}, loadModule });
+        const panels = await loadWorkspacePanelsModule();
+        window.pendingA = mount(() => new Promise(resolve => { window.releaseA = () => resolve(panels); }));
+        showMainChatFailure(container, 'Snapshot B failed');
+        window.mountC = () => mount();
     });
-    await requested;
-    await page.evaluate(() => window.failB());
     await expect(page.locator('[data-react-main-chat-build-error]')).toHaveText('Snapshot B failed');
-    releaseBundle();
-    await page.evaluate(() => window.pendingA);
-    await page.waitForTimeout(250);
+    await page.evaluate(() => { window.releaseA(); return window.pendingA; });
+    await expect(page.locator('#chat > .mes[mesid="0"] .mes_text')).toContainText('Recovered C');
     await expect(page.locator('[data-react-main-chat-build-error]')).toHaveText('Snapshot B failed');
     await page.evaluate(() => window.mountC());
     await expect(page.locator('[data-react-main-chat-build-error]')).toHaveCount(0);

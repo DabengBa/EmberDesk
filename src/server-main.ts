@@ -43,12 +43,13 @@ import {
     settingsPageMiddleware,
     createLegacyLoginHtmlRedirectMiddleware,
     createLegacySetupHtmlRedirectMiddleware,
+    createLegacyAuthHtmlRedirectMiddleware,
     needsSetup,
     migratePublicOverrides,
 } from './users.js';
 
 import getViteLibServeMiddleware from './middleware/vite-lib-serve.js';
-import { getReactLoginServeMiddleware } from './middleware/react-login-serve.js';
+import { getReactLoginServeMiddleware, hasReactLoginBuild, sendReactLoginIndex } from './middleware/react-login-serve.js';
 import basicAuthMiddleware from './middleware/basicAuth.js';
 import getWhitelistMiddleware from './middleware/whitelist.ts';
 import accessLoggerMiddleware, { getAccessLogPath, migrateAccessLog } from './middleware/accessLogWriter.js';
@@ -232,8 +233,7 @@ async function registerMiddleware(app: Express, cli: CommandLineArguments): Prom
         });
     }
 
-    // Static files
-    // Host index page
+    // Host the workspace through the same React entry as login and settings.
     app.get('/', cacheBuster.middleware, async (request, response) => {
         if (await needsSetup()) {
             return response.redirect('/setup');
@@ -245,8 +245,14 @@ async function registerMiddleware(app: Express, cli: CommandLineArguments): Prom
             return response.redirect(redirectUrl);
         }
 
-        return response.sendFile('index.html', { root: publicRoot });
+        if (!hasReactLoginBuild()) {
+            return response.status(503).type('text/plain').send(
+                'React workspace build is missing. Run "pnpm run build:react" and restart the server.',
+            );
+        }
+        return sendReactLoginIndex(response);
     });
+    app.get('/index.html', createLegacyAuthHtmlRedirectMiddleware('/'));
 
     // Callback endpoint for OAuth PKCE flows (e.g. OpenRouter)
     app.get(OAUTH_CALLBACK_ROUTE, oauthCallbackMiddleware);
@@ -267,7 +273,7 @@ async function registerMiddleware(app: Express, cli: CommandLineArguments): Prom
     app.use(viteLibMiddleware);
     app.use(REACT_LOGIN_BASE_PATH, getReactLoginServeMiddleware());
     app.use(userCssMiddleware);
-    app.use(express.static(path.join(serverDirectory, 'public'), {}));
+    app.use(express.static(publicRoot, {}));
 
     // Public API
     app.use('/api/users', usersPublicRouter);

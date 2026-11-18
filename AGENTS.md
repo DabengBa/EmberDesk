@@ -14,8 +14,8 @@ EmberDesk is a self-hosted browser LLM workspace forked from SillyTavern. The pr
 | Package manager / scripts | pnpm 12.0.0-rc.5 (`packageManager`) |
 | Language | JavaScript ES modules with incremental native TypeScript (server `src/`) + TypeScript (frontend `app/`) |
 | Server | Express 5 |
-| Frontend | React 19 + TanStack Router/Query/Form + Zustand + Zod on a Vite-built app; legacy `public/` HTML/CSS/jQuery shell retained for not-yet-migrated surfaces |
-| Build | Vite 8 for `/lib.js`, React page app, and guarded React panel bundles |
+| Frontend | One Vite-built React 19 app with TanStack Router/Query/Form, Zustand and Zod; `public/` retains first-party controllers, styles and compatibility assets |
+| Build | Vite 8 for `/lib.js` and one React SPA |
 | Tests | Jest unit tests and Playwright E2E under `tests/` |
 | License | AGPL-3.0 |
 
@@ -45,10 +45,7 @@ EmberDesk is a self-hosted browser LLM workspace forked from SillyTavern. The pr
 pnpm install --frozen-lockfile
 (cd tests && pnpm install --frozen-lockfile)
 pnpm run build:lib              # Vite 构建 (主构建)
-pnpm run build:react            # React page app
-pnpm run build:react:character-library
-pnpm run build:react:workspace-panels
-# 每个 vite mode 都会清空 app/dist——三个 React 构建必须全部跑完才完整
+pnpm run build:react            # Single React SPA
 pnpm run start
 pnpm run start:no-csrf
 pnpm run test:unit
@@ -83,7 +80,7 @@ For focused E2E runs, pass arguments directly: `pnpm --dir tests run test:e2e wo
 
 - React is the **sole runtime owner** of migrated surfaces: `/login`, `/setup`, `/settings`, Character Library + Character Authoring, World Info, and the same-entry workspace shell with its main-chat island. There are no group chat, group authoring, or third-party extension surfaces; do not reintroduce their UI or controllers. Do not reintroduce legacy `public/login.html` / `public/setup.html` controllers or otherwise keep a parallel legacy implementation alive; roll back by deploying a prior version. Shared helpers remain in `public/scripts/login-shared.js` and `public/scripts/setup-shared.js`.
 - Frontend `app/` is TypeScript + React 19 using the standard stack: TanStack Router, TanStack Query, TanStack Form, Zustand, and Zod. Do not broaden Vue, SPA-framework rewrites, or a separate `/workspace-next` route without explicit approval. Do not use the React stack to rewrite the entire `public/` shell in one move.
-- The legacy `public/` HTML/CSS/jQuery shell is retained only for surfaces not yet migrated. Treat `eventSource`, `event_types`, `globalThis.SillyTavern`, and startup ordering as shared contracts there.
+- The React workspace keeps DOM hosts used by native first-party controllers. Treat `eventSource`, `event_types`, `globalThis.SillyTavern`, and startup ordering as shared contracts there; do not reintroduce a standalone workspace HTML shell.
 - Preserve character-list identity selectors: `.character_select`, `.bogus_folder_select`, `data-chid`, legacy `chid`, `id="CharID${chid}"`, `.character_selected`, `.bulk_select_checkbox`, `.tags_inline`, `.ch_fav`.
 - There is no third-party extension API: `/api/extensions/*` does not exist and returns ordinary 404. Built-in Regex survives as a first-party feature, and message cards run through first-party frontend frames.
 - Retired API surfaces (`/api/groups`, `/api/extensions`, `/api/vector`, `/api/stats`, `/api/moving-ui`, `/api/presets` non-`openai` IDs, etc.) are absent rather than tombstoned: they fall through to ordinary 404. Do not re-add 410 handlers.

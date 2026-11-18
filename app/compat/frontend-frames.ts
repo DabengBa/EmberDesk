@@ -1,5 +1,5 @@
 /**
- * Frontend-frames bridge for React main-chat rows.
+ * Frontend-frame lifecycle adapter for React main-chat rows.
  *
  * The DOM algorithm lives in public/scripts/frontend-frame.js (framework-free,
  * DOM-marker state). This adapter resolves shell facts through
@@ -38,19 +38,11 @@ import type { MainChatMessageRecord } from '../stores/main-chat-store';
 
 interface ShellEventSource {
     emit?: (eventName: string, payload?: unknown) => void;
-    on?: (eventName: string, listener: (...args: unknown[]) => void) => void;
-    removeListener?: (eventName: string, listener: (...args: unknown[]) => void) => void;
 }
 
 interface ShellFrameContext {
-    powerUserSettings?: { frontend_frames?: unknown } & Record<string, unknown>;
+    powerUserSettings?: { frontend_frames?: unknown };
     eventSource?: ShellEventSource;
-    name1?: string;
-    name2?: string;
-    characterId?: number | string;
-    chatId?: string;
-    getUserAvatarUrl?: () => string;
-    getCharacterAvatarUrl?: () => string;
 }
 
 let cachedShellContext: ShellFrameContext | null = null;
@@ -93,28 +85,8 @@ function buildFrameContext(messageId: string, frameIdSeed?: string) {
         isStreamingRow: streaming.activeMessageId === messageId
             && (streaming.phase === 'connecting' || streaming.phase === 'streaming'),
         messageId,
-        // Uid-scoped identity for frame ids and collapse state: survives the
-        // index shifts that splices cause. `messageId` itself stays the chat
-        // index because frame scripts consume it as a positional handle.
+        // UID-scoped identity survives the chat index shifts that splices cause.
         frameIdSeed: frameIdSeed || messageId,
-        userAvatarUrl: shell?.getUserAvatarUrl?.() ?? '',
-        charAvatarUrl: shell?.getCharacterAvatarUrl?.() ?? '',
-        baseHref: typeof globalThis.location?.origin === 'string' ? globalThis.location.origin : '',
-        eventSource: shell?.eventSource,
-        // Convenience snapshot for EmberDeskFrame.getContext() — frozen by the
-        // bridge per call. NOT a security boundary: same-origin frames can
-        // always reach window.parent for the live context.
-        getContextSnapshot: (frameId: string) => ({
-            frameId,
-            messageId,
-            userName: shell?.name1 ?? '',
-            characterName: shell?.name2 ?? '',
-            characterId: shell?.characterId ?? null,
-            chatId: shell?.chatId ?? '',
-            userAvatarUrl: shell?.getUserAvatarUrl?.() ?? '',
-            charAvatarUrl: shell?.getCharacterAvatarUrl?.() ?? '',
-            settings: shell?.powerUserSettings ? { ...shell.powerUserSettings } : undefined,
-        }),
         emit: (eventName: string, frameId: string) => {
             try {
                 shell?.eventSource?.emit?.(eventName, frameId);

@@ -315,6 +315,51 @@ async function chatSnapshot(page) {
     });
 }
 
+test('continues the saved role reply through the React options menu', async ({ page, characterModel }) => {
+    const requests = await characterModel([
+        { content: 'ORIGINAL_REPLY' },
+        { content: 'CONTINUATION' },
+        { status: 500 },
+    ]);
+    const options = page.locator('#options_button');
+    const item = page.locator('#option_continue');
+    await options.click();
+    await expect(item).toBeVisible();
+    await expect(item).toBeDisabled();
+    await page.keyboard.press('Escape');
+    await expect(options).toHaveAttribute('aria-expanded', 'false');
+
+    await sendCharacterMessage(page, 'continue this story', 'ORIGINAL_REPLY');
+    const before = await chatSnapshot(page);
+    await page.locator('#send_textarea').fill('unsent draft');
+
+    const continueReply = async () => {
+        await options.click();
+        await expect(item).toBeVisible({ timeout: 5_000 });
+        await expect(item).toBeEnabled();
+        return startCharacterRun(page, 'continue', () => item.click());
+    };
+    const created = page.waitForRequest(request => request.url().endsWith('/generation/create')
+        && request.postDataJSON()?.action === 'continue');
+    await expectRunStatus(page, await continueReply(), 'completed');
+    expect((await created).postDataJSON()).toMatchObject({
+        avatar_url: expect.any(String), file_name: expect.any(String), version: expect.any(String),
+    });
+    await expect.poll(() => lastMessageText(page)).toMatch(/^ORIGINAL_REPLY\s*CONTINUATION$/);
+    const after = await chatSnapshot(page);
+    expect(after.slice(0, -1)).toEqual(before.slice(0, -1));
+    expect(after).toHaveLength(before.length);
+    expect(JSON.stringify(requests[1].messages)).toContain('ORIGINAL_REPLY');
+    expect(JSON.stringify(requests[1].messages)).not.toContain('unsent draft');
+    await expect(page.locator('#send_textarea')).toHaveValue('unsent draft');
+
+    await waitForRegenerateSettled(page);
+    await expectRunStatus(page, await continueReply(), 'failed');
+    await expect(page.getByText('generation_failed', { exact: true })).toBeVisible();
+    expect(await chatSnapshot(page)).toEqual(after);
+    expect(requests).toHaveLength(3);
+});
+
 test.describe('chat regenerate', () => {
     test.describe.configure({ mode: 'serial' });
 

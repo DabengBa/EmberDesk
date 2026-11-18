@@ -1,20 +1,33 @@
 import assert from 'node:assert/strict';
 import { createServer as createHttpServer } from 'node:http';
 import { once } from 'node:events';
-import { readFileSync } from 'node:fs';
+
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createServer, resolveConfig } from 'vite';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const configFile = path.join(repoRoot, 'vite.config.ts');
-const workspaceHtml = readFileSync(path.join(repoRoot, 'public/index.html'), 'utf8');
 const backend = createHttpServer((req, res) => {
     if (req.url === '/api/identity') return res.end(JSON.stringify(req.headers));
     if (req.url === '/?dev-workspace=1') {
         res.setHeader('content-type', 'text/html');
         res.setHeader('x-observed-url', req.url);
-        return res.end(workspaceHtml);
+        return res.end('<html>production build</html>');
+    }
+    if (req.url === '/?workspace=denied') {
+        res.writeHead(302, { location: '/login?workspace=denied' });
+        return res.end();
+    }
+    if (req.url === '/index.html?workspace=denied') {
+        res.writeHead(302, { location: '/?workspace=denied' });
+        return res.end();
+    }
+    if (req.url === '/?workspace=missing' || req.url === '/?workspace=outage') {
+        res.writeHead(503, { 'content-type': 'text/plain' });
+        return res.end(req.url.endsWith('missing')
+            ? 'React workspace build is missing. Run "pnpm run build:react" and restart the server.'
+            : 'unavailable');
     }
     if (req.url === '/not-a-page') {
         res.writeHead(404);
@@ -131,9 +144,21 @@ try {
     assert.equal(workspaceResponse.status, 200);
     assert.equal(workspaceResponse.headers.get('x-observed-url'), '/?dev-workspace=1');
     const workspace = await workspaceResponse.text();
-    assert.match(workspace, /<style>/);
+    assert.match(workspace, /<div id="root"><\/div>/);
+    assert.match(workspace, /\/app\/client\.tsx/);
     assert.match(workspace, /\/@vite\/client/);
     assert.match(workspace, /\/@react-refresh/);
+    const missingWorkspace = await fetch(`${origin}/?workspace=missing`);
+    assert.equal(missingWorkspace.status, 200);
+    assert.match(await missingWorkspace.text(), /\/app\/client\.tsx/);
+    const workspaceOutage = await fetch(`${origin}/?workspace=outage`);
+    assert.equal(workspaceOutage.status, 503);
+    assert.equal(await workspaceOutage.text(), 'unavailable');
+    for (const [requestPath, redirect] of [['/?workspace=denied', '/login?workspace=denied'], ['/index.html?workspace=denied', '/?workspace=denied']]) {
+        const response = await fetch(origin + requestPath, { redirect: 'manual' });
+        assert.equal(response.status, 302);
+        assert.equal(response.headers.get('location'), redirect);
+    }
     for (const panel of ['workspace-panels', 'character-library-panel']) {
         const module = await fetch(`${origin}/react/login/assets/${panel}.js?v=fixture`);
         assert.equal(module.status, 200);

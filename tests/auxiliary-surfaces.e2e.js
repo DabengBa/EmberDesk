@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { createServer } from 'node:http';
 import { testSetup } from './frontend/frontent-test-utils.js';
+import { openWorkspacePanelFixture } from './helpers/workspace-panel-fixture.js';
 
 test('wire records retain their matching upstream bodies when foreground and memory requests coexist', async ({ page }) => {
     test.setTimeout(120_000);
@@ -133,10 +134,9 @@ test('real memory and wire overlays restore focus and discard a forced-close dra
 });
 
 test('prompt panel fills its container and aligns token columns at different widths', async ({ page }) => {
-    await page.goto('/login');
-    await page.setContent('<link rel="stylesheet" href="/style.css"><link rel="stylesheet" href="/react/login/assets/workspace-panels.css"><nav id="left-nav-panel" class="drawer-content fillLeft openDrawer"><div id="prompt-layout-host"></div></nav>');
+    await openWorkspacePanelFixture(page, '<nav id="left-nav-panel" class="drawer-content fillLeft openDrawer"><div id="prompt-layout-host"></div></nav>');
     await page.evaluate(async () => {
-        const { mountPromptPanel } = await import('/react/login/assets/workspace-panels.js');
+        const { mountPromptPanel } = await (await import('/scripts/workspace-panels-react-bridge.js')).loadWorkspacePanelsModule();
         const prompt = {
             identifier: 'layout-prompt', name: 'A long prompt name for width regression', role: 'system',
             content: '内容', marker: false, system_prompt: false, forbid_overrides: false,
@@ -168,10 +168,9 @@ test('prompt panel fills its container and aligns token columns at different wid
 });
 
 test('prompt handles reorder across rows without changing enablement or editor state', async ({ page }) => {
-    await page.goto('/login');
-    await page.setContent('<link rel="stylesheet" href="/style.css"><link rel="stylesheet" href="/react/login/assets/workspace-panels.css"><nav id="left-nav-panel" class="drawer-content fillLeft openDrawer"><div id="prompt-drag-host"></div></nav>');
+    await openWorkspacePanelFixture(page, '<nav id="left-nav-panel" class="drawer-content fillLeft openDrawer"><div id="prompt-drag-host"></div></nav>');
     await page.evaluate(async () => {
-        const { mountPromptPanel } = await import('/react/login/assets/workspace-panels.js');
+        const { mountPromptPanel } = await (await import('/scripts/workspace-panels-react-bridge.js')).loadWorkspacePanelsModule();
         const prompts = ['first', 'second', 'third', 'fourth'].map(identifier => ({
             identifier, name: identifier, role: 'system', content: `${identifier} content`,
             marker: identifier === 'fourth', system_prompt: false, forbid_overrides: false,

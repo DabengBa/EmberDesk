@@ -37,7 +37,7 @@ export const defaultSettingsFormValues = {
         frontendFramesDepthIgnoreHidden: true,
         frontendFramesCollapseCodeBlock: 'none',
         frontendFramesSkipHighlight: true,
-        frontendFramesUseBlobUrl: false,
+
     },
 };
 
@@ -140,12 +140,7 @@ const fieldBindings = [
         settingsPath: 'power_user.frontend_frames.skip_highlight',
         toForm: value => boolOr(value, true),
     },
-    {
-        tab: 'providers',
-        formPath: 'rendering.frontendFramesUseBlobUrl',
-        settingsPath: 'power_user.frontend_frames.use_blob_url',
-        toForm: value => boolOr(value, false),
-    },
+
 ];
 
 /**
@@ -468,9 +463,10 @@ export function buildSettingsSavePayload(baseSettings, formValues, { settingsRev
         // runtime uses fixed markers and card/Prompt Manager prompts.
         delete powerUser.sysprompt;
         delete powerUser.reasoning;
-        // The streaming preview is retired; a stale stored flag must not survive a save.
+        // The streaming preview and blob debug mode are retired.
         if (powerUser.frontend_frames && typeof powerUser.frontend_frames === 'object') {
             delete powerUser.frontend_frames.allow_streaming;
+            delete powerUser.frontend_frames.use_blob_url;
         }
     }
 

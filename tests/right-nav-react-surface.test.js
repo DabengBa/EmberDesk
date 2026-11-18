@@ -11,16 +11,16 @@ function readRepoFile(relativePath) {
 }
 
 describe('right navigation panel React surface', () => {
-    const indexHtml = readRepoFile('public/index.html');
+    const indexHtml = readRepoFile('app/components/workspace/WorkspaceHost.tsx');
     const panel = readRepoFile('app/components/right-nav/RightNavPanel.tsx');
     const script = readRepoFile('public/script.js');
     const rossMods = readRepoFile('public/scripts/RossAscends-mods.js');
     const bulkOverlay = readRepoFile('public/scripts/BulkEditOverlay.js');
 
-    test('nav shell stays in index.html while inner markup is React-owned', () => {
+    test('nav shell stays in WorkspaceHost while inner markup is React-owned', () => {
         expect(indexHtml).toContain('id="right-nav-panel"');
         const block = indexHtml.match(/<nav id="right-nav-panel"[^>]*>([\s\S]*?)<\/nav>/)?.[0] ?? '';
-        expect(block).toContain('class="drawer-content closedDrawer fillRight"');
+        expect(block).toContain('className="drawer-content closedDrawer fillRight"');
         expect(block).not.toContain('id="form_create"');
         expect(block).not.toContain('id="rm_print_characters_block"');
     });

@@ -62,22 +62,22 @@ describe('options menu + character context menu React surfaces', () => {
         menu.close(true);
         expect(effects).toEqual(['show', 'hide', 'focus']);
     });
-    const indexHtml = readRepoFile('public/index.html');
+    const workspaceHost = readRepoFile('app/components/workspace/WorkspaceHost.tsx');
     const options = readRepoFile('app/components/options-menu/OptionsMenu.tsx');
     const ctxMenu = readRepoFile('app/components/context-menu/CharacterContextMenu.tsx');
     const script = readRepoFile('public/script.js');
 
     test('options shell stays legacy-owned; items are React-owned', () => {
-        const block = indexHtml.match(/<div id="options"[^>]*>([\s\S]*?)<\/div>/)?.[0] ?? '';
+        const block = workspaceHost.match(/<div id="options"[^>]*>([\s\S]*?)<\/div>/)?.[0] ?? '';
         expect(block).toContain('id="options"');
-        expect(block).toContain('style="display: none;"');
+        expect(block).toContain('style={{ display: "none" }}');
         expect(block).not.toContain('options-content');
     });
 
     test('options component preserves item IDs', () => {
         const ids = [
             'option_back_to_main',
-            'option_start_new_chat', 'option_close_chat', 'option_select_chat', 'option_regenerate', 'option_delete_mes',
+            'option_start_new_chat', 'option_close_chat', 'option_select_chat', 'option_regenerate', 'option_continue', 'option_delete_mes',
             'attachFile',
         ];
         for (const id of ids) {
@@ -126,8 +126,8 @@ describe('options menu + character context menu React surfaces', () => {
     });
 
     test('character context menu items are React-owned with shell preserved', () => {
-        expect(indexHtml).toContain('id="character_context_menu"');
-        expect(indexHtml).not.toContain('id="character_context_menu_favorite"');
+        expect(workspaceHost).toContain('id="character_context_menu"');
+        expect(workspaceHost).not.toContain('id="character_context_menu_favorite"');
         const ids = [
             'character_context_menu_favorite', 'character_context_menu_tag',
             'character_context_menu_duplicate',

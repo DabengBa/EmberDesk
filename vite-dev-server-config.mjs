@@ -6,9 +6,6 @@ const backendPaths = [
     '/api',
     '/lib.js',
     '/csrf-token',
-    '/login',
-    '/setup',
-    '/settings',
     '/react/login',
     '/style.css',
     '/css',
@@ -58,7 +55,8 @@ export function getDevServerConfig(env = process.env, getViteServer = () => unde
                     try {
                         const vite = getViteServer();
                         const source = await readFile(new URL('./index.html', import.meta.url), 'utf8');
-                        const html = await vite.transformIndexHtml(req.url, source);
+                        const pathname = new URL(req.url, 'http://localhost').pathname;
+                        const html = await vite.transformIndexHtml(pathname, source);
                         delete headers['content-length'];
                         delete headers['content-encoding'];
                         delete headers.etag;
@@ -78,7 +76,7 @@ export function getDevServerConfig(env = process.env, getViteServer = () => unde
                     return serveDevPage();
                 }
                 if (upstream.statusCode === 503 && /^text\/plain\b/i.test(headers['content-type'] ?? '') && req.method === 'GET') {
-                    const page = new URL(req.url, 'http://localhost').pathname.split('/')[1];
+                    const page = new URL(req.url, 'http://localhost').pathname.split('/')[1] || 'workspace';
                     const expected = `React ${page} build is missing. Run "pnpm run build:react" and restart the server.`;
                     const chunks = [];
                     let size = 0;
@@ -106,47 +104,10 @@ export function getDevServerConfig(env = process.env, getViteServer = () => unde
             });
         },
     };
-    const workspace = {
-        ...common,
-        selfHandleResponse: true,
-        configure(server) {
-            stripIdentityHeaders(server);
-            server.on('proxyReq', proxyReq => {
-                proxyReq.removeHeader('if-none-match');
-                proxyReq.removeHeader('if-modified-since');
-                proxyReq.setHeader('accept-encoding', 'identity');
-            });
-            server.on('proxyRes', async (upstream, req, res) => {
-                const headers = { ...upstream.headers };
-                if (req.method !== 'GET' || upstream.statusCode !== 200 || !/^text\/html\b/i.test(headers['content-type'] ?? '')) {
-                    res.writeHead(upstream.statusCode, headers);
-                    return upstream.pipe(res);
-                }
-                try {
-                    const chunks = [];
-                    for await (const chunk of upstream) chunks.push(chunk);
-                    const html = await getViteServer().transformIndexHtml(new URL(req.url, 'http://localhost').pathname, Buffer.concat(chunks).toString());
-                    delete headers['content-length'];
-                    delete headers['content-encoding'];
-                    delete headers.etag;
-                    delete headers['last-modified'];
-                    headers['cache-control'] = 'no-store';
-                    res.writeHead(200, headers);
-                    return res.end(html);
-                } catch {
-                    res.writeHead(502);
-                    return res.end('Unable to render development workspace');
-                }
-            });
-        },
-    };
-    delete proxy['/login'];
-    delete proxy['/setup'];
-    delete proxy['/settings'];
     return {
         port: devPort,
         proxy: {
-            '^/(?:\\?.*)?$': workspace,
+            '^/(?:\\?.*)?$': pages,
             '^/(login|setup|settings)/?(?:\\?.*)?$': pages,
             ...proxy,
             '^/(?!@|app/|public/|node_modules/|__vite|virtual:)(?:.*)$': common,

@@ -12,29 +12,12 @@ topic: third-party-extension-compatibility
 
 - **Regex** is a fixed product feature under `public/scripts/extensions/regex/` (the directory name is retained; it is a directly imported module, not a plugin system). It initializes via `initCoreFeatures()` in `public/scripts/feature-settings.js`.
 - **`feature_settings` data bag**: owns `regex`/`regex_presets`, `note`, `variables.global`, `character_allowed_regex`, `preset_allowed_regex`. New writes use `feature_settings`; legacy `extension_settings` data is preserved through lazy migration and on-disk keys are never purged.
-- **Message cards**: first-party frontend frames (`frontend-frame.js` / `frontend-frame-controller.js` / `EmberDeskFrame`) render fenced complete HTML documents as same-origin iframes. `createFrameIframe()` (`public/scripts/frontend-frame.js:704`) sets no `sandbox` attribute, and `buildFrontendFrameDocument()` (`public/scripts/frontend-frame.js:396`) injects host globals into the frame, so frame markup, CSS, and media bypass the message CSS policy and the per-character CSS-resource authorization entirely and run with the page's privileges. Treat a mounted frame as trusted page code, not as a restricted message body.
+- **Message cards**: `public/scripts/frontend-frame.js` renders fenced complete HTML inside opaque-origin `srcdoc` iframes with `sandbox="allow-scripts"`. Cards have their own DOM and scrolling, and no host globals, context, event bridge, or parent DOM access. A host disclosure shows the original source.
 - **Character-card metadata**: `data.extensions.*` fields (`regex_scripts`, `world`, etc.) are feature data and must not be deleted.
 
-### Migrating older jQuery message cards
+### Migrating older message cards
 
-The frame predefine script does not copy `$` or `jQuery` from its parent, even
-if the parent provides them. It best-effort copies the other available shared
-globals (`_`, `showdown`, `DOMPurify`, `hljs`, `moment`, and `SVGInject`); it
-does not install them or guarantee that a host supplies them. Frame
-mounting, the `EmberDeskFrame` event/context bridge, and host-side height and
-teardown do not require a parent jQuery. A card that calls `$` or a jQuery
-plugin still requires those dependencies, even when the frame itself mounts.
-
-For portable cards, replace applicable jQuery DOM selection, manipulation,
-and event handlers with native DOM APIs, checking plugin-specific behavior
-individually. Alternatively, trusted card authors can provide and maintain the
-needed library and plugins within their own card; do not assume plugins can be
-mechanically replaced or that loading arbitrary scripts is safe. This does not
-change the security contract above: frames are unsandboxed same-origin page
-code. The isolated no-jQuery browser test is designed to exercise the real
-frame module with and without parent jQuery, not the full workspace's
-React/controller/event-bus integration; the separate workspace frame E2E
-covers that integration.
+Cards must be self-contained. Replace use of parent globals and `EmberDeskFrame` with local browser APIs; any dependencies must be provided by the card itself. `tests/frontend-frame-isolation.e2e.js` tests the isolation boundary in a dedicated host; `tests/chat-message-frontend-frames.e2e.js` exercises cards in the real workspace.
 
 ## Internal Contracts
 
@@ -43,7 +26,7 @@ The following are internal contracts consumed by EmberDesk's own modules; breaki
 ### Internal runtime surface
 
 - `globalThis.SillyTavern` (`public/scripts/public-api.js`, installed by `script.js`) — internal API for first-party modules and debugging; `getContext()` exposes feature settings, variables, tools, world info, and rendering helpers to first-party code.
-- `eventSource` / `event_types` (`public/scripts/events.js`) — internal event emitter/table; also consumed by frontend frames through a whitelisted `EmberDeskFrame.on`/`off` bridge.
+- `eventSource` / `event_types` (`public/scripts/events.js`) — internal event emitter/table..
 - `/lib.js` (`public/lib.js`) — shared browser utility surface for first-party modules.
 - `__emberDeskReactCompatibilityBridge` — internal-only React/legacy adapter; never a public API.
 
@@ -56,7 +39,7 @@ The main chat message list is a shared surface for first-party message actions, 
 - `.swipe_left`, `.swipe_right`
 - `.extraMesButtonsHint` before `.extraMesButtons`; the hidden `data-main-chat-message-actions-owner="react"` marker stays appended after protected controls.
 
-Generation-recovery status (`.generation_auto_recovery_status`) stays outside `.mes_text`. Frontend-frame iframe hosts (`data-frontend-frame`) are owned by the frame controller.
+Generation-recovery status (`.generation_auto_recovery_status`) stays outside `.mes_text`. Frontend-frame iframe hosts (`data-frontend-slot`) are owned by the frame controller.
 
 Message-body text is additionally wrapped by `<div data-message-style-scope="message-…">` directly inside `.mes_text` (`public/scripts/message-service.js:223`). That scope is not cosmetic: `<custom-style>` rules are rewritten with a scoped prefix, `url()`/`image-set()` targets and SVG presentation resources are admitted only from the page origin, `data:`, or an authorized origin, selectors escaping the row (`+`, `~`, `>`) are dropped, and `@keyframes` names are renamed per message, so a message's own styles can no longer reach sibling rows or other messages. The images, video, and audio elements a message body renders are not filtered by that scope — only its styles are. Code that injected CSS through a message body and relied on it leaking to the page, or on fetching external CSS resources without a character authorization, now needs its own stylesheet.
 
@@ -88,7 +71,7 @@ Engine exports consumed internally: `getRegexedString`, `regex_placement.USER_IN
 
 ### Event contract
 
-Stable event names consumed by first-party modules and the frontend-frame whitelist include `APP_READY`, `CHAT_CHANGED`, `CHAT_COMPLETION_SETTINGS_READY`, `CHARACTER_DELETED`, `CHARACTER_MESSAGE_RENDERED`, `CHARACTER_RENAMED`, `GENERATE_AFTER_DATA`, `MESSAGE_RECEIVED`, `OAI_PRESET_CHANGED_AFTER`, `PRESET_DELETED`, `PRESET_RENAMED_BEFORE`, `SETTINGS_UPDATED`, `USER_MESSAGE_RENDERED`. `eventSource` must keep `on`, `once`, `emit`, `emitAndWait`, `makeFirst`, `makeLast`, `removeListener`.
+Stable event names consumed by first-party modules include `APP_READY`, `CHAT_CHANGED`, `CHAT_COMPLETION_SETTINGS_READY`, `CHARACTER_DELETED`, `CHARACTER_MESSAGE_RENDERED`, `CHARACTER_RENAMED`, `GENERATE_AFTER_DATA`, `MESSAGE_RECEIVED`, `OAI_PRESET_CHANGED_AFTER`, `PRESET_DELETED`, `PRESET_RENAMED_BEFORE`, `SETTINGS_UPDATED`, `USER_MESSAGE_RENDERED`. `eventSource` must keep `on`, `once`, `emit`, `emitAndWait`, `makeFirst`, `makeLast`, `removeListener`.
 
 ### Composition-root ownership
 

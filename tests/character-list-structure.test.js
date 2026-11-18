@@ -50,7 +50,7 @@ function expectElementWithId(source, id) {
 
 describe('character list structure', () => {
     test('keeps the character library panel skeleton stable', () => {
-        const indexHtml = read('public/index.html');
+        const indexHtml = read('app/components/workspace/WorkspaceHost.tsx');
         const rightNavSource = read('app/components/right-nav/RightNavPanel.tsx');
 
         [
@@ -229,7 +229,7 @@ describe('character list structure', () => {
         expect(lifecycleSource).toContain("querySelectorAll('.character_select').forEach(row => row.classList.remove('is_active'))");
         expect(lifecycleSource).toContain("document.getElementById(`CharID${chid}`)?.classList.add('is_active')");
 
-        const indexHtml = read('public/index.html');
+        const indexHtml = read('app/components/workspace/WorkspaceHost.tsx');
         expect(indexHtml).not.toContain('group_type_badge');
     });
 
@@ -450,7 +450,6 @@ describe('character list structure', () => {
 
     test('keeps temporary-chat warning integrated into character delete confirmation', () => {
         const scriptSource = read('public/script.js');
-        const indexHtml = read('public/index.html');
         const styleSource = read('public/style.css');
         const overlaySource = read('public/scripts/BulkEditOverlay.js');
         const cascadeDialogSource = read('public/scripts/world-cascade-dialog.js');
@@ -528,7 +527,6 @@ describe('character list structure', () => {
     });
 
     test('keeps search feedback, grid labels, and bulk selection semantics wired', () => {
-        const indexHtml = read('public/index.html');
         const scriptSource = read('public/script.js');
         const overlaySource = read('public/scripts/BulkEditOverlay.js');
         const overlayStyles = read('public/css/character-group-overlay.css');

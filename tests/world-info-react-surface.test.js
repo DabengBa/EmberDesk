@@ -16,7 +16,7 @@ function extractWorldInfoBlock(html) {
 }
 
 describe('World Info drawer React surface', () => {
-    const indexHtml = readRepoFile('public/index.html');
+    const indexHtml = readRepoFile('app/components/workspace/WorkspaceHost.tsx');
     const panel = readRepoFile('app/components/panels/WorldInfoPanel.tsx');
     const workspace = readRepoFile('app/workspace-panels.tsx');
     const worldInfoJs = readRepoFile('public/scripts/world-info.js');
@@ -25,7 +25,7 @@ describe('World Info drawer React surface', () => {
     test('drawer shell is preserved while owned inner markup is replaced by React host', () => {
         expect(indexHtml).toContain('id="WorldInfo"');
         const block = extractWorldInfoBlock(indexHtml);
-        expect(block).toContain('class="drawer-content closedDrawer"');
+        expect(block).toContain('className="drawer-content closedDrawer"');
         // Legacy-owned inner markup must be gone from the shell.
         expect(block).not.toContain('id="WorldInfoheader"');
         expect(block).not.toContain('id="wi-holder"');

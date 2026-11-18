@@ -1,6 +1,5 @@
 import { useId, useLayoutEffect, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent } from 'react';
-import { flushSync } from 'react-dom';
-import { createRoot } from 'react-dom/client';
+import { createWorkspacePortalMount } from '../../compat/workspace-portals';
 import { Theme } from '@astryxdesign/core';
 import { ContractButton } from '../contract/ContractButton';
 import { emberDeskTheme } from '../../lib/theme-tokens';
@@ -125,12 +124,10 @@ function Dialog({ request, finish }: { request: LocalDialogRequest; finish: (res
 }
 
 export function mountLocalDialog(host: HTMLElement, request: LocalDialogRequest, finish: (result: LocalDialogResult) => void, fail: (error: unknown) => void): () => void {
-    // React reports render/layout-effect failures through the root callback, not
-    // necessarily by throwing from flushSync. Defer teardown until commit ends.
-    const root = createRoot(host, { onUncaughtError: error => queueMicrotask(() => fail(error)) });
-    try { flushSync(() => root.render(<Theme theme={emberDeskTheme} mode="dark"><Dialog request={request} finish={finish} /></Theme>)); }
-    catch (error) { root.unmount(); throw error; }
-    return () => root.unmount();
+    const portal = createWorkspacePortalMount(host, fail);
+    try { portal.render(<Theme theme={emberDeskTheme} mode="dark"><Dialog request={request} finish={finish} /></Theme>, true); }
+    catch (error) { portal.unmount(); throw error; }
+    return () => portal.unmount();
 }
 
 // Share the unbundled browser module with JS callers, including pending loads.

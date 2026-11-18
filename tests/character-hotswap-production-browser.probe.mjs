@@ -24,8 +24,10 @@ const ross = read('public/scripts/RossAscends-mods.js');
 const dom = read('public/scripts/dom-handlers.js');
 const bulk = read('public/scripts/bulk-edit.js');
 const utils = read('public/scripts/utils.js');
-const html = read('public/index.html');
-const avatarTemplate = html.match(/<div id="inline_avatar_template"[\s\S]*?<\/div>\s*<\/div>/)?.[0];
+const workspaceHost = read('app/components/workspace/WorkspaceHost.tsx');
+const avatarTemplate = workspaceHost.match(/<div id="inline_avatar_template"[\s\S]*?<\/div>\s*<\/div>/)?.[0]
+    .replaceAll('className=', 'class=')
+    .replace(/(<img [^>]*?)\s*\/>/g, '$1>');
 assert(avatarTemplate);
 const selection = registration(dom, "document.addEventListener('click', async function onCharacterSelect(");
 const save = registration(ross, "document.addEventListener('click', function onCharacterSelectSave(");

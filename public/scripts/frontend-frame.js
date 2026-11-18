@@ -1,17 +1,4 @@
-/**
- * Message frontend frames: renders fenced code blocks that contain a complete
- * HTML document as live same-origin srcdoc iframes inside `.mes_text`.
- *
- * This is a first-party reimplementation of the JS-Slash-Runner "frontend
- * rendering" behavior contract (detection rule, slot wrapping, viewport-height
- * rewriting, avatar helper classes, auto-height). No upstream code is vendored.
- *
- * The module is deliberately STATELESS and import-free: the workspace React
- * bundle inlines its own copy of anything it imports, so all runtime facts
- * (settings, eligibility, avatars, event emission) arrive via the `ctx`
- * argument and all teardown state lives in DOM markers. Pure helpers stay
- * DOM-free so they are unit-testable under the node Jest environment.
- */
+/** Renders message HTML in opaque-origin iframes inside the owning row. */
 
 export const FRONTEND_FRAME_MARKERS = Object.freeze(['html>', '<head>', '<body']);
 
@@ -20,37 +7,6 @@ export const FRONTEND_FRAME_SLOT_ATTR = 'data-frontend-slot';
 export const FRONTEND_FRAME_IFRAME_CLASS = 'ed-frontend-frame__iframe';
 export const FRONTEND_CODE_TOGGLE_CLASS = 'ed-code-collapse-toggle';
 export const FRONTEND_CODE_COLLAPSED_ATTR = 'data-ed-code-collapsed';
-
-/** Host window key exposing the frame bridge to same-origin frame scripts. */
-const HOST_FRAME_API_KEY = '__ED_FRAME_API__';
-
-/**
- * Host `event_types` a frame may subscribe to via `EmberDeskFrame.on()`.
- * Literal names, not imports — this module must stay import-free so the
- * workspace bundle does not inline a second `events.js` instance. This is a
- * convenience/compat surface, NOT a security boundary: same-origin frames can
- * always reach `window.parent` directly.
- */
-export const FRONTEND_FRAME_ALLOWED_EVENTS = Object.freeze([
-    'message_sent',
-    'message_received',
-    'message_updated',
-    'message_edited',
-    'message_deleted',
-    'message_reasoning_edited',
-    'generation_started',
-    'generation_stopped',
-    'generation_ended',
-    'chatLoaded',
-    'chat_id_changed',
-    'chat_deleted',
-    'settings_updated',
-    'character_edited',
-    'user_message_rendered',
-    'character_message_rendered',
-    'frontend_frame_render_started',
-    'frontend_frame_render_ended',
-]);
 
 export const FRONTEND_FRAME_EVENTS = Object.freeze({
     started: 'frontend_frame_render_started',
@@ -67,7 +23,7 @@ export const DEFAULT_FRONTEND_FRAME_SETTINGS = Object.freeze({
     depth: 0,
     depth_ignore_hidden: true,
     collapse_code_block: 'none',
-    use_blob_url: false,
+
     skip_highlight: true,
 });
 
@@ -76,7 +32,7 @@ export const DEFAULT_FRONTEND_FRAME_SETTINGS = Object.freeze({
  * path shallow-assigns `power_user`, so stored partial/garbage values must be
  * rebuilt against defaults here.
  * @param {unknown} value Stored value
- * @returns {{enabled:boolean,depth:number,depth_ignore_hidden:boolean,collapse_code_block:string,use_blob_url:boolean,skip_highlight:boolean}}
+ * @returns {{enabled:boolean,depth:number,depth_ignore_hidden:boolean,collapse_code_block:string,skip_highlight:boolean}}
  */
 export function normalizeFrontendFramesSettings(value) {
     const defaults = DEFAULT_FRONTEND_FRAME_SETTINGS;
@@ -92,134 +48,8 @@ export function normalizeFrontendFramesSettings(value) {
         collapse_code_block: FRONTEND_FRAME_COLLAPSE_MODES.includes(/** @type {string} */ (input.collapse_code_block))
             ? /** @type {string} */ (input.collapse_code_block)
             : defaults.collapse_code_block,
-        use_blob_url: boolOr('use_blob_url'),
+
         skip_highlight: boolOr('skip_highlight'),
-    };
-}
-
-/**
- * Host-side frame bridge registry. Every mounted frameId owns one bridge
- * holding the frame's `EmberDeskFrame.on()` subscriptions and its
- * `getContext()` snapshot factory. Subscriptions are torn down host-side via
- * `disposeFrameBridge` on unmount — never by the frame's `pagehide`, which is
- * unreliable when an iframe is detached by a DOM rewrite.
- * @type {Map<string, ReturnType<typeof createFrameBridge>>}
- */
-const frameBridges = new Map();
-
-/**
- * Creates the per-frame bridge between `EmberDeskFrame` calls and the host
- * `eventSource`. Framework-free and DOM-free for unit tests.
- * @param {object} [options]
- * @param {{on?:Function, removeListener?:Function}|null} [options.eventSource]
- * @param {()=>object|null} [options.getContextSnapshot]
- */
-export function createFrameBridge({ eventSource = null, getContextSnapshot = null } = {}) {
-    /** @type {Array<{name:string, handler:Function, wrapped:Function}>} */
-    const subscriptions = [];
-    const remove = (sub) => {
-        try {
-            eventSource?.removeListener?.(sub.name, sub.wrapped);
-        } catch { /* best-effort */ }
-    };
-    return {
-        on(eventName, handler) {
-            const name = String(eventName ?? '');
-            if (!eventSource || typeof eventSource.on !== 'function' || typeof handler !== 'function') {
-                return false;
-            }
-            if (!FRONTEND_FRAME_ALLOWED_EVENTS.includes(name)) {
-                return false;
-            }
-            const wrapped = (...args) => handler(...args);
-            eventSource.on(name, wrapped);
-            subscriptions.push({ name, handler, wrapped });
-            return true;
-        },
-        off(eventName, handler) {
-            const name = String(eventName ?? '');
-            let removed = false;
-            for (let index = subscriptions.length - 1; index >= 0; index -= 1) {
-                const sub = subscriptions[index];
-                if (sub.name === name && (handler === undefined || sub.handler === handler)) {
-                    remove(sub);
-                    subscriptions.splice(index, 1);
-                    removed = true;
-                }
-            }
-            return removed;
-        },
-        getContext() {
-            try {
-                const snapshot = getContextSnapshot?.() ?? null;
-                return snapshot && typeof snapshot === 'object' ? Object.freeze(snapshot) : snapshot;
-            } catch {
-                return null;
-            }
-        },
-        dispose() {
-            for (const sub of subscriptions.splice(0)) {
-                remove(sub);
-            }
-        },
-        get subscriptionCount() {
-            return subscriptions.length;
-        },
-    };
-}
-
-function registerFrameBridge(frameId, ctx = {}) {
-    disposeFrameBridge(frameId);
-    if (!ctx.eventSource && typeof ctx.getContextSnapshot !== 'function') {
-        return;
-    }
-    frameBridges.set(String(frameId), createFrameBridge({
-        eventSource: ctx.eventSource,
-        getContextSnapshot: typeof ctx.getContextSnapshot === 'function'
-            ? () => ctx.getContextSnapshot(frameId)
-            : null,
-    }));
-}
-
-/**
- * Tears down one frame's host-side bridge (unsubscribes all frame handlers).
- * Safe to call for ids that were never bridged.
- * @param {string} frameId
- */
-export function disposeFrameBridge(frameId) {
-    const bridge = frameBridges.get(String(frameId));
-    if (bridge) {
-        bridge.dispose();
-        frameBridges.delete(String(frameId));
-    }
-}
-
-/**
- * Drops bridges whose slot vanished without `unmountFrontendSlot` — React
- * `innerHTML` rewrites destroy iframe DOM directly, so the registry must be
- * reconciled against the live document on each scan.
- */
-function pruneFrameBridges() {
-    if (typeof document === 'undefined' || frameBridges.size === 0) {
-        return;
-    }
-    for (const frameId of Array.from(frameBridges.keys())) {
-        if (!document.querySelector(`[${FRONTEND_FRAME_SLOT_ATTR}="${frameId}"]`)) {
-            disposeFrameBridge(frameId);
-        }
-    }
-}
-
-/** Installs `window.__ED_FRAME_API__` so same-origin frame scripts can reach
- * their bridge. Idempotent; no-op outside browsers. */
-function installHostFrameApi() {
-    if (typeof window === 'undefined' || !window || window[HOST_FRAME_API_KEY]) {
-        return;
-    }
-    window[HOST_FRAME_API_KEY] = {
-        on: (frameId, eventName, handler) => frameBridges.get(String(frameId))?.on(eventName, handler) ?? false,
-        off: (frameId, eventName, handler) => frameBridges.get(String(frameId))?.off(eventName, handler) ?? false,
-        getContext: (frameId) => frameBridges.get(String(frameId))?.getContext() ?? null,
     };
 }
 
@@ -235,204 +65,6 @@ export function isFrontendContent(text) {
 }
 
 /**
- * Rewrites `min-height: Nvh` occurrences (stylesheet declarations, inline style
- * attributes, `style.minHeight` assignments, `setProperty('min-height', ...)`) to
- * `var(--ed-viewport-height)` calc expressions, matching the upstream behavior.
- * @param {string} content HTML document source
- * @returns {string}
- */
-export function rewriteVhExpressions(content) {
-    let result = String(content ?? '');
-
-    const hasCssMinVh = /min-height\s*:\s*[^;{}]*\d+(?:\.\d+)?vh/gi.test(result);
-    const hasInlineStyleVh = /style\s*=\s*(["'])[\s\S]*?min-height\s*:\s*[^;]*?\d+(?:\.\d+)?vh[\s\S]*?\1/gi.test(result);
-    const hasJsVh = /(\.style\.minHeight\s*=\s*(["']))([\s\S]*?vh)(\2)/gi.test(result)
-        || /(setProperty\s*\(\s*(["'])min-height\2\s*,\s*(["']))([\s\S]*?vh)(\3\s*\))/gi.test(result);
-
-    if (!hasCssMinVh && !hasInlineStyleVh && !hasJsVh) {
-        return result;
-    }
-
-    const convertVhToVariable = (value) => value.replace(/(\d+(?:\.\d+)?)vh\b/gi, (match, amount) => {
-        const parsed = parseFloat(amount);
-        if (!Number.isFinite(parsed)) {
-            return match;
-        }
-        const variableExpression = 'var(--ed-viewport-height)';
-        if (parsed === 100) {
-            return variableExpression;
-        }
-        return `calc(${variableExpression} * ${parsed / 100})`;
-    });
-
-    result = result.replace(
-        /(min-height\s*:\s*)([^;{}]*?\d+(?:\.\d+)?vh)(?=\s*[;}])/gi,
-        (_match, prefix, value) => `${prefix}${convertVhToVariable(value)}`,
-    );
-
-    result = result.replace(
-        /(style\s*=\s*(["']))([^"'"]*?)(\2)/gi,
-        (match, prefix, _quote, styleContent, suffix) => {
-            if (!/min-height\s*:\s*[^;]*vh/i.test(styleContent)) {
-                return match;
-            }
-            const replaced = styleContent.replace(
-                /(min-height\s*:\s*)([^;]*?\d+(?:\.\d+)?vh)/gi,
-                (_m, p1, p2) => `${p1}${convertVhToVariable(p2)}`,
-            );
-            return `${prefix}${replaced}${suffix}`;
-        },
-    );
-
-    result = result.replace(
-        /(\.style\.minHeight\s*=\s*(["']))([\s\S]*?)(\2)/gi,
-        (match, prefix, _quote, value, suffix) => {
-            if (!/\b\d+(?:\.\d+)?vh\b/i.test(value)) {
-                return match;
-            }
-            return `${prefix}${convertVhToVariable(value)}${suffix}`;
-        },
-    );
-
-    result = result.replace(
-        /(setProperty\s*\(\s*(["'])min-height\2\s*,\s*(["']))([\s\S]*?)(\3\s*\))/gi,
-        (match, prefix, _q1, _q2, value, suffix) => {
-            if (!/\b\d+(?:\.\d+)?vh\b/i.test(value)) {
-                return match;
-            }
-            return `${prefix}${convertVhToVariable(value)}${suffix}`;
-        },
-    );
-
-    return result;
-}
-
-/**
- * Escapes a URL for interpolation inside a single-quoted CSS `url('...')`.
- * @param {unknown} url
- * @returns {string}
- */
-function escapeCssUrl(url) {
-    return String(url ?? '').replace(/[\\'"<>\n\r]/g, '');
-}
-
-const FRAME_PREDEFINE_SCRIPT = `(function () {
-    'use strict';
-    var meta = window.__ED_FRAME_META__ || {};
-    try { delete window.__ED_FRAME_META__; } catch (e) { window.__ED_FRAME_META__ = undefined; }
-    try {
-        var parentWindow = window.parent;
-        ['_', 'showdown', 'DOMPurify', 'hljs', 'moment', 'SVGInject'].forEach(function (key) {
-            if (window[key] === undefined && parentWindow && parentWindow[key] !== undefined) {
-                window[key] = parentWindow[key];
-            }
-        });
-    } catch (e) { /* same-origin copy is best-effort */ }
-    var frameHostApi = function () {
-        try {
-            return (window.parent && window.parent.__ED_FRAME_API__) || null;
-        } catch (e) { return null; }
-    };
-    window.EmberDeskFrame = Object.freeze({
-        frameId: typeof meta.frameId === 'string' ? meta.frameId : '',
-        messageId: typeof meta.messageId === 'string' ? meta.messageId : '',
-        allowedEvents: Array.isArray(meta.allowedEvents) ? meta.allowedEvents.slice() : [],
-        on: function (eventName, handler) {
-            try {
-                var api = frameHostApi();
-                return !!(api && api.on(window.EmberDeskFrame.frameId, eventName, handler));
-            } catch (e) { return false; }
-        },
-        off: function (eventName, handler) {
-            try {
-                var api = frameHostApi();
-                return !!(api && api.off(window.EmberDeskFrame.frameId, eventName, handler));
-            } catch (e) { return false; }
-        },
-        getContext: function () {
-            try {
-                var api = frameHostApi();
-                return api ? api.getContext(window.EmberDeskFrame.frameId) : null;
-            } catch (e) { return null; }
-        },
-    });
-    var updateViewportVars = function () {
-        try {
-            var height = window.parent && window.parent.innerHeight;
-            if (typeof height === 'number' && isFinite(height) && height > 0) {
-                var value = height + 'px';
-                document.documentElement.style.setProperty('--ed-viewport-height', value);
-                document.documentElement.style.setProperty('--TH-viewport-height', value);
-            }
-        } catch (e) { /* parent access is best-effort */ }
-    };
-    updateViewportVars();
-    try {
-        if (window.parent) {
-            window.parent.addEventListener('resize', updateViewportVars);
-        }
-        window.addEventListener('resize', updateViewportVars);
-        window.addEventListener('pagehide', function () {
-            try { window.parent && window.parent.removeEventListener('resize', updateViewportVars); } catch (e) { /* ignore */ }
-        });
-    } catch (e) { /* ignore */ }
-    // Auto-height is measured host-side: the parent observes this document via
-    // ResizeObserver (see attachFrameHeightObserver), so frames do not own a
-    // throttled measurement loop anymore.
-})();`;
-
-/**
- * Builds the full frame document string (used as `srcdoc` or blob source).
- * @param {string} code User HTML document source (vh already rewritten)
- * @param {object} [options]
- * @param {string} [options.frameId]
- * @param {string} [options.messageId]
- * @param {string} [options.userAvatarUrl]
- * @param {string} [options.charAvatarUrl]
- * @param {boolean} [options.useBlobUrl] Adds <base href> for blob-URL debugging
- * @param {string} [options.baseHref]
- * @returns {string}
- */
-export function buildFrontendFrameDocument(code, {
-    frameId = '',
-    messageId = '',
-    userAvatarUrl = '',
-    charAvatarUrl = '',
-    useBlobUrl = false,
-    baseHref = '',
-} = {}) {
-    const content = rewriteVhExpressions(code);
-    const metaJson = JSON.stringify({
-        frameId: String(frameId),
-        messageId: String(messageId),
-        allowedEvents: FRONTEND_FRAME_ALLOWED_EVENTS,
-    });
-    const userAvatar = escapeCssUrl(userAvatarUrl);
-    const charAvatar = escapeCssUrl(charAvatarUrl);
-    const baseTag = useBlobUrl && baseHref ? `<base href="${escapeCssUrl(baseHref)}">` : '';
-
-    return `<!DOCTYPE html>
-<html>
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-${baseTag}<style>
-*,*::before,*::after{box-sizing:border-box;}
-html,body{margin:0!important;padding:0;overflow:hidden!important;max-width:100%!important;background:transparent;}
-.user_avatar,.user-avatar{background-image:url('${userAvatar}')}
-.char_avatar,.char-avatar{background-image:url('${charAvatar}')}
-</style>
-<script>window.__ED_FRAME_META__=${metaJson};</script>
-<script>${FRAME_PREDEFINE_SCRIPT}</script>
-</head>
-<body>
-${content}
-</body>
-</html>
-`;
-}
-
-/**
  * Lists `<pre>` blocks under `rootEl` that qualify as frontend documents and are
  * not already wrapped in a frame slot. Visibility is intentionally NOT a filter:
  * blocks inside closed `<details>` still render, matching upstream.
@@ -445,101 +77,6 @@ export function findFrontendBlocks(rootEl) {
     }
     return Array.from(rootEl.querySelectorAll('pre'))
         .filter(pre => !pre.closest(`.${FRONTEND_FRAME_SLOT_CLASS}`) && isFrontendContent(pre.textContent));
-}
-
-/**
- * Cheap content fingerprint for the frame height cache: lets a remounted frame
- * start at the height it last measured without keeping the full text around.
- * @param {string} text
- * @returns {string}
- */
-function docSignature(text) {
-    const source = String(text ?? '');
-    let hash = 0;
-    for (let index = 0; index < source.length; index++) {
-        hash = ((hash << 5) - hash + source.charCodeAt(index)) | 0;
-    }
-    return `${source.length}:${hash}`;
-}
-
-/**
- * Session cache of measured frame content heights keyed by document signature.
- * Lets a freshly (re)mounted frame start at its last known height instead of
- * collapsing to the default iframe size while the first measurement lands.
- * @type {Map<string, number>}
- */
-const frameHeightCache = new Map();
-
-export function getCachedFrameHeight(signature) {
-    return frameHeightCache.get(String(signature)) ?? null;
-}
-
-export function setCachedFrameHeight(signature, height) {
-    if (signature == null || !Number.isFinite(height) || height <= 0) {
-        return;
-    }
-    frameHeightCache.set(String(signature), height);
-}
-
-/**
- * Measures a same-origin frame document from the host side and keeps the
- * iframe's style height in sync. Replaces the legacy in-frame 500ms-throttled
- * measurement loop: the first measurement runs immediately once the document
- * is available, and ResizeObserver reports subsequent changes unthrottled.
- * @param {HTMLIFrameElement} iframe
- * @param {string} signature Content signature used for the height cache
- */
-function attachFrameHeightObserver(iframe, signature) {
-    const update = () => {
-        let doc;
-        try {
-            doc = iframe.contentDocument;
-        } catch {
-            return;
-        }
-        if (!doc) {
-            return;
-        }
-        const height = Math.max(
-            doc.documentElement?.scrollHeight ?? 0,
-            doc.body?.scrollHeight ?? 0,
-        );
-        if (Number.isFinite(height) && height > 0) {
-            iframe.style.height = `${height}px`;
-            setCachedFrameHeight(signature, height);
-        }
-    };
-    const attach = () => {
-        let doc;
-        try {
-            doc = iframe.contentDocument;
-        } catch {
-            return false;
-        }
-        if (!doc || typeof ResizeObserver !== 'function') {
-            return false;
-        }
-        iframe.__edHeightObserver?.disconnect();
-        const observer = new ResizeObserver(update);
-        if (doc.documentElement) {
-            observer.observe(doc.documentElement);
-        }
-        if (doc.body) {
-            observer.observe(doc.body);
-        }
-        iframe.__edHeightObserver = observer;
-        update();
-        return true;
-    };
-    iframe.addEventListener('load', attach);
-    attach();
-}
-
-function detachFrameHeightObserver(iframe) {
-    iframe?.__edHeightObserver?.disconnect?.();
-    if (iframe) {
-        iframe.__edHeightObserver = undefined;
-    }
 }
 
 /**
@@ -589,43 +126,19 @@ export function computeDepthEligible({ messageId, renderedIds, isSystemById = {}
  * @property {object} [settings] Raw or normalized `power_user.frontend_frames`
  * @property {boolean} [eligible] Pre-mount depth eligibility (default true)
  * @property {string|number} [messageId] Owning message id
- * @property {string} [userAvatarUrl]
- * @property {string} [charAvatarUrl]
- * @property {string} [baseHref] Base href for blob-URL mode
- * @property {(eventName:string, frameId:string)=>void} [emit] Host event emitter
+ * @property {string} [frameIdSeed] Stable identity across message index changes
+ * @property {(eventName:string, frameId:string)=>void} [emit] Host-only lifecycle emitter
  * @property {(text:string)=>string} [translate] Optional label translator
- * @property {{on?:Function, removeListener?:Function}} [eventSource] Host event bus bridged to `EmberDeskFrame.on`
- * @property {(frameId:string)=>object} [getContextSnapshot] `EmberDeskFrame.getContext()` snapshot factory
  */
 
 /**
  * Removes one mounted frame slot: the hidden source `<pre>` is restored to the
- * slot's position and the iframe subtree is destroyed. Blob URLs are revoked
- * and the frame's host-side bridge (event subscriptions) is disposed.
+ * slot's position and the iframe subtree is destroyed.
  * @param {Element} slot `.ed-frontend-frame` element
  */
 export function unmountFrontendSlot(slot) {
-    if (!slot) {
-        return;
-    }
-    const frameId = slot.getAttribute(FRONTEND_FRAME_SLOT_ATTR);
-    if (frameId) {
-        disposeFrameBridge(frameId);
-    }
-    if (!slot.parentNode) {
-        return;
-    }
-    const iframe = slot.querySelector('iframe');
-    detachFrameHeightObserver(iframe);
-    const src = iframe?.getAttribute('src') ?? '';
-    if (src.startsWith('blob:')) {
-        try {
-            URL.revokeObjectURL(src);
-        } catch { /* revoke is best-effort */ }
-    }
-    const pre = slot.querySelector(':scope > pre');
+    const pre = slot.querySelector(':scope > details > pre');
     if (pre instanceof HTMLElement) {
-        pre.style.display = '';
         slot.replaceWith(pre);
     } else {
         slot.remove();
@@ -694,60 +207,39 @@ function decoratePlainCodeBlock(pre, expandKey, translate) {
 }
 
 /**
- * Creates the frame iframe (srcdoc or blob URL) with lifecycle event emission.
- * @param {string} frameId
- * @param {string} frameDocument Assembled frame document
- * @param {boolean} useBlobUrl
- * @param {(eventName:string, frameId:string)=>void|null} [emit]
- * @returns {HTMLIFrameElement}
- */
-function createFrameIframe(frameId, frameDocument, useBlobUrl, emit, { signature = null, initialHeight = null } = {}) {
-    const iframe = document.createElement('iframe');
-    iframe.className = FRONTEND_FRAME_IFRAME_CLASS;
-    iframe.title = frameId;
-    iframe.setAttribute('loading', 'lazy');
-    const cachedHeight = Number.isFinite(initialHeight) && initialHeight > 0
-        ? initialHeight
-        : (signature !== null ? getCachedFrameHeight(signature) : null);
-    if (cachedHeight !== null) {
-        iframe.style.height = `${cachedHeight}px`;
-    }
-    attachFrameHeightObserver(iframe, signature);
-    iframe.addEventListener('load', () => emit?.(FRONTEND_FRAME_EVENTS.ended, frameId));
-    if (useBlobUrl) {
-        const blob = new Blob([frameDocument], { type: 'text/html' });
-        iframe.src = URL.createObjectURL(blob);
-    } else {
-        iframe.srcdoc = frameDocument;
-    }
-    emit?.(FRONTEND_FRAME_EVENTS.started, frameId);
-    return iframe;
-}
-
-/**
- * Mounts one frame slot around a qualifying `<pre>`.
+ * Mounts one isolated iframe and a host-owned disclosure for its inert source.
  * @param {HTMLPreElement} pre
- * @param {object} options
- * @param {string} options.frameId
- * @param {string} options.document Assembled frame document
- * @param {boolean} options.useBlobUrl
- * @param {(eventName:string, frameId:string)=>void|null} [options.emit]
- * @param {FrontendFrameContext} [options.bridgeCtx] Bridge inputs (eventSource/getContextSnapshot)
+ * @param {string} frameId
+ * @param {FrontendFrameContext['emit']} emit
+ * @param {(text:string)=>string} translate
  */
-function mountFrontendSlot(pre, { frameId, document: frameDocument, useBlobUrl, emit, bridgeCtx, signature = null }) {
+function mountFrontendSlot(pre, frameId, emit, translate) {
     const slot = document.createElement('div');
     slot.className = FRONTEND_FRAME_SLOT_CLASS;
     slot.setAttribute(FRONTEND_FRAME_SLOT_ATTR, frameId);
 
+    const iframe = document.createElement('iframe');
+    iframe.className = FRONTEND_FRAME_IFRAME_CLASS;
+    iframe.title = frameId;
+    iframe.setAttribute('loading', 'lazy');
+    // Do not mint an app-origin blob URL for untrusted executable documents.
+    iframe.setAttribute('sandbox', 'allow-scripts');
+    iframe.srcdoc = pre.textContent ?? '';
+    iframe.addEventListener('load', () => emit?.(FRONTEND_FRAME_EVENTS.ended, frameId));
+
+    const source = document.createElement('details');
+    const summary = document.createElement('summary');
+    summary.textContent = translate('View HTML source');
+    source.appendChild(summary);
     pre.replaceWith(slot);
-    pre.style.display = 'none';
-    slot.appendChild(pre);
-    registerFrameBridge(frameId, bridgeCtx);
-    slot.appendChild(createFrameIframe(frameId, frameDocument, useBlobUrl, emit, { signature }));
+    source.appendChild(pre);
+    slot.appendChild(source);
+    emit?.(FRONTEND_FRAME_EVENTS.started, frameId);
+    slot.prepend(iframe);
 }
 
 /**
- * Scans `mesTextEl` for frontend `<pre>` blocks and mounts same-origin frames.
+ * Scans `mesTextEl` for frontend `<pre>` blocks and mounts isolated frames.
  * Idempotent: already-slotted blocks are skipped, and ineligible/disabled calls
  * remove any previously mounted frames under the root.
  * @param {Element|null|undefined} mesTextEl The `.mes_text` host element
@@ -760,8 +252,6 @@ export function mountFrontendFrames(mesTextEl, ctx = {}) {
     }
     const settings = normalizeFrontendFramesSettings(ctx.settings);
     const translate = typeof ctx.translate === 'function' ? ctx.translate : (text) => text;
-    installHostFrameApi();
-    pruneFrameBridges();
 
     if (!settings.enabled || ctx.eligible === false) {
         unmountFrontendFrames(mesTextEl);
@@ -786,23 +276,7 @@ export function mountFrontendFrames(mesTextEl, ctx = {}) {
     const blocks = findFrontendBlocks(mesTextEl);
     blocks.forEach((pre, index) => {
         const frameId = `ed-frame--${frameIdSeed}--${index}`;
-        const signature = docSignature(pre.textContent ?? '');
-        const frameDocument = buildFrontendFrameDocument(pre.textContent ?? '', {
-            frameId,
-            messageId,
-            userAvatarUrl: ctx.userAvatarUrl,
-            charAvatarUrl: ctx.charAvatarUrl,
-            useBlobUrl: settings.use_blob_url,
-            baseHref: ctx.baseHref,
-        });
-        mountFrontendSlot(pre, {
-            frameId,
-            document: frameDocument,
-            useBlobUrl: settings.use_blob_url,
-            emit: ctx.emit,
-            bridgeCtx: ctx,
-            signature,
-        });
+        mountFrontendSlot(pre, frameId, ctx.emit, translate);
     });
     return blocks.length;
 }

@@ -1,16 +1,10 @@
-import fs from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { test, expect } from '@playwright/test';
+import { openWorkspacePanelFixture } from './helpers/workspace-panel-fixture.js';
 
-const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const indexHtml = fs.readFileSync(path.join(repoRoot, 'public/index.html'), 'utf8');
-const popupTemplate = indexHtml.match(/<template id="popup_template"[\s\S]*?<\/template>/)[0];
-const pastChatTemplate = indexHtml.slice(indexHtml.indexOf('<div id="past_chat_template"'), indexHtml.indexOf('<div id="tag_view_template"'));
-const historyShell = indexHtml.slice(indexHtml.indexOf('<dialog id="shadow_select_chat_popup"'), indexHtml.indexOf('<!-- templates for JS to reuse'));
 const backup = { file_name: 'Chat backup 2026-10-12.jsonl', last_mes: '2026-10-12', file_size: '80 KB', chat_items: 84 };
 
 async function mountSurfaces(page) {
+    await page.addInitScript(() => localStorage.setItem('language', 'en'));
     await page.route('**/csrf-token', route => route.fulfill({ json: { token: 'test-token' } }));
     await page.route('**/api/**', route => route.fulfill({ status: 418, json: { error: 'Unmocked API operation' } }));
     await page.route('**/api/backups/chat/get', route => route.fulfill({ json: [backup] }));
@@ -29,23 +23,23 @@ async function mountSurfaces(page) {
     ` }));
     await page.route('**/scripts/tokenizers.js', route => route.fulfill({ contentType: 'text/javascript', body: 'export const getTokenCountAsync=async()=>10;' }));
     await page.route('**/scripts/chat-branch.js', route => route.fulfill({ contentType: 'text/javascript', body: 'export const branchChat=async()=>{};' }));
-    await page.route('**/script.js', route => route.fulfill({ contentType: 'text/javascript', body: `
-        export const chat=[{mes:'First message',is_user:false}];
-    ` }));
-    await page.route('**/chat-ui-test', route => route.fulfill({ contentType: 'text/html', body: `<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width,initial-scale=1">
-        <link rel="stylesheet" href="/webfonts/NotoSans/stylesheet.css">
-        <link rel="stylesheet" href="/css/fontawesome.min.css"><link rel="stylesheet" href="/css/solid.min.css">
-        <link rel="stylesheet" href="/style.css"><link rel="stylesheet" href="/css/st-tailwind.css"><link rel="stylesheet" href="/css/mobile-styles.css">
-        <link rel="stylesheet" href="/react/login/assets/workspace-panels.css">
-        </head><body class="no-blur noShadows"><button id="background-action">Background action</button>
-        ${popupTemplate}${pastChatTemplate}${historyShell}<div id="send_form"></div><div id="options" style="display:none"></div>
+    await openWorkspacePanelFixture(page, `<button id="background-action">Background action</button>
+        <div id="send_form"></div><div id="options" style="display:none"></div>
         <div id="chat"><div class="mes" mesid="0"><div class="mes_text">First message</div></div></div>
-        <script src="/lib/jquery-3.5.1.min.js"></script></body></html>` }));
-    await page.goto('/chat-ui-test');
+    `, { script: "export const chat=[{mes:'First message',is_user:false}];" });
+
     await page.evaluate(async () => {
+        document.body.classList.add('noShadows');
+        for (const id of ['shadow_select_chat_popup', 'past_chat_template']) {
+            const original = document.getElementById(id);
+            document.body.append(original.cloneNode(true));
+            original.removeAttribute('id');
+            for (const child of original.querySelectorAll('[id]')) child.removeAttribute('id');
+        }
         window.toastr = { options: {}, info() {}, warning() {}, error() {}, success() {} };
-        const module = await import('/react/login/assets/workspace-panels.js');
-        module.mountSelectChatPopup(document.getElementById('select_chat_popup'));
+        const module = await (await import('/scripts/workspace-panels-react-bridge.js')).loadWorkspacePanelsModule();
+        const controller = module.createHistoryPanelController({ load: async () => [], restoreFocus() {} });
+        module.mountSelectChatPopup(document.getElementById('select_chat_popup'), controller, () => {}, () => {}, () => {}, () => {});
         module.mountSelectChatList(document.getElementById('select_chat_div'), {}, {
             currentChat: 'Current chat', avatarImg: '/img/ai4.png', searchQuery: '',
             items: ['Current chat', 'VeryLongChatFilename'.repeat(10)].map(fileName => ({ fileName, fileSize: '80 KB', messageCount: 84, preview: 'Chat preview.', dateLabel: 'Oct 12, 2026, 1:00 AM' })),
@@ -60,7 +54,9 @@ async function mountSurfaces(page) {
                 return new Promise(resolve => { window.completeRestore = () => resolve(['Restored chat']); });
             },
         } });
-        module.mountOptionsMenu(document.getElementById('options'));
+        const optionsHost = document.createElement('div');
+        document.getElementById('options').append(optionsHost);
+        module.mountOptionsMenu(optionsHost, {}, () => {});
         module.mountChatComposer(document.getElementById('send_form'));
         (await import('/scripts/keyboard.js')).initKeyboard();
         const shell = document.getElementById('shadow_select_chat_popup');
@@ -165,7 +161,9 @@ for (const width of [1440, 390]) {
 
 test('generic rename input and actions expose native accessible controls', async ({ page }) => {
     await page.evaluate(async () => {
-        const { Popup, POPUP_TYPE } = await import('/scripts/popup.js');
+        const { Popup, POPUP_TYPE, installPopupRuntime } = await import('/scripts/popup.js');
+        const { createPopupRuntime } = await (await import('/scripts/workspace-panels-react-bridge.js')).loadWorkspacePanelsModule();
+        installPopupRuntime(createPopupRuntime);
         const content = await fetch('/scripts/templates/chatRename.html').then(response => response.text());
         void new Popup(content, POPUP_TYPE.INPUT, 'Current chat').show();
     });

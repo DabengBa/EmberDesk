@@ -7,6 +7,7 @@ import { createRouter } from './router';
 import { emberDeskTheme } from './lib/theme-tokens';
 import { readStoredUiLocale } from '../public/scripts/ui-locale.js';
 import { initializeUiLocale } from './compat/i18n.js';
+import { WorkspacePortalOutlet } from './compat/workspace-portals';
 
 const router = createRouter();
 const queryClient = new QueryClient();
@@ -28,13 +29,14 @@ async function start() {
     }
 
     createRoot(rootElement).render(
-        <StrictMode>
-            <Theme theme={emberDeskTheme} mode="dark">
-                <QueryClientProvider client={queryClient}>
+        <Theme theme={emberDeskTheme} mode="dark">
+            <QueryClientProvider client={queryClient}>
+                <WorkspacePortalOutlet />
+                <StrictMode>
                     <RouterProvider router={router} />
-                </QueryClientProvider>
-            </Theme>
-        </StrictMode>,
+                </StrictMode>
+            </QueryClientProvider>
+        </Theme>,
     );
 }
 

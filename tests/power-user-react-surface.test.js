@@ -5,7 +5,7 @@ describe('merged message-rendering settings (former user-settings drawer)', () =
     test('Frontend Frames fields are bound into the settings form; the separate drawer is gone', () => {
         const surface = readRepoFile('app/components/settings/SettingsSurface.tsx');
         const helpers = readRepoFile('app/lib/settings-helpers.js');
-        const indexHtml = readRepoFile('public/index.html');
+        const indexHtml = readRepoFile('app/components/workspace/WorkspaceHost.tsx');
         const powerUser = readRepoFile('public/scripts/power-user.js');
         const script = readRepoFile('public/script.js');
 
@@ -17,7 +17,7 @@ describe('merged message-rendering settings (former user-settings drawer)', () =
             'power_user.frontend_frames.depth_ignore_hidden',
             'power_user.frontend_frames.collapse_code_block',
             'power_user.frontend_frames.skip_highlight',
-            'power_user.frontend_frames.use_blob_url',
+
         ]) {
             expect(helpers).toContain(`settingsPath: '${settingsPath}'`);
         }
@@ -27,7 +27,7 @@ describe('merged message-rendering settings (former user-settings drawer)', () =
             'rendering.frontendFramesDepthIgnoreHidden',
             'rendering.frontendFramesCollapseCodeBlock',
             'rendering.frontendFramesSkipHighlight',
-            'rendering.frontendFramesUseBlobUrl',
+
         ]) {
             expect(surface).toContain(`name="${formPath}"`);
         }

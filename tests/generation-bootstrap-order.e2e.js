@@ -2,23 +2,28 @@ import { test, expect } from '@playwright/test';
 
 import { testSetup } from './frontend/frontent-test-utils.js';
 
-test('synchronous stop is available while the workspace bundle is still loading', async ({ page }) => {
+const workspacePanelEntry = '**/react/login/assets/workspace-panels-entry-*.js';
+
+test('synchronous stop is available while SPA panel preparation is waiting for its entry', async ({ page }) => {
     await testSetup.awaitST({ page });
 
     let releaseBundle;
     const bundleReleased = new Promise(resolve => { releaseBundle = resolve; });
     let bundleRequested;
     const bundleStarted = new Promise(resolve => { bundleRequested = resolve; });
-    await page.route('**/react/login/assets/workspace-panels.js*', async route => {
+    await page.route(workspacePanelEntry, async route => {
         bundleRequested();
         await bundleReleased;
         await route.continue();
-    });
+    }, { times: 1 });
 
     try {
         await page.reload({ waitUntil: 'commit' });
         await bundleStarted;
+        await expect(page.locator('#preloader')).toHaveAttribute('aria-busy', 'true');
         const result = await page.evaluate(async () => {
+            // Exercise the native runtime independently, keeping its normal module-graph entry order.
+            await import('/scripts/i18n.js');
             const script = await import('/script.js');
             const state = await import('/scripts/generation-shared-state.js');
             const context = await import('/scripts/generation-shell-context.js');
@@ -43,8 +48,10 @@ test('synchronous stop is available while the workspace bundle is still loading'
         expect(result).toEqual({ stopped: true, aborted: true, shared: true, typedPolicies: true });
     } finally {
         releaseBundle();
+
     }
 
+    await page.reload();
     await testSetup.awaitST({ page });
     const singleton = await page.evaluate(async () => {
         const context = await import('/scripts/generation-shell-context.js');
@@ -56,17 +63,13 @@ test('synchronous stop is available while the workspace bundle is still loading'
     expect(singleton).toBe(true);
 });
 
-test('generation runtime remains usable when the workspace bundle is unavailable', async ({ page }) => {
+test('generation runtime remains usable independently when SPA panel preparation fails', async ({ page }) => {
     await testSetup.awaitST({ page });
-    let bundleRequested;
-    const bundleStarted = new Promise(resolve => { bundleRequested = resolve; });
-    await page.route('**/react/login/assets/workspace-panels.js*', route => {
-        bundleRequested();
-        return route.abort();
-    });
+    await page.route(workspacePanelEntry, route => route.abort());
     await page.reload({ waitUntil: 'commit' });
-    await bundleStarted;
+    await expect(page.locator('#preloader')).toContainText('Unable to start the workspace.');
     const result = await page.evaluate(async () => {
+        await import('/scripts/i18n.js');
         const script = await import('/script.js');
         const context = await import('/scripts/generation-shell-context.js');
         const state = await import('/scripts/generation-shared-state.js');

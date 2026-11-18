@@ -8,7 +8,9 @@ topic: workspace-composition-root
 
 ## Module Responsibility
 
-`public/script.js` is the browser workspace's composition root and public compatibility entry. It currently assembles the legacy workspace, installs extracted browser contracts, preserves approved `/script.js` exports, and invokes the workspace bootstrap. It is not yet an assembly-only file: domain state, DOM handlers, chat/generation behavior, and React bridge coordination remain in the file until separately verified extraction waves move their owners.
+`app/client.tsx` creates the single React root used by `/`, `/login`, `/setup`, and `/settings`. The authenticated workspace route commits `WorkspaceHost` and its compatibility DOM, then `app/components/workspace/workspace-entry.ts` prepares the same app's panel module and loads the native controller. `app/compat/workspace-portals.tsx` renders workspace panels and popups under that root and its providers. There is no separate workspace document or panel build.
+
+`public/script.js` is the native controller's composition root and compatibility entry, not a second UI. It installs browser contracts, preserves first-party exports, and invokes the workspace bootstrap. It still owns domain state, DOM handlers, and generation coordination not yet extracted from the controller.
 
 The frontend migration gap slice moves the following responsibilities to their domain owners. The roots keep explicit wiring and stable exports; no domain imports either root to use these extracted capabilities.
 
@@ -59,7 +61,7 @@ During `public/script.js` evaluation:
 1. The root imports `eventSource` / `event_types`, request-context helpers, and the browser library.
 2. `installPublicBrowserApi({ libs, getContext })` explicitly assigns the supported `globalThis.SillyTavern` object.
 3. `registerWorldInfoShellContext(...)` registers callable shell capabilities and a lazy `extensionPromptRoles` accessor. It does not cause `world-info.js` to import the root.
-4. Once the DOM is ready, `bindLegacyShellHandlers()` in `public/scripts/dom-handlers.js` binds the shell and invokes `bootstrapWorkspace()`; `public/script.js` handles both the loading and already-ready cases.
+4. Once the DOM and native imports are ready, `bindLegacyShellHandlers()` in `public/scripts/dom-handlers.js` binds the committed host and invokes `bootstrapWorkspace()`.
 
 ### Bootstrap order
 

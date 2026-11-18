@@ -20,7 +20,7 @@ describe('frontend structure contract helpers', () => {
     });
 
     test('checks button affordance and readable marker failures', () => {
-        const indexHtml = readRepoFile('public/index.html');
+        const indexHtml = readRepoFile('app/components/workspace/WorkspaceHost.tsx');
 
         expectButtonAffordance(getTagByClass(indexHtml, 'mes_img_swipe_left'), 'Swipe left', {
             contractName: 'previous image button',
