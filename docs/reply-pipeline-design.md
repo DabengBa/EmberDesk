@@ -1,5 +1,7 @@
 # Reply Pipeline（回复管线）设计（as-built）
 
+本文区分服务端主聊天与旧浏览器路径。服务端线协议示例见 [跨轮历史投影讨论 §8](reply-pipeline-history-projection-discussion.md#8-全量工具投影完整首轮请求示例)；§1–7 保留早期方案讨论。
+
 ## 目标
 
 把"模型一次生成"升级为"确定性多步管线"：一次用户输入触发一串有序步骤，每步是一次受控的工具调用，前步输出自然进入后步上下文。管线定义随预设携带，工具实现复用全局 `tool_bindings`。
@@ -29,7 +31,7 @@
 | 字段 | 说明 |
 |---|---|
 | `enabled` | 管线开关；关闭则普通生成 |
-| `enforce_mode` | `'auto'`（默认，仅注入步提示）/ `'forced'`（每轮发 per-function `tool_choice`） |
+| `enforce_mode` | 兼容旧浏览器路径；服务端始终发送指向当前步的 `tool_choice` |
 | `result_field` | 可选点路径：final 步 result 能 JSON.parse 时从中取正文（默认要求 action 直接 return 字符串） |
 | `steps[].tool` | 全局绑定名；未注册/未启用/stealth → 跳过该步 |
 | `steps[].prompt` | 该轮注入的步指令文本 |
@@ -46,6 +48,10 @@
 每次请求构造前解析实际模型，stream 消费与请求体采用同一模型。首个可执行步骤的模型决定历史媒体装配；之后固定前缀不重建，因此混合模型及恢复模型的媒体能力差异不会改变该前缀。检查器使用同样规则且不修改运行态。明确不支持工具的模型报错，未知模型不因缺乏元数据被拒绝。
 
 步骤专属提示在该步骤首次尝试时以当时实际模型正常展开一次并保存快照；重试即使改用备用模型，请求模型会改变，提示中的 `{{model}}` 仍是首次模型，其他宏及副作用也不重新执行。已完成步骤和共享前缀保持不变。
+
+**服务端主聊天**：`src/server-generation-pipeline.ts` 按 send 命令捕获可运行的计划；每步使用同一个有序 `tools` 列表并强制当前工具。合法工具调用和回执追加到运行日志；非空纯文本原样追加，不执行脚本。收口轮保留运行日志和工具列表，但改为 `tool_choice: none`。服务端只保存最终回复，不会额外保存一条浏览器进度卡。
+
+**旧浏览器路径**（下图及其生命周期挂钩只描述此路径）：
 
 ```
 用户消息 → GENERATION_STARTED(depth 0) → beginPipelineRun
@@ -87,6 +93,14 @@ round i: 请求组装后 (CHAT_COMPLETION_SETTINGS_READY) 注入:
 - `[data-tool-invocation-text]` max-height 6em 滚动（运行中进度卡）
 
 ## 历史输入与工具输出
+
+### 服务端主聊天
+
+预设、角色描述、世界书及注入保留组装顺序，用合成 call/receipt 对承载。摘要逐轮生成 `story_history` 对，在原文位置替换；过去和当前的用户文字均为 `submit_story({kind: "user", content})`，由末尾的步骤指令引用当前输入的调用 ID。纯文本首轮没有开头的 system 消息或 user 锚点；原生多模态输入仍保留 multipart 表示。已有真实工具记录仍按原调用和结果回放，完成的纯管线回复只投影其有效正文。合成记录不执行、不写回聊天。
+
+首步前缀固定，后续步只追加真实执行记录、步专属投影及末尾指令。组装与运行见 `src/server-prompt.ts`、`src/server-prompt/history.ts`、`src/server-generation-pipeline.ts`，真实线上请求形状由 `tests/server-generation-http.test.js` 的本地模拟上游覆盖。
+
+### 旧浏览器路径
 
 普通生成存在可运行管线、且首轮实际模型支持工具时，旧用户消息和旧助手正文统一投影成 `submit_story({content: 正文})` 调用，紧随 `已收到。` 的工具回执；最新一条真实用户输入保持 `user`。这与当前管线开关联动，不新增独立的输入/输出开关。
 

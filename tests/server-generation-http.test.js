@@ -37,8 +37,10 @@ beforeAll(async () => {
         for await (const chunk of req) body += chunk;
         const completion = JSON.parse(body);
         calls.push(completion);
+        const hasStoryInput = text => completion.messages.some(message => message.tool_calls?.some(call =>
+            call.function.name === 'submit_story' && JSON.parse(call.function.arguments).content === text));
         if (completion.tool_choice?.function?.name === 'first' && completion.model !== 'gpt-4o-mini'
-            && completion.messages.some(message => message.content === 'Pipeline fallback input')) {
+            && hasStoryInput('Pipeline fallback input')) {
             res.writeHead(503).end();
             return;
         }
@@ -48,7 +50,7 @@ beforeAll(async () => {
             res.end(`data: ${JSON.stringify({ choices: [{ delta: { tool_calls: [{ index: 0, id: `call-${name}`, function: { name, arguments: JSON.stringify({ content: `from ${name}` }) } }] } }] })}\n\ndata: [DONE]\n\n`);
             return;
         }
-        if (completion.tool_choice === 'none' && completion.messages.some(message => message.content === 'Pipeline closing input')) {
+        if (completion.tool_choice === 'none' && hasStoryInput('Pipeline closing input')) {
             if (++closingAttempts === 1) res.end('data: {"choices":[{"delta":{"content":"Discard closing draft"}}]}\n\n');
             else res.end('data: {"choices":[{"delta":{"content":"Closing answer"}}]}\n\ndata: [DONE]\n\n');
             return;
@@ -397,6 +399,20 @@ test('default pipeline completes without a browser; custom step resumes once fro
         const { target, preview } = await open('default-pipeline');
         expect(await (await call(`/generation/${run.id}/events`)).text()).toContain('"status":"completed"');
         expect(calls[offset].messages).toEqual(preview.messages);
+        const [firstWire, secondWire] = calls.slice(offset, offset + 2);
+        expect(firstWire.messages[0]).toMatchObject({ role: 'assistant', tool_calls: expect.any(Array) });
+        expect(firstWire.messages.some(message => message.role === 'user')).toBe(false);
+        const current = firstWire.messages.flatMap(message => message.tool_calls ?? [])
+            .find(call => JSON.parse(call.function.arguments).content === 'Pipeline input');
+        expect(current.function.name).toBe('submit_story');
+        expect(firstWire.messages.at(-1).content).toContain(current.id);
+        expect(firstWire.tools.map(tool => tool.function.name)).toEqual(['first', 'last']);
+        expect(secondWire.tools).toEqual(firstWire.tools);
+        expect(secondWire.messages.slice(0, firstWire.messages.length)).toEqual(firstWire.messages);
+        const [actualCall, actualReceipt, nextStep] = secondWire.messages.slice(firstWire.messages.length);
+        expect(actualCall.tool_calls[0].function.name).toBe('first');
+        expect(actualReceipt.tool_call_id).toBe(actualCall.tool_calls[0].id);
+        expect(nextStep.content).toContain(current.id);
         expect(preview.previewPipeline).toMatchObject({ round: 0, total: 2, step: { tool: 'first' } });
         const secondPreview = await (await call('/generation/preview', { ...target, action: 'send', round: 1 })).json();
         expect(secondPreview.previewPipeline).toMatchObject({ round: 1, step: { tool: 'last' } });

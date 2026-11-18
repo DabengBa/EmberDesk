@@ -7,7 +7,7 @@ import { hasEnabledToolBindings } from '../public/scripts/tool-bindings-core.js'
 import { escapeRegex } from '../public/scripts/util/primitives.js';
 import { countWebTokenizerTokens, getSentencepiceTokenizer, getTiktokenTokenizer, getTokenizerModel, getWebTokenizer } from './endpoints/tokenizers.js';
 import { getRegenerateChatPrefix } from './server-generation-service.ts';
-import { projectHistory, stripPipelineMarkup, type MediaResolver, type ServerPromptMessage } from './server-prompt/history.ts';
+import { createStoryProjection, projectHistory, stripPipelineMarkup, type MediaResolver, type ServerPromptMessage } from './server-prompt/history.ts';
 import { array, record, ServerPromptError, string, type RecordView, type ServerPromptSnapshot } from './server-prompt/snapshot.ts';
 import { roleAt, scanWorldInfo, type Injection, type Role, type WorldInfoActivation } from './server-prompt/world-info.ts';
 
@@ -16,6 +16,7 @@ export { readServerPromptSnapshot, ServerPromptError, type ServerPromptSnapshot 
 export type ServerPromptCommand = { action: 'send' | 'regenerate' | 'continue'; pendingUserText?: string; pendingUserExtra?: RecordView };
 export type { ServerPromptMessage } from './server-prompt/history.ts';
 type TextMessage = { role: Role; content: string; name?: string };
+type PipelineStep = { tool: string; prompt?: string; model?: string; maxTokens?: number | null };
 export type ServerPromptRuntime = {
     scanPrompts?: readonly string[];
     forceWorldInfo?: readonly WorldInfoActivation[];
@@ -24,8 +25,9 @@ export type ServerPromptRuntime = {
     translateMemory?: (text: string) => string;
     resolveMedia?: MediaResolver;
     resolveFile?: (url: string) => string;
-    pipeline?: { activeRunId?: string; step: { tool: string; prompt?: string; model?: string }; index: number; total: number }
-        | { activeRunId?: string; fallback: true };
+
+    pipeline?: { activeRunId?: string; step: PipelineStep; steps?: readonly PipelineStep[]; index: number; total: number; currentInput?: string | null }
+        | { activeRunId?: string; fallback: true; steps?: Array<{ tool: string }> };
 };
 
 function invalid(message: string): never {
@@ -179,11 +181,84 @@ async function makeCounter(requestModel: string) {
         + (message.name === undefined ? 0 : legacy ? -1 : 1);
 }
 
+function pipelineTools(pipeline: ServerPromptRuntime['pipeline']) {
+    const steps = pipeline?.steps ?? (pipeline && 'step' in pipeline ? [pipeline.step] : []);
+    return [...new Map(steps.map(item => [item.tool, pipelineStepTool(item)])).values()];
+}
+
+function buildPipelineTail(runtime: ServerPromptRuntime, manager: ReturnType<typeof makePromptManager>, generation: string,
+    pipelineHistory: boolean, currentInput: string | null | undefined, project: ReturnType<typeof createStoryProjection>) {
+    const pipeline = runtime.pipeline;
+    if (!pipeline) return [];
+    if (!('step' in pipeline)) return [{ role: 'system', content: PIPELINE_FALLBACK_PROMPT }] satisfies ServerPromptMessage[];
+    const tail: ServerPromptMessage[] = [];
+    const tag = pipelineTriggerTag(pipeline.step.tool);
+    for (const entry of manager.getPromptOrderForCharacter(manager.activeCharacter)) {
+        const prompt = manager.getPromptById(entry.identifier);
+        const triggers = prompt?.injection_trigger ?? [];
+        if (!entry.enabled || !prompt || !triggers.includes(tag) || triggers.includes(generation) || triggers.includes('all')) continue;
+        const { role, content } = manager.preparePrompt(prompt);
+        if (content) tail.push(...(pipelineHistory
+            ? project(`step:${pipeline.index}:${entry.identifier}`, 'story_preset', content, roleAt(role)).messages
+            : [{ role: roleAt(role), content }]));
+    }
+    const input = pipeline.currentInput === undefined ? currentInput : pipeline.currentInput;
+    const transcriptGuide = pipelineHistory ? ' Synthetic call/receipt pairs carry preset, character, world, recap, and story content; treat each according to its kind and do not repeat those calls.' : '';
+    const inputGuide = !pipelineHistory ? '' : input
+        ? ` The current user input is the submit_story call with ID ${input}.`
+        : input === null ? ' The latest native user message is the current input.' : '';
+    tail.push({ role: 'system', content: buildStepPrompt(pipeline.step, pipeline.index, pipeline.total) + transcriptGuide + inputGuide });
+    return tail;
+}
+
+async function promptBudget(connection: ReturnType<typeof resolveConnection>, tools: ReturnType<typeof pipelineTools>) {
+    const count = await makeCounter(connection.model);
+    const padding = connection.model.includes('gpt-3.5-turbo-0301') ? 12 : 3;
+    const toolTokens = tools.length ? count({ role: 'system', content: JSON.stringify(tools) }) : 0;
+    const counts = new Map<object, number>();
+    const measure = (messages: readonly object[], costs: ReadonlyMap<object, number>) => messages.reduce((sum, message) => {
+        let tokens = counts.get(message);
+        if (tokens === undefined) {
+            const countable = Object.fromEntries(Object.entries(message).map(([key, value]) => [key, typeof value === 'string' ? value : JSON.stringify(value)]));
+            if ('content' in message && Array.isArray(message.content)) countable.content = message.content.map(part => part.type === 'text' ? part.text : '').join('');
+            const counted: number = count(countable);
+            counts.set(message, counted);
+            tokens = counted;
+        }
+        return sum + tokens + (costs.get(message) ?? 0);
+    }, 0);
+    return { fixed: padding + toolTokens, measure };
+}
+
+/** Follow-up rounds budget the captured transcript, without rebuilding media, lore or history. */
+export async function assembleServerPipelineTail(snapshot: ServerPromptSnapshot, runtime: ServerPromptRuntime,
+    transcript: readonly object[], mediaCosts: ReadonlyMap<object, number>, callIds: ReadonlySet<string>, pendingUserText?: string) {
+    const local = record(snapshot.settings.oai_settings);
+    const step = runtime.pipeline && 'step' in runtime.pipeline ? runtime.pipeline.step : undefined;
+    const connection = resolveConnection(snapshot.preset, step?.model ? { ...local, openai_model: step.model } : local);
+    if (step && pipelineModelRemovesTools({ chat_completion_source: 'openai', model: connection.model })) invalid('Reply pipeline model does not support tools');
+    const rows = snapshot.chat.slice(1).map(record);
+    if (pendingUserText !== undefined) rows.push(prepareGenerationUserMessage(snapshot, pendingUserText));
+    const manager = makePromptManager({ ...snapshot.preset, ...local }, createSubstitute(snapshot, rows, connection.model));
+    const tools = pipelineTools(runtime.pipeline);
+    const tail = buildPipelineTail(runtime, manager, 'normal', true, undefined, createStoryProjection(new Set(callIds)));
+    const messages = [...transcript, ...tail];
+    const { fixed, measure } = await promptBudget(connection, tools);
+    const promptTokens = fixed + measure(messages, mediaCosts);
+    if (promptTokens > connection.contextTokens - (step?.maxTokens ?? connection.responseTokens)) {
+        throw new ServerPromptError('budget_exceeded', 'Reply pipeline transcript exceeds the context size');
+    }
+    return { connection, messages, tail, tools, promptTokens };
+}
+
 /** Shared server-only entry point. Runtime inputs are supplied by the server caller, not the HTTP request. */
 export async function assembleServerPrompt(snapshot: ServerPromptSnapshot, command: ServerPromptCommand, runtime: ServerPromptRuntime = {}) {
     const local = record(snapshot.settings.oai_settings);
     const step = runtime.pipeline && 'step' in runtime.pipeline ? runtime.pipeline : undefined;
     const connection = resolveConnection(snapshot.preset, step?.step.model ? { ...local, openai_model: step.step.model } : local);
+    const removesTools = pipelineModelRemovesTools({ chat_completion_source: 'openai', model: connection.model });
+    if (step && removesTools) invalid('Reply pipeline model does not support tools');
+    const pipelineHistory = command.action === 'send' && Boolean(runtime.pipeline) && !removesTools;
     const settings = { ...snapshot.preset, ...local };
     const historyPayload = command.action === 'regenerate' ? getRegenerateChatPrefix(snapshot.chat) : snapshot.chat;
     const rows = structuredClone(historyPayload.slice(1).map(record));
@@ -191,6 +266,9 @@ export async function assembleServerPrompt(snapshot: ServerPromptSnapshot, comma
         if (command.action !== 'send') invalid('Only send preview accepts pending user text');
         rows.push({ ...prepareGenerationUserMessage(snapshot, command.pendingUserText), extra: command.pendingUserExtra });
     }
+    // Memory can add IDs after a send; use the position in the original chat,
+    // before memory replaces or groups any rows, for append-only stability.
+    const sourceKeys = new Map(rows.map((row, index) => [row, `row:${index}`]));
     const name1 = getGenerationUserName(record(snapshot.chat[0]));
     const substitute = createSubstitute(snapshot, rows, connection.model);
     const regex = makeRegex(snapshot, substitute, 'prompt');
@@ -215,6 +293,7 @@ export async function assembleServerPrompt(snapshot: ServerPromptSnapshot, comma
                 wrap: memorySettings.wrap,
                 name1,
                 name2: string(snapshot.character.name ?? record(snapshot.character.data).name),
+                includeTurns: pipelineHistory,
             }).items.map(record);
         }
     }
@@ -223,11 +302,16 @@ export async function assembleServerPrompt(snapshot: ServerPromptSnapshot, comma
         const role: Role = extra.type === 'narrator' ? 'system' : row.is_user ? 'user' : 'assistant';
         const files = array(extra.files).map(record).map(file => string(file.text) || runtime.resolveFile?.(string(file.url))).filter(Boolean);
         const message = (files.length ? `${files.join('\n\n')}\n\n` : '') + string(row.mes);
-        const content = regex(substitute(message).replace(/\r/g, ''), role === 'user' ? regexPlacement.userInput : regexPlacement.aiOutput, core.length - index - 1);
+        const prepareText = (value: string) => regex(substitute(value).replace(/\r/g, ''), role === 'user' ? regexPlacement.userInput : regexPlacement.aiOutput, core.length - index - 1);
+        const content = prepareText(message);
         const text = stripPipelineMarkup(content, array(extra.tool_invocations).map(record));
         const name = string(row.name);
         const displayName = role !== 'system' && name && (settings.names_behavior === 2 || (settings.names_behavior ?? 0) === 0 && row.force_avatar && name !== name1);
-        return { row, role, text: displayName ? `${name}: ${text}` : text, name: settings.names_behavior === 1 ? name.replace(/[^a-zA-Z0-9_]/g, '_').slice(0, 64) : undefined };
+        const summary = record(extra.chatMemorySummary);
+        return { row, role, text: displayName ? `${name}: ${text}` : text, name: settings.names_behavior === 1 ? name.replace(/[^a-zA-Z0-9_]/g, '_').slice(0, 64) : undefined,
+            sourceKey: sourceKeys.get(row) ?? (string(summary.turnKey ?? summary.summaryId) || `projected:${index}`),
+            summaryTurns: array(summary.turns).map(record).map(turn => ({ key: string(turn.key), text: displayName ? `${name}: ${prepareText(string(turn.text))}` : prepareText(string(turn.text)) })),
+        };
     });
     const world = scanWorldInfo(snapshot, prepared.map(message => message.text).reverse(), substitute, regex, runtime);
     const format = (content: string, template: unknown) => content && substitute(string(template).trim() ? string(template).replaceAll('{0}', () => content) : content);
@@ -241,7 +325,7 @@ export async function assembleServerPrompt(snapshot: ServerPromptSnapshot, comma
     const prompts = manager.getPromptCollection(generation).collection;
     const injections: Injection[] = [];
     const depth = record(record(card.extensions).depth_prompt);
-    const relative: (TextMessage | 'history')[] = [];
+    const relative: ({ message: TextMessage; key: string; tool: string } | 'history')[] = [];
     for (const prompt of prompts) {
         const content = computed.get(prompt.identifier ?? '') ?? (prompt.system_prompt ? '' : prompt.content);
         if (prompt.identifier === 'chatHistory') {
@@ -249,7 +333,7 @@ export async function assembleServerPrompt(snapshot: ServerPromptSnapshot, comma
         } else if (content) {
             const message = { role: roleAt(prompt.role), content };
             if (prompt.injection_position === 1) injections.push({ ...message, depth: prompt.injection_depth ?? 0, order: prompt.injection_order });
-            else relative.push(message);
+            else relative.push({ message, key: `preset:${prompt.identifier}`, tool: prompt.identifier === 'charDescription' ? 'character_card' : prompt.identifier === 'worldInfo' ? 'world_info' : 'story_preset' });
         }
     }
     if (depth.prompt) injections.push({ role: roleAt(depth.role), content: substitute(string(depth.prompt).trim()), depth: Number(depth.depth ?? 4), order: 100 });
@@ -261,53 +345,33 @@ export async function assembleServerPrompt(snapshot: ServerPromptSnapshot, comma
     const newChat: TextMessage = { role: 'system', content: substitute(string(settings.new_chat_prompt ?? '[Start a new Chat]')) };
     const continueNudge = command.action === 'continue'
         ? substitute(string(settings.continue_nudge_prompt ?? '[Continue your last message without repeating its original content.]')) : '';
-    const count = await makeCounter(connection.model);
+
     const feature = record(snapshot.settings.feature_settings ?? snapshot.settings.extension_settings);
-    const removesTools = pipelineModelRemovesTools({ chat_completion_source: 'openai', model: connection.model });
-    if (step && removesTools) invalid('Reply pipeline model does not support tools');
-    const pipelineHistory = generation === 'normal' && Boolean(runtime.pipeline) && !removesTools;
     const toolsEnabled = !removesTools && (Boolean(runtime.pipeline) || Boolean(record(settings.reply_pipeline).enabled) && hasEnabledToolBindings(feature.tool_bindings));
-    const { groups, currentUser, mediaCosts } = await projectHistory(prepared, {
+    const { groups, currentUser, currentInput, mediaCosts, project } = await projectHistory(prepared, {
         settings, model: connection.model, tools: toolsEnabled, pipelineHistory, activeRunId: runtime.pipeline?.activeRunId, resolveMedia: runtime.resolveMedia,
     });
-    const tools = step ? [pipelineStepTool(step.step)] : [];
-    const tail: TextMessage[] = [];
-    if (step) {
-        const tag = pipelineTriggerTag(step.step.tool);
-        for (const entry of manager.getPromptOrderForCharacter(manager.activeCharacter)) {
-            const prompt = manager.getPromptById(entry.identifier);
-            const triggers = prompt?.injection_trigger ?? [];
-            if (!entry.enabled || !prompt || !triggers.includes(tag) || triggers.includes(generation) || triggers.includes('all')) continue;
-            const { role, content } = manager.preparePrompt(prompt);
-            if (content) tail.push({ role: roleAt(role), content });
-        }
-        tail.push({ role: 'system', content: buildStepPrompt(step.step, step.index, step.total) });
-    } else if (runtime.pipeline) tail.push({ role: 'system', content: PIPELINE_FALLBACK_PROMPT });
-    const limit = connection.contextTokens - connection.responseTokens;
-    const padding = connection.model.includes('gpt-3.5-turbo-0301') ? 12 : 3;
-    const anchor: TextMessage = { role: 'user', content: '以下是此前已经发生的对话。' };
+    const tools = pipelineTools(runtime.pipeline);
+    const tail = buildPipelineTail(runtime, manager, generation, pipelineHistory, currentInput, project);
+    const pack = (key: string, tool: string, message: TextMessage) => pipelineHistory
+        ? project(key, tool, message.content, message.role, message.name).messages : [message];
+    const limit = connection.contextTokens - (step?.step.maxTokens ?? connection.responseTokens);
+    const worldInjections = new Set(world.injections);
+    const relativeMessages = relative.map(item => item === 'history' ? item : pack(item.key, item.tool, item.message));
+    const newChatMessages = newChat.content ? pack('new_chat', 'story_preset', newChat) : [];
     const assemble = (start: number): ServerPromptMessage[] => {
         const selected = groups.slice(start);
-        for (const [index, messages] of groupInjections(injections, selected.length)) selected.splice(index, 0, messages);
-        const historyMessages = selected.flat();
-        if (pipelineHistory && historyMessages[0]?.role !== 'user' && historyMessages.some(message => 'tool_calls' in message)) historyMessages.unshift(anchor);
-        if (newChat.content) historyMessages.unshift(newChat);
-        const messages = relative.flatMap(item => item === 'history' ? historyMessages : [item]);
+        for (const [index, messages] of groupInjections(injections, selected.length, worldInjections)) {
+            selected.splice(index, 0, messages.flatMap(({ message, key, tool }) => pack(key, tool, message)));
+        }
+        const historyMessages = [...newChatMessages, ...selected.flat()];
+        const messages = relativeMessages.flatMap(item => item === 'history' ? historyMessages : item);
         if (continueNudge) messages.push({ role: 'system', content: continueNudge });
         return settings.squash_system_messages ? squash(messages, newChat) : messages;
     };
-    const counts = new Map<ServerPromptMessage, number>();
-    const measureOne = (message: ServerPromptMessage) => {
-        const cached = counts.get(message);
-        if (cached !== undefined) return cached;
-        const countable = Object.fromEntries(Object.entries(message).map(([key, value]) => [key, typeof value === 'string' ? value : JSON.stringify(value)]));
-        if ('content' in message && Array.isArray(message.content)) countable.content = message.content.map(part => part.type === 'text' ? part.text : '').join('');
-        const tokens = count(countable) + (mediaCosts.get(message) ?? 0);
-        counts.set(message, tokens);
-        return tokens;
-    };
-    const reserved = tail.reduce((sum, message) => sum + measureOne(message), 0) + (tools.length ? count({ role: 'system', content: JSON.stringify(tools) }) : 0);
-    const measure = (messages: ServerPromptMessage[]) => messages.reduce((total, message) => total + measureOne(message), padding + reserved);
+    const budget = await promptBudget(connection, tools);
+    const reserved = budget.fixed + budget.measure(tail, mediaCosts);
+    const measure = (messages: ServerPromptMessage[]) => reserved + budget.measure(messages, mediaCosts);
     // Keep the current user turn (including the reply being continued) and
     // mandatory prompts before adding the newest contiguous older suffix.
     let start = currentUser;
@@ -326,12 +390,12 @@ export async function assembleServerPrompt(snapshot: ServerPromptSnapshot, comma
     return {
         messages: [...messages, ...tail], connection,
         budget: { contextTokens: connection.contextTokens, responseTokens: connection.responseTokens, promptTokens, omittedHistory: start },
-        ...(runtime.pipeline ? { pipeline: { baseMessages: messages, tail, tools } } : {}),
+        ...(runtime.pipeline ? { pipeline: { baseMessages: messages, tail, tools, currentInput, mediaCosts } } : {}),
     };
 }
 
 /** Apply absolute injections in the reference reverse-history depth/order/role order. */
-function groupInjections(injections: Injection[], historyLength: number) {
+function groupInjections(injections: Injection[], historyLength: number, worldInjections: Set<Injection>) {
     const groups = new Map<number, Injection[]>();
     for (const entry of injections) {
         if (!Number.isInteger(entry.depth) || entry.depth < 0) continue;
@@ -342,8 +406,9 @@ function groupInjections(injections: Injection[], historyLength: number) {
     return [...groups].sort(([a], [b]) => a - b).map(([depth, entries]) => {
         const order = [...new Set(entries.map(entry => entry.order))].sort((a, b) => a - b);
         const messages = order.flatMap(priority => roleOrder.slice().reverse().flatMap(role => {
-            const content = entries.filter(entry => entry.order === priority && entry.role === role).map(entry => entry.content.trim()).filter(Boolean).join('\n');
-            return content ? [{ role, content }] : [];
+            const matching = entries.filter(entry => entry.order === priority && entry.role === role);
+            const content = matching.map(entry => entry.content.trim()).filter(Boolean).join('\n');
+            return content ? [{ message: { role, content }, key: `depth:${depth}:${priority}:${role}`, tool: matching.every(entry => worldInjections.has(entry)) ? 'world_info' : 'prompt_injection' }] : [];
         }));
         return [Math.max(0, historyLength - depth), messages] as const;
     });
