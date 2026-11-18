@@ -1,5 +1,7 @@
 import http from 'node:http';
 import { afterAll, beforeAll, expect, test } from '@jest/globals';
+import { ProxyAgent } from 'proxy-agent';
+import { PrivateRequestAgent } from '../src/private-request-filter.ts';
 import { streamServerModel } from '../src/server-generation-model-transport.ts';
 
 let server;
@@ -101,6 +103,7 @@ test('does not treat a JSON payload without a completion as an empty successful 
 test('never forwards the configured key to a redirected origin', async () => {
     const redirect = http.createServer((_request, response) => {
         response.writeHead(307, { location: `${baseUrl}/chat/completions` });
+
         response.end();
     });
     await new Promise(resolve => redirect.listen(0, '127.0.0.1', resolve));
@@ -125,5 +128,33 @@ test('rejects an upstream stream that ends before its completion marker', async 
             messages: [], maxTokens: 12, signal: new AbortController().signal, emit() {} })).rejects.toThrow('incomplete');
     } finally {
         await new Promise(resolve => broken.close(resolve));
+    }
+});
+
+test.each([false, true])('uses the configured address policy on every model hop (proxy bypass: %s)', async bypass => {
+    const blocked = http.createServer((_request, response) => response.writeHead(403).end());
+    await new Promise(resolve => blocked.listen(0, '127.0.0.2', resolve));
+    const blockedUrl = `http://127.0.0.2:${blocked.address().port}`;
+    const redirect = http.createServer((_request, response) => response.writeHead(307, {
+        location: _request.url.startsWith('/allowed/') ? `${baseUrl}/chat/completions` : `${blockedUrl}/chat/completions`,
+    }).end());
+    await new Promise(resolve => redirect.listen(0, '127.0.0.1', resolve));
+    const redirectUrl = `http://127.0.0.1:${redirect.address().port}`;
+    const original = http.globalAgent;
+    const filtering = new PrivateRequestAgent({ privateAddressWhitelist: ['127.0.0.1/32'], logBlocked: false });
+    const proxy = bypass ? new ProxyAgent({ httpAgent: filtering, getProxyForUrl: () => '' }) : null;
+    http.globalAgent = proxy ?? filtering;
+    const input = { model: 'local', messages: [], maxTokens: 12, signal: new AbortController().signal, emit() {} };
+    try {
+        await expect(streamServerModel({ ...input, baseUrl })).resolves.toBe('hello');
+        await expect(streamServerModel({ ...input, baseUrl: `${redirectUrl}/allowed` })).resolves.toBe('hello');
+        expect(received.at(-1).authorization).toBeUndefined();
+        await expect(streamServerModel({ ...input, baseUrl: blockedUrl })).rejects.toThrow('Blocked request to private IP address');
+        await expect(streamServerModel({ ...input, baseUrl: `${redirectUrl}/blocked` })).rejects.toThrow('Blocked request to private IP address');
+    } finally {
+        http.globalAgent = original;
+        proxy?.destroy();
+        filtering.destroy();
+        await Promise.all([blocked, redirect].map(server => new Promise(resolve => server.close(resolve))));
     }
 });
