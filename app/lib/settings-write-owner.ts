@@ -1,10 +1,17 @@
 /** Per-document coordinator for runtime and form settings writes. */
 export function createSettingsWriteOwner() {
     let conflict = false;
+    let pendingWrite = Promise.resolve();
     const assertWritable = () => {
         if (conflict) throw new Error('Unresolved runtime settings conflict');
     };
     return {
+        // Include payload construction and publication of the committed revision.
+        runWrite<T>(write: () => Promise<T>): Promise<T> {
+            const operation = pendingWrite.then(write);
+            pendingWrite = operation.then(() => undefined, () => undefined);
+            return operation;
+        },
         hasConflict: () => conflict,
         markConflict: () => { conflict = true; },
         assertWritable,

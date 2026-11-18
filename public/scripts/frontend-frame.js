@@ -170,6 +170,41 @@ export function unmountFrontendFrames(rootEl) {
  */
 const expandedBlockKeys = new Set();
 
+// Keep this script self-contained: it runs in the card, not in the workspace.
+const clipboardScript = `<script>(function () {
+    const clipboard = navigator.clipboard;
+    if (!clipboard) return;
+    const nativeWrite = clipboard.writeText.bind(clipboard);
+    clipboard.writeText = async function (value) {
+        const text = String(value);
+        // Chromium denies async clipboard writes from opaque origins. A click
+        // can still copy within the frame, without a host message or permission.
+        if (navigator.userActivation?.isActive) {
+            const copy = event => {
+                event.clipboardData.setData('text/plain', text);
+                event.preventDefault();
+            };
+            document.addEventListener('copy', copy, { capture: true });
+            try {
+                if (document.execCommand('copy')) return;
+            } finally {
+                document.removeEventListener('copy', copy, { capture: true });
+            }
+        }
+        return nativeWrite(text);
+    };
+})();</script>`;
+
+/**
+ * Installs the copy helper before card scripts without displacing the doctype or head.
+ * @param {string} source
+ */
+function withCardClipboard(source) {
+    const preamble = /^(?:(?:\s+|<!--[\s\S]*?-->|<!doctype\s[^>]*>)|<(?:html|head)(?=[\s>])(?:"[^"]*"|'[^']*'|[^'">])*>)*/i;
+    const offset = source.match(preamble)?.[0].length ?? 0;
+    return source.slice(0, offset) + clipboardScript + source.slice(offset);
+}
+
 function expandedKey(kind, messageId, index) {
     return `${kind}::${String(messageId)}::${index}`;
 }
@@ -224,7 +259,7 @@ function mountFrontendSlot(pre, frameId, emit, translate) {
     iframe.setAttribute('loading', 'lazy');
     // Do not mint an app-origin blob URL for untrusted executable documents.
     iframe.setAttribute('sandbox', 'allow-scripts');
-    iframe.srcdoc = pre.textContent ?? '';
+    iframe.srcdoc = withCardClipboard(pre.textContent ?? '');
     iframe.addEventListener('load', () => emit?.(FRONTEND_FRAME_EVENTS.ended, frameId));
 
     const source = document.createElement('details');

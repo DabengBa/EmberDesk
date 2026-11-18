@@ -12,7 +12,7 @@ topic: third-party-extension-compatibility
 
 - **Regex** is a fixed product feature under `public/scripts/extensions/regex/` (the directory name is retained; it is a directly imported module, not a plugin system). It initializes via `initCoreFeatures()` in `public/scripts/feature-settings.js`.
 - **`feature_settings` data bag**: owns `regex`/`regex_presets`, `note`, `variables.global`, `character_allowed_regex`, `preset_allowed_regex`. New writes use `feature_settings`; legacy `extension_settings` data is preserved through lazy migration and on-disk keys are never purged.
-- **Message cards**: `public/scripts/frontend-frame.js` renders fenced complete HTML inside opaque-origin `srcdoc` iframes with `sandbox="allow-scripts"`. Cards have their own DOM and scrolling, and no host globals, context, event bridge, or parent DOM access. A host disclosure shows the original source.
+- **Message cards**: `public/scripts/frontend-frame.js` renders fenced complete HTML inside opaque-origin `srcdoc` iframes with `sandbox="allow-scripts"`. Cards have their own DOM and scrolling, and no host globals, context, event bridge, or parent DOM access. For `navigator.clipboard.writeText()` during a user gesture, a frame-local `copy` command supports plain text without granting clipboard permissions to the iframe. A host disclosure shows the original source.
 - **Character-card metadata**: `data.extensions.*` fields (`regex_scripts`, `world`, etc.) are feature data and must not be deleted.
 
 ### Migrating older message cards

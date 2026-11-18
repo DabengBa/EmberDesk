@@ -21,8 +21,12 @@ export function createWorkspaceGeneration({ request, subscribe, changed, finishe
         });
     }
     const close = () => {
-        selection?.detach?.();
+        const view = selection;
+        view?.detach?.();
         selection = undefined;
+        if (view?.run?.temporary && view.run.status === 'running') {
+            void request(`/${view.run.id}/cancel`, {}).catch(() => {});
+        }
         changed();
     };
 
@@ -45,6 +49,8 @@ export function createWorkspaceGeneration({ request, subscribe, changed, finishe
                 (view.invocations ??= []).push(event.invocation);
             } else if (event.type === 'terminal') {
                 view.run = event.run;
+            } else if (event.type === 'disconnected' && view.run.temporary) {
+                view.run = { ...view.run, status: 'interrupted' };
             }
             if (view.run.status !== 'running') {
                 results.delete(view.stepId);
@@ -81,6 +87,7 @@ export function createWorkspaceGeneration({ request, subscribe, changed, finishe
             try {
                 const run = await request('/create', { ...target, ...command });
                 if (selection === view) attach(view, run);
+                else if (run.temporary && run.status === 'running') void request(`/${run.id}/cancel`, {}).catch(() => {});
                 return run;
             } finally {
                 view.creating = false;

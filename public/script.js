@@ -6341,6 +6341,9 @@ const workspaceGeneration = createWorkspaceGeneration({
     subscribe(id, listener) {
         const source = new EventSource(`/api/chats/generation/${encodeURIComponent(id)}/events`);
         for (const type of ['snapshot', 'delta', 'step', 'invocation', 'terminal']) source.addEventListener(type, event => listener(JSON.parse(event.data)));
+        source.addEventListener('error', () => {
+            if (source.readyState === EventSource.CLOSED) listener({ type: 'disconnected' });
+        });
         return () => source.close();
     },
     changed() {
@@ -6363,7 +6366,7 @@ const workspaceGeneration = createWorkspaceGeneration({
                     : run.kind === 'continue' ? chat.length - 1 : chat.length;
                 chat.splice(start, chat.length - start, run.assistant);
             }
-            if (run.status === 'failed') toastr.error(run.error ?? run.status);
+            if (run.status === 'failed' || run.status === 'interrupted') toastr.error(run.error ?? run.status);
             return;
         }
         const current = getCurrentChatGenerationTarget();
@@ -8964,7 +8967,6 @@ async function removeCharacterFromUI(deletedAvatars = [], { deleteContext = null
  * @returns {Promise<void>} - A promise that resolves when the new assistant chat is created
  */
 export async function newAssistantChat({ temporary: _temporary = false } = {}) {
-    if (workspaceGeneration.current()?.run.temporary) void workspaceGeneration.cancel().catch(() => {});
     workspaceGeneration.close();
     await clearChat();
     chat.splice(0, chat.length);
