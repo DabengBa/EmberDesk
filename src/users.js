@@ -544,27 +544,28 @@ export async function createBackupArchive(handle, response) {
 export const router = express.Router();
 
 /**
- * Serves a managed-media compatibility path from the canonical blob store
- * when the projected file is absent (projection 'off').
+ * Resolves a managed-media compatibility path to a canonical blob file.
  * @param {import('express').Request} req Request object
  * @param {string} fullPath Absolute compatibility file path
- * @returns {Promise<{contents: Buffer, mediaType?: string}|null>} Blob payload or null
+ * @returns {Promise<{path: string, mediaType?: string}|null>} Blob file or null
  */
-async function tryReadManagedMediaBlob(req, fullPath) {
+async function tryResolveManagedMediaFile(req, fullPath) {
     try {
         const directories = req.user.directories;
         const handle = directories.handle ?? path.basename(path.resolve(directories.root));
         const compatibilityPath = path.relative(directories.root, fullPath).split(path.sep).join(path.posix.sep);
+        const { ensureCanonicalSliceBackend } = await import('./canonical-backend.js');
+        await ensureCanonicalSliceBackend('managed_media', directories, handle);
         const {
             getCanonicalManagedMediaReadState,
-            readManagedMediaContent,
+            resolveManagedMediaPath,
         } = await import('./endpoints/canonical-managed-media-read-service.ts');
         const state = getCanonicalManagedMediaReadState({ handle, directories });
         if (!state.ok) {
             return null;
         }
-        const blob = readManagedMediaContent(state.db, directories, compatibilityPath);
-        return blob.ok ? blob : null;
+        const blob = resolveManagedMediaPath(state.db, directories, compatibilityPath);
+        return blob.ok ? { path: blob.managedPath, mediaType: blob.reference.mediaType } : null;
     } catch {
         return null;
     }
@@ -572,8 +573,7 @@ async function tryReadManagedMediaBlob(req, fullPath) {
 
 /**
  * Route handler for managed-media domains (assets, user images, user files).
- * Missing compatibility files fall back to the canonical blob store before
- * answering 404.
+ * Canonical bytes take precedence over any compatibility projection.
  * @param {(req: import('express').Request) => string} directoryFn A function that returns the directory path to serve files from
  * @returns {import('express').RequestHandler}
  */
@@ -584,12 +584,12 @@ function createManagedMediaRouteHandler(directoryFn) {
             const directory = directoryFn(req);
             const filePath = getWildcardFilePath(req);
             const fullPath = path.join(directory, filePath);
-            if (isPathUnderParent(directory, path.resolve(fullPath)) && !fs.existsSync(fullPath)) {
-                const blob = await tryReadManagedMediaBlob(req, path.resolve(fullPath));
+            if (isPathUnderParent(directory, path.resolve(fullPath))) {
+                const blob = await tryResolveManagedMediaFile(req, path.resolve(fullPath));
                 if (blob) {
                     res.setHeader('Content-Type', blob.mediaType ?? 'application/octet-stream');
                     invalidateFirefoxCache(filePath, req, res);
-                    return res.send(blob.contents);
+                    return res.sendFile(path.basename(blob.path), { root: path.dirname(blob.path) });
                 }
             }
             return fileHandler(req, res);

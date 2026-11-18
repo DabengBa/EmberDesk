@@ -1,4 +1,3 @@
-import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import type { DatabaseSync } from 'node:sqlite';
@@ -15,15 +14,15 @@ import { getCanonicalStorageSlice } from '../canonical-storage-slice-registry.ts
 import { uuidv4 } from '../util.js';
 import {
     getCanonicalManagedMediaReference,
+    hasCanonicalManagedMediaConsumers,
+    hashCanonicalManagedMediaBuffer,
     listCanonicalManagedMediaReferences,
     listOpenCanonicalManagedMediaRepairs,
     markCanonicalManagedMediaRepairAttempt,
+    persistCanonicalManagedMediaContents,
     recordCanonicalManagedMediaRepair,
     resolveCanonicalManagedMediaRepair,
-    upsertCanonicalManagedMediaReference,
 } from './canonical-managed-media-store.ts';
-
-const MANAGED_MEDIA_ROOT = 'managed-media';
 
 type Directories = import('../users.js').UserDirectoryList;
 type Flags = ReturnType<ReturnType<typeof getCanonicalStorageSlice>['getFeatureFlags']>;
@@ -136,10 +135,6 @@ export function getCanonicalManagedMediaWriteState({
     return { ok: true, db, featureFlags, migrationStatus, auditStatus, sliceKey: slice.key } as const;
 }
 
-function getManagedRoot(directories: Directories) {
-    return path.resolve(directories.storage, MANAGED_MEDIA_ROOT);
-}
-
 function assertCompatibilityPath(directories: Directories, compatibilityPath: string) {
     const normalized = normalizePath(compatibilityPath);
     const root = path.resolve(directories.root);
@@ -161,24 +156,6 @@ function getContentsBuffer(contents: unknown) {
         return fs.readFileSync(contents);
     }
     throw new Error('Managed media contents must be a buffer, Uint8Array, or source path');
-}
-
-function stageManagedContents({ directories, contents, contentHash }: { directories: Directories; contents: Buffer; contentHash: string }) {
-    const managedRoot = getManagedRoot(directories);
-    const stagingRoot = path.join(managedRoot, '.staging');
-    const managedPath = path.join(managedRoot, contentHash);
-    fs.mkdirSync(stagingRoot, { recursive: true });
-    const stagedPath = path.join(stagingRoot, `${uuidv4()}.stage`);
-    try {
-        fs.writeFileSync(stagedPath, contents);
-        if (!fs.existsSync(managedPath)) {
-            fs.renameSync(stagedPath, managedPath);
-            return { managedPath, installed: true };
-        }
-        return { managedPath, installed: false };
-    } finally {
-        fs.rmSync(stagedPath, { force: true });
-    }
 }
 
 function projectCompatibilityFile({ managedPath, compatibilityPath }: ProjectionFile) {
@@ -245,44 +222,33 @@ export async function writeCanonicalManagedMedia({
 
     const target = assertCompatibilityPath(directories, compatibilityPath);
     const buffer = getContentsBuffer(contents);
-    const contentHash = crypto.createHash('sha256').update(buffer).digest('hex');
-    const staged = stageManagedContents({ directories, contents: buffer, contentHash });
+    const contentHash = hashCanonicalManagedMediaBuffer(buffer);
     const previousReference = getCanonicalManagedMediaReference(state.db, target.normalized);
     const repairKey = createRepairKey('project', `${target.normalized}:${contentHash}`);
-    // A hash path may already be in use by another writer, even if this call
-    // installed it. On any database failure retain it rather than unlinking.
-    const result = upsertCanonicalManagedMediaReference(state.db, {
+    const result = persistCanonicalManagedMediaContents(state.db, directories.storage, buffer, {
         compatibilityPath: target.normalized,
         contentHash,
         sizeBytes: buffer.length,
         mediaType: mediaType ?? (mime.lookup(target.normalized) || 'application/octet-stream'),
-        managedRelativePath: `${MANAGED_MEDIA_ROOT}/${contentHash}`,
         ownerType,
         ownerId,
         role,
         displayName,
         metadata,
         nowMs,
-    }, {
-        onPersist: projectionMode === 'off' ? null : (db, saved) => saveProjectionRepair(db, {
-            repairKey,
-            reference: saved.reference,
-            operation: 'project',
-            compatibilityPath: target.normalized,
-            reason: 'projection_pending',
-            nowMs,
-        }),
-    });
+    }, projectionMode === 'off' ? undefined : (db, saved) => saveProjectionRepair(db, {
+        repairKey,
+        reference: saved.reference,
+        operation: 'project',
+        compatibilityPath: target.normalized,
+        reason: 'projection_pending',
+        nowMs,
+    }));
     // The store reads back the reference it just upserted in the same transaction.
     const reference = result.reference as NonNullable<Reference>;
     if (previousReference && previousReference.blobId !== reference.blobId) {
         withCanonicalTransaction(state.db, (db: DatabaseSync) => {
-            const stillReferenced = db.prepare(`
-                SELECT 1 FROM media_references
-                WHERE blob_id = ? AND deleted_at_ms IS NULL
-                LIMIT 1
-            `).get(previousReference.blobId);
-            if (!stillReferenced) {
+            if (!hasCanonicalManagedMediaConsumers(db, previousReference.blobId)) {
                 db.prepare(`
                     UPDATE managed_blobs
                     SET lifecycle_state = 'tombstoned', deleted_at_ms = ?, updated_at_ms = ?
@@ -306,7 +272,7 @@ export async function writeCanonicalManagedMedia({
                 resolveCanonicalManagedMediaRepair(db, { repairKey, resolvedAtMs: nowMs });
             });
         }
-        return { ok: true, authorityCommitted: true, reference, managedPath: staged.managedPath };
+        return { ok: true, authorityCommitted: true, reference, managedPath: result.managedPath };
     } catch (error) {
         withCanonicalTransaction(state.db, (db: DatabaseSync) => saveProjectionRepair(db, {
             repairKey, reference: getCanonicalManagedMediaReference(db, target.normalized),
@@ -352,12 +318,7 @@ export async function deleteCanonicalManagedMediaReference({
             SET deleted_at_ms = ?, updated_at_ms = ?
             WHERE id = ? AND deleted_at_ms IS NULL
         `).run(Number(nowMs), Number(nowMs), reference.id);
-        const activeReference = db.prepare(`
-            SELECT 1 FROM media_references
-            WHERE blob_id = ? AND deleted_at_ms IS NULL
-            LIMIT 1
-        `).get(reference.blobId);
-        if (!activeReference) {
+        if (!hasCanonicalManagedMediaConsumers(db, reference.blobId)) {
             blobTombstoned = true;
             db.prepare(`
                 UPDATE managed_blobs
@@ -370,33 +331,19 @@ export async function deleteCanonicalManagedMediaReference({
                 repairKey, reference, operation: 'delete', compatibilityPath: target.normalized,
                 reason: 'projection_pending', nowMs,
             });
-        } else {
-            fs.rmSync(target.absolute, { force: true });
-            removeImportLedgerEntry(db, { sliceKey: 'managed_media', sourcePath: target.normalized });
         }
     });
     if (!reference) return { ok: false, reason: 'reference_not_found' };
-
-
-    if (projectionMode === 'off') {
-        return {
-            ok: true,
-            authorityCommitted: true,
-            reference,
-            blobTombstoned,
-            managedRelativePath: reference.managedRelativePath,
-            managedPath,
-        };
-    }
 
     try {
         withCanonicalTransaction(state.db, (db: DatabaseSync) => {
             if (getCanonicalManagedMediaReference(db, target.normalized)?.deletedAtMs == null) {
                 throw new Error('managed_media_projection_path_reused');
             }
-            (projectDelete ?? (targetPath => fs.rmSync(targetPath, { force: true })))(target.absolute);
+            const deleteProjection = projectionMode === 'off' ? null : projectDelete;
+            (deleteProjection ?? (targetPath => fs.rmSync(targetPath, { force: true })))(target.absolute);
             removeImportLedgerEntry(db, { sliceKey: 'managed_media', sourcePath: target.normalized });
-            resolveCanonicalManagedMediaRepair(db, { repairKey, resolvedAtMs: nowMs });
+            if (projectionMode !== 'off') resolveCanonicalManagedMediaRepair(db, { repairKey, resolvedAtMs: nowMs });
         });
         return {
             ok: true,
@@ -607,9 +554,10 @@ export async function collectCanonicalManagedMediaGarbage({
     handle,
     directories,
     db = null,
+    blobId = null,
     dryRun = true,
     dependencies = {},
-}: BaseOptions & { db?: DatabaseSync | null; dryRun?: boolean } = {} as BaseOptions) {
+}: BaseOptions & { db?: DatabaseSync | null; blobId?: string | null; dryRun?: boolean } = {} as BaseOptions) {
     let activeDb = db;
     if (!activeDb) {
         const state = getCanonicalManagedMediaWriteState({ handle, directories, dependencies });
@@ -622,43 +570,43 @@ export async function collectCanonicalManagedMediaGarbage({
     if (auditStatus.blocking) {
         return { ok: false, reason: auditStatus.reason ?? 'audit_not_run', dryRun: !!dryRun, candidateCount: 0, deletedCount: 0 };
     }
-    const rows = activeDb.prepare(`
+    const collect = (txnDb: DatabaseSync) => {
+        const rows = txnDb.prepare(`
         SELECT id, relative_path
         FROM managed_blobs
         WHERE lifecycle_state = 'tombstoned'
             AND deleted_at_ms IS NOT NULL
-            AND NOT EXISTS (
-                SELECT 1 FROM media_references
-                WHERE media_references.blob_id = managed_blobs.id
-                    AND media_references.deleted_at_ms IS NULL
-            )
+            AND (? IS NULL OR id = ?)
         ORDER BY deleted_at_ms ASC, id ASC
-    `).all();
-    const candidates = [];
-    for (const row of rows) {
-        const relativePath = normalizePath(row.relative_path);
-        const absolutePath = path.resolve(directories.storage, relativePath);
-        if (!relativePath || !absolutePath.startsWith(`${path.resolve(directories.storage)}${path.sep}`)) {
-            continue;
+        `).all(blobId, blobId);
+        const candidates = [];
+        for (const row of rows) {
+            const id = String(row.id);
+            if (hasCanonicalManagedMediaConsumers(txnDb, id)) continue;
+            const relativePath = normalizePath(row.relative_path);
+            const absolutePath = path.resolve(directories.storage, relativePath);
+            if (!relativePath || !absolutePath.startsWith(`${path.resolve(directories.storage)}${path.sep}`)) continue;
+            if (!dryRun) {
+                fs.rmSync(absolutePath, { force: true });
+                txnDb.prepare(`
+                    UPDATE managed_blobs
+                    SET lifecycle_state = 'collected', updated_at_ms = ?
+                    WHERE id = ?
+                `).run(Date.now(), id);
+            }
+            candidates.push({ id, relativePath });
         }
-        candidates.push({ id: String(row.id), relativePath, absolutePath });
-    }
-    if (!dryRun) {
-        for (const candidate of candidates) {
-            fs.rmSync(candidate.absolutePath, { force: true });
-            activeDb.prepare(`
-                UPDATE managed_blobs
-                SET lifecycle_state = 'collected', updated_at_ms = ?
-                WHERE id = ?
-            `).run(Date.now(), candidate.id);
-        }
-    }
+        return candidates;
+    };
+    // Hold the writer lock through the final reference check and unlink. The
+    // reference deletion has already committed; GC never rolls it back.
+    const candidates = dryRun ? collect(activeDb) : withCanonicalTransaction(activeDb, collect);
     return {
         ok: true,
         dryRun: !!dryRun,
         candidateCount: candidates.length,
         deletedCount: dryRun ? 0 : candidates.length,
-        candidates: candidates.map(candidate => ({ id: candidate.id, relativePath: candidate.relativePath })),
+        candidates,
     };
 }
 

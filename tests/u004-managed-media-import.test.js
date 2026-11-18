@@ -7,6 +7,7 @@ import { expect, test } from '@jest/globals';
 import { createCanonicalSqliteManager } from '../src/canonical-sqlite.ts';
 import { runCanonicalManagedMediaShadowImport, auditCanonicalManagedMediaShadowImport } from '../src/canonical-managed-media-shadow-import.ts';
 import { listCanonicalManagedMediaReferences } from '../src/endpoints/canonical-managed-media-store.ts';
+import { readManagedMediaContent } from '../src/endpoints/canonical-managed-media-read-service.ts';
 
 test('media import retries preserve catalog identity and projection-off audit suppresses file drift', async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'u004-media-'));
@@ -24,6 +25,9 @@ test('media import retries preserve catalog identity and projection-off audit su
         const db = manager.open({ handle: 'tester', directories, featureFlags });
         expect(listCanonicalManagedMediaReferences(db)).toHaveLength(1);
         fs.unlinkSync(file);
+        expect(readManagedMediaContent(db, directories, 'files/photo.png')).toMatchObject({
+            ok: true, contents: Buffer.from('fixture content'),
+        });
         const sync = await auditCanonicalManagedMediaShadowImport({ handle: 'tester', directories, db });
         expect(sync.blocking).toBe(true);
         const off = await auditCanonicalManagedMediaShadowImport({ handle: 'tester', directories, db, projection: 'off' });

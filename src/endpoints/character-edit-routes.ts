@@ -64,18 +64,21 @@ export function createCharacterEditHandlers({ canonicalCharacterExistsSafe, getC
 /**
  * Handle a POST request to edit a character attribute.
  *
- * This function reads the character data from a file, updates the specified attribute,
- * and writes the updated data back to the file.
+ * Updates the specified attribute only against the caller's canonical card version.
  *
  * @param {Object} request - The HTTP request object.
  * @param {Object} response - The HTTP response object.
  * @returns {void}
  */
     const editAttribute: RequestHandler = async function (request, response) {
-        console.debug(request.body);
         if (!request.body) {
             console.warn('Error: no response body detected');
             return response.status(400).send('Error: no response body detected');
+        }
+
+        const expectedCardJson = request.body.expected_card_json;
+        if (typeof expectedCardJson !== 'string' || !expectedCardJson) {
+            return response.status(400).send('Error: expected_card_json is required');
         }
 
         if (request.body.ch_name === '' || request.body.ch_name === undefined || request.body.ch_name === '.') {
@@ -91,6 +94,9 @@ export function createCharacterEditHandlers({ canonicalCharacterExistsSafe, getC
         try {
             const charJSON = await getCanonicalCharacterCardJsonSafe(request.user.profile?.handle ?? null, request.user.directories, request.body.avatar_url);
             if (typeof charJSON !== 'string') throw new Error('Failed to read character file');
+            if (charJSON !== expectedCardJson) {
+                return response.status(409).send({ error: 'character_card_conflict' });
+            }
 
             const char = JSON.parse(charJSON);
             //check if the field exists
@@ -108,6 +114,7 @@ export function createCharacterEditHandlers({ canonicalCharacterExistsSafe, getC
                 avatarUrl: request.body.avatar_url,
                 targetFile,
                 characterData: newCharJSON,
+                expectedCardJson,
                 dependencies: createCharacterWriteDependencies(),
             });
 
@@ -117,6 +124,9 @@ export function createCharacterEditHandlers({ canonicalCharacterExistsSafe, getC
 
             return response.sendStatus(200);
         } catch (err) {
+            if (err && typeof err === 'object' && 'code' in err && err.code === 'CHARACTER_CARD_CONFLICT') {
+                return response.status(409).send({ error: 'character_card_conflict' });
+            }
             console.error('An error occurred, character edit invalidated.', err);
             return response.sendStatus(500);
         }

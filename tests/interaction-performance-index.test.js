@@ -618,9 +618,10 @@ async function invokeCharactersDeletePreflight(directories, avatars) {
  * @param {string} avatar
  * @param {string} field
  * @param {any} value
+ * @param {string} [expectedCardJson]
  * @returns {Promise<ReturnType<typeof createMockResponse>>}
  */
-async function invokeCharacterEditAttribute(directories, avatar, field, value) {
+async function invokeCharacterEditAttribute(directories, avatar, field, value, expectedCardJson) {
     const handler = getCharactersEditAttributeRouteHandler();
     const request = {
         body: {
@@ -628,6 +629,7 @@ async function invokeCharacterEditAttribute(directories, avatar, field, value) {
             ch_name: path.parse(avatar).name,
             field,
             value,
+            ...(expectedCardJson === undefined ? {} : { expected_card_json: expectedCardJson }),
         },
         user: { directories, profile: { handle: 'default-user' } },
     };
@@ -2082,7 +2084,7 @@ describe('character index', () => {
             expect(initialResponse.statusCode).toBe(200);
             expect(initialResponse.body.name).toBe('Live Alpha');
 
-            const editResponse = await invokeCharacterEditAttribute(directories, 'alpha.png', 'description', 'Edited description');
+            const editResponse = await invokeCharacterEditAttribute(directories, 'alpha.png', 'description', 'Edited description', initialResponse.body.canonical_card_version);
             expect(editResponse.statusCode).toBe(200);
 
             const fallbackResponse = await invokeCharacterGet(directories, 'alpha.png');
@@ -2154,7 +2156,7 @@ describe('character index', () => {
         }
     });
 
-    test('updates the canonical row during edit-attribute when canonical writes are enabled', async () => {
+    test.each([false, true])('edit-attribute requires a version and preserves the latest canonical card (stale: %s)', async (stale) => {
         const directories = makeDirectories('emberdesk-character-canonical-route-');
         tempRoots.push(directories.root);
         process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_ENABLED = 'true';
@@ -2190,17 +2192,30 @@ describe('character index', () => {
                 entries: [],
             }, { auditedAtMs: 1735689602000 });
 
-            const editResponse = await invokeCharacterEditAttribute(directories, 'alpha.png', 'description', 'Edited description');
-            expect(editResponse.statusCode).toBe(200);
+            const before = await invokeCharacterGet(directories, 'alpha.png');
+            expect(before.statusCode).toBe(200);
+            const version = before.body.canonical_card_version;
+            expect(typeof version).toBe('string');
+            let currentVersion = version;
+            if (stale) {
+                const editResponse = await invokeCharacterEditAttribute(directories, 'alpha.png', 'description', 'Edited description', version);
+                expect(editResponse.statusCode).toBe(200);
+                currentVersion = (await invokeCharacterGet(directories, 'alpha.png')).body.canonical_card_version;
+                expect(currentVersion).not.toBe(version);
+            }
+            const projectedCurrent = fs.readFileSync(path.join(directories.characters, 'alpha.png'));
+            const rejected = await invokeCharacterEditAttribute(directories, 'alpha.png', 'description', 'Must not persist', stale ? version : undefined);
+            expect(rejected.statusCode).toBe(stale ? 409 : 400);
+            if (stale) expect(rejected.body).toEqual({ error: 'character_card_conflict' });
 
             const row = db.prepare('SELECT card_json FROM characters WHERE avatar_filename = ?').get('alpha.png');
+            expect(row.card_json).toBe(currentVersion);
             const card = JSON.parse(row.card_json);
-            expect(card.description).toBe('Edited description');
-            expect(card.data.description).toBe('Edited description');
-
-            const readResponse = await invokeCharacterGet(directories, 'alpha.png');
-            expect(readResponse.statusCode).toBe(200);
-            expect(readResponse.body.description).toBe('Edited description');
+            const expectedDescription = stale ? 'Edited description' : 'Before';
+            expect(card.description).toBe(expectedDescription);
+            expect(card.data.description).toBe(expectedDescription);
+            expect((await invokeCharacterGet(directories, 'alpha.png')).body.description).toBe(expectedDescription);
+            expect(fs.readFileSync(path.join(directories.characters, 'alpha.png'))).toEqual(projectedCurrent);
         } finally {
             manager.dispose();
         }

@@ -220,7 +220,7 @@ test('a captured shallow detail response must not overwrite a newer published de
         await clickCharacter(page, 4);
         const held = await gate.wait();
         const updated = 'U011 newer server description';
-        await api(page, '/api/characters/edit-attribute', { avatar_url: avatar(4), ch_name: name(4), field: 'description', value: updated });
+        await api(page, '/api/characters/edit-attribute', { avatar_url: avatar(4), ch_name: name(4), field: 'description', value: updated, expected_card_json: held.payload.canonical_card_version });
         gate.events.push('new-description-committed');
         await startRefresh(page);
         await finishRefresh(page);
@@ -429,7 +429,8 @@ test('refresh while a React description autosave is held preserves draft and sav
         const draft = 'U011 unsent React description';
         await page.locator(description).fill(draft);
         await Promise.race([seen, page.waitForTimeout(10_000).then(() => { throw new Error('Autosave was not captured'); })]);
-        await api(page, '/api/characters/edit-attribute', { avatar_url: avatar(6), ch_name: name(6), field: 'description', value: 'U011 refresh trigger' });
+        const card = JSON.parse(await api(page, '/api/characters/get', { avatar_url: avatar(6) }));
+        await api(page, '/api/characters/edit-attribute', { avatar_url: avatar(6), ch_name: name(6), field: 'description', value: 'U011 refresh trigger', expected_card_json: card.canonical_card_version });
         await startRefresh(page);
         await finishRefresh(page);
         const during = await state(page);

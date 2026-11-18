@@ -68,7 +68,7 @@ function hashPayload(payloadJson) {
     return crypto.createHash('sha256').update(payloadJson, 'utf8').digest('hex');
 }
 
-// Writes a stray `settings.json` under the user root. The file is fully inert:
+// Writes a legacy `settings.json` under the user root. The file is not projected:
 // nothing reads it, projects it, or imports it — tests use it to prove that.
 function writeSettingsFile(directories, payload) {
     const filePath = path.join(directories.root, 'settings.json');
@@ -571,8 +571,8 @@ describe('canonical settings route integration', () => {
         };
         setCanonicalEnv({ enabled: true, shadowImport: true, reads: true, writes: false });
         const router = await loadSettingsRouter();
-        // First get bootstraps a defaults document (rev 1) — the stray file is
-        // never read; seeding on top keeps DB authority divergent from it.
+        // First get imports the legacy document (rev 1); the following write
+        // makes the canonical document diverge from the unchanged file.
         await invokeRoute(router, '/get', { directories });
         await seedSettingsDocument(directories, canonicalPayload, { expectedRevision: 1 });
         const response = await invokeRoute(router, '/get', { directories });
@@ -602,6 +602,24 @@ describe('canonical settings route integration', () => {
         expect(fs.existsSync(path.join(directories.root, 'settings.json'))).toBe(false);
     });
 
+    test('imports legacy settings on first access and never re-reads them after creating the document', async () => {
+        const directories = createRouteDirectories(makeRoot());
+        writeSettingsFile(directories, { firstRun: false, legacy: 'kept', oai_settings: { custom_url: 'http://example.test', proxy_password: 'retired' } });
+        setCanonicalEnv({ enabled: true, shadowImport: true, reads: true, writes: true });
+        const router = await loadSettingsRouter();
+        const first = await invokeRoute(router, '/get', { directories });
+        expect(first.statusCode).toBe(200);
+        const payload = { firstRun: false, legacy: 'kept', oai_settings: { custom_url: 'http://example.test' } };
+        expect(JSON.parse(first.body.settings)).toEqual(payload);
+        const { canonicalSqliteManager } = await import('../src/canonical-sqlite.ts');
+        const db = canonicalSqliteManager.open({ handle: 'alice', directories, featureFlags: { enabled: true, strict: false } });
+        expect(getCanonicalSettingsDocument(db, { userId: 'alice' }).payload).toEqual(payload);
+        writeSettingsFile(directories, { legacy: 'not re-imported' });
+        const second = await invokeRoute(router, '/get', { directories });
+        expect(JSON.parse(second.body.settings)).toEqual(payload);
+        expect(second.body.settings_revision).toBe(first.body.settings_revision);
+    });
+
     test('concurrent first /get and /save initialize a single document idempotently', async () => {
         const root = makeRoot();
         const directories = createRouteDirectories(root);
@@ -612,7 +630,7 @@ describe('canonical settings route integration', () => {
             invokeRoute(router, '/get', { directories }),
             invokeRoute(router, '/save', {
                 directories,
-                body: { firstRun: false, race: true },
+                body: { firstRun: false, race: true, settings_revision: 1 },
             }),
         ]);
 
@@ -721,7 +739,7 @@ describe('canonical settings route integration', () => {
         setCanonicalEnv({ enabled: true, shadowImport: true, reads: true, writes: true });
         const router = await loadSettingsRouter();
 
-        // First save bootstraps a defaults document (rev 1) before the DB write.
+        // First save imports the legacy document (rev 1) before the DB write.
         const firstSave = await invokeRoute(router, '/save', {
             directories,
             body: {
@@ -820,8 +838,7 @@ describe('canonical settings route integration', () => {
         writeSettingsFile(directories, { firstRun: true });
         setCanonicalEnv({ enabled: true, reads: true, writes: true });
         const router = await loadSettingsRouter();
-        // First canonical access bootstraps a defaults document (rev 1); the
-        // stray file is never consulted.
+        // First canonical access imports the legacy document (rev 1).
 
         // A body field named revision must not act as optimistic concurrency token.
         const byDocumentRevision = await invokeRoute(router, '/save', {
@@ -832,24 +849,24 @@ describe('canonical settings route integration', () => {
                 revision: 0,
             },
         });
-        expect(byDocumentRevision.statusCode).toBe(200);
-        expect(byDocumentRevision.body).toEqual(expect.objectContaining({
-            result: 'ok',
-            settings_revision: 2,
-        }));
+        expect(byDocumentRevision.statusCode).toBe(400);
+        expect(byDocumentRevision.body).toEqual({ error: 'invalid_settings_revision' });
+        const current = await invokeRoute(router, '/get', { directories });
+        expect(JSON.parse(current.body.settings)).toEqual({ firstRun: true });
+        expect(current.body.settings_revision).toBe(1);
 
         const stale = await invokeRoute(router, '/save', {
             directories,
             body: {
                 firstRun: false,
                 v: 3,
-                settings_revision: 1,
+                settings_revision: 0,
             },
         });
         expect(stale.statusCode).toBe(409);
         expect(stale.body).toEqual({
             error: 'settings_revision_conflict',
-            settings_revision: 2,
+            settings_revision: 1,
         });
     });
 
@@ -865,6 +882,7 @@ describe('canonical settings route integration', () => {
             body: {
                 firstRun: false,
                 v: 2,
+                settings_revision: 1,
             },
         });
         const get = await invokeRoute(router, '/get', { directories });
@@ -883,10 +901,11 @@ describe('canonical settings route integration', () => {
         writeSettingsFile(directories, { firstRun: true });
         setCanonicalEnv({ enabled: true, reads: true, writes: true });
         const router = await loadSettingsRouter();
-        await invokeRoute(router, '/save', {
+        const save = await invokeRoute(router, '/save', {
             directories,
-            body: { firstRun: false, v: 5 },
+            body: { firstRun: false, v: 5, settings_revision: 1 },
         });
+        expect(save.statusCode).toBe(200);
         // The stray settings.json is intentionally stale and fully inert.
         expect(JSON.parse(fs.readFileSync(path.join(directories.root, 'settings.json'), 'utf8')))
             .toEqual({ firstRun: true });
@@ -965,24 +984,24 @@ describe('canonical settings snapshots and rollback', () => {
         const response = createResponse();
         // Filename validation middleware may be stacked before the handler.
         const handlers = layer.route.stack.map(entry => entry.handle);
-        let idx = 0;
-        const next = async (err) => {
-            if (err) {
-                throw err;
-            }
-            const handler = handlers[idx++];
+        const dispatch = async (index) => {
+            const handler = handlers[index];
             if (!handler) {
                 return;
             }
+            let continuation;
             await handler({
                 body,
                 user: {
                     profile: { handle },
                     directories,
                 },
-            }, response, next);
+            }, response, error => {
+                continuation = error ? Promise.reject(error) : dispatch(index + 1);
+            });
+            await continuation;
         };
-        await next();
+        await dispatch(0);
         return response;
     }
 
@@ -1027,8 +1046,7 @@ describe('canonical settings snapshots and rollback', () => {
         setCanonicalEnv({ enabled: true, reads: true, writes: true });
         const router = await loadSettingsRouter();
 
-        // Lazy init bootstraps a defaults document (rev 1); the stray file
-        // stays inert while we seed divergent state on top.
+        // Lazy init imports the legacy document (rev 1) before the SQLite writes.
         await invokeRoute(router, '/get', { directories });
 
         const { canonicalSqliteManager } = await import('../src/canonical-sqlite.ts');

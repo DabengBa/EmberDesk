@@ -7,9 +7,15 @@ async function edit(page, number, field, value) {
     const padded = String(number).padStart(3, '0');
     await page.evaluate(async ({ padded, field, value }) => {
         const { getRequestHeaders } = await import('/scripts/request-context.js');
+        const avatar_url = `dev-character-${padded}.png`;
+        const card = await fetch('/api/characters/get', {
+            method: 'POST', headers: getRequestHeaders(), body: JSON.stringify({ avatar_url }),
+        });
+        if (!card.ok) throw new Error(`get failed: ${card.status}`);
+        const { canonical_card_version: expected_card_json } = await card.json();
         const response = await fetch('/api/characters/edit-attribute', {
             method: 'POST', headers: getRequestHeaders(),
-            body: JSON.stringify({ avatar_url: `dev-character-${padded}.png`, ch_name: `Dev Character ${padded}`, field, value }),
+            body: JSON.stringify({ avatar_url, ch_name: `Dev Character ${padded}`, field, value, expected_card_json }),
         });
         if (!response.ok) throw new Error(`edit failed: ${response.status} ${await response.text()}`);
     }, { padded, field, value });
@@ -70,12 +76,8 @@ test('U016 remote deletion cannot change a bulk target or reset folder filtering
                 body: JSON.stringify({ avatar_url: 'dev-character-046.png', delete_chats: false }),
             });
             if (!response.ok) throw new Error(`delete failed: ${response.status} ${await response.text()}`);
-            const renameResponse = await fetch('/api/characters/edit-attribute', {
-                method: 'POST', headers: getRequestHeaders(),
-                body: JSON.stringify({ avatar_url: 'dev-character-045.png', ch_name: 'Dev Character 045', field: 'name', value: 'ZZZ U016' }),
-            });
-            if (!renameResponse.ok) throw new Error(`rename failed: ${renameResponse.status} ${await renameResponse.text()}`);
         });
+        await edit(other, 45, 'name', 'ZZZ U016');
         await expect.poll(() => page.evaluate(() => window.u016Invalidations), { timeout: 12_000 }).toBeGreaterThan(before);
         await page.waitForTimeout(2500);
         expect(characterReads).toBe(readsBeforeRemoteChanges);
@@ -296,14 +298,7 @@ test('another page changes the filtered character list without manual refresh', 
         const search = page.locator('#emberdesk-react-character-search');
         await search.fill('U015 named character');
         await expect(page.locator('#rm_print_characters_block .character_select')).toHaveCount(0);
-        await other.evaluate(async () => {
-            const { getRequestHeaders } = await import('/scripts/request-context.js');
-            const response = await fetch('/api/characters/edit-attribute', {
-                method: 'POST', headers: getRequestHeaders(),
-                body: JSON.stringify({ avatar_url: 'dev-character-001.png', ch_name: 'Dev Character 001', field: 'name', value: 'U015 named character' }),
-            });
-            if (!response.ok) throw new Error(`edit failed: ${response.status} ${await response.text()}`);
-        });
+        await edit(other, 1, 'name', 'U015 named character');
         await expect(page.locator('#rm_print_characters_block .character_select').filter({ hasText: 'U015 named character' })).toHaveCount(1, { timeout: 8000 });
         await expect(search).toHaveValue('U015 named character');
     } finally {

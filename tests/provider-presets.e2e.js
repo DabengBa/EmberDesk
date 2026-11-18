@@ -19,6 +19,15 @@ async function savedPreset(page, name) {
     return index === -1 ? null : JSON.parse(data.openai_settings[index]);
 }
 
+async function deleteFixturePresets(page, names) {
+    const { data } = await post(page, '/api/settings/get');
+    for (const name of names) {
+        if (!Object.hasOwn(data.openai_setting_revisions, name)) continue;
+        const result = await post(page, '/api/presets/delete', { apiId: 'openai', name, expectedRevision: data.openai_setting_revisions[name] });
+        expect(result.status).toBe(200);
+    }
+}
+
 async function openPrompt(page) {
     if (!await page.locator('#settings_preset_openai').isVisible()) {
         await page.locator('[data-react-workspace-shell-chrome] nav button').filter({ hasText: '提示词' }).click();
@@ -193,7 +202,7 @@ test('preset sensitive import and export preserve the selected choices', async (
     await testSetup.awaitST({ page });
     await openPrompt(page);
     const name = 'F6 Sensitive Import';
-    await post(page, '/api/presets/delete', { apiId: 'openai', name });
+    await deleteFixturePresets(page, [name]);
     const fixture = await page.evaluate(() => {
         const settings = window.SillyTavern.getContext().chatCompletionSettings;
         return { temperature: 0.63, custom_url: 'https://example.invalid/f6', prompts: settings.prompts, prompt_order: settings.prompt_order };
@@ -232,7 +241,7 @@ test('preset switching lets the user cancel, discard, or save unsaved changes', 
     await testSetup.awaitST({ page });
     await openPrompt(page);
     const names = ['F6 Switch First', 'F6 Switch Second'];
-    for (const name of names) await post(page, '/api/presets/delete', { apiId: 'openai', name });
+    await deleteFixturePresets(page, names);
     const fixture = await page.evaluate(() => {
         const settings = window.SillyTavern.getContext().chatCompletionSettings;
         return { temperature: 0.71, prompts: settings.prompts, prompt_order: settings.prompt_order };
@@ -269,7 +278,7 @@ test('preset form CRUD, failed writes, settings handoff and reload retain the fu
     const source = 'F4 Browser Source';
     const created = 'F4 Browser New';
     const renamed = 'F4 Browser Renamed';
-    for (const name of [source, created, renamed]) await post(page, '/api/presets/delete', { apiId: 'openai', name });
+    await deleteFixturePresets(page, [source, created, renamed]);
     await page.reload();
     await testSetup.awaitST({ page });
     await openPrompt(page);

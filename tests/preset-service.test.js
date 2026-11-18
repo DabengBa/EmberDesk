@@ -238,36 +238,45 @@ test('actual OpenAI composition port installs one service and reads cold-loaded 
     expect(events.map(event => event[0])).toEqual(['before', 'model', 'after', 'changed']);
 });
 
-test('OpenAI preset port guards new names and reports conflicts without overwriting', async () => {
+test('OpenAI preset port forwards revisions for saves and deletes without discarding them on conflicts', async () => {
     const source = fs.readFileSync(new URL('../public/scripts/openai.js', import.meta.url), 'utf8');
     const start = source.indexOf('let presetService;');
     const end = source.indexOf('/** @type {import(\'./PromptManager.js\')', start);
     const fragment = source.slice(start, end).replaceAll('export function ', 'function ');
     const requests = [];
     let stored;
-    const fetch = async (_url, options) => {
+    const fetch = async (url, options) => {
         const body = JSON.parse(options.body);
         requests.push(body);
+        if (url === '/api/presets/delete') return { ok: body.name === 'New', status: body.name === 'New' ? 200 : 409 };
         if (stored && body.expectedRevision === 0) return { ok: false, status: 409 };
         stored = body.preset;
         return { ok: true, json: async () => ({ name: body.name, revision: 1 }) };
     };
-    const makePort = new Function('fetch', 'openai_setting_names', `
-        const oai_settings = {}, openai_settings = [], openai_setting_revisions = {};
+    const makePort = new Function('fetch', 'openai_setting_names', 'openai_setting_revisions', `
+        const oai_settings = {}, openai_settings = [];
         const settingsToUpdate = {}, SECRET_KEYS = {}, default_settings = {};
         const getSanitizedFilename = name => name, getRequestHeaders = () => ({});
         const presetDialogs = {};
         ${fragment}
         return installOpenAIPresetService(port => port);
     `);
-    const a = makePort(fetch, {}), b = makePort(fetch, {});
+    const a = makePort(fetch, {}, {}), b = makePort(fetch, {}, {});
     await a.persist('New', { value: 'first' });
     await expect(b.persist('New', { value: 'second' })).rejects.toThrow('预设保存冲突（HTTP 409）：此预设已在其他会话中修改，请重新加载后再保存。');
     expect(requests.map(x => x.expectedRevision)).toEqual([0, 0]);
     expect(stored).toEqual({ value: 'first' });
-    const legacy = makePort(fetch, { Existing: 0 });
+    const legacy = makePort(fetch, { Existing: 0 }, {});
     await legacy.persist('Existing', { value: 'legacy' });
     expect(requests.at(-1)).not.toHaveProperty('expectedRevision');
+    const loadedRevisions = { Loaded: 5 };
+    const loaded = makePort(fetch, { Loaded: 0 }, loadedRevisions);
+    const conflict = await loaded.remove('Loaded').catch(error => error);
+    expect(requests.at(-1)).toEqual({ apiId: 'openai', name: 'Loaded', expectedRevision: 5 });
+    expect(conflict?.message).toMatch(/409/);
+    expect(loadedRevisions.Loaded).toBe(5);
+    await a.remove('New');
+    expect(requests.at(-1)).toEqual({ apiId: 'openai', name: 'New', expectedRevision: 1 });
 });
 
 test('actual preset manager reads and saves OpenAI data without a select element', async () => {

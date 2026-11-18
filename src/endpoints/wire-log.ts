@@ -117,6 +117,7 @@ export async function readWireLogSettings(request: Request) {
     }
     const ensured = ensureCanonicalSettingsDocument(db, {
         userId: getRequestHandle(request),
+        userRoot: request.user.directories.root,
         defaults: getDefaultTemplateFile('settings-defaults.json') ?? {},
     });
     if (!ensured.ok || !ensured.document) {
@@ -158,6 +159,7 @@ async function writeWireLogSettings(request: Request, patch: object) {
     const handle = getRequestHandle(request);
     const ensured = ensureCanonicalSettingsDocument(db, {
         userId: handle,
+        userRoot: request.user.directories.root,
         defaults: getDefaultTemplateFile('settings-defaults.json') ?? {},
     });
     if (!ensured.ok || !ensured.document) {

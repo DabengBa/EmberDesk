@@ -1,8 +1,10 @@
 import crypto from 'node:crypto';
+import fs from 'node:fs';
+import path from 'node:path';
 import type { DatabaseSync, SQLInputValue } from 'node:sqlite';
 
 import { withCanonicalTransaction } from '../canonical-sqlite.ts';
-import { uuidv4 } from '../util.js';
+import { tryParse, uuidv4 } from '../util.js';
 
 // Views describe existing unchecked JSON access, not runtime validation.
 type PowerUserView = {
@@ -230,25 +232,35 @@ export function upsertCanonicalSettingsDocument(db: DatabaseSync, {
 
 /**
  * Ensure a canonical settings document exists, creating it from the provided
- * defaults when absent. Independent of shadow-import and audit state — this is
+ * legacy settings or bundled defaults when absent. Independent of shadow-import and audit state — this is
  * the bootstrap path for deployments where no canonical document exists yet.
  * A revision conflict on create means a concurrent caller already created the
  * document, which is treated as success.
  * @param {object} db Canonical sqlite handle
- * @param {object} options { userId, defaults, nowMs }
+ * @param {object} options { userId, userRoot, defaults, nowMs }
  * @returns {{ok: true, document: object, created: boolean} | {ok: false, reason: string}}
  */
-export function ensureCanonicalSettingsDocument(db: DatabaseSync, { userId, defaults, nowMs = Date.now() }: UserOptions & { defaults?: unknown; nowMs?: unknown } = {}) {
+export function ensureCanonicalSettingsDocument(db: DatabaseSync, { userId, userRoot, defaults, nowMs = Date.now() }: UserOptions & { userRoot?: string; defaults?: unknown; nowMs?: unknown } = {}) {
     const existing = getCanonicalSettingsDocument(db, { userId });
     if (existing) {
         return { ok: true, document: existing, created: false };
+    }
+    let legacy;
+    if (userRoot) {
+        try {
+            legacy = tryParse(fs.readFileSync(path.join(userRoot, 'settings.json'), 'utf8'));
+        } catch (error) {
+            if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+        }
     }
     const safeDefaults = defaults != null && typeof defaults === 'object' && !Array.isArray(defaults)
         ? defaults
         : {};
     const saved = upsertCanonicalSettingsDocument(db, {
         userId,
-        payload: safeDefaults,
+        payload: legacy && typeof legacy === 'object' && !Array.isArray(legacy)
+            ? stripRetiredSettingsPassword(legacy)
+            : safeDefaults,
         expectedRevision: 0,
         nowMs,
     });
@@ -259,6 +271,17 @@ export function ensureCanonicalSettingsDocument(db: DatabaseSync, { userId, defa
             : { ok: false, reason: 'settings_document_create_failed' };
     }
     return { ok: true, document: getCanonicalSettingsDocument(db, { userId }), created: true };
+}
+
+export function stripRetiredSettingsPassword(payload: unknown) {
+    if (payload && typeof payload === 'object') {
+        const settings = payload as { proxy_password?: unknown; oai_settings?: unknown };
+        delete settings.proxy_password;
+        if (settings.oai_settings && typeof settings.oai_settings === 'object') {
+            delete (settings.oai_settings as { proxy_password?: unknown }).proxy_password;
+        }
+    }
+    return payload;
 }
 
 export function recordSettingsProjectionRepair(db: DatabaseSync, {

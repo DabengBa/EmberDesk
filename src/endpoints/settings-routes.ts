@@ -19,10 +19,10 @@ import {
     createSettingsSnapshot,
     ensureCanonicalSettingsDocument,
     getCanonicalSettingsDocument,
-    getCanonicalSettingsRevision,
     getSettingsSnapshot,
     listSettingsSnapshots,
     restoreSettingsSnapshot,
+    stripRetiredSettingsPassword,
     upsertCanonicalSettingsDocument,
     mutateCharacterMediaAuthorizationInTransaction,
 
@@ -123,6 +123,7 @@ async function getCanonicalSettingsReadState(request: Request) {
 
     const ensured = ensureCanonicalSettingsDocument(db, {
         userId: handle,
+        userRoot: request.user.directories.root,
         defaults: getDefaultTemplateFile('settings-defaults.json') ?? {},
     });
     if (!ensured.ok || !ensured.document) {
@@ -207,6 +208,7 @@ async function getCanonicalSettingsWriteState(request: Request) {
 
     const ensured = ensureCanonicalSettingsDocument(db, {
         userId: handle,
+        userRoot: request.user.directories.root,
         defaults: getDefaultTemplateFile('settings-defaults.json') ?? {},
     });
     if (!ensured.ok || !ensured.document) {
@@ -226,7 +228,7 @@ async function getCanonicalSettingsWriteState(request: Request) {
 
 /**
  * Ensure the canonical settings document exists for a user, seeding it from
- * the bundled defaults template when absent. Flag-gated only on canonical
+ * legacy settings or the bundled defaults when absent. Flag-gated only on canonical
  * storage itself — independent of shadow import and audit state, so it can
  * run at user-creation time before any canonical document exists.
  * @param {object} directories User directories
@@ -256,6 +258,7 @@ export async function ensureCanonicalSettingsForUser(directories: UserDirectoryL
     }
     return ensureCanonicalSettingsDocument(db, {
         userId: handle,
+        userRoot: directories.root,
         defaults: getDefaultTemplateFile('settings-defaults.json') ?? {},
     });
 }
@@ -308,23 +311,6 @@ function stripSettingsRevisionFields(body: unknown) {
     return clone;
 }
 
-function resolveExpectedRevisionForSave({ db, handle, body }: { db: DatabaseSync, handle: string, body: unknown }) {
-    const provided = extractSettingsRevision(body);
-    if (provided != null && provided !== '') {
-        const numeric = Number(provided);
-        if (!Number.isFinite(numeric) || numeric < 0) {
-            return { ok: false, error: 'invalid_settings_revision' };
-        }
-        return { ok: true, expectedRevision: numeric };
-    }
-
-    // Legacy clients without a revision may save only when their baseline matches
-    // the current document (compat window). We treat missing revision as "use current".
-    // If no document exists yet, expectedRevision is 0 (create).
-    const current = getCanonicalSettingsRevision(db, { userId: handle });
-    return { ok: true, expectedRevision: current };
-}
-
 export const router = express.Router();
 
 router.post('/character-css-authorization', async (request, response) => {
@@ -363,19 +349,15 @@ router.post('/save', async function (request, response) {
                 return response.status(400).send({ error: 'settings payload must be a JSON object' });
             }
 
-            const expected = resolveExpectedRevisionForSave({
-                db: writeState.db,
-                handle,
-                body: request.body,
-            });
-            if (!expected.ok) {
-                return response.status(400).send({ error: expected.error });
+            const expectedRevision = extractSettingsRevision(request.body);
+            if (typeof expectedRevision !== 'number' || !Number.isSafeInteger(expectedRevision) || expectedRevision < 0) {
+                return response.status(400).send({ error: 'invalid_settings_revision' });
             }
 
             const saved = upsertCanonicalSettingsDocument(writeState.db, {
                 userId: handle,
-                payload,
-                expectedRevision: expected.expectedRevision,
+                payload: stripRetiredSettingsPassword(payload),
+                expectedRevision,
                 preserveMediaAuthorization: true,
             });
             if (!saved.ok) {
@@ -425,12 +407,12 @@ router.post('/get', async (request, response) => {
     // Normalize the wire payload so every reader sees only the new key; the
     // next client save drops the old key from the stored document.
     const parsedSettings = tryParse(settings);
-    if (parsedSettings && typeof parsedSettings === 'object' && parsedSettings.extension_settings !== undefined) {
-        if (parsedSettings.feature_settings === undefined) {
+    if (parsedSettings && typeof parsedSettings === 'object') {
+        if (parsedSettings.extension_settings !== undefined && parsedSettings.feature_settings === undefined) {
             parsedSettings.feature_settings = parsedSettings.extension_settings;
         }
         delete parsedSettings.extension_settings;
-        settings = JSON.stringify(parsedSettings);
+        settings = JSON.stringify(stripRetiredSettingsPassword(parsedSettings));
     }
 
     const [
@@ -448,7 +430,12 @@ router.post('/get', async (request, response) => {
     }
     // The JS read-state JSDoc says object[], but the underlying canonical store returns preset rows.
     const presetRows = presetsReadState.rows as ReturnType<typeof import('./presets-store.ts').listCanonicalPresets>;
-    const openai_settings = presetRows.map(row => row.payloadJson);
+    const openai_settings = presetRows.map(row => {
+        const preset = tryParse(row.payloadJson);
+        return preset && typeof preset === 'object'
+            ? JSON.stringify(stripRetiredSettingsPassword(preset))
+            : row.payloadJson;
+    });
     const openai_setting_names = presetRows.map(row => row.name);
 
     response.send({
@@ -514,7 +501,7 @@ router.post('/load-snapshot', getFileNameValidationFunction('name'), async (requ
         if (!snap) {
             return response.sendStatus(404);
         }
-        return response.send(snap.payloadJson);
+        return response.send(JSON.stringify(stripRetiredSettingsPassword(snap.payload)));
     } catch (error) {
         console.error(error);
         response.sendStatus(500);

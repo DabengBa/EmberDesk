@@ -11,10 +11,14 @@ import {
     resolveAuditDriftReason,
 } from './canonical-import-ledger.js';
 import { getCanonicalMigrationStatus, runCanonicalMigrations } from './canonical-sqlite-migrations.ts';
+import { withCanonicalTransaction } from './canonical-sqlite.ts';
 import { persistCanonicalAuditStatus } from './canonical-sqlite-shadow-import.ts';
 import {
+    hashCanonicalManagedMediaBuffer,
+    installCanonicalManagedMediaContents,
     listCanonicalManagedMediaReferences,
-    upsertCanonicalManagedMediaReference,
+    managedMediaRelativePath,
+    persistCanonicalManagedMediaContents,
 } from './endpoints/canonical-managed-media-store.ts';
 import { isVirtualAvatarReference } from './canonical-avatar-blobs.js';
 import { isPathUnderParent } from './util.js';
@@ -27,7 +31,7 @@ const MEDIA_DOMAINS = Object.freeze([
     { key: 'userImages', ownerType: 'user_image', role: 'user_image', recursive: true },
 ] as const);
 
-type MediaDirectories = { root: string; storage?: string; assets?: string; files?: string; userImages?: string; backgrounds?: string };
+type MediaDirectories = { root: string; storage: string; assets?: string; files?: string; userImages?: string; backgrounds?: string };
 type MediaDomain = (typeof MEDIA_DOMAINS)[number];
 type MigrationStatus = ReturnType<typeof runCanonicalMigrations>;
 type MediaImportEntry = { compatibility_path: string; status: string; errorMessage?: string };
@@ -156,6 +160,32 @@ function isRetiredCompatibilityPath(directories: MediaDirectories, reference: Re
         && isSafeCompatibilityPath(directories, reference.compatibilityPath, directories?.backgrounds);
 }
 
+/** Backfills old registered blobs without importing any changes from the projection. */
+export function backfillCanonicalManagedMediaContents({ directories, db }: { directories: MediaDirectories; db: DatabaseSync }) {
+    const missing = listCanonicalManagedMediaReferences(db).filter(reference => reference.lifecycleState === 'active'
+        && /^[a-f0-9]{64}$/.test(reference.contentHash)
+        && reference.managedRelativePath === managedMediaRelativePath(reference.contentHash)
+        && !fs.existsSync(path.join(directories.storage, reference.managedRelativePath)));
+    if (!missing.length) return;
+
+    const compatibilityFiles = new Map(listCompatibilityMedia(directories).map(item => [item.compatibilityPath, item.filePath]));
+    for (const reference of missing) {
+        const sourcePath = compatibilityFiles.get(reference.compatibilityPath);
+        if (!sourcePath) continue;
+        const managedPath = path.join(directories.storage, reference.managedRelativePath);
+        const contents = fs.readFileSync(sourcePath);
+        if (hashCanonicalManagedMediaBuffer(contents) !== reference.contentHash) continue;
+        withCanonicalTransaction(db, txnDb => {
+            const current = txnDb.prepare(`
+                SELECT 1 FROM media_references AS ref JOIN managed_blobs AS blob ON blob.id = ref.blob_id
+                WHERE ref.id = ? AND ref.deleted_at_ms IS NULL AND blob.id = ?
+                    AND blob.relative_path = ? AND blob.lifecycle_state = 'active'
+            `).get(reference.id, reference.blobId, reference.managedRelativePath);
+            if (current) installCanonicalManagedMediaContents(managedPath, contents);
+        });
+    }
+}
+
 export async function runCanonicalManagedMediaShadowImport({
     handle,
     directories,
@@ -186,15 +216,12 @@ export async function runCanonicalManagedMediaShadowImport({
     for (const item of listCompatibilityMedia(directories)) {
         try {
             const stat = fs.statSync(item.filePath);
-            const contentHash = hashFile(item.filePath);
-            const result = upsertCanonicalManagedMediaReference(db, {
+            const contents = fs.readFileSync(item.filePath);
+            const contentHash = hashCanonicalManagedMediaBuffer(contents);
+            const result = persistCanonicalManagedMediaContents(db, directories.storage, contents, {
                 compatibilityPath: item.compatibilityPath,
-                // Shadow mode has no content root yet. Keep a stable future
-                // managed-file identity without treating any compatibility path
-                // as canonical, so duplicate references share one blob row.
-                managedRelativePath: `managed-media/${contentHash}`,
                 contentHash,
-                sizeBytes: stat.size,
+                sizeBytes: contents.length,
                 mediaType: mime.lookup(item.filePath) || 'application/octet-stream',
                 ownerType: item.domain.ownerType,
                 ownerId: item.compatibilityPath,
@@ -202,14 +229,13 @@ export async function runCanonicalManagedMediaShadowImport({
                 displayName: path.basename(item.filePath),
                 metadata: { sourceMtimeMs: Number(stat.mtimeMs) },
                 nowMs,
-            });
-            recordImportLedgerEntry(db, {
+            }, txnDb => recordImportLedgerEntry(txnDb, {
                 sliceKey: 'managed_media',
                 sourcePath: item.compatibilityPath,
                 contentHash,
                 origin: 'import',
                 nowMs,
-            });
+            }));
             entries.push({ compatibility_path: item.compatibilityPath, status: result.status });
         } catch (error) {
             entries.push({

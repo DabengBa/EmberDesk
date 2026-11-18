@@ -138,37 +138,38 @@ function listOwnerReferences(db: DatabaseSync, ownerType: string, prefix: string
         .filter(reference => normalizeCompatibilityPath(reference.compatibilityPath).startsWith(prefix));
 }
 
-/**
- * Reads blob bytes for a managed-media reference (or a compatibility path
- * resolving to one). Virtual-path references (e.g. character avatars) are
- * served the same way — the managed blob file is the content authority.
- * @param {object} db Canonical SQLite handle
- * @param {import('../users.js').UserDirectoryList} directories User directories
- * @param {object|string} referenceOrPath Reference object or compatibility path
- * @returns {{ok: boolean, reason?: string, contents?: Buffer, mediaType?: string, contentHash?: string, reference?: object}}
- */
-export function readManagedMediaContent(db: DatabaseSync, directories: Pick<Directories, 'storage'>, referenceOrPath: Reference | string | null | undefined) {
+/** Resolves the active blob file for a reference or compatibility path. */
+export function resolveManagedMediaPath(db: DatabaseSync, directories: Pick<Directories, 'storage'>, referenceOrPath: Reference | string | null | undefined) {
     const reference = typeof referenceOrPath === 'string'
         ? getCanonicalManagedMediaReference(db, normalizeCompatibilityPath(referenceOrPath))
         : referenceOrPath;
     if (!reference || reference.deletedAtMs != null) {
-        return { ok: false, reason: 'reference_not_found' };
+        return { ok: false, reason: 'reference_not_found' } as const;
     }
     if (reference.lifecycleState !== 'active') {
-        return { ok: false, reason: 'blob_not_active', reference };
+        return { ok: false, reason: 'blob_not_active', reference } as const;
     }
 
     const managedPath = path.resolve(directories.storage, reference.managedRelativePath);
     const storageRoot = path.resolve(directories.storage);
     if (managedPath !== storageRoot && !managedPath.startsWith(`${storageRoot}${path.sep}`)) {
-        return { ok: false, reason: 'unsafe_managed_path', reference };
+        return { ok: false, reason: 'unsafe_managed_path', reference } as const;
     }
     if (!fs.existsSync(managedPath)) {
-        return { ok: false, reason: 'blob_bytes_missing', reference };
+        return { ok: false, reason: 'blob_bytes_missing', reference } as const;
     }
+    return { ok: true, managedPath, reference } as const;
+}
 
+/** Reads blob bytes for a managed-media reference or compatibility path. */
+export function readManagedMediaContent(db: DatabaseSync, directories: Pick<Directories, 'storage'>, referenceOrPath: Reference | string | null | undefined) {
+    const resolved = resolveManagedMediaPath(db, directories, referenceOrPath);
+    if (!resolved.ok) {
+        return resolved;
+    }
+    const { managedPath, reference } = resolved;
     return {
-        ok: true,
+        ok: true as const,
         contents: fs.readFileSync(managedPath),
         mediaType: reference.mediaType,
         contentHash: reference.contentHash,

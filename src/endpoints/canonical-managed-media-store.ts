@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import fs from 'node:fs';
 import path from 'node:path';
 
 import type { DatabaseSync, SQLOutputValue } from 'node:sqlite';
@@ -95,6 +96,60 @@ export function hashCanonicalManagedMediaBuffer(contents: string | NodeJS.ArrayB
     return crypto.createHash('sha256').update(contents).digest('hex');
 }
 
+export function managedMediaRelativePath(contentHash: string) {
+    return `managed-media/${contentHash}`;
+}
+
+// Called under the SQLite write lock so staging cannot race scoped GC.
+export function installCanonicalManagedMediaContents(managedPath: string, contents: Buffer) {
+    if (fs.existsSync(managedPath)) return false;
+    const stagingRoot = path.join(path.dirname(managedPath), '.staging');
+    fs.mkdirSync(stagingRoot, { recursive: true });
+    const stagedPath = path.join(stagingRoot, `${uuidv4()}.stage`);
+    try {
+        fs.writeFileSync(stagedPath, contents);
+        fs.renameSync(stagedPath, managedPath);
+        return true;
+    } finally {
+        fs.rmSync(stagedPath, { force: true });
+    }
+}
+
+export function hasCanonicalManagedMediaConsumers(db: DatabaseSync, blobId: string) {
+    return !!db.prepare(`
+        SELECT 1 FROM media_references WHERE blob_id = ? AND deleted_at_ms IS NULL
+        UNION ALL
+        SELECT 1 FROM chat_attachment_refs WHERE blob_id = ?
+        LIMIT 1
+    `).get(blobId, blobId);
+}
+
+export function persistCanonicalManagedMediaContents(db: DatabaseSync, storage: string, contents: Buffer,
+    record: MediaRecord & { contentHash: string }, onPersist?: (db: DatabaseSync, result: PersistResult) => void) {
+    const managedRelativePath = managedMediaRelativePath(record.contentHash);
+    const managedPath = path.join(storage, managedRelativePath);
+    let installed = false;
+    try {
+        const result = upsertCanonicalManagedMediaReference(db, { ...record, managedRelativePath }, {
+            onPersist: (txnDb, saved) => {
+                installed = installCanonicalManagedMediaContents(managedPath, contents);
+                onPersist?.(txnDb, saved);
+            },
+        });
+        return { ...result, managedPath };
+    } catch (error) {
+        if (installed) {
+            withCanonicalTransaction(db, txnDb => {
+                const blob = getBlobByHash(txnDb, record.contentHash);
+                if (!blob || !hasCanonicalManagedMediaConsumers(txnDb, String(blob.id))) {
+                    fs.rmSync(managedPath, { force: true });
+                }
+            });
+        }
+        throw error;
+    }
+}
+
 export function listCanonicalManagedMediaReferences(db: DatabaseSync, { includeDeleted = false } = {}) {
     const rows = db.prepare(`
         SELECT
@@ -128,9 +183,8 @@ export function getCanonicalManagedMediaReference(db: DatabaseSync, compatibilit
 }
 
 /**
- * Shadow import only registers an existing compatibility file. The stored
- * relative path intentionally remains that compatibility path until write
- * cutover establishes the managed content root.
+ * Registers a reference and its blob identity. Callers supplying media bytes
+ * use persistCanonicalManagedMediaContents to install them in the same write.
  */
 export function upsertCanonicalManagedMediaReference(db: DatabaseSync, record: MediaRecord, { onPersist = null }: { onPersist?: ((db: DatabaseSync, result: PersistResult) => void) | null } = {}) {
     const normalized = {

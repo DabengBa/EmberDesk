@@ -192,11 +192,12 @@ router.post<Record<string, string>, unknown, PresetBody>('/save', async function
 });
 
 router.post<Record<string, string>, unknown, PresetBody>('/delete', async function (request, response) {
-    const name = sanitize(request.body.name);
-    if (!name) {
+    const { name: rawName, apiId, expectedRevision }: Partial<PresetBody> = request.body ?? {};
+    const name = typeof rawName === 'string' ? sanitize(rawName) : '';
+    if (!name || apiId !== PRESETS_OPENAI_API_ID) {
         return response.sendStatus(400);
     }
-    if (request.body.apiId !== PRESETS_OPENAI_API_ID) {
+    if (typeof expectedRevision !== 'number' || !Number.isSafeInteger(expectedRevision) || expectedRevision < 1) {
         return response.sendStatus(400);
     }
 
@@ -206,7 +207,10 @@ router.post<Record<string, string>, unknown, PresetBody>('/delete', async functi
             return sendCanonicalUnavailable(response, writeState);
         }
 
-        const result = deleteCanonicalPreset(writeState.db, { apiId: PRESETS_OPENAI_API_ID, name });
+        const result = deleteCanonicalPreset(writeState.db, { apiId: PRESETS_OPENAI_API_ID, name, expectedRevision });
+        if (!result.ok) {
+            return response.status(409).send({ error: 'preset_conflict', revision: result.revision });
+        }
         return result.deleted ? response.sendStatus(200) : response.sendStatus(404);
     } catch (error) {
         console.error('Preset could not be deleted', error);
