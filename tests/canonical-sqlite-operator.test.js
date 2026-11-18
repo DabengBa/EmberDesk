@@ -374,74 +374,8 @@ describe('canonical sqlite operator helpers', () => {
         });
     });
 
-    test('rebuilds canonical chat stats from JSONL chat files', async () => {
+    test('rebuilds chat stats from canonical chat_sessions despite legacy sync config', async () => {
         process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_SLICES_CHATS_PROJECTION = 'sync';
-        try {
-            const root = makeRoot();
-            const directories = createDirectories(root);
-            const manager = createManager();
-            const buildSnapshotRow = createSnapshotBuilder();
-
-            writeCharacterFile(directories, 'alpha.png', {
-                name: 'Alpha',
-                chat: 'Alpha - chat',
-                fav: false,
-                tags: [],
-                data: { name: 'Alpha', extensions: { fav: false, world: '' }, tags: [] },
-            });
-            writeChatFile(directories, 'alpha.png', 'one.jsonl', '{"mes":"one"}\n');
-
-            await runCanonicalShadowImport({
-                handle: 'alice',
-                directories,
-                featureFlags: { enabled: true, shadowImport: true, strict: false },
-                manager,
-                buildSnapshotRow,
-                nowMs: 1735689600000,
-            });
-
-            const db = manager.open({
-                handle: 'alice',
-                directories,
-                featureFlags: { enabled: true, strict: false },
-            });
-
-            db.prepare(`
-            UPDATE character_chat_stats
-            SET chat_count = 0,
-                chat_size_bytes = 0,
-                date_last_chat_ms = 0
-        `).run();
-            writeChatFile(directories, 'alpha.png', 'two.jsonl', '{"mes":"two"}\n');
-
-            const rebuilt = rebuildCanonicalChatStats({
-                db,
-                directories,
-                avatars: ['alpha.png'],
-                nowMs: 1735689603333,
-            });
-
-            expect(rebuilt).toEqual({
-                ok: true,
-                rebuilt: [
-                    expect.objectContaining({
-                        avatarFilename: 'alpha.png',
-                        chatCount: 2,
-                    }),
-                ],
-            });
-            expect(db.prepare(`
-            SELECT chat_count
-            FROM character_chat_stats
-            WHERE character_id = (SELECT id FROM characters WHERE avatar_filename = ?)
-        `).get('alpha.png').chat_count).toBe(2);
-        } finally {
-            delete process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_SLICES_CHATS_PROJECTION;
-        }
-    });
-
-    test('rebuilds canonical chat stats from canonical chat_sessions when chats projection is off', async () => {
-        process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_SLICES_CHATS_PROJECTION = 'off';
         try {
             const root = makeRoot();
             const directories = createDirectories(root);
@@ -995,18 +929,18 @@ describe('canonical sqlite operator helpers', () => {
 
             expect(audit).toEqual(expect.objectContaining({
                 sliceKey: 'managed_media',
-                ok: false,
-                blocking: true,
-                reason: 'audit_stale_file_changes',
+                ok: true,
+                blocking: false,
             }));
             expect(audit.entries).toEqual(expect.arrayContaining([
                 expect.objectContaining({
                     compatibility_path: 'assets/sky.png',
                     drift_types: ['orphan'],
+                    details: expect.objectContaining({ projection_mode: 'off', suppressed: true }),
                 }),
             ]));
             expect(getPersistedCanonicalAuditStatus(db, { scope: MANAGED_MEDIA_AUDIT_SCOPE }))
-                .toEqual(expect.objectContaining({ blocking: true }));
+                .toEqual(expect.objectContaining({ blocking: false }));
             const repair = await runCanonicalSliceRepair({
                 sliceKey: 'managed_media',
                 db,

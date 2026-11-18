@@ -1,5 +1,6 @@
 import type {} from 'multer';
 import type { ChatRouteContext } from './chat-route-context.ts';
+import { MAX_CHAT_EXCHANGE_BYTES, readChatExchange, registerChatExchangeAttachments } from './chat-exchange.ts';
 
 export function registerChatImportRoute(context: ChatRouteContext): void {
     const { router, fs, path, crypto, sanitize, writeFileAtomicSync, validateAvatarUrlMiddleware, openRequestCoordinationDatabase, getCanonicalChatOperation, getCanonicalChatWriteState, getCanonicalChatLocator, getChatsProjectionMode, getRequestHandle, sendCanonicalChatWriteBlocked, sendCanonicalChatWriteRejected, writeCanonicalChatPayload, parseCanonicalChatJsonl, invalidateCanonicalAuditStatus, getCanonicalStorageSlice, syncCanonicalChatStatsAfterCharacterChatMutation, isPathUnderParent, createCharacterChatImportPlan, CHAT_IMPORT_UPLOAD_CLEANUP, warnAboutChatImportFailure } = context;
@@ -25,10 +26,28 @@ export function registerChatImportRoute(context: ChatRouteContext): void {
             return response.sendStatus(400);
         }
 
+        const pathToUpload = path.join(request.file.destination, request.file.filename);
         try {
-            const pathToUpload = path.join(request.file.destination, request.file.filename);
-            const data = fs.readFileSync(pathToUpload, 'utf8');
-            const fingerprint = crypto.createHash('sha256').update(JSON.stringify(['chat-import', avatarUrl, characterName, userName, format, data])).digest('hex');
+            let exchange: Awaited<ReturnType<typeof readChatExchange>> | undefined;
+            let data: string;
+            let fingerprintData: string;
+            if (format === 'zip') {
+                if (fs.statSync(pathToUpload).size > MAX_CHAT_EXCHANGE_BYTES) {
+                    return response.status(413).send({ error: 'chat_exchange_too_large' });
+                }
+                const archive = fs.readFileSync(pathToUpload);
+                try {
+                    exchange = await readChatExchange(archive);
+                } catch {
+                    return response.status(400).send({ error: 'invalid_chat_exchange' });
+                }
+                data = exchange.jsonl;
+                fingerprintData = crypto.createHash('sha256').update(archive).digest('hex');
+            } else {
+                data = fs.readFileSync(pathToUpload, 'utf8');
+                fingerprintData = data;
+            }
+            const fingerprint = crypto.createHash('sha256').update(JSON.stringify(['chat-import', avatarUrl, characterName, userName, format, fingerprintData])).digest('hex');
             const importKey = crypto.createHash('sha256').update(importId).digest('hex');
             let importIndex = 0;
 
@@ -72,6 +91,11 @@ export function registerChatImportRoute(context: ChatRouteContext): void {
                 return sendCanonicalChatWriteBlocked(response, writeState);
             }
             if (writeState.ok) {
+                // The ZIP payload already contains the full canonical history.
+                // Resolve every target-owned attachment before creating a chat.
+                const exchangePayload = exchange
+                    ? await registerChatExchangeAttachments(exchange, getRequestHandle(request), request.user.directories)
+                    : undefined;
                 for (const [index, write] of importPlan.writes.entries()) {
                     const jsonlData = write.kind === 'copy-upload'
                         ? fs.readFileSync(write.uploadPath, 'utf8')
@@ -83,7 +107,7 @@ export function registerChatImportRoute(context: ChatRouteContext): void {
                             ownerId: avatarUrl,
                             filePath: write.filePath,
                         }),
-                        payload: parseCanonicalChatJsonl(jsonlData),
+                        payload: exchangePayload ?? parseCanonicalChatJsonl(jsonlData),
                         operation: 'import',
                         condition: { create: true },
                         operationIdentity: operations[index],
@@ -121,8 +145,17 @@ export function registerChatImportRoute(context: ChatRouteContext): void {
 
             return sendCanonicalChatWriteBlocked(response, writeState);
         } catch (error) {
+            if (format === 'zip') return response.status(400).send({ error: 'chat_exchange_import_failed' });
             console.error(error);
             return response.send({ error: true });
+        } finally {
+            if (format === 'zip') {
+                try {
+                    fs.unlinkSync(pathToUpload);
+                } catch (error) {
+                    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') console.warn('Could not remove chat exchange upload.');
+                }
+            }
         }
     });
 }

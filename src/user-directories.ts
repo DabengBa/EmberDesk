@@ -86,24 +86,24 @@ export async function ensurePublicDirectoriesExist(): Promise<UserDirectoryList[
     return directoriesList;
 }
 
-export function cleanUploads(): void {
-    try {
-        const uploadsPath = path.join(globalThis.DATA_ROOT, UPLOADS_DIRECTORY);
-        if (fs.existsSync(uploadsPath)) {
+export function getUserUploadsPath(directories: Pick<UserDirectoryList, 'root'>): string {
+    return path.join(directories.root, UPLOADS_DIRECTORY);
+}
+
+export function cleanUploads(directories: UserDirectoryList[]): void {
+    const paths = [path.join(globalThis.DATA_ROOT, UPLOADS_DIRECTORY), ...directories.map(getUserUploadsPath)];
+    for (const uploadsPath of paths) {
+        try {
+            if (!fs.existsSync(uploadsPath)) continue;
             const uploads = fs.readdirSync(uploadsPath);
-
-            if (!uploads.length) {
-                return;
-            }
-
+            if (!uploads.length) continue;
             console.debug(`Cleaning uploads folder (${uploads.length} files)`);
-            uploads.forEach(file => {
-                const pathToFile = path.join(uploadsPath, file);
-                fs.unlinkSync(pathToFile);
-            });
+            for (const file of uploads) {
+                fs.unlinkSync(path.join(uploadsPath, file));
+            }
+        } catch (error) {
+            console.error(error);
         }
-    } catch (err) {
-        console.error(err);
     }
 }
 

@@ -152,26 +152,6 @@ describe('legacy canonical sqlite config migration', () => {
         expect(migrated.features.storage.canonicalSqlite).toEqual({
             enabled: true,
             shadowImport: true,
-            slices: {
-                secrets: {
-                    projection: 'off',
-                },
-                settings: {
-                    projection: 'off',
-                },
-                world_info: {
-                    projection: 'off',
-                },
-                chats: {
-                    projection: 'off',
-                },
-                managed_media: {
-                    projection: 'off',
-                },
-                characters: {
-                    projection: 'off',
-                },
-            },
         });
     });
 

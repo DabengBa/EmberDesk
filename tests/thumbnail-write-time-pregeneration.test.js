@@ -10,6 +10,7 @@ import extract from 'png-chunks-extract';
 import PNGtext from 'png-chunk-text';
 import * as realImageProcessing from '../src/image-processing.js';
 import * as realCharacterCard from '../src/character-card-parser.ts';
+import * as realManagedMediaWrites from '../src/endpoints/canonical-managed-media-write-service.ts';
 import { setConfigFilePath } from '../src/util.js';
 import { makeAnimatedImages, makeBmp } from './helpers/animated-image-fixtures.js';
 
@@ -27,6 +28,7 @@ function makeUserDirectories(prefix) {
 
     const directories = {
         root,
+        storage: path.join(root, 'storage'),
         characters: path.join(root, 'characters'),
         chats: path.join(root, 'chats'),
         avatars: path.join(root, 'User Avatars'),
@@ -162,7 +164,7 @@ async function importCharacterRoutes({ generateThumbnailImpl, thumbnailsEnabled 
     jest.unstable_mockModule('../src/endpoints/canonical-managed-media-write-service.ts', () => ({
         deleteCanonicalManagedMediaReference: async () => ({ authorityCommitted: false }),
         invalidateCanonicalManagedMediaAudit: () => false,
-        writeCanonicalManagedMedia: async () => ({ authorityCommitted: false }),
+        writeCanonicalManagedMedia: realImages ? realManagedMediaWrites.writeCanonicalManagedMedia : async () => ({ authorityCommitted: false }),
     }));
 
     jest.unstable_mockModule('../src/endpoints/character-index.js', () => ({
@@ -207,6 +209,7 @@ async function invokeRoute(router, method, routePath, request) {
         body: undefined,
         finished: false,
         status(code) { this.statusCode = code; return this; },
+        setHeader() {},
         send(payload) { this.body = payload; this.finished = true; return this; },
         sendStatus(code) { this.statusCode = code; this.body = code; this.finished = true; return this; },
     };
@@ -249,9 +252,16 @@ afterEach(() => {
     jest.clearAllMocks();
 });
 
-// These hook tests assert the legacy PNG write behavior — pin characters
-// projection to 'sync' (the mocked keyToEnv drops the EMBERDESK_ prefix).
-process.env.FEATURES_STORAGE_CANONICALSQLITE_SLICES_CHARACTERS_PROJECTION = 'sync';
+async function exportCharacterPng(router, directories, avatar) {
+    expect(fs.existsSync(path.join(directories.characters, avatar))).toBe(false);
+    const response = await invokeRoute(router, 'post', '/export', {
+        body: { avatar_url: avatar, format: 'png' },
+        user: { directories, profile: { handle: 'default-user' } },
+    });
+    expect(response.statusCode).toBe(200);
+    expect(Buffer.isBuffer(response.body)).toBe(true);
+    return response.body;
+}
 
 describe('thumbnail write-time pregeneration hooks', () => {
     test('CharX expression assets are not mapped for persistence', () => {
@@ -296,7 +306,7 @@ describe('thumbnail write-time pregeneration hooks', () => {
                 return;
             }
             expect(response.body).toBe('ImageTest.png');
-            const card = fs.readFileSync(cardPath);
+            const card = await exportCharacterPng(router, directories, 'ImageTest.png');
             expect(JSON.parse(realCharacterCard.read(card)).data.name).toBe('ImageTest');
             if (format === 'apng') {
                 expect(extract(card).filter(chunk => chunk.name === 'fcTL')).toHaveLength(2);
@@ -322,7 +332,7 @@ describe('thumbnail write-time pregeneration hooks', () => {
             user: { directories, profile: { handle: 'default-user' } },
         });
         expect(response.statusCode).toBe(200);
-        const result = fs.readFileSync(path.join(directories.characters, 'Imported.png'));
+        const result = await exportCharacterPng(router, directories, 'Imported.png');
         expect(JSON.parse(realCharacterCard.read(result)).data).toMatchObject({ name: 'Imported', description: 'retained' });
         if (format === 'apng') expect(extract(result).filter(chunk => chunk.name === 'fcTL')).toHaveLength(2);
     });
@@ -344,7 +354,7 @@ describe('thumbnail write-time pregeneration hooks', () => {
         expect(mocks.generateThumbnail).toHaveBeenCalledTimes(1);
         const pregen = await mocks.generateThumbnail.mock.results[0].value;
         expect(pregen.path).toBeNull();
-        const card = fs.readFileSync(path.join(directories.characters, 'Animated.png'));
+        const card = await exportCharacterPng(router, directories, 'Animated.png');
         const chunks = extract(card);
         expect(chunks.filter(chunk => chunk.name === 'fcTL')).toHaveLength(2);
         const text = chunks.filter(chunk => chunk.name === 'tEXt').map(chunk => PNGtext.decode(chunk.data));
@@ -355,17 +365,13 @@ describe('thumbnail write-time pregeneration hooks', () => {
         expect(fs.readdirSync(directories.thumbnailsAvatar)).toEqual([]);
         expect((await realGenerateThumbnail(directories, 'avatar', 'Animated.png')).path).toBeNull();
         expect(fs.readdirSync(directories.thumbnailsAvatar)).toEqual([]);
-        expect(fs.readFileSync(path.join(directories.characters, 'Animated.png'))).toEqual(card);
+        expect(await exportCharacterPng(router, directories, 'Animated.png')).toEqual(card);
     });
 
     test('character create kicks off avatar pregeneration without awaiting it', async () => {
         const directories = makeUserDirectories('emberdesk-pregen-character-');
-        let sawWrittenCharacter = false;
         const { router, mocks } = await importCharacterRoutes({
-            generateThumbnailImpl: () => {
-                sawWrittenCharacter = fs.existsSync(path.join(directories.characters, 'Tester.png'));
-                return new Promise(() => {});
-            },
+            generateThumbnailImpl: () => new Promise(() => {}),
         });
         const request = {
             body: {
@@ -400,7 +406,7 @@ describe('thumbnail write-time pregeneration hooks', () => {
         const response = await invokeRoute(router, 'post', '/create', request);
 
         expect(response.body).toBe('Tester.png');
-        expect(sawWrittenCharacter).toBe(true);
+        expect(fs.existsSync(path.join(directories.characters, 'Tester.png'))).toBe(false);
         expect(mocks.generateThumbnail).toHaveBeenCalledWith(directories, 'avatar', 'Tester.png', true, null);
     });
 
@@ -446,7 +452,7 @@ describe('thumbnail write-time pregeneration hooks', () => {
         await Promise.resolve();
 
         expect(response.body).toBe('Resilient.png');
-        expect(fs.existsSync(path.join(directories.characters, 'Resilient.png'))).toBe(true);
+        expect(fs.existsSync(path.join(directories.characters, 'Resilient.png'))).toBe(false);
         expect(mocks.generateThumbnail).toHaveBeenCalledWith(directories, 'avatar', 'Resilient.png', true, null);
         expect(warnSpy).toHaveBeenCalledWith('Thumbnail pregeneration skipped for avatar/Resilient.png:', expect.any(Error));
         warnSpy.mockRestore();
@@ -509,7 +515,7 @@ describe('thumbnail write-time pregeneration hooks', () => {
         expect(mocks.generateThumbnail).toHaveBeenCalledWith(directories, 'avatar', 'tester_1.png', true, null);
     });
 
-    test('character avatar overwrite invalidates the previous thumbnail before pregeneration', async () => {
+    test('canonical avatar update pregenerates without overwriting the previous compatibility file', async () => {
         const directories = makeUserDirectories('emberdesk-pregen-edit-avatar-');
         const { router, mocks } = await importCharacterRoutes();
         const uploadPath = path.join(directories.root, 'upload.tmp');
@@ -529,10 +535,8 @@ describe('thumbnail write-time pregeneration hooks', () => {
         const response = await invokeRoute(router, 'post', '/edit-avatar', request);
 
         expect(response.statusCode).toBe(200);
-        expect(mocks.invalidateThumbnail).toHaveBeenCalledTimes(1);
-        expect(mocks.invalidateThumbnail).toHaveBeenCalledWith(directories, 'avatar', 'Tester.png');
+        expect(fs.readFileSync(characterPath, 'utf8')).toBe('png');
         expect(mocks.generateThumbnail).toHaveBeenCalledWith(directories, 'avatar', 'Tester.png', true, null);
-        expect(mocks.invalidateThumbnail.mock.invocationCallOrder[0]).toBeLessThan(mocks.generateThumbnail.mock.invocationCallOrder[0]);
     });
 
     test('character metadata edit without a new upload does not invalidate or pregenerate thumbnails', async () => {

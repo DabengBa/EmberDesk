@@ -6,6 +6,7 @@ import { afterEach, describe, expect, jest, test } from '@jest/globals';
 
 import { createCanonicalSqliteManager } from '../src/canonical-sqlite.ts';
 import { runCanonicalMigrations } from '../src/canonical-sqlite-migrations.ts';
+import { getCanonicalSliceProjectionMode } from '../src/storage-feature-flags.js';
 import {
     buildCanonicalBackupManifest,
     createCanonicalStorageSliceRegistry,
@@ -13,7 +14,7 @@ import {
     getDefaultCanonicalStorageSliceRegistry,
     listCanonicalStorageSliceKeys,
     MANAGED_FILE_MANIFEST_VERSION,
-    resetDeprecatedSettingsProjectionWarningForTests,
+
 } from '../src/canonical-storage-slice-registry.ts';
 import {
     buildCanonicalRollbackBlockers,
@@ -304,21 +305,20 @@ describe('canonical storage slice registry', () => {
         }));
     });
 
-    test('deprecated settings projection config warns once and resolves to off', () => {
-        resetDeprecatedSettingsProjectionWarningForTests();
-        process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_SLICES_SETTINGS_PROJECTION = 'sync';
-        const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    test('resolves runtime projection to off without a registered config', () => {
+        expect(getCanonicalSliceProjectionMode()).toBe('off');
+    });
+
+    test.each(['CHARACTERS', 'WORLDINFO', 'SETTINGS', 'PRESETS', 'SECRETS', 'MANAGED_MEDIA', 'CHATS'])('ignores the legacy %s sync override', flag => {
+        const key = `EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_SLICES_${flag}_PROJECTION`;
+        process.env[key] = 'sync';
         try {
-            const settingsSlice = getDefaultCanonicalStorageSliceRegistry().get('settings');
-            expect(settingsSlice.getProjectionMode()).toBe('off');
-            expect(settingsSlice.getProjectionMode()).toBe('off');
-            const projectionWarnings = warnSpy.mock.calls.filter(call =>
-                String(call[0]).includes('slices.settings.projection'));
-            expect(projectionWarnings).toHaveLength(1);
+            const registry = getDefaultCanonicalStorageSliceRegistry();
+            for (const sliceKey of listCanonicalStorageSliceKeys()) {
+                expect(registry.get(sliceKey).getProjectionMode()).toBe('off');
+            }
         } finally {
-            warnSpy.mockRestore();
-            delete process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_SLICES_SETTINGS_PROJECTION;
-            resetDeprecatedSettingsProjectionWarningForTests();
+            delete process.env[key];
         }
     });
 

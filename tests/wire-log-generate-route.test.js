@@ -1,5 +1,5 @@
 /* global globalThis */
-import { describe, test, expect, beforeAll, afterAll, afterEach } from '@jest/globals';
+import { describe, test, expect, beforeAll, afterAll, afterEach, jest } from '@jest/globals';
 import express from 'express';
 import http from 'node:http';
 import os from 'node:os';
@@ -74,27 +74,28 @@ async function closeServer(server) {
  */
 async function createUpstreamStub(options = {}) {
     const received = [];
+    const authorization = [];
     const status = options.status ?? 200;
     const handler = (request, response) => {
         const chunks = [];
         request.on('data', chunk => chunks.push(chunk));
         request.on('end', () => {
             received.push(Buffer.concat(chunks).toString('utf8'));
+            authorization.push(request.headers.authorization);
             if (options.stream) {
                 response.writeHead(status, { 'Content-Type': 'text/event-stream' });
                 response.write('data: {"choices":[{"delta":{"content":"hi"}}]}\n\n');
                 response.end('data: [DONE]\n\n');
                 return;
             }
-            response.writeHead(status, {
+            response.writeHead(status, options.statusText ?? http.STATUS_CODES[status], {
                 'Content-Type': 'application/json',
-                ...(options.statusText ? { 'X-Test-Status-Text': options.statusText } : {}),
             });
             response.end(options.rawBody ?? JSON.stringify(options.body ?? { id: 'cmpl-1', choices: [{ message: { role: 'assistant', content: 'hello' } }] }));
         });
     };
     const { server, url } = await listen(handler);
-    return { server, url, received };
+    return { server, url, received, authorization };
 }
 
 function createApp(directories) {
@@ -113,12 +114,13 @@ function createApp(directories) {
  * Enables or disables the wire log switch through the real settings route.
  * @param {string} appUrl Express app URL
  * @param {boolean} enabled Desired switch value
+ * @param {boolean} [captureBody] Explicit body preference
  */
-async function setWireLogEnabled(appUrl, enabled) {
+async function setWireLogEnabled(appUrl, enabled, captureBody) {
     const response = await fetch(`${appUrl}/api/wire-logs/config`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ enabled }),
+        body: JSON.stringify({ enabled, captureBody }),
     });
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual(expect.objectContaining({ enabled }));
@@ -205,6 +207,56 @@ afterEach(async () => {
 });
 
 describe('POST /api/backends/chat-completions/generate wire logging', () => {
+    test.each(['success', 'http-error', 'stream-http-error', 'network-error'])('default diagnostics omit private content: %s', async mode => {
+        const marker = 'fixture-private-prompt';
+        const reply = 'fixture-private-reply';
+        const key = 'fixture-provider-key';
+        const directories = makeDirectories();
+        fs.writeFileSync(path.join(directories.root, 'secrets.json'), JSON.stringify({
+            api_key_openai: [{ id: 'fixture-key', value: key, label: 'Fixture', active: true }], _migrated: [],
+        }));
+        const status = mode === 'success' ? 200 : 429;
+        const upstream = await createUpstreamStub({
+            status,
+            ...(status === 429 ? { statusText: `Fixture ${key}` } : {}),
+            body: status === 200 ? { choices: [{ message: { content: reply } }] } : { error: { message: key } },
+        });
+        if (mode === 'network-error') await closeServer(upstream.server);
+        const { url } = await listen(createApp(directories));
+        const logs = ['debug', 'info', 'log', 'warn', 'error'].map(level => jest.spyOn(console, level).mockImplementation(() => {}));
+        try {
+            const response = await fetch(`${url}/api/backends/chat-completions/generate`, {
+                method: 'POST', headers: { 'content-type': 'application/json' },
+                body: JSON.stringify({ chat_completion_source: 'openai',
+                    custom_url: mode === 'network-error' ? `${upstream.url}/fixture-private-network-path` : upstream.url,
+                    model: 'test', messages: [{ role: 'user', content: marker }], stream: mode === 'stream-http-error' }),
+            });
+            expect(response.status).toBe(mode === 'network-error' ? 502 : mode === 'stream-http-error' ? 429 : 200);
+            if (mode !== 'network-error') expect(upstream.authorization).toEqual([`Bearer ${key}`]);
+            const clientBody = await response.text();
+            if (mode === 'success') expect(clientBody).toContain(reply);
+            const [record] = await waitForRecords(directories);
+            const terminal = logs.flatMap(log => log.mock.calls.map(args => args.map(arg => String(arg) + JSON.stringify(arg)).join(' '))).join('\n');
+            expect(terminal).not.toMatch(/fixture-(private|provider)/);
+            if (status === 429 && mode !== 'network-error') {
+                expect(terminal).toContain('429');
+                expect(terminal).toContain('UPSTREAM_HTTP_ERROR');
+                expect(record.response.status).toBe(429);
+            } else if (mode === 'network-error') {
+                expect(terminal).toContain('502');
+                expect(terminal).toContain('ECONNREFUSED');
+                expect(record.error).toMatchObject({ code: 'ECONNREFUSED' });
+                expect(record.error.message).not.toContain('fixture-private-network-path');
+            }
+            expect(record.request).toMatchObject({ body: null, messageCount: 1, headers: { Authorization: '***redacted***' } });
+            expect(record.request.bytes).toBeGreaterThan(0);
+            expect(record.response.body).toBeNull();
+            expect(JSON.stringify(record)).not.toMatch(/fixture-(private-(prompt|reply)|provider-key)/);
+        } finally {
+            logs.forEach(log => log.mockRestore());
+        }
+    });
+
     test.each(['audit', 'rollback'])('blocked %s cannot pretend to save logging off', async blocker => {
         const directories = makeDirectories();
         const upstream = await createUpstreamStub();
@@ -285,6 +337,7 @@ describe('POST /api/backends/chat-completions/generate wire logging', () => {
             if (mode === 'normal') release();
         });
         const { url } = await listen(createApp(directories));
+        await setWireLogEnabled(url, true, true);
         const controller = new AbortController();
         const response = await fetch(`${url}/api/backends/chat-completions/generate`, {
             method: 'POST', signal: controller.signal, headers: { 'content-type': 'application/json' },
@@ -329,6 +382,7 @@ describe('POST /api/backends/chat-completions/generate wire logging', () => {
         const directories = makeDirectories();
         const upstream = await createUpstreamStub({ rawBody: 'not json' });
         const { url } = await listen(createApp(directories));
+        await setWireLogEnabled(url, true, true);
         const response = await fetch(`${url}/api/backends/chat-completions/generate`, {
             method: 'POST', headers: { 'content-type': 'application/json' },
             body: JSON.stringify({ chat_completion_source: 'openai', custom_url: upstream.url, model: 'test', messages: [] }),
@@ -348,6 +402,7 @@ describe('POST /api/backends/chat-completions/generate wire logging', () => {
         const directories = makeDirectories();
         const upstream = await createUpstreamStub({ status: 429, body: { error: 'slow down' } });
         const { url } = await listen(createApp(directories));
+        await setWireLogEnabled(url, true, true);
         const response = await fetch(`${url}/api/backends/chat-completions/generate`, {
             method: 'POST', headers: { 'content-type': 'application/json' },
             body: JSON.stringify({ chat_completion_source: 'openai', custom_url: upstream.url, stream: true, model: 'test', messages: [] }),
@@ -520,7 +575,7 @@ describe('POST /api/backends/chat-completions/generate wire logging', () => {
         const { server, url } = await listen(app);
 
         try {
-            await setWireLogEnabled(url, true);
+            await setWireLogEnabled(url, true, true);
 
             const response = await fetch(`${url}/api/backends/chat-completions/generate`, {
                 method: 'POST',

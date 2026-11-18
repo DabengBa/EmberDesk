@@ -377,7 +377,7 @@ describe('/api/wire-logs/config', () => {
             const body = await response.json();
             // Logging is opt-out: an unstored fragment means "on".
             expect(body.enabled).toBe(true);
-            expect(body.captureBody).toBe(true);
+            expect(body.captureBody).toBe(false);
             expect(body.retentionDays).toBe(2);
             expect(body.maxFileBytes).toBe(2 * 1024 * 1024);
             expect(body.redact).toContain('authorization');

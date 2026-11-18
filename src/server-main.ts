@@ -77,7 +77,7 @@ import {
     setWindowTitle,
     getConfigValue,
 } from './util.js';
-import { UPLOADS_DIRECTORY } from './constants.js';
+import { getUserUploadsPath } from './user-directories.ts';
 import { REACT_LOGIN_BASE_PATH } from './react-login-feature.js';
 
 // Routers
@@ -296,8 +296,15 @@ async function registerMiddleware(app: Express, cli: CommandLineArguments): Prom
     }
 
     // File uploads
-    const uploadsPath = path.join(cli.dataRoot, UPLOADS_DIRECTORY);
-    app.use(multer({ dest: uploadsPath, limits: { fieldSize: 500 * 1024 * 1024 } }).single('avatar'));
+    const storage = multer.diskStorage({
+        destination(request, _file, callback) {
+            const directories = request.user?.directories;
+            if (!directories) return callback(new Error('Upload requires a user directory'), '');
+            const uploadsPath = getUserUploadsPath(directories);
+            fs.mkdir(uploadsPath, { recursive: true }, error => callback(error, uploadsPath));
+        },
+    });
+    app.use(multer({ storage, limits: { fieldSize: 500 * 1024 * 1024 } }).single('avatar'));
     app.use(multerMonkeyPatch);
 
     app.get('/version', async function (_, response) {
@@ -333,7 +340,7 @@ async function collectCleanupResources() {
     await startupProfiler.measure('checkForNewContent', () => checkForNewContent(directories));
     await startupProfiler.measure('diskCache.verify', () => diskCache.verify(directories));
     await startupProfiler.measure('migrateFlatSecrets', () => Promise.resolve(migrateFlatSecrets(directories)));
-    await startupProfiler.measure('cleanUploads', () => Promise.resolve(cleanUploads()));
+    await startupProfiler.measure('cleanUploads', () => Promise.resolve(cleanUploads(directories)));
     await startupProfiler.measure('migrateAccessLog', () => Promise.resolve(migrateAccessLog()));
 
     const pluginsDirectory = path.join(serverDirectory, 'plugins');

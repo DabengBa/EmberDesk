@@ -1304,6 +1304,7 @@ async function importFromByaf(uploadPath, { request }, preservedFileName) {
     const byafData = await new ByafParser(data).parse();
     const card = readFromV2(byafData.card);
     const fileName = preservedFileName || getPngName(sanitize(byafData.character.displayName || card.name, { replacement: sanitizeSafeCharacterReplacements }), request.user.directories);
+    let conflicts = 0;
 
     // Don't import chats and images if the character is being replaced or updated, instead of newly imported.
     if (!preservedFileName) {
@@ -1320,6 +1321,7 @@ async function importFromByaf(uploadPath, { request }, preservedFileName) {
                 return chatName;
             }
             // No file-only fallback: an uncommitted session would be invisible.
+            if (canonicalResult?.reason === 'conflict') conflicts++;
             console.warn(`Skipped ${chatName} chat from BYAF import: canonical create was not committed (${canonicalResult?.reason ?? 'chats unavailable'})`);
             return null;
         };
@@ -1383,12 +1385,13 @@ async function importFromByaf(uploadPath, { request }, preservedFileName) {
         }
     }
 
-    return persistImportedCharacter({
+    const result = await persistImportedCharacter({
         request,
         fileName,
         characterData: JSON.stringify(card),
         sourceImage: byafData.images[0].image,
     });
+    return result.ok && conflicts ? { ...result, scenarios: { conflicts } } : result;
 }
 
 /**

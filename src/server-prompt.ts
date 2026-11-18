@@ -13,7 +13,8 @@ import { roleAt, scanWorldInfo, type Injection, type Role, type WorldInfoActivat
 
 export { readServerPromptSnapshot, ServerPromptError, type ServerPromptSnapshot } from './server-prompt/snapshot.ts';
 
-export type ServerPromptCommand = { action: 'send' | 'regenerate' | 'continue'; pendingUserText?: string; pendingUserExtra?: RecordView };
+export type ServerPromptCommand = { action: 'send' | 'regenerate' | 'continue'; temporary?: boolean; pendingUserText?: string; pendingUserExtra?: RecordView };
+export const isTemporaryRegenerate = (command?: ServerPromptCommand) => command?.temporary === true && command.action === 'regenerate';
 export type { ServerPromptMessage } from './server-prompt/history.ts';
 type TextMessage = { role: Role; content: string; name?: string };
 type PipelineStep = { tool: string; prompt?: string; model?: string; maxTokens?: number | null };
@@ -232,16 +233,18 @@ async function promptBudget(connection: ReturnType<typeof resolveConnection>, to
 
 /** Follow-up rounds budget the captured transcript, without rebuilding media, lore or history. */
 export async function assembleServerPipelineTail(snapshot: ServerPromptSnapshot, runtime: ServerPromptRuntime,
-    transcript: readonly object[], mediaCosts: ReadonlyMap<object, number>, callIds: ReadonlySet<string>, pendingUserText?: string) {
+    transcript: readonly object[], mediaCosts: ReadonlyMap<object, number>, callIds: ReadonlySet<string>, command?: ServerPromptCommand) {
     const local = record(snapshot.settings.oai_settings);
     const step = runtime.pipeline && 'step' in runtime.pipeline ? runtime.pipeline.step : undefined;
     const connection = resolveConnection(snapshot.preset, step?.model ? { ...local, openai_model: step.model } : local);
     if (step && pipelineModelRemovesTools({ chat_completion_source: 'openai', model: connection.model })) invalid('Reply pipeline model does not support tools');
-    const rows = snapshot.chat.slice(1).map(record);
+    const regenerate = isTemporaryRegenerate(command);
+    const rows = (regenerate ? getRegenerateChatPrefix(snapshot.chat) : snapshot.chat).slice(1).map(record);
+    const pendingUserText = command?.pendingUserText;
     if (pendingUserText !== undefined) rows.push(prepareGenerationUserMessage(snapshot, pendingUserText));
     const manager = makePromptManager({ ...snapshot.preset, ...local }, createSubstitute(snapshot, rows, connection.model));
     const tools = pipelineTools(runtime.pipeline);
-    const tail = buildPipelineTail(runtime, manager, 'normal', true, undefined, createStoryProjection(new Set(callIds)));
+    const tail = buildPipelineTail(runtime, manager, regenerate ? 'regenerate' : 'normal', true, undefined, createStoryProjection(new Set(callIds)));
     const messages = [...transcript, ...tail];
     const { fixed, measure } = await promptBudget(connection, tools);
     const promptTokens = fixed + measure(messages, mediaCosts);
@@ -258,7 +261,7 @@ export async function assembleServerPrompt(snapshot: ServerPromptSnapshot, comma
     const connection = resolveConnection(snapshot.preset, step?.step.model ? { ...local, openai_model: step.step.model } : local);
     const removesTools = pipelineModelRemovesTools({ chat_completion_source: 'openai', model: connection.model });
     if (step && removesTools) invalid('Reply pipeline model does not support tools');
-    const pipelineHistory = command.action === 'send' && Boolean(runtime.pipeline) && !removesTools;
+    const pipelineHistory = (command.action === 'send' || isTemporaryRegenerate(command)) && Boolean(runtime.pipeline) && !removesTools;
     const settings = { ...snapshot.preset, ...local };
     const historyPayload = command.action === 'regenerate' ? getRegenerateChatPrefix(snapshot.chat) : snapshot.chat;
     const rows = structuredClone(historyPayload.slice(1).map(record));

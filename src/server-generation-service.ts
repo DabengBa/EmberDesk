@@ -115,6 +115,11 @@ export function getRegenerateChatPrefix(payload: readonly object[]) {
 /** One instance per server process, using DB handles from the authenticated user's canonical manager. */
 export function createServerGenerationService<T>({ execute }: { execute: ExecuteGeneration<T> }) {
     const temporary = new Map<string, { database: Live['database']; run: GenerationRun }>();
+    const cancelledRequests = new Map<Live['database'], Set<string>>();
+
+    function findTemporaryRequest(database: Live['database'], requestId: string) {
+        return [...temporary.values()].find(entry => entry.database === database && entry.run.requestId === requestId);
+    }
 
     function temporaryFor(db: DatabaseSync, id: string) {
         const entry = temporary.get(id);
@@ -185,6 +190,24 @@ export function createServerGenerationService<T>({ execute }: { execute: Execute
         });
         if (result.changed && result.run) notifyTerminal(result.run);
         return result.run;
+    }
+
+    function cancelTemporaryRequest(db: DatabaseSync, requestId: string) {
+        const database = generationDatabaseIdentity(db);
+        const existing = findTemporaryRequest(database, requestId);
+        if (existing) {
+            finishTemporary(existing.run.id, 'cancelled');
+            return;
+        }
+        // A keepalive cancellation can arrive before its /create request.
+        const cancelled = cancelledRequests.get(database) ?? new Set<string>();
+        if (cancelled.has(requestId)) return;
+        cancelled.add(requestId);
+        cancelledRequests.set(database, cancelled);
+        setTimeout(() => {
+            cancelled.delete(requestId);
+            if (!cancelled.size) cancelledRequests.delete(database);
+        }, 60_000).unref();
     }
 
     function pendingStep(db: DatabaseSync, id: string) {
@@ -301,12 +324,13 @@ export function createServerGenerationService<T>({ execute }: { execute: Execute
 
     function createTemporary(db: DatabaseSync, requestId: string, kind: Kind, original: object | null, prompt: T, user?: object) {
         const database = generationDatabaseIdentity(db);
-        const replay = [...temporary.values()].find(entry => entry.database === database && entry.run.requestId === requestId);
+        const replay = findTemporaryRequest(database, requestId);
         if (replay) return replay.run;
         const id = randomUUID();
         const run: GenerationRun = { id, requestId, kind, status: 'running', temporary: true, user,
             chatId: '', version: '', error: null, createdAtMs: Date.now(), finishedAtMs: null };
         temporary.set(id, { database, run });
+        if (cancelledRequests.get(database)?.has(requestId)) return finishTemporary(id, 'cancelled');
         const timeout = setTimeout(() => finishTemporary(id, 'cancelled'), 600_000).unref();
         launch(db, run, { kind, original }, prompt, () => clearTimeout(timeout),
             assistant => finishTemporary(id, 'completed', null, assistant), error => finishTemporary(id, 'failed', error));
@@ -363,5 +387,5 @@ export function createServerGenerationService<T>({ execute }: { execute: Execute
         });
     }
 
-    return { create, createTemporary, query, find, subscribe, cancel, submitStep, getStep: (db: DatabaseSync, id: string) => pendingStep(db, id)?.message };
+    return { create, createTemporary, query, find, subscribe, cancel, cancelTemporaryRequest, submitStep, getStep: (db: DatabaseSync, id: string) => pendingStep(db, id)?.message };
 }

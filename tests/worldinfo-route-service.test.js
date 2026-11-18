@@ -9,7 +9,7 @@ import { canonicalSqliteManager } from '../src/canonical-sqlite.ts';
 import { runCanonicalMigrations } from '../src/canonical-sqlite-migrations.ts';
 import { runCanonicalWorldInfoShadowImport } from '../src/canonical-world-info-shadow-import.ts';
 import { getPersistedCanonicalAuditStatus, persistCanonicalAuditStatus } from '../src/canonical-sqlite-shadow-import.ts';
-import { repairCanonicalWorldInfoProjection, runCanonicalWorldInfoAudit } from '../src/canonical-sqlite-operator.ts';
+import { runCanonicalWorldInfoAudit } from '../src/canonical-sqlite-operator.ts';
 import { upsertCanonicalWorldInfoBook } from '../src/endpoints/world-info-store.ts';
 import { router } from '../src/endpoints/worldinfo.js';
 import { setConfigFilePath } from '../src/util.js';
@@ -441,7 +441,7 @@ describe('world info canonical route service', () => {
         });
     });
 
-    test('writes edits to canonical sqlite first and projects the compatibility JSON file', async () => {
+    test('writes edits to canonical SQLite and quarantines the old file despite legacy sync config', async () => {
         const root = makeRoot();
         const directories = createDirectories(root);
         fs.writeFileSync(path.join(directories.worlds, 'Lorebook.json'), JSON.stringify({ entries: {} }));
@@ -461,11 +461,7 @@ describe('world info canonical route service', () => {
 
         expect(response.statusCode).toBe(200);
         expect(response.body).toEqual({ ok: true, revision: 2 });
-        expect(JSON.parse(fs.readFileSync(path.join(directories.worlds, 'Lorebook.json'), 'utf8'))).toEqual({
-            name: 'Edited Lore',
-            extensions: { source: 'route' },
-            entries: { one: { content: 'edited' } },
-        });
+        expect(fs.existsSync(path.join(directories.worlds, 'Lorebook.json'))).toBe(false);
         expect(db.prepare('SELECT payload_json FROM world_books WHERE name = ?').get('Lorebook').payload_json)
             .toBe(JSON.stringify({
                 name: 'Edited Lore',
@@ -543,46 +539,6 @@ describe('world info canonical route service', () => {
         }));
     });
 
-    test('records a projection repair when canonical edit commits but JSON projection fails', async () => {
-        const root = makeRoot();
-        const directories = createDirectories(root);
-        fs.mkdirSync(path.join(directories.worlds, 'Lorebook.json'));
-        const db = seedCanonicalWorldInfo(directories, {
-            payload: { name: 'Old', entries: {} },
-        });
-        setCanonicalEnv({ enabled: true, shadowImport: true, reads: true, writes: true, projection: 'sync' });
-
-        const response = await invokeRoute('/edit', {
-            name: 'Lorebook',
-            data: {
-                name: 'Edited Lore',
-                entries: { one: { content: 'db survives' } },
-            },
-        }, directories);
-
-        expect(response.statusCode).toBe(500);
-        expect(response.body).toEqual(expect.objectContaining({
-            error: 'Failed to project canonical World Info file.',
-            committed: true,
-            revision: 2,
-            repairKey: expect.stringMatching(/^world-path-v1:/),
-        }));
-        expect(JSON.parse(db.prepare('SELECT payload_json FROM world_books WHERE name = ?').get('Lorebook').payload_json)).toEqual({
-            name: 'Edited Lore',
-            entries: { one: { content: 'db survives' } },
-        });
-        const repairs = db.prepare(`
-            SELECT repair_key, world_name, reason, details_json, resolved_at_ms
-            FROM world_info_projection_repairs
-        `).all();
-        expect(repairs).toHaveLength(1);
-        expect(repairs[0]).toEqual(expect.objectContaining({ repair_key: response.body.repairKey, world_name: 'Lorebook', reason: 'world_path_intent', resolved_at_ms: null }));
-        fs.rmdirSync(path.join(directories.worlds, 'Lorebook.json'));
-        const replay = await repairCanonicalWorldInfoProjection({ db, directories, repairKeys: [response.body.repairKey] });
-        expect(replay.ok).toBe(true);
-        expect(JSON.parse(fs.readFileSync(path.join(directories.worlds, 'Lorebook.json'), 'utf8')).name).toBe('Edited Lore');
-        expect(db.prepare('SELECT resolved_at_ms FROM world_info_projection_repairs WHERE repair_key = ?').get(response.body.repairKey).resolved_at_ms).not.toBeNull();
-    });
 
     test('imports and deletes world info through canonical writes while preserving route responses', async () => {
         const root = makeRoot();
@@ -622,11 +578,7 @@ describe('world info canonical route service', () => {
 
         expect(importResponse.statusCode).toBe(200);
         expect(importResponse.body).toEqual({ name: 'Imported' });
-        expect(JSON.parse(fs.readFileSync(path.join(directories.worlds, 'Imported.json'), 'utf8'))).toEqual({
-            name: 'Imported Lore',
-            extensions: { source: 'upload' },
-            entries: { one: { content: 'imported' } },
-        });
+        expect(fs.existsSync(path.join(directories.worlds, 'Imported.json'))).toBe(false);
         expect(JSON.parse(db.prepare('SELECT payload_json FROM world_books WHERE name = ?').get('Imported').payload_json)).toEqual({
             name: 'Imported Lore',
             extensions: { source: 'upload' },
@@ -710,7 +662,7 @@ describe('world info canonical route service', () => {
         expect(suppressed.every(entry => entry.details?.import_classification != null)).toBe(true);
     });
 
-    test('audit blocks on stale projection drift when projection is sync', async () => {
+    test('audit suppresses stale projection drift despite legacy sync config', async () => {
         const root = makeRoot();
         const directories = createDirectories(root);
         fs.writeFileSync(path.join(directories.worlds, 'Lorebook.json'), JSON.stringify({
@@ -727,11 +679,12 @@ describe('world info canonical route service', () => {
         });
         const audit = await runCanonicalWorldInfoAudit({ handle: 'alice', directories, db });
 
-        expect(audit.blocking).toBe(true);
+        expect(audit.blocking).toBe(false);
         expect(audit.entries).toEqual(expect.arrayContaining([
             expect.objectContaining({
                 status: 'drift',
                 drift_types: ['payload_mismatch'],
+                details: expect.objectContaining({ suppressed: true }),
             }),
         ]));
     });

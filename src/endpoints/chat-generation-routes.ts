@@ -7,7 +7,7 @@ import { resolveUiLocale } from '../../public/scripts/ui-locale.js';
 import { isPathUnderParent } from '../util.js';
 import { canonicalSqliteManager, withCanonicalTransaction } from '../canonical-sqlite.ts';
 import { MEDIA_EXTENSIONS } from '../constants.js';
-import { createServerGenerationService, getRegenerateChatPrefix, ServerGenerationExecutionError, type GenerationChat, type GenerationEvent } from '../server-generation-service.ts';
+import { createServerGenerationService, ServerGenerationExecutionError, type GenerationChat, type GenerationEvent } from '../server-generation-service.ts';
 import { ChatGenerationBusyError } from '../server-generation-lock.ts';
 import { streamServerModel } from '../server-generation-model-transport.ts';
 import { applyGenerationOutputRegex, DEFAULT_GENERATION_USER_NAME, prepareGenerationUserMessage, readServerPromptSnapshot, ServerPromptError, type ServerPromptCommand, type ServerPromptRuntime, type ServerPromptSnapshot } from '../server-prompt.ts';
@@ -23,6 +23,7 @@ import type { ChatRouteContext } from './chat-route-context.ts';
 
 type Action = ServerPromptCommand['action'];
 const isAction = (action: unknown): action is Action => action === 'send' || action === 'regenerate' || action === 'continue';
+const isRequestId = (requestId: unknown): requestId is string => typeof requestId === 'string' && /^[\w-]{1,128}$/.test(requestId);
 const errorResponse = (response: Response, status: number, error: string) => response.status(status).json({ error });
 
 class InvalidAttachmentError extends Error {}
@@ -138,7 +139,7 @@ const service = createServerGenerationService<GenerationPrompt>({
         const db = canonicalSqliteManager.open({ handle: prompt.handle, directories: prompt.directories, featureFlags: { enabled: true } });
         if (!db) throw new Error('canonical_chat_unavailable');
         const { snapshot } = prompt;
-        const command = { action: chat.kind };
+        const command = { action: chat.kind, temporary: ports.run.temporary };
         const runtime = promptRuntime(db, prompt.directories, prompt.locale, prompt.worldRuntime);
         try {
             const prepared = await prepareServerGeneration(snapshot, command, runtime);
@@ -220,7 +221,7 @@ export function registerChatGenerationRoutes(context: ChatRouteContext) {
             }) : temporarySnapshot(txn, handle, history),
             extra: action === 'send' ? draft?.extra ?? sendAttachments(txn, attachments) : {},
         }));
-        const prompt = await previewServerGeneration(snapshot, { action,
+        const prompt = await previewServerGeneration(snapshot, { action, temporary: temporary === true,
             pendingUserText: action === 'send' ? (text as string | undefined) ?? (Object.keys(extra).length ? '' : undefined) : undefined,
             pendingUserExtra: extra,
         }, promptRuntime(db, request.user.directories, string(locale), worldRuntime, draft?.blobs), round);
@@ -230,7 +231,7 @@ export function registerChatGenerationRoutes(context: ChatRouteContext) {
     router.post('/generation/create', (request, response) => run(request, response, true, (db, handle) => {
         const { action, text, requestId, version, locale, attachments, worldInfo, scanPrompts, temporary, history } = record(request.body);
         const chat = temporary === true ? null : target(request, db);
-        if ((!chat && temporary !== true) || !isAction(action) || typeof requestId !== 'string' || !/^[\w-]{1,128}$/.test(requestId)
+        if ((!chat && temporary !== true) || !isAction(action) || !isRequestId(requestId)
             || (version !== undefined && (typeof version !== 'string' || !/^[0-9a-f]{32}$/.test(version)))
             || (action === 'send' ? typeof text !== 'string' : chat !== null && typeof version !== 'string')) {
             return errorResponse(response, 400, 'invalid_generation_command');
@@ -248,8 +249,7 @@ export function registerChatGenerationRoutes(context: ChatRouteContext) {
                 }
                 const tail = source.chat.at(-1);
                 if (record(tail).is_user !== false) throw new Error('assistant_reply_required');
-                return action === 'continue' ? { snapshot: source, original: tail ?? null }
-                    : { snapshot: { ...source, chat: getRegenerateChatPrefix(source.chat) }, original: null };
+                return { snapshot: source, original: action === 'continue' ? tail ?? null : null };
             });
             const result = service.createTemporary(db, requestId, action, original, { snapshot, directories, handle, locale: string(locale), worldRuntime }, user);
             return response.status(202).json(result);
@@ -291,6 +291,12 @@ export function registerChatGenerationRoutes(context: ChatRouteContext) {
     router.post('/generation/find', (request, response) => run(request, response, false, db => {
         const chat = target(request, db);
         return chat ? response.json(service.find(db, chat.locator)) : errorResponse(response, 400, 'invalid_generation_target');
+    }));
+    router.post('/generation/cancel', (request, response) => run(request, response, false, db => {
+        const { temporary, requestId } = record(request.body);
+        if (temporary !== true || !isRequestId(requestId)) return errorResponse(response, 400, 'invalid_generation_command');
+        service.cancelTemporaryRequest(db, requestId);
+        return response.status(204).end();
     }));
     router.get('/generation/:id', (request, response) => run(request, response, false, db => {
         const id = String(request.params.id);

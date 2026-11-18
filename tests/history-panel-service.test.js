@@ -153,6 +153,14 @@ describe('history panel controller', () => {
         await exportHistoryChat('txt', false, ports);
         expect(calls).toEqual(['save', 'wait', 'ok', 'text:text/plain']);
         calls.length = 0;
+        const zip = new Blob(['archive'], { type: 'application/zip' });
+        await exportHistoryChat('zip', true, {
+            ...ports,
+            request: async () => ({ ok: true, data: { message: 'ok', result: zip } }),
+            download: (data, mime) => calls.push([data, mime]),
+        });
+        expect(calls).toEqual(['wait', 'ok', [zip, 'application/zip']]);
+        calls.length = 0;
         await exportHistoryChat('jsonl', true, { ...ports, request: async () => ({ ok: false, data: { message: 'bad' } }) });
         expect(calls).toEqual(['wait', 'error:bad']);
         calls.length = 0;
@@ -212,13 +220,13 @@ describe('history panel controller', () => {
     test('imports supported files sequentially, skips invalid formats and refreshes once', async () => {
         const { importHistoryFiles } = await loadTsModule('app/lib/history-panel-service.ts');
         const calls = [];
-        const names = await importHistoryFiles([{ name: 'one.JSONL' }, { name: 'bad.txt' }, { name: 'two.json' }], {
+        const names = await importHistoryFiles([{ name: 'one.JSONL' }, { name: 'bad.txt' }, { name: 'two.json' }, { name: 'three.ZIP' }], {
             invalid: file => calls.push(`invalid:${file.name}`),
             importFile: async (file, format) => { calls.push(`${file.name}:${format}`); return [file.name]; },
             complete: async imported => calls.push(`refresh:${imported.join(',')}`),
         });
-        expect(names).toEqual(['one.JSONL', 'two.json']);
-        expect(calls).toEqual(['one.JSONL:jsonl', 'invalid:bad.txt', 'two.json:json', 'refresh:one.JSONL,two.json']);
+        expect(names).toEqual(['one.JSONL', 'two.json', 'three.ZIP']);
+        expect(calls).toEqual(['one.JSONL:jsonl', 'invalid:bad.txt', 'two.json:json', 'three.ZIP:zip', 'refresh:one.JSONL,two.json,three.ZIP']);
     });
     test('projects history records in timestamp order using the existing date ports without mutating the response', async () => {
         const { projectHistoryChats } = await loadTsModule('app/lib/history-panel-service.ts');

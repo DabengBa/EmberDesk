@@ -5,6 +5,7 @@ import fetch from 'node-fetch';
 import type { RequestInit } from 'node-fetch';
 import urlJoin from 'url-join';
 import path from 'node:path';
+import { STATUS_CODES } from 'node:http';
 
 import {
     CHAT_COMPLETION_SOURCES,
@@ -31,6 +32,17 @@ import { normalizeWireLogOptions, createWireLogRecorder } from '../../wire-log-r
 import { readWireLogSettings } from '../wire-log.ts';
 
 const API_OPENAI = 'https://api.openai.com/v1';
+const SAFE_TRANSPORT_CODES = new Set(['ECONNREFUSED', 'ECONNRESET', 'ETIMEDOUT', 'EPIPE', 'ENOTFOUND', 'EAI_AGAIN']);
+
+function transportErrorCode(error: unknown): string {
+    if (error instanceof Error && error.name === 'AbortError') return 'UPSTREAM_ABORTED';
+    const code = error && typeof error === 'object' && 'code' in error ? error.code : undefined;
+    return typeof code === 'string' && SAFE_TRANSPORT_CODES.has(code) ? code : 'UPSTREAM_TRANSPORT_ERROR';
+}
+
+function logUpstreamError(status: number, code: string): void {
+    console.warn('Chat completion upstream failure', { status, code });
+}
 
 // These describe the existing upstream request contract, not runtime validation.
 type ChatBody = {
@@ -147,7 +159,7 @@ router.post<Record<string, string>, unknown, ChatBody>('/status', async function
             statusResponse.send({ error: true, data: { data: [] } });
         }
     } catch (e) {
-        console.error(e);
+        logUpstreamError(502, transportErrorCode(e));
 
         if (!statusResponse.headersSent) {
             statusResponse.send({ error: true });
@@ -158,6 +170,7 @@ router.post<Record<string, string>, unknown, ChatBody>('/status', async function
 });
 
 router.post<Record<string, string>, unknown, ChatBody>('/generate', async function (request: ChatRequest, response) {
+    let failureCode: string | undefined;
     try {
         if (!request.body) return response.status(400).send({ error: true });
 
@@ -291,7 +304,6 @@ router.post<Record<string, string>, unknown, ChatBody>('/generate', async functi
             signal: controller.signal,
         };
 
-        console.debug('Chat Completion request:', requestBody);
 
         // Wire log session: `begin` returns null when the switch is off, so
         // every branch below stays a no-op in that case.
@@ -323,6 +335,9 @@ router.post<Record<string, string>, unknown, ChatBody>('/generate', async functi
         }
 
         const fetchResponse = await fetch(endpointUrl, config);
+        const status = fetchResponse.status;
+        const statusText = STATUS_CODES[status] ?? '';
+        if (!fetchResponse.ok) logUpstreamError(status, 'UPSTREAM_HTTP_ERROR');
 
         if (request.body.stream) {
             console.info('Streaming request in progress');
@@ -330,13 +345,33 @@ router.post<Record<string, string>, unknown, ChatBody>('/generate', async functi
             if (wireLog.wireLogSession) {
                 const session = wireLog.wireLogSession;
                 const tap = session.stream({
-                    status: fetchResponse.status,
-                    statusText: fetchResponse.statusText,
+                    status,
+                    statusText,
                     headers: fetchResponse.headers.raw(),
                 });
                 pipeOptions.onChunk = tap.onChunk;
                 pipeOptions.onComplete = () => session.completeStream();
-                pipeOptions.onError = error => session.fail(error);
+            }
+            pipeOptions.onError = error => {
+                const code = transportErrorCode(error);
+                logUpstreamError(status, code);
+                wireLog.wireLogSession?.fail({ message: 'Upstream stream interrupted', code });
+            };
+            if (!fetchResponse.ok) {
+                // Keep forwarding the provider's error body to the caller, not to the terminal.
+                // As in forwardFetchResponse, a 401 must not reset the caller's Basic auth.
+                response.statusCode = status === 401 ? 400 : status;
+                if (statusText) response.statusMessage = statusText;
+                let text: string;
+                try {
+                    text = await fetchResponse.text();
+                } catch (error) {
+                    try { pipeOptions.onError(error); } catch { /* Diagnostics must not affect transport. */ }
+                    return response.end();
+                }
+                try { pipeOptions.onChunk?.(text); } catch { /* Diagnostics must not affect transport. */ }
+                try { pipeOptions.onComplete?.(); } catch { /* Diagnostics must not affect transport. */ }
+                return response.end(text, 'utf-8');
             }
             return await forwardFetchResponse(fetchResponse, response, pipeOptions);
         }
@@ -350,9 +385,10 @@ router.post<Record<string, string>, unknown, ChatBody>('/generate', async functi
                 json = JSON.parse(responseText);
             } catch (error) {
                 // Preserve the original JSON-only generation contract.
-                wireLog.wireLogSession?.fail(error, {
-                    status: fetchResponse.status,
-                    statusText: fetchResponse.statusText,
+                failureCode = 'INVALID_UPSTREAM_JSON';
+                wireLog.wireLogSession?.fail({ message: 'Invalid upstream JSON', code: failureCode }, {
+                    status,
+                    statusText,
                     headers: fetchResponse.headers.raw(),
                     body: responseText,
                 });
@@ -361,8 +397,8 @@ router.post<Record<string, string>, unknown, ChatBody>('/generate', async functi
             if (wireLog.wireLogSession) {
                 try {
                     wireLog.wireLogSession.complete({
-                        status: fetchResponse.status,
-                        statusText: fetchResponse.statusText,
+                        status,
+                        statusText,
                         headers: fetchResponse.headers.raw(),
                         body: json,
                     });
@@ -370,19 +406,18 @@ router.post<Record<string, string>, unknown, ChatBody>('/generate', async functi
                     console.warn('[wire-log] completion failed', error instanceof Error ? error.message : error);
                 }
             }
-            console.debug('Chat Completion response:', json);
             return response.send(json);
         } else {
             const responseText = await fetchResponse.text();
             const errorData = tryParse(responseText);
 
-            const message = fetchResponse.statusText || 'Unknown error occurred';
-            const quota_error = fetchResponse.status === 429 && errorData?.error?.type === 'insufficient_quota';
+            const message = statusText || 'Unknown error occurred';
+            const quota_error = status === 429 && errorData?.error?.type === 'insufficient_quota';
             if (wireLog.wireLogSession) {
                 try {
                     wireLog.wireLogSession.complete({
-                        status: fetchResponse.status,
-                        statusText: fetchResponse.statusText,
+                        status,
+                        statusText,
                         headers: fetchResponse.headers.raw(),
                         body: errorData ?? responseText,
                     });
@@ -390,7 +425,6 @@ router.post<Record<string, string>, unknown, ChatBody>('/generate', async functi
                     console.warn('[wire-log] completion failed', error instanceof Error ? error.message : error);
                 }
             }
-            console.error('Chat completion request error: ', message, responseText);
 
             if (!response.headersSent) {
                 response.send({ error: { message }, quota_error: quota_error });
@@ -401,22 +435,18 @@ router.post<Record<string, string>, unknown, ChatBody>('/generate', async functi
             }
         }
     } catch (error) {
-        console.error('Generation failed', error);
+        const code = failureCode ?? transportErrorCode(error);
+        const message = code === 'ECONNREFUSED' ? 'Connection refused' : 'Upstream generation failed';
+        logUpstreamError(502, code);
         try {
             // Recording schedules its own write; never wait for diagnostic I/O
             // before returning a generation failure to the client.
-            request.wireLogSession?.fail(error);
+            request.wireLogSession?.fail({ message, code });
         } catch {
             // Logging must never mask the generation failure.
         }
-        // Preserve the legacy error property access and response spread.
-        const legacyError = error as { code?: string; message?: string };
-        const message = legacyError.code === 'ECONNREFUSED'
-            ? `Connection refused: ${legacyError.message}`
-            : legacyError.message || 'Unknown error occurred';
-
         if (!response.headersSent) {
-            response.status(502).send({ error: { message, ...legacyError } });
+            response.status(502).send({ error: { message, code } });
         } else {
             response.end();
         }

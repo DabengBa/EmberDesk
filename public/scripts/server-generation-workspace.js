@@ -1,7 +1,23 @@
 /** Owns only the currently selected chat's transient subscription. */
-export function createWorkspaceGeneration({ request, subscribe, changed, finished, executeStep, lockStep = (_id, run) => run() }) {
+export function createWorkspaceGeneration({ request, subscribe, changed, finished, executeStep, stepFailed, lockStep = (_id, run) => run() }) {
     let selection;
     const results = new Map();
+
+    async function runTemporaryStep(view, route, step) {
+        if (view.stepId === step.id) return;
+        view.stepId = step.id;
+        try {
+            const result = await executeStep(step);
+            if (selection === view) await request(`${route}/step`, { stepId: step.id, result });
+        } catch (error) {
+            if (selection !== view || view.run.status !== 'running') return;
+            try {
+                stepFailed?.(error);
+            } finally {
+                await request(`${route}/cancel`, {});
+            }
+        }
+    }
 
     async function handleStep(view, step) {
         if (!step || !executeStep) return;
@@ -13,6 +29,7 @@ export function createWorkspaceGeneration({ request, subscribe, changed, finishe
                 if (current.step?.id !== step.id) results.delete(step.id);
                 return;
             }
+            if (view.target.temporary) return runTemporaryStep(view, route, current.step);
             if (!results.has(step.id)) results.set(step.id, Promise.resolve(executeStep(current.step)));
             view.stepId = step.id;
             const result = await results.get(step.id);
@@ -20,14 +37,27 @@ export function createWorkspaceGeneration({ request, subscribe, changed, finishe
             results.delete(step.id);
         });
     }
-    const close = () => {
+    function detach() {
         const view = selection;
-        view?.detach?.();
         selection = undefined;
-        if (view?.run?.temporary && view.run.status === 'running') {
-            void request(`/${view.run.id}/cancel`, {}).catch(() => {});
-        }
+        view?.detach?.();
+
         changed();
+    }
+
+    function leaveTemporary() {
+        const view = selection;
+        if (!view?.target.temporary) return false;
+        detach();
+        if (view.creating || view.run?.status === 'running' || view.run?.status === 'interrupted') {
+            // The request ID exists even before /create returns a run ID.
+            void request('/cancel', { temporary: true, requestId: view.requestId }, { keepalive: true }).catch(() => {});
+        }
+        return true;
+    }
+
+    const close = () => {
+        if (!leaveTemporary()) detach();
     };
 
     function attach(view, run, discovery) {
@@ -71,6 +101,7 @@ export function createWorkspaceGeneration({ request, subscribe, changed, finishe
         current: () => selection?.run?.status === 'running' ? selection : null,
         busy: () => Boolean(selection?.creating || selection?.run?.status === 'running'),
         close,
+        leaveTemporary,
         async select(target, reconciledChatVersion) {
             close();
             if (!target) return;
@@ -81,14 +112,16 @@ export function createWorkspaceGeneration({ request, subscribe, changed, finishe
         },
         async create(target, command) {
             close();
-            const view = { target, text: '', pendingText: command.text, creating: true };
+            const view = { target, text: '', pendingText: command.text, creating: true, requestId: command.requestId };
             selection = view;
             changed();
             try {
                 const run = await request('/create', { ...target, ...command });
                 if (selection === view) attach(view, run);
-                else if (run.temporary && run.status === 'running') void request(`/${run.id}/cancel`, {}).catch(() => {});
+                else if (target.temporary) return;
                 return run;
+            } catch (error) {
+                if (selection === view || !target.temporary) throw error;
             } finally {
                 view.creating = false;
                 if (selection === view) changed();

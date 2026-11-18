@@ -29,6 +29,11 @@ const test = base.extend({
                     if (!step || step.status) {
                         res.writeHead(step?.status ?? 500, { 'Content-Type': 'application/json' });
                         res.end(JSON.stringify({ error: { message: 'provider boom' } }));
+
+                    } else if (step.tool) {
+                        res.writeHead(200, { 'Content-Type': 'text/event-stream' });
+                        const tool_calls = [{ index: 0, id: `call-${requests.length}`, function: { name: step.tool, arguments: JSON.stringify({ content: step.content }) } }];
+                        res.end(`data: ${JSON.stringify({ choices: [{ delta: { tool_calls } }] })}\n\ndata: [DONE]\n\n`);
                     } else if (step.holdOpen || step.stream) {
                         res.writeHead(200, { 'Content-Type': 'text/event-stream' });
                         res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: step.content } }] })}\n\n`);
@@ -225,6 +230,106 @@ test('continues the saved role reply through the React options menu', async ({ p
     await expect(page.getByText('generation_failed', { exact: true })).toBeVisible();
     expect(await chatSnapshot(page)).toEqual(after);
     expect(requests).toHaveLength(3);
+});
+
+async function startTemporaryChat(page) {
+    await page.locator('#options_button').click();
+    await page.locator('#option_start_new_chat').click();
+}
+
+test('temporary assistant regenerates with a browser action and cancels visibly when the step POST fails', async ({ page, characterModel }) => {
+    const requests = await characterModel([
+        { tool: 'custom', content: 'browser input' }, { tool: 'last', content: 'INITIAL_TEMPORARY_REPLY' },
+        { tool: 'custom', content: 'fail action' }, { tool: 'last', content: 'REGENERATED_TEMPORARY_REPLY' },
+        { tool: 'custom', content: 'fail reply' },
+        { content: ' CONTINUED_TEMPORARY_REPLY' },
+    ], { temporary: true, streamOpenAi: true });
+    await page.evaluate(async () => {
+        const { feature_settings } = await import('/scripts/feature-settings.js');
+        feature_settings.tool_bindings = [{ name: 'custom', enabled: true,
+            actionBody: 'if (args.content === "fail action") throw new Error("controlled action failure"); return "browser:" + args.content;' }];
+        window.SillyTavern.getContext().chatCompletionSettings.reply_pipeline = { enabled: true, steps: [{ tool: 'custom' }, { tool: 'last' }] };
+    });
+    const writes = [];
+    page.on('request', request => {
+        if (/\/api\/(?:backends\/chat-completions\/generate|chats\/save)$/.test(request.url())) writes.push(request.url());
+    });
+    await startTemporaryChat(page);
+    const composer = page.locator('#send_textarea');
+    await composer.fill('temporary pipeline question');
+    await page.locator('#file_form_input').setInputFiles({ name: 'temporary.txt', mimeType: 'text/plain', buffer: Buffer.from('TEMPORARY_ATTACHMENT') });
+    const send = await startCharacterRun(page, 'send', () => page.locator('#send_but').click());
+    await expectRunStatus(page, send, 'completed');
+    await expect.poll(() => lastMessageText(page)).toContain('INITIAL_TEMPORARY_REPLY');
+    expect(requests[1].messages).toContainEqual(expect.objectContaining({ role: 'tool', content: 'browser:browser input' }));
+    await composer.fill('untouched draft');
+    const regenerated = await regenerateCharacter(page);
+    await expectRunStatus(page, regenerated, 'completed');
+    await expect.poll(() => lastMessageText(page)).toContain('REGENERATED_TEMPORARY_REPLY');
+    const regeneratedReply = await lastMessageText(page);
+    expect(JSON.stringify(requests[2].messages)).toContain('TEMPORARY_ATTACHMENT');
+    expect(JSON.stringify(requests[2].messages)).not.toContain('INITIAL_TEMPORARY_REPLY');
+    expect(requests[3].messages).toContainEqual(expect.objectContaining({ role: 'tool', content: '{"ok":false,"error":"controlled action failure"}' }));
+
+    const stepRoute = '**/generation/*/step';
+    await page.route(stepRoute, route => route.fulfill({ status: 503, json: { error: 'controlled_step_reply_failure' } }));
+    const cancelled = await regenerateCharacter(page);
+    await expect(page.getByText('controlled_step_reply_failure', { exact: true })).toBeVisible();
+    await expectRunStatus(page, cancelled, 'cancelled');
+    await expect(page.locator('body')).not.toHaveAttribute('data-workspace-generation-running');
+    expect(await lastMessageText(page)).toBe(regeneratedReply);
+    expect(requests).toHaveLength(5);
+    await page.unroute(stepRoute);
+
+    const continued = await startCharacterRun(page, 'continue', async () => {
+        await page.locator('#options_button').click();
+        await page.locator('#option_continue').click();
+    });
+    await expectRunStatus(page, continued, 'completed');
+    await expect.poll(() => lastMessageText(page)).toBe(`${regeneratedReply} CONTINUED_TEMPORARY_REPLY`);
+    expect(requests[5].tool_choice).toBeUndefined();
+    expect((await chatSnapshot(page)).filter(message => message.is_user)).toHaveLength(1);
+    await expect(composer).toHaveValue('untouched draft');
+    expect(writes).toEqual([]);
+});
+
+test('leaving a temporary assistant before create arrives prevents the model from starting', async ({ page, characterModel }) => {
+    const requests = await characterModel([{ content: 'UNEXPECTED_REPLY' }], { temporary: true });
+    await startTemporaryChat(page);
+    const arrived = Promise.withResolvers();
+    const release = Promise.withResolvers();
+    await page.route('**/generation/create', async route => {
+        arrived.resolve(route.request().postDataJSON());
+        await release.promise;
+        await route.continue();
+    });
+    const created = page.waitForResponse(response => response.url().endsWith('/generation/create'));
+    await page.locator('#send_textarea').fill('leave before create');
+    await page.locator('#send_but').click();
+    const { requestId } = await arrived.promise;
+    try {
+        const cancellation = page.waitForResponse(response => response.url().endsWith('/generation/cancel'));
+        await startTemporaryChat(page);
+        const response = await cancellation;
+        expect(response.status()).toBe(204);
+        expect(response.request().postDataJSON()).toEqual({ temporary: true, requestId });
+    } finally {
+        release.resolve();
+    }
+    expect(await (await created).json()).toMatchObject({ status: 'cancelled', temporary: true });
+    expect(requests).toEqual([]);
+    expect((await chatSnapshot(page)).filter(message => !message.is_system)).toEqual([]);
+});
+
+test('navigating away from a running temporary assistant cancels the shared run', async ({ page, characterModel }) => {
+    await characterModel([{ content: 'TEMPORARY_STREAM', holdOpen: true }], { temporary: true, streamOpenAi: true });
+    await startTemporaryChat(page);
+    await page.locator('#send_textarea').fill('leave while streaming');
+    const id = await startCharacterRun(page, 'send', () => page.locator('#send_but').click());
+    await expect(page.locator('#chat')).toContainText('TEMPORARY_STREAM');
+    await expectRunStatus(page, id, 'running');
+    await page.goto('about:blank');
+    await expectRunStatus(page, id, 'cancelled');
 });
 
 test.describe('chat regenerate', () => {

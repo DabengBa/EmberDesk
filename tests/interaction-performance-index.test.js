@@ -1359,7 +1359,7 @@ describe('character index', () => {
         expectNoCharacterReadEnvelope(response.body);
     });
 
-    test('keeps file-backed chat stats fresh without dirty-marking the legacy sidecar', async () => {
+    test('ignores unimported JSONL for character stats despite legacy sync and does not write the sidecar', async () => {
         const directories = makeDirectories('emberdesk-character-index-route-');
         tempRoots.push(directories.root);
         writeCharacterCardFile(directories, 'alpha.png', 'Alpha Live');
@@ -1373,7 +1373,8 @@ describe('character index', () => {
         expect(response.body).toEqual(expect.objectContaining({
             avatar: 'alpha.png',
             name: 'Alpha Live',
-            chat_size: 5,
+            chat_size: 0,
+            date_last_chat: 0,
         }));
         expectNoCharacterIndexSidecar(directories);
     });
@@ -1618,11 +1619,12 @@ describe('character index', () => {
             expect(response.body).toEqual({ ok: true, version: expect.stringMatching(/^[0-9a-f]{32}$/) });
             const stats = db.prepare('SELECT chat_count, chat_size_bytes, date_last_chat_ms, stats_updated_at_ms FROM character_chat_stats WHERE character_id = ?').get('char-alpha');
             const chatPath = path.join(directories.chats, 'alpha', 'first.jsonl');
-            const fileStat = fs.statSync(chatPath);
+            expect(fs.existsSync(chatPath)).toBe(false);
+            const session = db.prepare('SELECT source_size_bytes, source_mtime_ms FROM chat_sessions WHERE source_path = ?').get('chats/alpha/first.jsonl');
             expect(stats).toEqual({
                 chat_count: 1,
-                chat_size_bytes: fileStat.size,
-                date_last_chat_ms: fileStat.mtimeMs,
+                chat_size_bytes: session.source_size_bytes,
+                date_last_chat_ms: session.source_mtime_ms,
                 stats_updated_at_ms: expect.any(Number),
             });
             expect(stats.stats_updated_at_ms).toBeGreaterThan(0);
@@ -1631,8 +1633,8 @@ describe('character index', () => {
             expect(readResponse.body).toEqual([
                 expect.objectContaining({
                     avatar: 'alpha.png',
-                    chat_size: fileStat.size,
-                    date_last_chat: fileStat.mtimeMs,
+                    chat_size: session.source_size_bytes,
+                    date_last_chat: session.source_mtime_ms,
                 }),
             ]);
         } finally {
@@ -1744,7 +1746,7 @@ describe('character index', () => {
         }
     });
 
-    test('keeps chat save successful and stales canonical audit when canonical chat stats cannot find a live character row', async () => {
+    test('keeps chat save successful without staling character audit when no live character row exists', async () => {
         const directories = makeDirectories('emberdesk-chat-stats-route-');
         tempRoots.push(directories.root);
         process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_ENABLED = 'true';
@@ -1762,18 +1764,15 @@ describe('character index', () => {
             expect(saveResponse.statusCode).toBe(200);
             expect(saveResponse.body).toEqual({ ok: true, version: expect.stringMatching(/^[0-9a-f]{32}$/) });
 
-            // The write-side invalidation mark is recorded at save time...
+            // The retired file-stat sync must not write an invalidation mark.
             expect(getPersistedCanonicalAuditStatus(db)).toEqual(expect.objectContaining({
                 ok: false,
                 blocking: true,
-                status: 'drift',
-                reason: 'audit_stale_after_chat_stats_sync_failure',
-                details: expect.objectContaining({
-                    handle: `chat-test-${path.basename(directories.root)}`,
-                }),
+                status: 'missing',
+                reason: 'audit_not_run',
             }));
 
-            // ...and the next canonical read heals it through lazy re-import+audit.
+            // Lazy character import still computes stats from canonical chats.
             const refreshedListResponse = await invokeCharactersAll(directories);
             expect(refreshedListResponse.statusCode).toBe(200);
             expect(refreshedListResponse.body).toEqual([
@@ -1856,12 +1855,13 @@ describe('character index', () => {
             expect(response.body).toEqual({ ok: true, sanitizedFileName: 'renamed', version: expect.stringMatching(/^[0-9a-f]{32}$/) });
             expect(fs.existsSync(path.join(directories.chats, 'alpha', 'first.jsonl'))).toBe(false);
             const renamedPath = path.join(directories.chats, 'alpha', 'renamed.jsonl');
-            const fileStat = fs.statSync(renamedPath);
+            expect(fs.existsSync(renamedPath)).toBe(false);
+            const session = db.prepare('SELECT source_size_bytes, source_mtime_ms FROM chat_sessions WHERE source_path = ?').get('chats/alpha/renamed.jsonl');
             const stats = db.prepare('SELECT chat_count, chat_size_bytes, date_last_chat_ms, stats_updated_at_ms FROM character_chat_stats WHERE character_id = ?').get('char-alpha');
             expect(stats).toEqual({
                 chat_count: 1,
-                chat_size_bytes: fileStat.size,
-                date_last_chat_ms: fileStat.mtimeMs,
+                chat_size_bytes: session.source_size_bytes,
+                date_last_chat_ms: session.source_mtime_ms,
                 stats_updated_at_ms: expect.any(Number),
             });
             expect(stats.stats_updated_at_ms).toBeGreaterThan(0);

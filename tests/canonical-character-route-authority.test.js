@@ -13,6 +13,7 @@ import { afterEach, describe, expect, jest, test } from '@jest/globals';
 
 import { humanizedDateTime, setConfigFilePath } from '../src/util.js';
 import { canonicalSqliteManager } from '../src/canonical-sqlite.ts';
+import { ensureCanonicalSliceBackend } from '../src/canonical-backend.js';
 import { runCanonicalMigrations } from '../src/canonical-sqlite-migrations.ts';
 import { auditCanonicalShadowImport } from '../src/canonical-sqlite-shadow-import.ts';
 import { auditCanonicalChatShadowImport } from '../src/canonical-chat-shadow-import.ts';
@@ -22,8 +23,11 @@ import {
     upsertCanonicalChatSession,
 } from '../src/endpoints/canonical-chat-store.ts';
 import { recordCharacterAvatarBlob } from '../src/canonical-avatar-blob-service.ts';
+import { readManagedMediaContent } from '../src/endpoints/canonical-managed-media-read-service.ts';
+import { writeCanonicalManagedMedia } from '../src/endpoints/canonical-managed-media-write-service.ts';
 import { getCanonicalSettingsDocument, upsertCanonicalSettingsDocument } from '../src/endpoints/settings-store.ts';
 import { read } from '../src/character-card-parser.ts';
+import { router as userFileRouter } from '../src/users.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const repoRoot = path.resolve(path.dirname(__filename), '..');
@@ -409,7 +413,18 @@ describe('characters projection off', () => {
             }
 
             expect(response.statusCode).toBe(200);
-            expect(response.body).toEqual({ file_name: ownerId });
+            expect(response.body).toEqual({ file_name: ownerId, report: { scenarios: { conflicts: 1 } } });
+            const source = fs.readFileSync(path.join(repoRoot, 'public/script.js'), 'utf8');
+            const entry = source.match(/async function importCharacter\([\s\S]*?\n}\n/)[0];
+            const toastr = { success: jest.fn(), warning: jest.fn(), error: jest.fn() };
+            const importCharacter = runInNewContext(`(${entry})`, {
+                is_send_press: false, document: { getElementById: () => null },
+                name1: 'User', FormData, HTMLInputElement: class {}, toastr, console,
+                t: (parts, ...values) => String.raw({ raw: parts }, ...values),
+                getRequestHeaders: () => ({}), fetch: async () => Response.json(response.body),
+            });
+            expect(await importCharacter(new File([], 'import.byaf'))).toBe(`${ownerId}.png`);
+            expect(toastr.warning).toHaveBeenCalledWith(expect.stringMatching(/1.*conflict/i), 'Character import');
             const canonicalAfter = db.prepare(`
                 SELECT source_jsonl FROM chat_sessions
                 WHERE owner_type = 'character' AND owner_id = ? AND source_path = ?
@@ -685,6 +700,84 @@ describe('characters projection off', () => {
         expect(fs.readdirSync(target.characters)).toEqual([]);
         expect(fs.readdirSync(directories.worlds)).toEqual([]);
         expect(fs.readdirSync(target.worlds)).toEqual([]);
+    });
+
+    test('exchanges only the selected chat attachments with another account over HTTP', async () => {
+        const directories = makeDirectories();
+        const target = { ...makeDirectories(), handle: 'bob' };
+        const { db } = await seedCanonicalCharacter(directories);
+        const targetDb = openDb(target, 'bob');
+        const attachment = 'user/files/source-only.txt';
+        const unassociated = 'user/files/not-in-chat.txt';
+        const bytes = Buffer.from([0, 255, 123, 17]);
+        await ensureCanonicalSliceBackend('managed_media', directories, 'alice');
+        for (const [compatibilityPath, contents] of [[attachment, bytes], [unassociated, Buffer.from('not part of this chat')]]) {
+            expect(await writeCanonicalManagedMedia({
+                handle: 'alice', directories, compatibilityPath, contents, ownerType: 'attachment', role: 'attachment',
+            })).toMatchObject({ ok: true });
+        }
+        const locator = { ownerType: 'character', ownerId: 'alice', sourcePath: 'chats/alice/exchange.jsonl' };
+        const payload = [{ chat_metadata: { title: 'Exchange' } }, { name: 'User', mes: 'Message', extra: { file: { url: `/${attachment}` } } }];
+        upsertCanonicalChatSession(db, createCanonicalChatSessionRecord(db, { locator, payload }));
+
+        const app = express();
+        app.use(express.json());
+        app.use(multer({ dest: target.root }).single('avatar'));
+        for (const [handle, userDirectories] of [['alice', directories], ['bob', target]]) {
+            app.use(`/${handle}`, (request, _response, next) => {
+                request.user = { directories: userDirectories, profile: { handle } };
+                next();
+            }, chatRouter, userFileRouter);
+        }
+        const server = await new Promise(resolve => {
+            const instance = app.listen(0, '127.0.0.1', () => resolve(instance));
+        });
+        try {
+            const url = `http://127.0.0.1:${server.address().port}`;
+            const exportChat = format => fetch(`${url}/alice/export`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ file: 'exchange.jsonl', avatar_url: 'alice.png', format, exportfilename: `exchange.${format}` }),
+            });
+            expect(await (await exportChat('txt')).json()).toMatchObject({ result: 'User: Message\n\n' });
+            expect(await (await exportChat('jsonl')).json()).toMatchObject({ result: payload.map(row => JSON.stringify(row)).join('\n') });
+            const exported = await exportChat('zip');
+            expect(exported.status).toBe(200);
+            expect(exported.headers.get('content-type')).toMatch(/^application\/zip/);
+            const zip = await exported.blob();
+            expect(targetDb.prepare('SELECT COUNT(*) AS count FROM media_references').get().count).toBe(0);
+            const importChat = (archive = zip, operationId = 'zip-exchange') => {
+                const form = new FormData();
+                for (const [key, value] of Object.entries({ avatar_url: 'alice.png', file_type: 'zip', operationId, character_name: 'Alice', user_name: 'User' })) {
+                    form.set(key, value);
+                }
+                form.set('avatar', archive, 'exchange.zip');
+                return fetch(`${url}/bob/import`, { method: 'POST', body: form });
+            };
+            const incomplete = new Blob([zipSync({ 'chat.jsonl': Buffer.from('{}') })], { type: 'application/zip' });
+            const rejected = await importChat(incomplete, 'incomplete-exchange');
+            expect(rejected.status).toBe(400);
+            expect(await rejected.json()).toEqual({ error: 'invalid_chat_exchange' });
+            expect(targetDb.prepare('SELECT COUNT(*) AS count FROM chat_sessions').get().count).toBe(0);
+            expect(targetDb.prepare('SELECT COUNT(*) AS count FROM media_references').get().count).toBe(0);
+            const imported = await importChat();
+            expect(imported.status).toBe(200);
+            const result = await imported.json();
+            expect(result).toMatchObject({ res: true, fileNames: [expect.stringMatching(/ imported\.jsonl$/)] });
+            expect(await (await importChat()).json()).toEqual(result);
+            const [saved] = targetDb.prepare('SELECT source_jsonl FROM chat_sessions').all();
+            expect(targetDb.prepare('SELECT COUNT(*) AS count FROM chat_sessions').get().count).toBe(1);
+            const rows = saved.source_jsonl.split('\n').map(row => JSON.parse(row));
+            const mapped = rows[1].extra.file.url;
+            expect(mapped).not.toBe(attachment);
+            expect(rows).toEqual([payload[0], { ...payload[1], extra: { file: { url: mapped } } }]);
+            expect(targetDb.prepare('SELECT compatibility_path FROM media_references').all()).toEqual([{ compatibility_path: mapped }]);
+            expect(readManagedMediaContent(targetDb, target, mapped)).toMatchObject({ contents: bytes });
+            const downloaded = await fetch(`${url}/bob/${mapped}`);
+            expect(downloaded.status).toBe(200);
+            expect(Buffer.from(await downloaded.arrayBuffer())).toEqual(bytes);
+        } finally {
+            await new Promise(resolve => server.close(resolve));
+        }
     });
 
     test('/delete removes the canonical row and owned chat sessions with no PNG on disk', async () => {
