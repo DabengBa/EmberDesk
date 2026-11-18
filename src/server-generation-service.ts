@@ -307,7 +307,8 @@ export function createServerGenerationService<T>({ execute }: { execute: Execute
         const run: GenerationRun = { id, requestId, kind, status: 'running', temporary: true, user,
             chatId: '', version: '', error: null, createdAtMs: Date.now(), finishedAtMs: null };
         temporary.set(id, { database, run });
-        launch(db, run, { kind, original }, prompt, () => {},
+        const timeout = setTimeout(() => finishTemporary(id, 'cancelled'), 600_000).unref();
+        launch(db, run, { kind, original }, prompt, () => clearTimeout(timeout),
             assistant => finishTemporary(id, 'completed', null, assistant), error => finishTemporary(id, 'failed', error));
         return run;
     }

@@ -13,9 +13,6 @@ export function withStrictSettingsSaveFailureHandler(onFailure, save) {
 
 /** Runtime settings payload and guarded persistence over the existing settings owner. */
 export function createRuntimeSettingsPersistence(ports) {
-    // Construct each payload only after the previous local write has committed
-    // its revision. Genuine writes from other pages still receive a 409.
-    let pendingSave = Promise.resolve();
     function buildRuntimeSettingsPayload() {
         const persistedCurrentVersion = ports.persistedCurrentVersion();
         return {
@@ -99,13 +96,12 @@ export function createRuntimeSettingsPersistence(ports) {
     }
     async function saveSettings(loopCounter = 0, options) {
         const onFailure = options?.strict === true ? strictSaveFailureHandler : undefined;
-        const operation = pendingSave.then(() => saveSettingsCore(loopCounter, options)).catch(error => {
+        const operation = ports.conflict.runWrite(() => saveSettingsCore(loopCounter, options).catch(error => {
             onFailure?.();
             throw error;
-        });
+        }));
         // Do not hold the write queue while notifying subscribers: a subscriber
         // may itself await a settings save. Failed writes must not poison it.
-        pendingSave = operation.then(() => undefined, () => undefined);
         if (await operation) {
             try {
                 await ports.emitUpdated();

@@ -7,7 +7,7 @@ function fixture() {
     const calls = [];
     let revision = 2;
     let document;
-    const conflict = { hasConflict: () => false, assertWritable: jest.fn(), saveRuntime: async ({ post }) => post() };
+    const conflict = createSettingsWriteOwner();
     const ports = {
         conflict, isReady: () => true, schedule: value => calls.push(['schedule', value]),
         isResponseCustomized: () => false, restoreResponse: () => {}, version: () => '1', ensureVersion: async () => {},
@@ -72,7 +72,7 @@ test('overlapping runtime saves use the revision committed by the previous save'
 
 test('a real revision conflict blocks queued strict saves without retrying or posting them', async () => {
     const f = fixture();
-    f.ports.conflict = createSettingsWriteOwner();
+
     let release;
     const wait = new Promise(resolve => { release = resolve; });
     f.ports.post = jest.fn(async () => {
@@ -138,7 +138,7 @@ test('production settings exports forward payload and strict saves to the real o
     const scheduled = jest.fn();
     const env = {
         createRuntimeSettingsPersistence,
-        runtimeSettingsConflict: { hasConflict: () => false }, settingsReady: false, saveSettingsDebounced: scheduled,
+        runtimeSettingsConflict: createSettingsWriteOwner(), settingsReady: false, saveSettingsDebounced: scheduled,
         currentVersion: '1', settings: { currentVersion: 'old' }, settingsDocumentRevision: 2,
         resolvePersistedCurrentVersion: ({ currentVersion }) => currentVersion,
         accountStorage: { getState: () => ({ test: true }) }, active_character: 'alice', amount_gen: 80,

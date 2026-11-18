@@ -17,12 +17,12 @@ Make reply structure deterministic instead of model-discretionary. Parallel tool
 
 ## Ownership Direction
 
-The plan is saved with the preset in `oai_settings.reply_pipeline`. In OpenAI-compatible character chats the server owns the run. The existing browser generation path remains for contexts outside that route.
+The plan is saved with the preset in `oai_settings.reply_pipeline`. In OpenAI-compatible character chats and temporary Assistant chats, the server owns the run. The existing browser generation path remains for contexts outside that route.
 
 ## User-Visible Contract
 
 - In an OpenAI-compatible character chat, the server owns the run and saves the final reply. Default steps continue even when the chat is closed or the page disconnects. A matching call to a custom script waits for that script to run in an attached browser; reopening the same chat resumes a waiting step. Stopping the run discards unfinished output rather than saving it.
-- On the server path, completed steps appear in one temporary card that is restored when the chat reattaches. Only the final reply is saved, with the completed steps and any final-step option chips. Recoverable failures retry only the current round, using the configured fallback model after the primary retry. The Prompt Inspector previews each step and the closing round without running scripts.
+- On the server path, completed steps appear in one temporary card. In a character chat the card is restored on reattachment, and only the final reply is saved, with the completed steps and any final-step option chips. A temporary Assistant chat keeps its final reply in the current view only. Recoverable failures retry only the current round, using the configured fallback model after the primary retry. The Prompt Inspector previews each step and the closing round without running scripts.
 
 - `reply_pipeline` is preset-carried: `{ enabled, enforce_mode?: 'auto'|'forced', result_field?, final, steps: [{ tool, model?, prompt?, display?, max_tokens?, reasoning_effort?, id? }] }`. It is a `settingsToUpdate` field, so preset apply/save and the canonical settings document persistence all carry it; applying a preset without a `reply_pipeline` key clears the active pipeline.
 - Disabling the pipeline prevents subsequent generations from sending tool definitions, while retaining the bindings for later re-enabling. An already-running pipeline finishes before the new setting takes effect.

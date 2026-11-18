@@ -29,9 +29,10 @@ const test = base.extend({
                     if (!step || step.status) {
                         res.writeHead(step?.status ?? 500, { 'Content-Type': 'application/json' });
                         res.end(JSON.stringify({ error: { message: 'provider boom' } }));
-                    } else if (step.holdOpen) {
+                    } else if (step.holdOpen || step.stream) {
                         res.writeHead(200, { 'Content-Type': 'text/event-stream' });
                         res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: step.content } }] })}\n\n`);
+                        if (!step.holdOpen) res.end('data: [DONE]\n\n');
                     } else {
                         res.writeHead(200, { 'Content-Type': 'application/json' });
                         res.end(JSON.stringify({ choices: [{ message: { content: step.content } }] }));
@@ -707,10 +708,15 @@ test.describe('chat regenerate', () => {
     });
 
     test('uses server generation in the assistant scratch chat and preserves the reply on failure', async ({ page, characterModel }) => {
-        const requests = await characterModel([{ content: 'SCRATCH_REPLY' }, { status: 500 }], { temporary: true });
-        const legacyRequests = [];
+        const requests = await characterModel([
+            { content: 'SCRATCH_REPLY', stream: true },
+            { content: 'SCRATCH_PARTIAL', holdOpen: true },
+            { status: 500 },
+            { content: 'SCRATCH_REPLACEMENT', stream: true },
+        ], { temporary: true, streamOpenAi: true });
+        const unrelatedRequests = [];
         page.on('request', request => {
-            if (request.url().endsWith('/api/backends/chat-completions/generate')) legacyRequests.push(request);
+            if (/\/api\/(?:backends\/chat-completions\/generate|chats\/save)$/.test(request.url())) unrelatedRequests.push(request.url());
         });
         await page.locator('#send_textarea').fill('scratch question');
         const drawer = page.locator('[data-react-workspace-shell-chrome] nav button').filter({ hasText: '提示词' }).first();
@@ -727,14 +733,29 @@ test.describe('chat regenerate', () => {
         const snapshotBefore = await chatSnapshot(page);
         expect(snapshotBefore.at(-1).mes).toContain('SCRATCH_REPLY');
 
+        const stopped = await regenerateCharacter(page);
+        await expect(page.locator('#chat').getByText('SCRATCH_PARTIAL', { exact: true })).toBeVisible();
+        await page.locator('#mes_stop').click();
+        await expectRunStatus(page, stopped, 'cancelled');
+        await expect(page.locator('#chat').getByText('SCRATCH_PARTIAL', { exact: true })).toHaveCount(0);
+        expect(await chatSnapshot(page)).toEqual(snapshotBefore);
+
         await expectRunStatus(page, await regenerateCharacter(page), 'failed');
         await expect(page.locator('body')).not.toHaveAttribute('data-workspace-generation-running', '');
 
         const snapshotAfter = await chatSnapshot(page);
         expect(snapshotAfter).toHaveLength(snapshotBefore.length);
         expect(snapshotAfter.at(-1).mes).toContain('SCRATCH_REPLY');
-        expect(requests).toHaveLength(2);
-        expect(legacyRequests).toHaveLength(0);
+        await expectRunStatus(page, await regenerateCharacter(page), 'completed');
+        await expect(page.locator('#chat').getByText('SCRATCH_REPLACEMENT', { exact: true })).toBeVisible();
+        const replacement = await chatSnapshot(page);
+        expect(replacement.slice(0, -1)).toEqual(snapshotBefore.slice(0, -1));
+        expect(replacement.at(-1).mes).toBe('SCRATCH_REPLACEMENT');
+        expect(requests).toHaveLength(4);
+        expect(unrelatedRequests).toEqual([]);
+        await page.reload();
+        await expect(page.locator('#send_textarea')).toBeVisible();
+        await expect(page.locator('#chat').getByText('SCRATCH_REPLACEMENT', { exact: true })).toHaveCount(0);
     });
 
     test('reports unavailable while editing, offline, or without an active chat', async ({ page, characterModel }) => {

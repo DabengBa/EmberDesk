@@ -55,3 +55,37 @@ test('a reattached workspace retries the result without rerunning the browser st
     expect(executions).toBe(1);
     expect(submitted).toEqual([{ stepId: step.id, result: 'browser' }, { stepId: step.id, result: 'browser' }]);
 });
+
+test('leaving a temporary chat cancels its run even if creation is still in flight', async () => {
+    const requests = [];
+    let resolveCreate;
+    const creating = new Promise(resolve => { resolveCreate = resolve; });
+    const workspace = createWorkspaceGeneration({
+        async request(route) { requests.push(route); if (route === '/create') return creating; },
+        subscribe() { throw new Error('A closed view must not subscribe'); },
+        changed() {}, finished() {},
+    });
+    const operation = workspace.create({ temporary: true }, { text: 'hello' });
+    workspace.close();
+    resolveCreate({ id: 'temporary', temporary: true, status: 'running' });
+    await operation;
+    expect(requests).toEqual(['/create', '/temporary/cancel']);
+    expect(workspace.busy()).toBe(false);
+});
+
+test('a permanently disconnected temporary stream releases the workspace', async () => {
+    const run = { id: 'temporary', temporary: true, status: 'running' };
+    let deliver;
+    let detached = false;
+    const terminal = [];
+    const workspace = createWorkspaceGeneration({
+        async request() { return run; },
+        subscribe(_id, listener) { deliver = listener; return () => { detached = true; }; },
+        changed() {}, finished(result) { terminal.push(result); },
+    });
+    await workspace.create({ temporary: true }, { text: 'hello' });
+    deliver({ type: 'disconnected' });
+    expect(workspace.busy()).toBe(false);
+    expect(detached).toBe(true);
+    expect(terminal).toEqual([{ ...run, status: 'interrupted' }]);
+});

@@ -393,66 +393,69 @@ export function SettingsSurface({
             }
 
             const csrfToken = await ensureCsrfToken();
-            const baselineFormValues = buildSettingsFormDefaults(parsedPayload.settings);
-            const runtimeBaseline = runtime?.getSettingsSnapshot();
-            // The prompt drawer may have changed the active preset since this
-            // form loaded. Overlay only dirty form fields on the live authority,
-            // not the stale settings query's copy of those generation values.
-            const buildPayload = (base: typeof parsedPayload.settings, revision: typeof parsedPayload.settingsRevision) =>
-                buildSettingsSavePayload(runtime ? { ...base, oai_settings: runtime.getChatCompletionSettings() } : base, values, {
-                    settingsRevision: revision,
-                    baselineFormValues,
-                });
-            const payload = buildPayload(parsedPayload.settings, parsedPayload.settingsRevision);
-            const postSettings = (nextPayload: typeof payload) => {
-                if (runtime?.hasSettingsConflict?.()) {
-                    throw new MessageError(t('Download your unsaved runtime settings before reloading. Saving is paused until reload.'));
-                }
-                return fetch('/api/settings/save', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-CSRF-Token': csrfToken,
-                    },
-                    body: JSON.stringify(nextPayload),
-                });
-            };
-            const { response, payload: savedPayload } = await writeOwner.saveForm({
-                payload,
-                post: postSettings,
-                rebase: async () => {
-                    const refreshed = await refetchSettings();
-                    if (refreshed.data) {
-                        const refreshedPayload = parseSettingsPayload(refreshed.data);
-                        return writeOwner.rebaseForm({
-                            base: parsedPayload.settings,
-                            local: payload,
-                            remote: refreshedPayload.settings,
-                            values,
-                            baseline: baselineFormValues,
-                            revision: refreshedPayload.settingsRevision,
-                            provider: document => getValueAtPath(document, 'oai_settings') ?? {},
-                            rebaseProvider: rebaseChatCompletionSettings,
-                            formDefaults: buildSettingsFormDefaults,
-                            formConflict: hasSettingsFormConflict,
-                            buildPayload: buildSettingsSavePayload,
-                        });
+            const { savedPayload, revision } = await writeOwner.runWrite(async () => {
+                const baselineFormValues = buildSettingsFormDefaults(parsedPayload.settings);
+                const runtimeBaseline = runtime?.getSettingsSnapshot();
+                // The prompt drawer may have changed the active preset since this
+                // form loaded. Overlay only dirty form fields on the live authority,
+                // not the stale settings query's copy of those generation values.
+                const buildPayload = (base: typeof parsedPayload.settings, revision: typeof parsedPayload.settingsRevision) =>
+                    buildSettingsSavePayload(runtime ? { ...base, oai_settings: runtime.getChatCompletionSettings() } : base, values, {
+                        settingsRevision: revision,
+                        baselineFormValues,
+                    });
+                const payload = buildPayload(parsedPayload.settings, parsedPayload.settingsRevision);
+                const postSettings = (nextPayload: typeof payload) => {
+                    if (runtime?.hasSettingsConflict?.()) {
+                        throw new MessageError(t('Download your unsaved runtime settings before reloading. Saving is paused until reload.'));
                     }
-                    return null;
-                },
-            });
+                    return fetch('/api/settings/save', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRF-Token': csrfToken,
+                        },
+                        body: JSON.stringify(nextPayload),
+                    });
+                };
+                const { response, payload: savedPayload } = await writeOwner.saveForm({
+                    payload,
+                    post: postSettings,
+                    rebase: async () => {
+                        const refreshed = await refetchSettings();
+                        if (refreshed.data) {
+                            const refreshedPayload = parseSettingsPayload(refreshed.data);
+                            return writeOwner.rebaseForm({
+                                base: parsedPayload.settings,
+                                local: payload,
+                                remote: refreshedPayload.settings,
+                                values,
+                                baseline: baselineFormValues,
+                                revision: refreshedPayload.settingsRevision,
+                                provider: document => getValueAtPath(document, 'oai_settings') ?? {},
+                                rebaseProvider: rebaseChatCompletionSettings,
+                                formDefaults: buildSettingsFormDefaults,
+                                formConflict: hasSettingsFormConflict,
+                                buildPayload: buildSettingsSavePayload,
+                            });
+                        }
+                        return null;
+                    },
+                });
 
-            if (!response.ok) {
-                if (response.status === 409) {
-                    setHasRevisionConflict(true);
-                    throw new SettingsRevisionConflictError(t('Settings were updated in another session; the local draft is still kept. Reload the current settings, merge, and save again.'));
+                if (!response.ok) {
+                    if (response.status === 409) {
+                        setHasRevisionConflict(true);
+                        throw new SettingsRevisionConflictError(t('Settings were updated in another session; the local draft is still kept. Reload the current settings, merge, and save again.'));
+                    }
+                    throw new MessageError(t('Settings could not be saved.'));
                 }
-                throw new MessageError(t('Settings could not be saved.'));
-            }
 
-            const result = await response.clone().json().catch(() => null);
-            const revision = Number.isSafeInteger(result?.settings_revision) ? result.settings_revision : undefined;
-            await saveSettingsToRuntime(savedPayload, runtime, runtimeBaseline, revision);
+                const result = await response.clone().json().catch(() => null);
+                const revision = Number.isSafeInteger(result?.settings_revision) ? result.settings_revision : undefined;
+                await saveSettingsToRuntime(savedPayload, runtime, runtimeBaseline, revision);
+                return { savedPayload, revision };
+            });
             await refetchSettings();
             setHasRevisionConflict(false);
             setSaveStatus({ kind: 'success', message: t('Saved') });

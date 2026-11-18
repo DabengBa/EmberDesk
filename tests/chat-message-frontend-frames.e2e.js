@@ -13,6 +13,16 @@ const FRAME_DOCUMENT_ONE = [
     '<div id="ed-e2e-app" style="min-height: 50vh">FRAME CONTENT ONE</div>',
     '<style>#ed-e2e-app { background-color: rgb(18, 52, 86); }</style>',
     '<script>document.querySelector("#ed-e2e-app").dataset.marker = "42";</scr' + 'ipt>',
+    '<button id="copy">Copy card text</button><output id="copy-result"></output>',
+    `<script>document.querySelector('#copy').addEventListener('click', async () => {
+        const result = document.querySelector('#copy-result');
+        try {
+            await navigator.clipboard.writeText(document.querySelector('#ed-e2e-app').textContent);
+            result.textContent = 'Copied';
+        } catch (error) {
+            result.textContent = error.name + ': ' + error.message;
+        }
+    });</script>`,
     '</body>',
     '</html>',
 ].join('\n');
@@ -163,6 +173,19 @@ test.describe('chat message frontend frames', () => {
         await expect(app).toHaveText('FRAME CONTENT ONE');
         await expect(app).toHaveAttribute('data-marker', '42');
         await expect(app).toHaveCSS('background-color', 'rgb(18, 52, 86)');
+    });
+
+    test('copies text from an isolated message card', async ({ page, context }) => {
+        await selectCharacterByName(page, characterName);
+        await openFrontendChat(page);
+
+        const frame = page.locator('.mes[mesid="1"] iframe.ed-frontend-frame__iframe');
+        const card = frame.contentFrame();
+        await card.getByRole('button', { name: 'Copy card text' }).click();
+        await expect(card.locator('#copy-result')).toHaveText('Copied');
+
+        await context.grantPermissions(['clipboard-read'], { origin: new URL(page.url()).origin });
+        expect(await page.evaluate(() => navigator.clipboard.readText())).toBe('FRAME CONTENT ONE');
     });
 
     test('discloses the original fenced HTML as text', async ({ page }) => {
