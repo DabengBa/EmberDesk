@@ -57,7 +57,7 @@ router.post('/upload', async (request, response) => {
         const canonicalResult = await writeCanonicalManagedMedia({
             handle: getRequestHandle(request),
             directories: request.user.directories,
-            compatibilityPath: url.split(path.sep).join(path.posix.sep),
+            compatibilityPath: path.relative(request.user.directories.root, pathToUpload).split(path.sep).join(path.posix.sep),
             ownerType: 'attachment',
             ownerId: url,
             role: 'attachment',

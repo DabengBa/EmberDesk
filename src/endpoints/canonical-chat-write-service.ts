@@ -13,11 +13,10 @@ import {
     deleteCanonicalChatSession,
     deleteCanonicalChatSessionIfCurrent,
     listOpenCanonicalChatProjectionRepairs,
+    persistCanonicalChatSessionInTransaction,
     renameCanonicalChatSession,
     recordCanonicalChatProjectionRepair,
     resolveCanonicalChatProjectionRepair,
-    upsertCanonicalChatSession,
-    saveCanonicalChatSessionIfCurrent,
     syncCanonicalCharacterChatStats,
 } from './canonical-chat-store.ts';
 
@@ -112,7 +111,13 @@ function findFirstUnregisteredAttachmentPath(db: DatabaseSync, payload: unknown[
  * Commits one full chat session before attempting its JSONL compatibility projection.
  * A projection error is durable repair state, never a reason to restore file authority.
  */
-export function writeCanonicalChatPayload({
+export function writeCanonicalChatPayload(options: WriteOptions) {
+    const staged = withCanonicalTransaction(options.db, db => stageCanonicalChatPayloadWrite({ ...options, db }));
+    return staged.finish();
+}
+
+/** Stage the authority write in the caller's transaction; call finish only after commit. */
+export function stageCanonicalChatPayloadWrite({
     db,
     locator,
     payload,
@@ -131,10 +136,8 @@ export function writeCanonicalChatPayload({
     const unregisteredAttachmentPath = findFirstUnregisteredAttachmentPath(db, payload);
     if (unregisteredAttachmentPath) {
         return {
-            ok: false,
-            authorityCommitted: false,
-            reason: 'unregistered_attachment',
-            path: unregisteredAttachmentPath,
+            version: null,
+            finish: () => ({ ok: false, authorityCommitted: false, reason: 'unregistered_attachment', path: unregisteredAttachmentPath } as const),
         };
     }
 
@@ -152,23 +155,63 @@ export function writeCanonicalChatPayload({
         }),
         operation: operationIdentity,
     };
-    const persisted: StoreResultView = condition?.create
-        ? createCanonicalChatSession(db, record, options)
-        : condition?.version
-            ? saveCanonicalChatSessionIfCurrent(db, record, condition.version, options)
-            : upsertCanonicalChatSession(db, record, options);
+    const version = condition?.create ? undefined : condition?.version;
+    if (version && typeof version !== 'string') throw new TypeError('Canonical chat version must be a non-empty string.');
+    const persisted: StoreResultView = persistCanonicalChatSessionInTransaction(db, record, {
+        ...options,
+        condition: condition?.create ? { create: true } : typeof version === 'string' && version ? { version } : null,
+    });
     if (persisted.status === 'conflict' || persisted.status === 'operation_mismatch') {
-        return { ok: false, authorityCommitted: false, reason: persisted.status };
+        return { version: null, finish: () => ({ ok: false, authorityCommitted: false, reason: persisted.status } as const) };
     }
-    if (persisted.replayed) return { ok: true, authorityCommitted: true, version: persisted.version, replayed: true };
-    if (projection === 'off') {
-        // The chat file is an export surface now; post-commit side effects
-        // (chat backups) still run but never fail the committed write.
-        try {
-            onAuthorityCommitted?.(record.sourceJsonl);
-        } catch (error) {
-            console.warn('Canonical chat post-commit side effects skipped:', error);
+    return { version: persisted.version ?? null, finish };
+
+    function finish() {
+        if (persisted.replayed) return { ok: true, authorityCommitted: true, version: persisted.version, replayed: true };
+        if (projection === 'off') {
+            // The chat file is an export surface now; post-commit side effects
+            // (chat backups) still run but never fail the committed write.
+            try {
+                onAuthorityCommitted?.(record.sourceJsonl);
+            } catch (error) {
+                console.warn('Canonical chat post-commit side effects skipped:', error);
+            }
+            return {
+                ok: true,
+                authorityCommitted: true,
+                sessionId: persisted.id,
+                status: persisted.status,
+                version: persisted.version,
+            };
         }
+        try {
+            withCanonicalTransaction(db, (txn: DatabaseSync) => {
+                const session = txn.prepare('SELECT source_jsonl FROM chat_sessions WHERE owner_type = ? AND owner_id = ? AND source_path = ?')
+                    .get(locator.ownerType, locator.ownerId, locator.sourcePath);
+                if (!session) throw new Error('missing_canonical_chat_session');
+                // The selected SQLite column is the JSONL text written by the store.
+                projectJsonl(session.source_jsonl as string);
+                recordImportLedgerEntry(txn, {
+                    sliceKey: 'chats',
+                    sourcePath: locator.sourcePath,
+                    contentHash: crypto.createHash('sha256').update(session.source_jsonl as string).digest('hex'),
+                    origin: 'projection',
+                    nowMs,
+                });
+                resolveCanonicalChatProjectionRepair(txn, { repairKey, resolvedAtMs: nowMs });
+            });
+        } catch (error) {
+            onProjectionFailure?.({ repairKey, error, locator, operation });
+            return {
+                ok: false,
+                authorityCommitted: true,
+                reason: 'projection_failed',
+                repairKey,
+                sessionId: persisted.id,
+                version: persisted.version,
+            };
+        }
+
         return {
             ok: true,
             authorityCommitted: true,
@@ -177,41 +220,6 @@ export function writeCanonicalChatPayload({
             version: persisted.version,
         };
     }
-    try {
-        withCanonicalTransaction(db, (txn: DatabaseSync) => {
-            const session = txn.prepare('SELECT source_jsonl FROM chat_sessions WHERE owner_type = ? AND owner_id = ? AND source_path = ?')
-                .get(locator.ownerType, locator.ownerId, locator.sourcePath);
-            if (!session) throw new Error('missing_canonical_chat_session');
-            // The selected SQLite column is the JSONL text written by the store.
-            projectJsonl(session.source_jsonl as string);
-            recordImportLedgerEntry(txn, {
-                sliceKey: 'chats',
-                sourcePath: locator.sourcePath,
-                contentHash: crypto.createHash('sha256').update(session.source_jsonl as string).digest('hex'),
-                origin: 'projection',
-                nowMs,
-            });
-            resolveCanonicalChatProjectionRepair(txn, { repairKey, resolvedAtMs: nowMs });
-        });
-    } catch (error) {
-        onProjectionFailure?.({ repairKey, error, locator, operation });
-        return {
-            ok: false,
-            authorityCommitted: true,
-            reason: 'projection_failed',
-            repairKey,
-            sessionId: persisted.id,
-            version: persisted.version,
-        };
-    }
-
-    return {
-        ok: true,
-        authorityCommitted: true,
-        sessionId: persisted.id,
-        status: persisted.status,
-        version: persisted.version,
-    };
 }
 
 export function parseCanonicalChatJsonl(jsonl: unknown) {

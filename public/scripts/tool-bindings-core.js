@@ -12,6 +12,7 @@
 export const TOOL_NAME_PATTERN = /^[a-zA-Z0-9_-]{1,64}$/;
 
 const EMPTY_SCHEMA = Object.freeze({ type: 'object', properties: {} });
+export const DEFAULT_PIPELINE_ACTION = 'if (typeof args.content !== "string" || !args.content.trim()) return ""; return args.content;';
 
 /**
  * @typedef {object} ToolBinding
@@ -113,7 +114,7 @@ export function ensurePipelineToolBindings(store, names, { activate = false, reg
             name,
             description: 'Return the model-authored text for this reply pipeline step in content.',
             parameters: { type: 'object', properties: { content: { type: 'string' } }, required: ['content'] },
-            actionBody: 'if (typeof args.content !== "string" || !args.content.trim()) return ""; return args.content;',
+            actionBody: DEFAULT_PIPELINE_ACTION,
         }));
         changed = true;
     }

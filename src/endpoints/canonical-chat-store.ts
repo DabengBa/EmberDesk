@@ -17,6 +17,7 @@ import crypto from 'node:crypto';
 import path from 'node:path';
 
 import { withCanonicalTransaction } from '../canonical-sqlite.ts';
+import { ChatGenerationBusyError, assertNoActiveChatGenerations, isChatGenerationActive } from '../server-generation-lock.ts';
 
 function hashIdentity(...parts: unknown[]) {
     const hash = crypto.createHash('sha256');
@@ -128,16 +129,17 @@ export function createCanonicalChatSessionRecord(db: DatabaseSync, {
         const occurrence = occurrences.get(base) ?? 0;
         occurrences.set(base, occurrence + 1);
         const identityKey = hashIdentity(base, occurrence);
-        const attachments = listStringLeaves(message)
-            .filter(leaf => mediaByPath.has(leaf.value))
-            .map(leaf => ({
-                blobId: mediaByPath.get(leaf.value) as string,
+        const attachments = listStringLeaves(message).flatMap(leaf => {
+            const blobId = mediaByPath.get(leaf.value) ?? mediaByPath.get(leaf.value.replace(/^\//, ''));
+            return blobId ? [{
+                blobId,
                 role: 'attachment',
                 compatibility: {
                     path: leaf.value,
                     fieldPath: leaf.fieldPath,
                 },
-            }));
+            }] : [];
+        });
 
         return {
             id: `chat-message-${hashIdentity(sourceKey, identityKey)}`,
@@ -284,159 +286,166 @@ function recordCanonicalChatOperation(db: DatabaseSync, operation: Operation | n
 }
 
 function persistCanonicalChatSession(db: DatabaseSync, record: ChatRecord, { onPersist = null, condition = null, operation = null }: PersistOptions & { condition?: Condition | null } = {}): PersistResult {
-    return withCanonicalTransaction(db, (txnDb: DatabaseSync) => {
-        const replay = operation && getCanonicalChatOperation(txnDb, operation);
-        if (replay) return replay;
-        if (condition?.projection && hasCanonicalChatProjectionTombstone(txnDb, record)) {
-            return { status: 'suppressed' };
-        }
-        let existing = getExistingSession(txnDb, record);
-        if (condition?.create && !getCanonicalChatSession(txnDb, record)) {
-            // A moved session may still own the old path-derived identity.
-            if (getSessionBySourceKey(txnDb, record) || txnDb.prepare('SELECT 1 FROM chat_sessions WHERE id = ?').get(record.id)) {
-                const sourceKey = crypto.randomBytes(32).toString('hex');
-                record = {
-                    ...record,
-                    sourceKey,
-                    id: `chat-session-${sourceKey}`,
-                    messages: record.messages.map(message => ({
-                        ...message,
-                        id: `chat-message-${hashIdentity(sourceKey, message.identityKey)}`,
-                    })),
-                };
-            }
-            existing = null;
-        }
-        if (condition && !condition.projection) {
-            const atLocator = getCanonicalChatSession(txnDb, record);
-            if (condition.create
-                ? Boolean(existing || atLocator)
-                : !atLocator || existing?.id !== atLocator.id || atLocator.concurrency_token !== condition.version) {
-                return { status: 'conflict' };
-            }
-        }
-        const sourceUnchanged = existing?.source_jsonl === record.sourceJsonl;
-        const attachmentSnapshotMatches = existing
-            ? hasMatchingAttachmentSnapshot(txnDb, existing.id, record)
-            : false;
-        const id = existing?.id ?? record.id;
-        // A matching source JSONL implies an existing row: the record value is a string.
-        if (sourceUnchanged && (existing as ChatSessionRow).source_path === record.sourcePath && attachmentSnapshotMatches) {
-            const result: WriteResult = { id, status: 'unchanged' };
-            if (condition && !condition.projection) result.version = (existing as ChatSessionRow).concurrency_token;
-            onPersist?.(txnDb, result);
-            recordCanonicalChatOperation(txnDb, operation, result);
-            return result;
-        }
-        const existingMessageIds = existing ? getExistingMessageIds(txnDb, id) : new Map();
-        if (existing) {
-            txnDb.prepare(`
-                UPDATE chat_sessions
-                SET
-                    source_key = ?,
-                    owner_id = ?,
-                    source_path = ?,
-                    display_name = ?,
-                    header_payload_json = ?,
-                    source_jsonl = ?,
-                    source_mtime_ms = ?,
-                    source_size_bytes = ?,
-                    updated_at_ms = ?
-                WHERE id = ?
-            `).run(
-                record.sourceKey,
-                record.ownerId,
-                record.sourcePath,
-                record.displayName,
-                record.headerPayloadJson,
-                record.sourceJsonl,
-                record.sourceMtimeMs,
-                record.sourceSizeBytes,
-                record.updatedAtMs,
-                id,
-            );
-        } else {
-            txnDb.prepare(`
-                INSERT INTO chat_sessions (
-                    id,
-                    owner_type,
-                    owner_id,
-                    source_key,
-                    source_path,
-                    display_name,
-                    header_payload_json,
-                    source_jsonl,
-                    source_mtime_ms,
-                    source_size_bytes,
-                    created_at_ms,
-                    updated_at_ms
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            `).run(
-                id,
-                record.ownerType,
-                record.ownerId,
-                record.sourceKey,
-                record.sourcePath,
-                record.displayName,
-                record.headerPayloadJson,
-                record.sourceJsonl,
-                record.sourceMtimeMs,
-                record.sourceSizeBytes,
-                record.createdAtMs,
-                record.updatedAtMs,
-            );
-        }
+    return withCanonicalTransaction(db, txn => persistCanonicalChatSessionInTransaction(txn, record, { onPersist, condition, operation }));
+}
 
-        if (sourceUnchanged && attachmentSnapshotMatches) {
-            const result: WriteResult = { id, status: existing ? 'updated' : 'imported' };
-            // This transaction has just inserted or updated the row at this locator.
-            if (condition && !condition.projection) result.version = (getCanonicalChatSession(txnDb, record) as ChatSessionRow).concurrency_token;
-            onPersist?.(txnDb, result);
-            recordCanonicalChatOperation(txnDb, operation, result);
-            return result;
+/** Reuse session persistence when the caller owns the enclosing chat transaction. */
+export function persistCanonicalChatSessionInTransaction(txnDb: DatabaseSync, record: ChatRecord, { onPersist = null, condition = null, operation = null }: PersistOptions & { condition?: Condition | null } = {}): PersistResult {
+    const replay = operation && getCanonicalChatOperation(txnDb, operation);
+    if (replay) return replay;
+    if (condition?.projection && hasCanonicalChatProjectionTombstone(txnDb, record)) {
+        return { status: 'suppressed' };
+    }
+    let existing = getExistingSession(txnDb, record);
+    if (condition?.create && !getCanonicalChatSession(txnDb, record)) {
+        // A moved session may still own the old path-derived identity.
+        if (getSessionBySourceKey(txnDb, record) || txnDb.prepare('SELECT 1 FROM chat_sessions WHERE id = ?').get(record.id)) {
+            const sourceKey = crypto.randomBytes(32).toString('hex');
+            record = {
+                ...record,
+                sourceKey,
+                id: `chat-session-${sourceKey}`,
+                messages: record.messages.map(message => ({
+                    ...message,
+                    id: `chat-message-${hashIdentity(sourceKey, message.identityKey)}`,
+                })),
+            };
         }
-
-        txnDb.prepare('DELETE FROM chat_messages WHERE session_id = ?').run(id);
-        const insertMessage = txnDb.prepare(`
-            INSERT INTO chat_messages (
-                id,
-                session_id,
-                message_order,
-                identity_key,
-                payload_json,
-                created_at_ms
-            ) VALUES (?, ?, ?, ?, ?, ?)
-        `);
-        const insertAttachment = txnDb.prepare(`
-            INSERT INTO chat_attachment_refs (message_id, blob_id, role, compatibility_json)
-            VALUES (?, ?, ?, ?)
-        `);
-
-        for (const message of record.messages) {
-            const messageId = existingMessageIds.get(message.identityKey) ?? message.id;
-            insertMessage.run(
-                messageId,
-                id,
-                message.order,
-                message.identityKey,
-                message.payloadJson,
-                message.createdAtMs,
-            );
-            for (const attachment of message.attachments) {
-                insertAttachment.run(
-                    messageId,
-                    attachment.blobId,
-                    attachment.role,
-                    JSON.stringify(attachment.compatibility),
-                );
-            }
+        existing = null;
+    }
+    if (condition && !condition.projection) {
+        const atLocator = getCanonicalChatSession(txnDb, record);
+        if (condition.create
+            ? Boolean(existing || atLocator)
+            : !atLocator || existing?.id !== atLocator.id || atLocator.concurrency_token !== condition.version) {
+            return { status: 'conflict' };
         }
+    }
+    if (existing && isChatGenerationActive(txnDb, existing.id)) {
+        if (condition?.projection) return { status: 'suppressed' };
+        throw new ChatGenerationBusyError();
+    }
+    const sourceUnchanged = existing?.source_jsonl === record.sourceJsonl;
+    const attachmentSnapshotMatches = existing
+        ? hasMatchingAttachmentSnapshot(txnDb, existing.id, record)
+        : false;
+    const id = existing?.id ?? record.id;
+    // A matching source JSONL implies an existing row: the record value is a string.
+    if (sourceUnchanged && (existing as ChatSessionRow).source_path === record.sourcePath && attachmentSnapshotMatches) {
+        const result: WriteResult = { id, status: 'unchanged' };
+        if (condition && !condition.projection) result.version = (existing as ChatSessionRow).concurrency_token;
+        onPersist?.(txnDb, result);
+        recordCanonicalChatOperation(txnDb, operation, result);
+        return result;
+    }
+    const existingMessageIds = existing ? getExistingMessageIds(txnDb, id) : new Map();
+    if (existing) {
+        txnDb.prepare(`
+            UPDATE chat_sessions
+            SET
+                source_key = ?,
+                owner_id = ?,
+                source_path = ?,
+                display_name = ?,
+                header_payload_json = ?,
+                source_jsonl = ?,
+                source_mtime_ms = ?,
+                source_size_bytes = ?,
+                updated_at_ms = ?
+            WHERE id = ?
+        `).run(
+            record.sourceKey,
+            record.ownerId,
+            record.sourcePath,
+            record.displayName,
+            record.headerPayloadJson,
+            record.sourceJsonl,
+            record.sourceMtimeMs,
+            record.sourceSizeBytes,
+            record.updatedAtMs,
+            id,
+        );
+    } else {
+        txnDb.prepare(`
+            INSERT INTO chat_sessions (
+                id,
+                owner_type,
+                owner_id,
+                source_key,
+                source_path,
+                display_name,
+                header_payload_json,
+                source_jsonl,
+                source_mtime_ms,
+                source_size_bytes,
+                created_at_ms,
+                updated_at_ms
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(
+            id,
+            record.ownerType,
+            record.ownerId,
+            record.sourceKey,
+            record.sourcePath,
+            record.displayName,
+            record.headerPayloadJson,
+            record.sourceJsonl,
+            record.sourceMtimeMs,
+            record.sourceSizeBytes,
+            record.createdAtMs,
+            record.updatedAtMs,
+        );
+    }
+
+    if (sourceUnchanged && attachmentSnapshotMatches) {
         const result: WriteResult = { id, status: existing ? 'updated' : 'imported' };
+        // This transaction has just inserted or updated the row at this locator.
         if (condition && !condition.projection) result.version = (getCanonicalChatSession(txnDb, record) as ChatSessionRow).concurrency_token;
         onPersist?.(txnDb, result);
         recordCanonicalChatOperation(txnDb, operation, result);
         return result;
-    });
+    }
+
+    txnDb.prepare('DELETE FROM chat_messages WHERE session_id = ?').run(id);
+    const insertMessage = txnDb.prepare(`
+        INSERT INTO chat_messages (
+            id,
+            session_id,
+            message_order,
+            identity_key,
+            payload_json,
+            created_at_ms
+        ) VALUES (?, ?, ?, ?, ?, ?)
+    `);
+    const insertAttachment = txnDb.prepare(`
+        INSERT INTO chat_attachment_refs (message_id, blob_id, role, compatibility_json)
+        VALUES (?, ?, ?, ?)
+    `);
+
+    for (const message of record.messages) {
+        const messageId = existingMessageIds.get(message.identityKey) ?? message.id;
+        insertMessage.run(
+            messageId,
+            id,
+            message.order,
+            message.identityKey,
+            message.payloadJson,
+            message.createdAtMs,
+        );
+        for (const attachment of message.attachments) {
+            insertAttachment.run(
+                messageId,
+                attachment.blobId,
+                attachment.role,
+                JSON.stringify(attachment.compatibility),
+            );
+        }
+    }
+    const result: WriteResult = { id, status: existing ? 'updated' : 'imported' };
+    if (condition && !condition.projection) result.version = (getCanonicalChatSession(txnDb, record) as ChatSessionRow).concurrency_token;
+    onPersist?.(txnDb, result);
+    recordCanonicalChatOperation(txnDb, operation, result);
+    return result;
 }
 
 export function upsertCanonicalChatSession(db: DatabaseSync, record: ChatRecord, { onPersist = null }: PersistOptions = {}): PersistResult {
@@ -473,6 +482,7 @@ export function renameCanonicalChatSession(db: DatabaseSync, {
         const session = getCanonicalChatSession(txnDb, locator);
         if (version !== null && (!session || session.concurrency_token !== version)) return { status: 'conflict' };
         if (!session) return null;
+        if (isChatGenerationActive(txnDb, session.id)) throw new ChatGenerationBusyError();
         if (getCanonicalChatSession(txnDb, nextLocator)) {
             if (version !== null) return { status: 'conflict' };
             throw new Error('Canonical chat rename destination already exists.');
@@ -509,6 +519,7 @@ function removeCanonicalChatSession(db: DatabaseSync, locator: CanonicalChatLoca
             return { status: 'conflict' };
         }
         if (!session) return null;
+        if (isChatGenerationActive(txnDb, session.id)) throw new ChatGenerationBusyError();
         txnDb.prepare('DELETE FROM chat_sessions WHERE id = ?').run(session.id);
         const result: WriteResult = { id: session.id, sourceJsonl: session.source_jsonl };
         if (version !== null) result.status = 'deleted';
@@ -540,6 +551,7 @@ export function deleteCanonicalChatSessionIfCurrent(db: DatabaseSync, locator: C
  * @returns {number} Number of retargeted sessions
  */
 export function retargetCanonicalChatSessionsOwner(db: DatabaseSync, { oldOwnerId, newOwnerId, nowMs = Date.now() }: { oldOwnerId: string; newOwnerId: string; nowMs?: number }) {
+    assertNoActiveChatGenerations(db, oldOwnerId);
     const sessions = db.prepare(`
         SELECT id, source_path
         FROM chat_sessions
@@ -573,6 +585,7 @@ export function retargetCanonicalChatSessionsOwner(db: DatabaseSync, { oldOwnerI
  * @returns {number} Number of deleted sessions
  */
 export function deleteCanonicalChatSessionsForOwner(db: DatabaseSync, ownerId: string) {
+    assertNoActiveChatGenerations(db, ownerId);
     return Number(db.prepare(`
         DELETE FROM chat_sessions
         WHERE owner_type = 'character' AND owner_id = ?

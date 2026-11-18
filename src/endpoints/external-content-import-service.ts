@@ -1,4 +1,5 @@
 import fetch from 'node-fetch';
+import { fetchExternalImport } from '../external-import-fetch.ts';
 import type { RequestInit, Response } from 'node-fetch';
 
 export type ExternalContentSource = 'pygmalion_character' | 'janitor_character' | 'aicc_character' | 'chub_character' | 'chub_lorebook' | 'risu_character' | 'perchance_character' | 'generic_png';
@@ -249,7 +250,7 @@ export async function fetchExternalResource({
     source = 'external',
     stage = 'artifact',
     requireOk = false,
-    fetchImpl = fetch,
+    fetchImpl = fetchExternalImport,
 }: FetchRequest & { fetchImpl?: FetchImplementation } = {}): Promise<FetchResult> {
     try {
         const response = await fetchImpl(url as string, options);
@@ -299,7 +300,7 @@ export async function fetchExternalResource({
 export async function downloadExternalContentArtifact({
     descriptor,
     downloaders,
-    fetchImpl = fetch,
+    fetchImpl = fetchExternalImport,
 }: { descriptor?: ExternalContentDescriptor; downloaders?: Partial<Record<ExternalContentSource, Downloader>>; fetchImpl?: FetchImplementation } = {}): Promise<ArtifactResult> {
     const trace: DownloadTrace[] = [];
     // The descriptor's typed source is present after the guard; preserve the
@@ -376,7 +377,7 @@ export async function downloadExternalContentArtifact({
 export async function downloadExternalAsset({
     url,
     allowlist = [],
-    fetchImpl = fetch,
+    fetchImpl = fetchExternalImport,
 }: { url?: string; allowlist?: readonly string[]; fetchImpl?: FetchImplementation } = {}): Promise<AssetResult> {
     const validation = validateExternalAssetUrl({ url, allowlist });
 

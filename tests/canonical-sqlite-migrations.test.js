@@ -68,7 +68,7 @@ describe('canonical sqlite migrations', () => {
             expect.objectContaining({ version: 9, name: expect.any(String), sql: expect.any(String) }),
             expect.objectContaining({ version: 10, name: expect.any(String), sql: expect.any(String) }),
         ]));
-        expect(CANONICAL_SQLITE_MIGRATIONS.map(x => x.version)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19]);
+        expect(CANONICAL_SQLITE_MIGRATIONS.map(x => x.version)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]);
         expect(CANONICAL_SQLITE_MIGRATIONS[0].sql).toContain('CREATE TABLE IF NOT EXISTS characters');
         expect(CANONICAL_SQLITE_MIGRATIONS[0].sql).toContain('CREATE TABLE IF NOT EXISTS character_chat_stats');
         expect(CANONICAL_SQLITE_MIGRATIONS[0].sql).toContain('CREATE TABLE IF NOT EXISTS projection_repairs');
@@ -112,9 +112,9 @@ describe('canonical sqlite migrations', () => {
         expect(status).toEqual(expect.objectContaining({
             ok: true,
             blockedReason: null,
-            currentVersion: 19,
-            targetVersion: 19,
-            appliedVersions: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19],
+            currentVersion: 20,
+            targetVersion: 20,
+            appliedVersions: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20],
         }));
         expect(db.prepare('SELECT name FROM sqlite_master WHERE type = ? AND name = ?').get('table', 'schema_migrations')).toBeTruthy();
         expect(db.prepare('SELECT name FROM sqlite_master WHERE type = ? AND name = ?').get('table', 'characters')).toBeTruthy();
@@ -220,6 +220,11 @@ describe('canonical sqlite migrations', () => {
                 name: CANONICAL_SQLITE_MIGRATIONS[18].name,
                 applied_at_ms: 1735689600000,
             },
+            {
+                version: 20,
+                name: 'chat_generation_runs',
+                applied_at_ms: 1735689600000,
+            },
         ]);
         expect(db.prepare('SELECT name FROM sqlite_master WHERE type = ? AND name = ?').get('table', 'settings_documents')).toBeTruthy();
         expect(db.prepare('SELECT name FROM sqlite_master WHERE type = ? AND name = ?').get('table', 'settings_snapshots')).toBeTruthy();
@@ -234,6 +239,7 @@ describe('canonical sqlite migrations', () => {
         expect(db.prepare('SELECT name FROM sqlite_master WHERE type = ? AND name = ?').get('table', 'managed_media_repairs')).toBeTruthy();
         expect(db.prepare('SELECT name FROM sqlite_master WHERE type = ? AND name = ?').get('table', 'chat_sessions')).toBeTruthy();
         expect(db.prepare('SELECT name FROM sqlite_master WHERE type = ? AND name = ?').get('table', 'chat_messages')).toBeTruthy();
+        expect(db.prepare('SELECT name FROM sqlite_master WHERE type = ? AND name = ?').get('table', 'chat_generation_runs')).toBeTruthy();
         expect(db.prepare('SELECT name FROM sqlite_master WHERE type = ? AND name = ?').get('table', 'chat_message_swipes')).toBeFalsy();
         expect(db.prepare('SELECT name FROM sqlite_master WHERE type = ? AND name = ?').get('table', 'chat_attachment_refs')).toBeTruthy();
         expect(db.prepare('SELECT name FROM sqlite_master WHERE type = ? AND name = ?').get('table', 'chat_projection_repairs')).toBeTruthy();
@@ -272,15 +278,15 @@ describe('canonical sqlite migrations', () => {
 
         const second = runCanonicalMigrations(db, { nowMs: 1735689609999 });
 
-        expect(first.appliedVersions).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19]);
+        expect(first.appliedVersions).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]);
         expect(second).toEqual(expect.objectContaining({
             ok: true,
             blockedReason: null,
-            currentVersion: 19,
-            targetVersion: 19,
+            currentVersion: 20,
+            targetVersion: 20,
             appliedVersions: [],
         }));
-        expect(db.prepare('SELECT COUNT(*) AS count FROM schema_migrations').get().count).toBe(19);
+        expect(db.prepare('SELECT COUNT(*) AS count FROM schema_migrations').get().count).toBe(20);
         expect(db.prepare('SELECT COUNT(*) AS count FROM characters').get().count).toBe(1);
         expect(db.prepare('SELECT avatar_filename FROM characters WHERE id = ?').get('char-1').avatar_filename).toBe('alpha.png');
     });
@@ -345,9 +351,9 @@ describe('canonical sqlite migrations', () => {
 
         expect(status).toEqual(expect.objectContaining({
             ok: true,
-            currentVersion: 19,
-            targetVersion: 19,
-            appliedVersions: [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19],
+            currentVersion: 20,
+            targetVersion: 20,
+            appliedVersions: [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20],
         }));
         expect(db.prepare('SELECT name FROM sqlite_master WHERE type = ? AND name = ?').get('table', 'canonical_audit_state')).toBeTruthy();
         expect(db.prepare('SELECT name FROM sqlite_master WHERE type = ? AND name = ?').get('table', 'world_books')).toBeTruthy();
@@ -534,9 +540,9 @@ describe('canonical sqlite migrations', () => {
 
         expect(status).toEqual(expect.objectContaining({
             ok: false,
-            currentVersion: 19,
-            targetVersion: 19,
-            appliedVersions: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19],
+            currentVersion: 20,
+            targetVersion: 20,
+            appliedVersions: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20],
             blockedReason: expect.stringContaining('expected name'),
         }));
     });
@@ -569,16 +575,16 @@ describe('canonical sqlite migrations', () => {
         expect(recovered).toEqual(expect.objectContaining({
             ok: true,
             blockedReason: null,
-            currentVersion: 19,
-            targetVersion: 19,
-            appliedVersions: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19],
+            currentVersion: 20,
+            targetVersion: 20,
+            appliedVersions: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20],
         }));
         expect(getCanonicalMigrationStatus(db)).toEqual(expect.objectContaining({
             ok: true,
             blockedReason: null,
-            currentVersion: 19,
-            targetVersion: 19,
-            appliedVersions: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19],
+            currentVersion: 20,
+            targetVersion: 20,
+            appliedVersions: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20],
         }));
     });
 

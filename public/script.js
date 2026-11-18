@@ -63,6 +63,7 @@ import {
     promptMoveOrCopyWorldInfoEntry,
     updateWorldInfoScanDepth,
 } from './scripts/world-info.js';
+import { WorldInfoBuffer } from './scripts/world-info-service.js';
 import { openBoundWorldInfoBook } from './scripts/world-info-bound-book.js';
 import { createWorldInfoMountScheduler } from './scripts/world-info-workbench-service.js';
 import { scanImportedCharacter, showUnifiedImportConfirm, applyImportChoices, buildSkipAllChoices } from './scripts/import-confirm-dialog.js';
@@ -205,7 +206,7 @@ import { markdownUnderscoreExt } from './scripts/showdown-underscore.js';
 import { installPromptManagerDomain, registerPromptManagerMigration } from './scripts/PromptManager.js';
 import { normalizeReplyPipeline, pipelineTriggerTag } from './scripts/reply-pipeline-core.js';
 import { endPipelineRun } from './scripts/reply-pipeline.js';
-import { normalizeToolBindings } from './scripts/tool-bindings-core.js';
+import { createToolAction, normalizeToolBindings } from './scripts/tool-bindings-core.js';
 import { installToolBindingsServiceFactory, syncPipelineToolBindings } from './scripts/tool-bindings.js';
 import { getRegexedString, regex_placement } from './scripts/extensions/regex/engine.js';
 import { FILTER_STATES, FILTER_TYPES, FilterHelper, isFilterState } from './scripts/filters.js';
@@ -366,6 +367,8 @@ export {
 import { createGenerationBootstrapAdmission, createGenerationRuntimeBootstrap, getGenerationLifecycleService, installGenerationLifecycleService, registerGenerationShellContext } from './scripts/generation-shell-context.js';
 import { registerCharacterLifecycleShellContext } from './scripts/character-lifecycle-shell-context.js';
 import { registerCharacterTagsShellContext } from './scripts/character-tags-shell-context.js';
+import { createWorkspaceGeneration } from './scripts/server-generation-workspace.js';
+import { readStoredUiLocale } from './scripts/ui-locale.js';
 import {
     clearChat,
     closeCurrentChatForDelete,
@@ -373,6 +376,7 @@ import {
     displayChats,
     fetchChatHistory,
     getChat,
+    getCurrentChatGenerationTarget,
     getPastCharacterChats,
     shouldPreserveCharacterChatTarget,
     withCurrentChatDeleteVersion,
@@ -1867,7 +1871,7 @@ function getMainChatComposerBridgeState() {
     const composer = getComposerSnapshot();
     const valueLength = composer.value.length;
     const hasBackendConnection = online_status !== 'no_connection';
-    const isGenerating = document.body.dataset.generating === 'true';
+    const isGenerating = workspaceGeneration.busy() || document.body.dataset.generating === 'true';
     const isDisabled = textarea?.disabled === true || sendButton?.disabled === true || !hasBackendConnection;
 
     return getMainChatComposerState({
@@ -1882,6 +1886,10 @@ function getMainChatComposerBridgeState() {
 }
 
 function getMainChatGenerationControlBridgeState() {
+    if (workspaceGeneration.busy()) return getStreamingControlState({
+        isGenerating: true, hasStreamingProcessor: true,
+        activeMessageId: chat.length + Number(Boolean(workspaceGeneration.current()?.pendingText)),
+    });
     const reactOwner = isReactMainChatOwner();
     const recoveryUi = reactOwner ? getMainChatRecoveryUiState() : null;
     const recoveryStatus = reactOwner ? null : document.querySelector('#chat > .mes .generation_auto_recovery_status');
@@ -3150,7 +3158,13 @@ function getMainChatMessageListReactBridgeState() {
     const generationControl = getMainChatGenerationControlBridgeState();
     const composer = getMainChatComposerBridgeState();
     const streamingTransport = getMainChatStreamingTransportBridgeState();
-    const projectedChat = reactMainChatProjectionCleared ? [] : chat;
+    const runView = workspaceGeneration.current();
+    const projectedChat = reactMainChatProjectionCleared ? [] : runView ? [
+        ...chat,
+        ...(runView.pendingText ? [{ name: name1, mes: runView.pendingText, is_user: true, extra: {} }] : []),
+        ...(runView.invocations?.length ? [ToolManager.createToolInvocationMessage(runView.invocations)] : []),
+        { name: name2, mes: runView.text, is_user: false, extra: {} },
+    ] : chat;
     const visibleWindow = getMainChatReactVisibleWindow(projectedChat);
     const visibleMessageIds = visibleWindow.visibleMessageIds;
     syncMainChatRuntimeDiagnostics(chatContainer, {
@@ -5741,7 +5755,7 @@ export function sendTextareaMessage(composerSubmission = getComposerSnapshot()) 
 
 async function submitComposerMessage(composerSubmission) {
     if (greetingSelectionPending) return;
-    if (is_send_press) return;
+    if (is_send_press || workspaceGeneration.busy()) return;
     if (generationCaller.regenerateRequestInFlight || generationCaller.generationEntryPending) return;
 
     const textareaText = composerSubmission.value;
@@ -5761,6 +5775,11 @@ async function submitComposerMessage(composerSubmission) {
         composerSubmission = { ...composerSubmission, contextKey: currentComposer.contextKey, contextRevision: currentComposer.contextRevision };
     }
 
+    if (usesWorkspaceGeneration() && this_chid !== undefined && (textareaText.trim() || hasPendingFileAttachment())) {
+        const accepted = await startWorkspaceGeneration('send', textareaText);
+        if (accepted) setComposerValue('', { expected: currentComposer });
+        return accepted;
+    }
     return await Generate('normal', { composerSubmission });
 }
 
@@ -6200,8 +6219,8 @@ function showStopButton() {
 function hideStopButton() {
     // prevent NOOP, because hideStopButton() gets called multiple times
     const button = document.getElementById('mes_stop');
-    if (button && getComputedStyle(button).display !== 'none') {
-        button.style.display = 'none';
+    if (button?.style.display === 'flex') {
+        button.style.removeProperty('display');
         eventSource.emit(event_types.GENERATION_ENDED, chat.length);
     }
 }
@@ -6305,7 +6324,152 @@ function removeLastMessage() {
  * @returns {Promise<any>} Returns a promise that resolves when the text is done generating.
  */
 export async function Generate(type, options = {}, dryRun = false) {
+    if (type === 'continue' && !dryRun && usesWorkspaceGeneration() && this_chid !== undefined) {
+        return startWorkspaceGeneration('continue');
+    }
     return generationCaller.Generate(...arguments);
+}
+
+function usesWorkspaceGeneration() {
+    return main_api === 'openai' && oai_settings.chat_completion_source === chat_completion_sources.OPENAI;
+}
+
+async function workspaceGenerationRequest(route, body) {
+    const response = await fetch(`/api/chats/generation${route}`, {
+        method: body === undefined ? 'GET' : 'POST', headers: getRequestHeaders(), body: JSON.stringify(body),
+    });
+    if (response.status === 204) return;
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error ?? 'Generation request failed');
+    return result;
+}
+
+const workspaceGeneration = createWorkspaceGeneration({
+    request: workspaceGenerationRequest,
+    subscribe(id, listener) {
+        const source = new EventSource(`/api/chats/generation/${encodeURIComponent(id)}/events`);
+        for (const type of ['snapshot', 'delta', 'step', 'invocation', 'terminal']) source.addEventListener(type, event => listener(JSON.parse(event.data)));
+        return () => source.close();
+    },
+    changed() {
+        document.body.toggleAttribute('data-workspace-generation-running', Boolean(workspaceGeneration.current()));
+        scheduleMainChatMessageListPanelRefresh();
+    },
+    lockStep: (id, run) => navigator.locks?.request(`emberdesk-generation-step:${id}`, run) ?? run(),
+    async executeStep({ actionBody, args }) {
+        const result = await createToolAction(actionBody)(args);
+        return typeof result === 'string' ? result : JSON.stringify(result) ?? '';
+    },
+    finished(run, { discovered = false, reconciledChatVersion } = {}) {
+        const current = getCurrentChatGenerationTarget();
+        // A historical run version does not describe the current chat returned by /find.
+        const version = discovered ? run.chatVersion : run.version;
+        // Do not retry the same version if the reconciliation read also came back stale.
+        if (current && typeof version === 'string' && current.version !== version && version !== reconciledChatVersion) {
+            void getChat({ strictReload: true, reconciledChatVersion: version }).catch(error => toastr.error(error.message));
+        }
+        if ((!discovered && run.status === 'failed') || (run.status === 'interrupted' && reconciledChatVersion === undefined)) {
+            toastr.error(run.error ?? run.status);
+        }
+    },
+});
+
+eventSource.on(event_types.CHAT_CHANGED, () => workspaceGeneration.close());
+eventSource.on(event_types.CHAT_LOADED, event => {
+    if (usesWorkspaceGeneration()) {
+        void workspaceGeneration.select(getCurrentChatGenerationTarget(), event?.detail?.reconciledChatVersion).catch(error => toastr.error(error.message));
+    }
+});
+
+async function captureWorkspaceWorldRuntime(activations) {
+    const worldInfo = activations.map(([, { world, uid, content, position, depth, role, order, useProbability, probability }]) =>
+        ({ world, uid, content, position, depth, role, order, useProbability, probability }));
+    const promptMap = { ...extension_prompts };
+    const scanPrompts = [];
+    for (const key of Object.keys(promptMap)) {
+        if (!promptMap[key].scan) continue;
+        const text = await getExtensionPromptByName(key, promptMap);
+        if (text) scanPrompts.push(text);
+    }
+    return { worldInfo, scanPrompts };
+}
+
+function ownsWorkspaceComposer(snapshot) {
+    const current = getComposerSnapshot();
+    return current.contextKey === snapshot.contextKey && current.contextRevision === snapshot.contextRevision;
+}
+
+function flushWorkspaceGenerationSettings() {
+    cancelDebounce(saveSettingsDebounced);
+    return saveSettings(0, { strict: true });
+}
+
+async function startWorkspaceGeneration(action, text) {
+    if (workspaceGeneration.busy()) return false;
+    const target = getCurrentChatGenerationTarget();
+    if (!target) {
+        toastr.warning('Load or finish saving this chat before generating.');
+        return false;
+    }
+    const activations = [...WorldInfoBuffer.externalActivations.entries()];
+    const composer = getComposerSnapshot();
+    const isCurrent = () => ownsWorkspaceComposer(composer);
+    try {
+        let attachments;
+        let clearFiles;
+        if (action === 'send' && hasPendingFileAttachment()) {
+            const input = document.getElementById('file_form_input');
+            const selected = Array.from(input.files);
+            const message = { extra: {} };
+            await populateFileAttachment(message, 'file_form_input', { isCurrent, reset: false });
+            if (!isCurrent()) return false;
+            attachments = message.extra;
+            if ((attachments.files?.length ?? 0) + (attachments.media?.length ?? 0) !== selected.length) return false;
+            clearFiles = () => {
+                if (isCurrent() && selected.length === input.files.length && selected.every((file, index) => file === input.files[index])) {
+                    document.getElementById('file_form')?.reset();
+                }
+            };
+        }
+        const worldRuntime = await captureWorkspaceWorldRuntime(activations);
+        if (!isCurrent()) return false;
+        await flushWorkspaceGenerationSettings();
+        if (!isCurrent() || workspaceGeneration.busy()) return false;
+        await workspaceGeneration.create(target, { action, text, attachments, ...worldRuntime, requestId: crypto.randomUUID(), locale: readStoredUiLocale() });
+        clearFiles?.();
+        for (const [key, entry] of activations) {
+            if (WorldInfoBuffer.externalActivations.get(key) === entry) WorldInfoBuffer.externalActivations.delete(key);
+        }
+        return true;
+    } catch (error) {
+        toastr.error(error.message);
+        return false;
+    }
+}
+
+async function previewWorkspaceGeneration(round = 0) {
+    const target = getCurrentChatGenerationTarget();
+    if (!target) return { kind: 'prompt-preview-empty', reason: 'No saved chat selected', warnings: [] };
+    const text = getComposerValue();
+    const composer = getComposerSnapshot();
+    const worldRuntime = await captureWorkspaceWorldRuntime([...WorldInfoBuffer.externalActivations.entries()]);
+    if (!ownsWorkspaceComposer(composer)) return { kind: 'prompt-preview-empty', reason: 'Selected chat changed', warnings: [] };
+    await flushWorkspaceGenerationSettings();
+    if (!ownsWorkspaceComposer(composer)) return { kind: 'prompt-preview-empty', reason: 'Selected chat changed', warnings: [] };
+    const { connection, messages, budget, tools, toolChoice, maxTokens, reasoningEffort, previewPipeline } = await workspaceGenerationRequest('/preview', {
+        ...target, action: 'send', text: text || undefined, locale: readStoredUiLocale(), round,
+        ...worldRuntime,
+    });
+    return {
+        kind: 'prompt-preview', type: 'normal', model: connection.model, stream: true,
+        request: { model: connection.model, messages, max_tokens: maxTokens ?? budget.responseTokens, stream: true,
+            ...(tools?.length ? { tools, tool_choice: toolChoice } : {}), ...(reasoningEffort ? { reasoning_effort: reasoningEffort } : {}) },
+        entries: [], dropped: [], summarized: [], pipeline: previewPipeline ?? null, warnings: [],
+        pendingMessage: text ? { name: name1, mes: text } : null, pendingEntryIdentifier: null,
+        messagesInContext: messages.filter(message => ['user', 'assistant'].includes(message.role)).length,
+        budget: { context: budget.contextTokens, response: budget.responseTokens, used: budget.promptTokens,
+            remaining: budget.contextTokens - budget.responseTokens - budget.promptTokens, totalTokens: budget.promptTokens + budget.responseTokens },
+    };
 }
 
 const generationBootstrapAdmission = createGenerationBootstrapAdmission();
@@ -6413,7 +6577,7 @@ let greetingSelectionPending = false;
  * @returns {boolean}
  */
 export function canRegenerateLastReply() {
-    return generationCaller.canRegenerateLastReply(...arguments);
+    return !workspaceGeneration.busy() && generationCaller.canRegenerateLastReply(...arguments);
 }
 
 /**
@@ -6424,6 +6588,7 @@ export function canRegenerateLastReply() {
  * @returns {Promise<boolean>}
  */
 export async function regenerateLastReply() {
+    if (usesWorkspaceGeneration() && this_chid !== undefined) return canRegenerateLastReply() && startWorkspaceGeneration('regenerate');
     return generationCaller.regenerateLastReply(...arguments);
 }
 
@@ -6440,6 +6605,7 @@ export function setOptionsMenuRegenerateAvailability(canRegenerate) {
  * Stops the generation and any streaming if it is currently running.
  */
 export function stopGeneration() {
+    if (workspaceGeneration.current()) return workspaceGeneration.cancel().catch(error => toastr.error(error.message));
     return generationCaller.stopGeneration(...arguments);
 }
 
@@ -9123,7 +9289,8 @@ function getPromptInspectorBridge() {
     }
 
     globalThis.__emberDeskPromptInspectorBridge = {
-        preview: (round = 0) => previewNextGenerationRequest({ round }),
+        preview: (round = 0) => usesWorkspaceGeneration() && this_chid !== undefined
+            ? previewWorkspaceGeneration(round) : previewNextGenerationRequest({ round }),
         close: () => closePromptInspectorOverlay(),
     };
     return globalThis.__emberDeskPromptInspectorBridge;

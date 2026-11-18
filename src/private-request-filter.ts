@@ -16,6 +16,7 @@ type PrivateRequestAgentOptions = {
     logAllowed: boolean;
     allowUnresolvedHosts: boolean;
     enableKeepAlive: boolean;
+    rejectAddress?: (address: string) => boolean;
 };
 
 const LOG_HEADER = '[Private Request Filter]';
@@ -80,6 +81,8 @@ export class PrivateRequestAgent extends Agent {
      */
     allowUnresolvedHosts = false;
 
+    rejectAddress?: (address: string) => boolean;
+
     /**
      * Create a new PrivateRequestAgent instance.
      * @param {object} options
@@ -96,6 +99,7 @@ export class PrivateRequestAgent extends Agent {
         const whitelistArray = Array.isArray(options.privateAddressWhitelist) ? options.privateAddressWhitelist : [];
         this.privateAddressWhitelist = Object.freeze(filterValidIpPatterns(whitelistArray, logEntryWarning).map(pattern => ipMatch.getMatch(pattern)));
         this.allowUnresolvedHosts = options.allowUnresolvedHosts;
+        this.rejectAddress = options.rejectAddress;
         this.logBlocked = options.logBlocked;
         this.logAllowed = options.logAllowed;
     }
@@ -150,6 +154,9 @@ export class PrivateRequestAgent extends Agent {
          * @returns {net.Socket|tls.TLSSocket} A socket connected to the target IP address if it's allowed, otherwise an error is raised.
          */
         const validateIpAddress = (ip: string): net.Socket => {
+            if (this.rejectAddress?.(ip)) {
+                return raiseError(`Blocked request to private IP address: ${ip}`, this.logBlocked);
+            }
             // Not a private IP address, allow the request
             if (!isPrivateIpAddress(ip)) {
                 return connect(ip);

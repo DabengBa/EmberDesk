@@ -510,6 +510,16 @@ export function saveChatDebounced(shouldSave = () => true) {
 const chatSaveKey = (avatar, name) => JSON.stringify([avatar, name]);
 const currentChatSaveKey = () => chatSaveKey(state.characters[state.this_chid]?.avatar, state.characters[state.this_chid]?.chat);
 
+export function getCurrentChatGenerationTarget() {
+    const character = state.characters[state.this_chid];
+    if (!character?.avatar || !character.chat || state.selected_group) return null;
+    const key = currentChatSaveKey();
+    const record = chatVersions.get(key);
+    if (!record || record.session !== chatSessionVersion || record.chatReference !== state.chat
+        || record.pending || record.conflicted || chatWriteQueues.has(key)) return null;
+    return { avatar_url: character.avatar, file_name: character.chat, version: record.version ?? undefined };
+}
+
 export async function saveChat({ chatName, withMetadata, mesId, force = false, chatData = undefined } = {}) {
     if (chatClearInProgress) return false;
     if (arguments.length > 0 && typeof arguments[0] !== 'object') {
@@ -791,7 +801,7 @@ export async function selectChatGreeting({ index, characterId, chatId }) {
 }
 
 
-export async function getChat({ strictReload = false } = {}) {
+export async function getChat({ strictReload = false, reconciledChatVersion = undefined } = {}) {
     const character = state.characters[state.this_chid];
     const load = { avatar: character?.avatar, chat: character?.chat, session: chatSessionVersion, chatReference: state.chat };
     activeCharacterChatLoad = load;
@@ -862,7 +872,7 @@ export async function getChat({ strictReload = false } = {}) {
         queueMainChatMessageListScrollRestore(state.characters[state.this_chid].chat);
         await getChatResult({ switchMenu: !strictReload });
         if (!isCurrent()) return false;
-        eventSource.emit(event_types.CHAT_LOADED, { detail: { id: state.this_chid, character: state.characters[state.this_chid] } });
+        eventSource.emit(event_types.CHAT_LOADED, { detail: { id: state.this_chid, character: state.characters[state.this_chid], reconciledChatVersion } });
 
         // Focus on the textarea if not already focused on a visible interactive
         // element — a button/control the user just activated (e.g. an opened

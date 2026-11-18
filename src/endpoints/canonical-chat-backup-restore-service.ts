@@ -1,3 +1,4 @@
+import { assertNoActiveChatGenerations, ChatGenerationBusyError } from '../server-generation-lock.ts';
 import fs from 'node:fs';
 import crypto, { randomUUID } from 'node:crypto';
 import path from 'node:path';
@@ -650,6 +651,7 @@ export async function restoreCanonicalChatBackup({
         });
         commitState = 'unknown';
         withCanonicalTransaction(db, (txnDb: DatabaseSync) => {
+            assertNoActiveChatGenerations(txnDb);
             if (getCanonicalChatRestoreVersion(txnDb) !== expectedVersion) {
                 const error: Error & { code?: string } = new Error('chat_conflict');
                 error.code = 'CHAT_RESTORE_CONFLICT';
@@ -775,8 +777,9 @@ export async function restoreCanonicalChatBackup({
         });
         return { ok: true, status: 'restored', reasonCode: null, restoreId, commitState };
     } catch (error) {
-        if ((error as ErrorView)?.code === 'CHAT_RESTORE_CONFLICT' || (error as ErrorView)?.code === 'CHAT_RESTORE_OPERATION_CONFLICT') {
-            const reasonCode = (error as ErrorView)?.code === 'CHAT_RESTORE_OPERATION_CONFLICT' ? 'chat_operation_conflict' : 'chat_conflict';
+        if (error instanceof ChatGenerationBusyError || (error as ErrorView)?.code === 'CHAT_RESTORE_CONFLICT' || (error as ErrorView)?.code === 'CHAT_RESTORE_OPERATION_CONFLICT') {
+            const reasonCode = error instanceof ChatGenerationBusyError ? 'chat_generation_busy'
+                : (error as ErrorView)?.code === 'CHAT_RESTORE_OPERATION_CONFLICT' ? 'chat_operation_conflict' : 'chat_conflict';
             writeRestoreStatus(db, { restoreId, manifestVersion, backupCreatedAtMs: backup?.createdAtMs ?? null,
                 status: 'blocked', commitState: 'not_committed', reasonCode, nowMs, finishedAtMs: nowMs });
             return { ok: false, status: 'blocked', reasonCode, restoreId, commitState: 'not_committed' };
