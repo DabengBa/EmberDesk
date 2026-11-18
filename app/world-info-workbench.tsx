@@ -415,6 +415,7 @@ function EntryEditor({
     const [draft, setDraft] = useState(incomingEntry);
     const [draftEntry, setDraftEntry] = useState(incomingEntry);
     const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+    const [saveError, setSaveError] = useState('');
     const [keywordPending, setKeywordPending] = useState(false);
     const saveSeqRef = useRef(0);
     const titleInputRef = useRef<HTMLInputElement>(null);
@@ -479,6 +480,7 @@ function EntryEditor({
         const fields = { ...pendingFieldsRef.current };
         latestSucceededRef.current = false;
         inFlightRef.current++;
+        setSaveError('');
         setSaveState('saving');
         Promise.resolve().then(() => commands.updateEntryFields(entry.uid, fields, worldName))
             .then(result => {
@@ -487,8 +489,11 @@ function EntryEditor({
                     if (result === false) setSaveState('error');
                 }
             })
-            .catch(() => {
-                if (seq === saveSeqRef.current) setSaveState('error');
+            .catch(error => {
+                if (seq === saveSeqRef.current) {
+                    setSaveError(error instanceof Error && error.message.includes('HTTP 409') ? error.message : '');
+                    setSaveState('error');
+                }
             })
             .finally(() => {
                 inFlightRef.current--;
@@ -700,11 +705,11 @@ function EntryEditor({
                 UID {entry.uid} · {translate('${0} characters').replace('${0}', String((draft.content ?? '').length))}
                 {keywordPending || saveState !== 'idle' ? (
                     <span {...stylex.props(saveState === 'error' ? s.saveStateError : null)}>
-                        {' · '}{saveState === 'error' ? translate('Save failed') : keywordPending ? translate('Unsaved change') : saveState === 'saving' ? translate('Saving…') : translate('Saved')}
+                        {' · '}{saveState === 'error' ? saveError || translate('Save failed') : keywordPending ? translate('Unsaved change') : saveState === 'saving' ? translate('Saving…') : translate('Saved')}
                     </span>
                 ) : null}
             </span>
-            {saveState === 'error' ? (
+            {saveState === 'error' && !saveError ? (
                 <button
                     type="button"
                     className={buttonClass(s.button, s.buttonGhost)}
@@ -967,7 +972,7 @@ export function WorldInfoWorkbenchPanel({
                 data-world-info-react-mobile-view={mobileView}
                 data-doc-id="feature.world_info_panel"
             >
-                {worldInfoCommandMutation.isError ? <div role="alert" {...stylex.props(s.saveStateError)}>{translate('World Info action failed. Please try again.')}</div> : null}
+                {worldInfoCommandMutation.isError ? <div role="alert" {...stylex.props(s.saveStateError)}>{worldInfoCommandMutation.error instanceof Error && worldInfoCommandMutation.error.message.includes('HTTP 409') ? worldInfoCommandMutation.error.message : translate('World Info action failed. Please try again.')}</div> : null}
                 <div {...stylex.props(s.global)} data-world-info-react-global="summary">
                     <span {...stylex.props(s.globalIcon)} aria-hidden="true">
                         <i className="fa-solid fa-globe" />

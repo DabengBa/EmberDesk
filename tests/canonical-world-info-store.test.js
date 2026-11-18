@@ -7,7 +7,7 @@ import { afterEach, describe, expect, jest, test } from '@jest/globals';
 
 import { createCanonicalSqliteManager, withCanonicalTransaction } from '../src/canonical-sqlite.ts';
 import * as worldStore from '../src/endpoints/world-info-store.ts';
-import { runCanonicalMigrations } from '../src/canonical-sqlite-migrations.ts';
+import { CANONICAL_SQLITE_MIGRATIONS, runCanonicalMigrations } from '../src/canonical-sqlite-migrations.ts';
 import {
     getCanonicalWorldInfoBook,
     listCanonicalWorldInfoBooks,
@@ -72,6 +72,19 @@ afterEach(() => {
 });
 
 describe('canonical world info store', () => {
+    test('upgrading an existing world book adds its initial revision without changing its payload', () => {
+        const db = new DatabaseSync(':memory:');
+        try {
+            runCanonicalMigrations(db, { migrations: CANONICAL_SQLITE_MIGRATIONS.slice(0, -1) });
+            db.prepare('INSERT INTO world_books (id, name, payload_json, created_at_ms, updated_at_ms) VALUES (?, ?, ?, ?, ?)')
+                .run('existing', 'Existing', JSON.stringify({ entries: { 1: { comment: 'kept' } } }), 1, 1);
+            expect(runCanonicalMigrations(db).ok).toBe(true);
+            expect(worldStore.getCanonicalWorldInfoRevision(db, 'Existing')).toBe(1);
+            expect(getCanonicalWorldInfoBook(db, 'Existing').entries['1'].comment).toBe('kept');
+        } finally {
+            db.close();
+        }
+    });
     test('audit persistence failure rolls back and releases its writer transaction', async () => {
         const directories = createDirectories(makeRoot());
         const db = createManager().open({ handle: 'alice', directories, featureFlags: { enabled: true } });

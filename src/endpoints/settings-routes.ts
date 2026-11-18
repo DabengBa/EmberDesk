@@ -457,6 +457,7 @@ router.post('/get', async (request, response) => {
         world_names,
         openai_settings,
         openai_setting_names,
+        openai_setting_revisions: Object.fromEntries(presetRows.map(row => [row.name, row.revision])),
         enable_accounts: ENABLE_ACCOUNTS,
         request_compression: {
             enabled: ENABLE_REQUEST_COMPRESSION,

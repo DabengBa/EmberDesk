@@ -101,6 +101,8 @@ test('authoring reads legacy fallback fields without jQuery before issuing the w
     state.create_save = {};
     shell.getCurrentCharacterAuthoringMode = () => 'edit';
     shell.getCurrentCharacterAuthoringSource = () => ({ avatar: 'alice.png' });
+
+
     const sentinel = new Error('stop after building');
     buildCharacterAuthoringFormData.mockImplementation(() => { throw sentinel; });
     try {
@@ -111,6 +113,27 @@ test('authoring reads legacy fallback fields without jQuery before issuing the w
     } finally {
         buildCharacterAuthoringFormData.mockReset(); globalThis.document = oldDocument; globalThis.$ = oldDollar;
     }
+});
+
+test('conditional edit advances its version and reports a committed projection failure', async () => {
+    const { buildCharacterAuthoringFormData } = await import('../public/scripts/character-authoring.js');
+    state.create_save = {};
+    shell.getCurrentCharacterAuthoringMode = () => 'edit';
+    shell.getCurrentCharacterAuthoringSource = () => ({ avatar: 'alice.png' });
+    shell.applyCharacterAuthoringSaveModel = jest.fn();
+    buildCharacterAuthoringFormData.mockReturnValue(new Map([['avatar_url', 'alice.png']]));
+    globalThis.fetch = jest.fn(async () => ({ ok: false, status: 500, json: async () => ({ error: 'projection_failed', authority_committed: true, canonical_card_version: 'new-version' }) }));
+    try {
+        const result = await lifecycle.saveCharacterAuthoringFromPayload({ fields: { name: 'Alice' }, expectedCardJson: 'old-version', changedFields: ['description'] });
+        expect(result).toEqual(expect.objectContaining({ ok: true, canonicalCardVersion: 'new-version', projectionFailed: true }));
+        expect(toastr.warning).toHaveBeenCalled();
+    } finally { buildCharacterAuthoringFormData.mockReset(); }
+});
+
+test('character conflict guidance matches in English and Chinese', () => {
+    const locales = JSON.parse(readFileSync(new URL('../public/locales/zh-cn.json', import.meta.url), 'utf8'));
+    const key = 'This character changed elsewhere. Your draft has been kept; copy your changes before reloading.';
+    expect(locales[key]).toMatch(/重新加载前复制/);
 });
 
 test('legacy creation validates the native form without jQuery before generating', async () => {
@@ -147,7 +170,7 @@ test('successful legacy creation clears all field mirrors without jQuery or chan
     state.is_advanced_char_open = true;
     const transition = jest.fn((_element, options) => options.complete());
     const handlerSource = readFileSync(new URL('../public/scripts/dom-handlers.js', import.meta.url), 'utf8');
-    const closeBody = handlerSource.match(/\$\('#character_cross'\)\.on\('click', function \(\) \{([\s\S]*?)\n    \}\);/);
+    const closeBody = handlerSource.match(/document\.getElementById\('character_cross'\)\?\.addEventListener\('click', function \(\) \{([\s\S]*?)\n    \}\);/);
     expect(closeBody).not.toBeNull();
     cross.addEventListener('click', new Function('state', 'document', 'transitionOpacity', `return function() {${closeBody[1]}\n};`)(state, { getElementById: id => fields[id] ?? null }, transition));
     const avatarInput = fakeAvatarInput();
@@ -215,6 +238,65 @@ test('a current character edit restores the save control without jQuery', async 
     expect(avatarChange).toHaveBeenCalledTimes(1);
 });
 
+test('authoring does not save a shallow character without a version', async () => {
+    state.create_save = {};
+    state.characters[0].shallow = true;
+    Object.assign(shell, {
+        getCurrentCharacterAuthoringMode: () => 'edit',
+        getCurrentCharacterAuthoringSource: () => state.characters[0],
+        applyCharacterAuthoringSaveModel: jest.fn(),
+    });
+    globalThis.fetch = jest.fn();
+    await expect(lifecycle.saveCharacterAuthoringFromPayload({ fields: { name: 'Alice' } })).rejects.toThrow('Character not loaded');
+    expect(fetch).not.toHaveBeenCalled();
+});
+
+test('authoring returns the version from the committed write', async () => {
+    const { buildCharacterAuthoringFormData, getCharacterAuthoringWriteUrl } = await import('../public/scripts/character-authoring.js');
+    state.create_save = {};
+    Object.assign(shell, {
+        getCurrentCharacterAuthoringMode: () => 'edit',
+        getCurrentCharacterAuthoringSource: () => state.characters[0],
+        applyCharacterAuthoringSaveModel: jest.fn(),
+    });
+    buildCharacterAuthoringFormData.mockReturnValue(new Map([['avatar_url', 'alice.png']]));
+    getCharacterAuthoringWriteUrl.mockReturnValue('/api/characters/edit');
+    globalThis.fetch = jest.fn(async () => ({ ok: true, json: async () => ({ canonical_card_version: 'committed version' }) }));
+    try {
+        const result = await lifecycle.saveCharacterAuthoringFromPayload({ fields: { name: 'Alice' }, expectedCardJson: 'old version', changedFields: [] });
+        expect(result.canonicalCardVersion).toBe('committed version');
+    } finally {
+        buildCharacterAuthoringFormData.mockReset();
+        getCharacterAuthoringWriteUrl.mockReset();
+    }
+});
+
+test('authoring forwards its snapshot and surfaces a conflict without refreshing the draft source', async () => {
+    const { buildCharacterAuthoringFormData, getCharacterAuthoringWriteUrl } = await import('../public/scripts/character-authoring.js');
+    state.create_save = {};
+    Object.assign(shell, {
+        getCurrentCharacterAuthoringMode: () => 'edit',
+        getCurrentCharacterAuthoringSource: () => state.characters[0],
+        applyCharacterAuthoringSaveModel: jest.fn(),
+    });
+
+    const form = new Map([['avatar_url', 'alice.png']]);
+    buildCharacterAuthoringFormData.mockReturnValue(form);
+    getCharacterAuthoringWriteUrl.mockReturnValue('/api/characters/edit');
+    globalThis.fetch = jest.fn(async () => ({ ok: false, status: 409 }));
+    const model = { fields: { name: 'Alice', description: 'unsaved draft' }, expectedCardJson: 'old version' };
+    try {
+        await expect(lifecycle.saveCharacterAuthoringFromPayload(model)).rejects.toThrow('status 409');
+        expect(buildCharacterAuthoringFormData).toHaveBeenCalledWith(model, expect.anything());
+        expect(fetch.mock.calls[0][1].body).toBe(form);
+        expect(toastr.error).toHaveBeenCalledWith(expect.stringContaining('draft has been kept'));
+        expect(shell.getOneCharacter).not.toHaveBeenCalled();
+        expect(model.fields.description).toBe('unsaved draft');
+    } finally {
+        buildCharacterAuthoringFormData.mockReset();
+        getCharacterAuthoringWriteUrl.mockReset();
+    }
+});
 test('payload edit clears the uploaded file without replacing its input or losing change listeners', async () => {
     const { buildCharacterAuthoringFormData, getCharacterAuthoringWriteUrl } = await import('../public/scripts/character-authoring.js');
     const file = new File(['avatar'], 'avatar.png', { type: 'image/png' });

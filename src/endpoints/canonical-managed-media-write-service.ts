@@ -169,13 +169,16 @@ function stageManagedContents({ directories, contents, contentHash }: { director
     const managedPath = path.join(managedRoot, contentHash);
     fs.mkdirSync(stagingRoot, { recursive: true });
     const stagedPath = path.join(stagingRoot, `${uuidv4()}.stage`);
-    fs.writeFileSync(stagedPath, contents);
-    if (!fs.existsSync(managedPath)) {
-        fs.renameSync(stagedPath, managedPath);
-        return { managedPath, installed: true };
+    try {
+        fs.writeFileSync(stagedPath, contents);
+        if (!fs.existsSync(managedPath)) {
+            fs.renameSync(stagedPath, managedPath);
+            return { managedPath, installed: true };
+        }
+        return { managedPath, installed: false };
+    } finally {
+        fs.rmSync(stagedPath, { force: true });
     }
-    fs.rmSync(stagedPath, { force: true });
-    return { managedPath, installed: false };
 }
 
 function projectCompatibilityFile({ managedPath, compatibilityPath }: ProjectionFile) {

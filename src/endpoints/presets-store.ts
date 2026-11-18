@@ -1,4 +1,5 @@
 import { stableSettingsPayloadJson, hashSettingsPayload } from './settings-store.ts';
+import { withCanonicalTransaction } from '../canonical-sqlite.ts';
 import type { DatabaseSync, SQLOutputValue } from 'node:sqlite';
 
 type PresetOptions = { apiId?: unknown; name?: unknown };
@@ -40,7 +41,7 @@ export function listCanonicalPresets(db: DatabaseSync, { apiId = PRESETS_OPENAI_
     const rows = db.prepare(`
         SELECT api_id, name, payload_json, revision, content_hash, source, created_at_ms, updated_at_ms
         FROM preset_documents
-        WHERE api_id = ?
+        WHERE api_id = ? AND deleted = 0
     `).all(String(apiId));
     return rows.map(mapPresetRow).sort((a, b) => a.name.localeCompare(b.name));
 }
@@ -49,7 +50,7 @@ export function getCanonicalPreset(db: DatabaseSync, { apiId = PRESETS_OPENAI_AP
     const row = db.prepare(`
         SELECT api_id, name, payload_json, revision, content_hash, source, created_at_ms, updated_at_ms
         FROM preset_documents
-        WHERE api_id = ? AND name = ?
+        WHERE api_id = ? AND name = ? AND deleted = 0
     `).get(String(apiId), normalizePresetName(name));
     return row ? mapPresetRow(row) : null;
 }
@@ -74,36 +75,41 @@ export function upsertCanonicalPreset(db: DatabaseSync, {
     }
     const payloadJson = typeof payload === 'string' ? payload : stableSettingsPayloadJson(payload);
     const contentHash = hashSettingsPayload(payloadJson);
-    const existing = db.prepare(`
-        SELECT revision FROM preset_documents WHERE api_id = ? AND name = ?
-    `).get(String(apiId), resolvedName);
+    return withCanonicalTransaction(db, () => {
+        const existing = db.prepare(`
+            SELECT revision, deleted FROM preset_documents WHERE api_id = ? AND name = ?
+        `).get(String(apiId), resolvedName);
 
-    if (expectedRevision != null && Number(existing?.revision ?? 0) !== Number(expectedRevision)) {
-        return { ok: false, conflicted: true, revision: Number(existing?.revision ?? 0) };
-    }
+        const activeRevision = existing && !existing.deleted ? Number(existing.revision) : 0;
+        if (expectedRevision != null && activeRevision !== Number(expectedRevision)) {
+            return { ok: false, conflicted: true, revision: activeRevision };
+        }
 
-    const nextRevision = Number(existing?.revision ?? 0) + 1;
-    db.prepare(`
-        INSERT INTO preset_documents
-            (api_id, name, payload_json, revision, content_hash, source, created_at_ms, updated_at_ms)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        ON CONFLICT(api_id, name) DO UPDATE SET
-            payload_json = excluded.payload_json,
-            revision = excluded.revision,
-            content_hash = excluded.content_hash,
-            source = excluded.source,
-            updated_at_ms = excluded.updated_at_ms
-    `).run(
-        String(apiId), resolvedName, payloadJson, nextRevision, contentHash,
-        String(source), Number(nowMs), Number(nowMs),
-    );
-    return {
-        ok: true,
-        revision: nextRevision,
-        contentHash,
-        created: !existing,
-        preset: getCanonicalPreset(db, { apiId, name: resolvedName }),
-    };
+        const nextRevision = Number(existing?.revision ?? 0) + 1;
+        db.prepare(`
+            INSERT INTO preset_documents
+                (api_id, name, payload_json, revision, content_hash, source, created_at_ms, updated_at_ms)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(api_id, name) DO UPDATE SET
+                payload_json = excluded.payload_json,
+                revision = excluded.revision,
+                content_hash = excluded.content_hash,
+                source = excluded.source,
+                deleted = 0,
+                created_at_ms = CASE WHEN preset_documents.deleted = 1 THEN excluded.created_at_ms ELSE preset_documents.created_at_ms END,
+                updated_at_ms = excluded.updated_at_ms
+        `).run(
+            String(apiId), resolvedName, payloadJson, nextRevision, contentHash,
+            String(source), Number(nowMs), Number(nowMs),
+        );
+        return {
+            ok: true,
+            revision: nextRevision,
+            contentHash,
+            created: activeRevision === 0,
+            preset: getCanonicalPreset(db, { apiId, name: resolvedName }),
+        };
+    });
 }
 
 /**
@@ -132,7 +138,8 @@ export function ensureCanonicalPreset(db: DatabaseSync, {
 
 export function deleteCanonicalPreset(db: DatabaseSync, { apiId = PRESETS_OPENAI_API_ID, name }: PresetOptions = {}) {
     const result = db.prepare(`
-        DELETE FROM preset_documents WHERE api_id = ? AND name = ?
+        UPDATE preset_documents SET deleted = 1, payload_json = '{}', content_hash = ''
+        WHERE api_id = ? AND name = ? AND deleted = 0
     `).run(String(apiId), normalizePresetName(name));
     return { ok: true, deleted: Number(result.changes) > 0 };
 }

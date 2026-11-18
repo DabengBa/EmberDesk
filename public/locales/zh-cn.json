@@ -12,6 +12,8 @@
     "Download runtime settings only": "仅下载运行时设置",
     "Settings form saved; runtime changes remain unsaved.": "设置表单已保存；运行时更改仍未保存。",
     "Settings were updated elsewhere. Open Settings and download your unsaved runtime settings before reloading.": "其他位置已更新设置。重新加载前，请打开设置并下载未保存的运行时设置。",
+    "This character changed elsewhere. Your draft has been kept; copy your changes before reloading.": "角色已在其他位置更改。草稿仍保留；请在重新加载前复制你的修改。",
+    "The character was saved, but its compatibility projection failed. Some exports may be outdated until it is repaired.": "角色已保存，但兼容性投影失败。修复之前，部分导出内容可能不是最新版本。",
     "Settings conflict": "设置冲突",
     "Download your unsaved runtime settings before reloading. Saving is paused until reload.": "请在重新加载前下载未保存的运行时设置。重新加载前，保存操作已暂停。",
     "Import as-is": "直接导入",

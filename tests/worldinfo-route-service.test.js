@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import express from 'express';
 
 import { afterEach, beforeAll, describe, expect, test } from '@jest/globals';
 
@@ -40,6 +41,7 @@ function createResponse() {
     return {
         body: undefined,
         statusCode: 200,
+        set() { return this; },
         send(payload) { this.body = payload; return this; },
         sendStatus(code) { this.statusCode = code; this.body = code; return this; },
         status(code) { this.statusCode = code; return this; },
@@ -188,6 +190,36 @@ afterEach(() => {
 });
 
 describe('world info canonical route service', () => {
+    test('HTTP reads carry revisions and reject a second stale editor', async () => {
+        const directories = createDirectories(makeRoot());
+        const db = seedCanonicalWorldInfo(directories, { payload: { entries: { original: {} } } });
+        setCanonicalEnv({ enabled: true, shadowImport: true, reads: true, writes: true, projection: 'off' });
+        const app = express();
+        app.use(express.json(), (req, _res, next) => { req.user = { profile: { handle: 'alice' }, directories }; next(); }, router);
+        const server = app.listen(0, '127.0.0.1');
+        try {
+            await new Promise(resolve => server.once('listening', resolve));
+            const post = (route, body) => fetch(`http://127.0.0.1:${server.address().port}${route}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+            const firstRead = await post('/get', { name: 'Lorebook' });
+            const secondRead = await post('/get', { name: 'Lorebook' });
+            expect(firstRead.status).toBe(200);
+            expect(secondRead.status).toBe(200);
+            expect(await firstRead.json()).toEqual(await secondRead.json());
+            const revision = Number(firstRead.headers.get('X-World-Info-Revision'));
+            const first = await post('/edit', { name: 'Lorebook', data: { entries: { first: {} } }, expectedRevision: revision });
+            expect(first.status).toBe(200);
+            const firstResult = await first.json();
+            const stale = await post('/edit', { name: 'Lorebook', data: { entries: { stale: {} } }, expectedRevision: revision });
+            expect(stale.status).toBe(409);
+            expect(await stale.json()).toMatchObject({ error: 'world_info_conflict', revision: revision + 1 });
+            expect(Number(firstRead.headers.get('X-World-Info-Revision'))).toBe(revision);
+            expect(Number(secondRead.headers.get('X-World-Info-Revision'))).toBe(revision);
+            expect(firstResult.revision).toBe(revision + 1);
+            expect(JSON.parse(db.prepare('SELECT payload_json FROM world_books WHERE name = ?').get('Lorebook').payload_json)).toEqual({ entries: { first: {} } });
+        } finally {
+            await new Promise(resolve => server.close(resolve));
+        }
+    });
     test('rejects imported basenames that normalize to an existing world name', async () => {
         const directories = createDirectories(makeRoot());
         const db = seedCanonicalWorldInfo(directories, { payload: { name: 'Old', entries: {} } });
@@ -428,7 +460,7 @@ describe('world info canonical route service', () => {
         }, directories);
 
         expect(response.statusCode).toBe(200);
-        expect(response.body).toEqual({ ok: true });
+        expect(response.body).toEqual({ ok: true, revision: 2 });
         expect(JSON.parse(fs.readFileSync(path.join(directories.worlds, 'Lorebook.json'), 'utf8'))).toEqual({
             name: 'Edited Lore',
             extensions: { source: 'route' },
@@ -531,6 +563,8 @@ describe('world info canonical route service', () => {
         expect(response.statusCode).toBe(500);
         expect(response.body).toEqual(expect.objectContaining({
             error: 'Failed to project canonical World Info file.',
+            committed: true,
+            revision: 2,
             repairKey: expect.stringMatching(/^world-path-v1:/),
         }));
         expect(JSON.parse(db.prepare('SELECT payload_json FROM world_books WHERE name = ?').get('Lorebook').payload_json)).toEqual({

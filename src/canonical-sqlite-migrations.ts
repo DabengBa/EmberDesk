@@ -564,6 +564,16 @@ export const CANONICAL_SQLITE_MIGRATIONS = Object.freeze([
         name: 'canonical_chat_operation_results',
         sql: 'CREATE TABLE chat_operation_results (operation_id TEXT PRIMARY KEY, fingerprint TEXT NOT NULL, result_json TEXT NOT NULL);',
     }),
+    Object.freeze({
+        version: 18,
+        name: 'world_book_revision',
+        sql: 'ALTER TABLE world_books ADD COLUMN revision INTEGER NOT NULL DEFAULT 1;',
+    }),
+    Object.freeze({
+        version: 19,
+        name: 'preset_revision_tombstones',
+        sql: 'ALTER TABLE preset_documents ADD COLUMN deleted INTEGER NOT NULL DEFAULT 0;',
+    }),
 ]);
 
 export class CanonicalMigrationBlockedError extends Error {

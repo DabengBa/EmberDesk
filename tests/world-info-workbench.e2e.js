@@ -946,31 +946,43 @@ test.describe('UI hardening', () => {
         await expect(page.locator('#open_regex_editor')).toBeVisible({ timeout: 15_000 });
     }
 
-    test('world entry reports rejected saves and retries the retained draft', async ({ page }) => {
-        let rejectSave = true;
-        const writes = [];
-        await page.route('**/api/worldinfo/edit', route => {
-            writes.push(route.request().postDataJSON());
-            return rejectSave ? route.fulfill({ status: 500, json: {} }) : route.continue();
+    for (const [failureStatus, label, message] of [[409, 'conflicts', '世界书保存冲突'], [500, 'server failures', '保存失败']]) {
+        test(`world entry reports ${label} and retains the draft`, async ({ page }) => {
+            let rejectSave = true;
+            const writes = [];
+            await page.route('**/api/worldinfo/edit', route => {
+                writes.push(route.request().postDataJSON());
+                return rejectSave ? route.fulfill({ status: failureStatus, json: { error: 'world_info_conflict', revision: 2 } }) : route.continue();
+            });
+            // Keep the real retry write separate from other parallel browser fixtures.
+            const worldName = failureStatus === 409 ? 'Dev World 11' : 'Dev World 12';
+            await openEntry(page, worldName);
+            const comment = page.locator('[data-world-info-react-field="comment"]');
+            const draft = `${await comment.inputValue()} (audited)`;
+            await comment.fill(draft);
+            await page.locator('[data-world-info-react-field="order"]').focus();
+            const status = page.locator('[data-world-info-react-section="ops"]');
+            const retry = page.locator('[data-world-info-react-action="retry-save"]');
+            if (failureStatus === 409) {
+                await expect(status).toContainText('HTTP 409');
+                await expect(retry).toHaveCount(0, { timeout: 3000 });
+            }
+            await expect(status).toContainText(message);
+            await expect(comment).toHaveValue(draft);
+            if (failureStatus === 409) {
+                await expect(status).toContainText('重新加载');
+                return;
+            }
+            rejectSave = false;
+            await expect(retry).toBeVisible();
+            await retry.click();
+            await expect(status).toContainText('已保存');
+            expect(Object.values(writes.at(-1).data.entries).some(entry => entry.comment === draft)).toBe(true);
+            await page.reload();
+            await openEntry(page, worldName);
+            await expect(comment).toHaveValue(draft);
         });
-        // Keep the real retry write separate from other parallel browser fixtures.
-        const worldName = 'Dev World 11';
-        await openEntry(page, worldName);
-        const comment = page.locator('[data-world-info-react-field="comment"]');
-        const draft = `${await comment.inputValue()} (audited)`;
-        await comment.fill(draft);
-        await page.locator('[data-world-info-react-field="order"]').focus();
-        const status = page.locator('[data-world-info-react-section="ops"]');
-        await expect(status).toContainText('保存失败');
-        await expect(comment).toHaveValue(draft);
-        rejectSave = false;
-        await page.locator('[data-world-info-react-action="retry-save"]').click();
-        await expect(status).toContainText('已保存');
-        expect(Object.values(writes.at(-1).data.entries).some(entry => entry.comment === draft)).toBe(true);
-        await page.reload();
-        await openEntry(page, worldName);
-        await expect(comment).toHaveValue(draft);
-    });
+    }
 
     test('regex import cancellation never imports and clears the file input', async ({ page }) => {
         await openRegex(page);

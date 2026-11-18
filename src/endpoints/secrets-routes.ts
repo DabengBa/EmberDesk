@@ -1,5 +1,5 @@
 import express from 'express';
-import { SecretManager, getAllSecrets, allowKeysExposure } from './secrets.js';
+import { SecretManager } from './secrets.js';
 
 // Pass the existing key list to avoid introducing a second exposure policy.
 export function createSecretsRouter(EXPORTABLE_KEYS: string[]) {
@@ -34,25 +34,7 @@ export function createSecretsRouter(EXPORTABLE_KEYS: string[]) {
         }
     });
 
-    router.post('/view', (request, response) => {
-        try {
-            if (!allowKeysExposure) {
-                console.error('secrets.json could not be viewed unless allowKeysExposure in config.yaml is set to true');
-                return response.sendStatus(403);
-            }
-
-            const secrets = getAllSecrets(request.user.directories);
-
-            if (!secrets) {
-                return response.sendStatus(404);
-            }
-
-            return response.send(secrets);
-        } catch (error) {
-            console.error('Error viewing secrets:', error);
-            return response.sendStatus(500);
-        }
-    });
+    router.post('/view', (_request, response) => response.sendStatus(403));
 
     router.post('/find', (request, response) => {
         try {
@@ -62,8 +44,7 @@ export function createSecretsRouter(EXPORTABLE_KEYS: string[]) {
                 return response.status(400).send('Key is required');
             }
 
-            if (!allowKeysExposure && !EXPORTABLE_KEYS.includes(key)) {
-                console.error('Cannot fetch secrets unless allowKeysExposure in config.yaml is set to true');
+            if (!EXPORTABLE_KEYS.includes(key)) {
                 return response.sendStatus(403);
             }
 
@@ -137,7 +118,7 @@ export function createSecretsRouter(EXPORTABLE_KEYS: string[]) {
     });
 
     router.post('/settings', async (_request, response) => {
-        return response.send({ allowKeysExposure });
+        return response.send({ allowKeysExposure: false });
     });
 
     return router;

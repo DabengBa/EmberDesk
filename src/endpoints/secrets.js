@@ -97,7 +97,7 @@ export const SECRET_KEYS = {
  * @typedef {{[key: string]: string}} FlatSecretKeys
  */
 
-// These are the keys that are safe to expose, even if allowKeysExposure is false
+// These are the non-secret values that may be returned to clients.
 const EXPORTABLE_KEYS = [
     SECRET_KEYS.LIBRE_URL,
     SECRET_KEYS.LINGVA_URL,
@@ -215,8 +215,7 @@ export class SecretManager {
      * @returns {string} A masked version of the value for peeking
      */
     getMaskedValue(value, key) {
-        // No masking if exposure is allowed
-        if (allowKeysExposure || EXPORTABLE_KEYS.includes(key)) {
+        if (EXPORTABLE_KEYS.includes(key)) {
             return value;
         }
         const threshold = 10;

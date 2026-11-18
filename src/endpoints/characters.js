@@ -1018,6 +1018,7 @@ function createCharacterWriteDependencies({ bustCache = null } = {}) {
             const payloadAvatar = payload.newAvatarName ?? payload.avatarName;
             let mediaAuthorization;
             let settingsRevision;
+            let cardVersion;
 
             try {
                 if (operation === 'rename') {
@@ -1089,6 +1090,7 @@ function createCharacterWriteDependencies({ bustCache = null } = {}) {
                             createdAtMs: existing?.created_at_ms ?? nowMs,
                             updatedAtMs: nowMs,
                         });
+                        cardVersion = txnDb.prepare('SELECT card_json FROM characters WHERE avatar_filename = ? AND deleted_at_ms IS NULL').get(payloadAvatar).card_json;
                     });
                 }
             } catch (error) {
@@ -1103,6 +1105,7 @@ function createCharacterWriteDependencies({ bustCache = null } = {}) {
                 authorityCommitted: true,
                 mediaAuthorization,
                 settingsRevision,
+                cardVersion,
                 repairKey,
                 projection: typeof characterSlice.getProjectionMode === 'function'
                     ? characterSlice.getProjectionMode()

@@ -19,7 +19,7 @@ import {
 
 type PresetRequest = Request & { user: Request['user'] & { handle?: string } };
 // Describes the existing request contract; it does not add runtime validation.
-type PresetBody = { name: string; apiId?: unknown; preset?: unknown };
+type PresetBody = { name: string; apiId?: unknown; preset?: unknown; expectedRevision?: unknown };
 type PresetWriteState =
     | { ok: true; db: DatabaseSync; handle: string }
     | { ok: false; reason: string };
@@ -157,10 +157,6 @@ export async function getCanonicalPresetsReadState(request: PresetRequest) {
     return { ok: true, rows: listCanonicalPresets(db, { apiId: PRESETS_OPENAI_API_ID }) };
 }
 
-/**
- * Preset saves historically used last-write-wins file semantics; canonical
- * keeps that contract (no client-facing revision field yet).
- */
 export const router = express.Router();
 
 router.post<Record<string, string>, unknown, PresetBody>('/save', async function (request, response) {
@@ -183,11 +179,12 @@ router.post<Record<string, string>, unknown, PresetBody>('/save', async function
             name,
             payload: request.body.preset,
             source: 'user',
+            expectedRevision: request.body.expectedRevision,
         });
         if (!result.ok) {
             return response.status(409).send({ error: 'preset_conflict', revision: result.revision });
         }
-        return response.send({ name });
+        return response.send({ name, revision: result.revision });
     } catch (error) {
         console.error('Preset could not be saved', error);
         return response.sendStatus(500);

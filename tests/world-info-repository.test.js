@@ -9,6 +9,88 @@ function deferred() {
 }
 
 describe('world info confirmed persistence', () => {
+    test('new same-name books conflict instead of overwriting another session', async () => {
+        const { createWorldInfoRepository } = await import('../public/scripts/world-info-repository.js');
+        let stored;
+        const requests = [];
+        const fetch = async (_url, options) => {
+            const body = JSON.parse(options.body);
+            requests.push(body);
+            if (stored && body.expectedRevision === 0) return { ok: false, status: 409 };
+            stored = body.data;
+            return { ok: true, json: async () => ({ revision: 1 }) };
+        };
+        const create = () => createWorldInfoRepository({ cache: new Map(), headers: () => ({}), emitUpdated: () => {}, fetch });
+        const a = create(), b = create();
+        await a.save('New', { entries: { a: {} } });
+        await expect(b.save('New', { entries: { b: {} } })).rejects.toThrow('世界书保存冲突（HTTP 409）：此世界书已在其他会话中修改，请重新加载后再保存。');
+        expect(requests.map(x => x.expectedRevision)).toEqual([0, 0]);
+        expect(stored).toEqual({ entries: { a: {} } });
+    });
+
+    test('a committed projection failure advances the revision for retry without publishing an unconfirmed projection', async () => {
+        const { createWorldInfoRepository } = await import('../public/scripts/world-info-repository.js');
+        const sent = [], events = [], cache = new Map();
+        const repository = createWorldInfoRepository({ cache, headers: () => ({}), emitUpdated: (...args) => events.push(args), fetch: async (url, options) => {
+            if (url.endsWith('/get')) return { ok: true, headers: new Headers({ 'X-World-Info-Revision': '4' }), json: async () => ({ entries: {} }) };
+            sent.push(JSON.parse(options.body));
+            if (sent.length === 1) return { ok: false, status: 500, json: async () => ({ error: 'Failed to project canonical World Info file.', committed: true, revision: 5 }) };
+            return { ok: true, json: async () => ({ revision: 6 }) };
+        } });
+        await repository.load('A');
+        const draft = { entries: { a: {} } };
+        await expect(repository.save('A', draft)).rejects.toThrow('HTTP 500');
+        expect(events).toHaveLength(0);
+        expect(cache.get('A')).toEqual(draft);
+        await repository.save('A', draft);
+        expect(sent.map(x => x.expectedRevision)).toEqual([4, 5]);
+        expect(cache.get('A')).toEqual(draft);
+    });
+
+    test('a newly created book retries using its committed revision after projection fails', async () => {
+        const { createWorldInfoRepository } = await import('../public/scripts/world-info-repository.js');
+        const sent = [], cache = new Map();
+        const repository = createWorldInfoRepository({ cache, headers: () => ({}), emitUpdated: () => {}, fetch: async (_url, options) => {
+            sent.push(JSON.parse(options.body));
+            return sent.length === 1
+                ? { ok: false, status: 500, json: async () => ({ committed: true, revision: 1 }) }
+                : { ok: true, json: async () => ({ revision: 2 }) };
+        } });
+        const draft = { entries: { a: {} } };
+        await expect(repository.save('New', draft)).rejects.toThrow('HTTP 500');
+        await repository.save('New', draft);
+        expect(sent.map(x => x.expectedRevision)).toEqual([0, 1]);
+    });
+
+    test('an existing cached book without a known revision keeps the legacy omission', async () => {
+        const { createWorldInfoRepository } = await import('../public/scripts/world-info-repository.js');
+        let sent;
+        const repository = createWorldInfoRepository({ cache: new Map([['A', { entries: {} }]]), headers: () => ({}), emitUpdated: () => {}, fetch: async (_url, options) => {
+            sent = JSON.parse(options.body);
+            return { ok: true, json: async () => ({ revision: 1 }) };
+        } });
+        await repository.save('A', { entries: {} });
+        expect(sent).not.toHaveProperty('expectedRevision');
+    });
+
+    test('sends the loaded revision, advances it after success, and preserves a conflicting draft', async () => {
+        const { createWorldInfoRepository } = await import('../public/scripts/world-info-repository.js');
+        const sent = [];
+        const cache = new Map();
+        const repository = createWorldInfoRepository({ cache, headers: () => ({}), emitUpdated: () => {}, fetch: async (url, options) => {
+            if (url.endsWith('/get')) return { ok: true, headers: new Headers({ 'X-World-Info-Revision': '4' }), json: async () => ({ entries: {} }) };
+            sent.push(JSON.parse(options.body));
+            if (sent.length === 2) return { ok: false, status: 409 };
+            return { ok: true, json: async () => ({ revision: 5 }) };
+        } });
+        await repository.load('A');
+        await repository.save('A', { entries: { 1: { comment: 'first' } } });
+        const draft = { entries: { 1: { comment: 'pending' } } };
+        await expect(repository.save('A', draft)).rejects.toThrow('HTTP 409');
+        expect(sent.map(request => request.expectedRevision)).toEqual([4, 5]);
+        expect(draft.entries[1].comment).toBe('pending');
+        expect(cache.get('A').entries[1].comment).toBe('first');
+    });
     test('same-book field and bulk mutations read the preceding confirmed write', async () => {
         const { createWorldInfoRepository } = await import('../public/scripts/world-info-repository.js');
         const { createWorldInfoWorkbenchSession } = await import('../public/scripts/world-info-workbench-service.js');

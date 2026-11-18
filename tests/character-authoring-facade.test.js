@@ -12,6 +12,19 @@ import {
 } from '../public/scripts/character-authoring.js';
 
 describe('character authoring facade', () => {
+    test('keeps the read version with the draft and advances it only on successful rebase', () => {
+        const session = createCharacterAuthoringSession({ avatar: 'Mira.png', name: 'Mira', canonical_card_version: 'version-1' });
+        const editing = session.update({ description: 'local draft' });
+        const submitted = editing.submit().payload;
+        expect(submitted.expectedCardJson).toBe('version-1');
+        expect(buildCharacterAuthoringFormData(submitted, { mode: 'edit' }).get('expected_card_json')).toBe('version-1');
+        expect(editing.draft.description).toBe('local draft');
+        const typing = editing.update({ description: 'still typing' });
+        const rebased = typing.rebase({ ...editing.draft, canonicalCardVersion: 'version-2' });
+        expect(rebased.submit().payload.expectedCardJson).toBe('version-2');
+        expect(rebased.draft.description).toBe('still typing');
+        expect(rebased.dirty).toBe(true);
+    });
     test('projects editable character fields and reports unsupported extension fields', () => {
         const draft = createCharacterAuthoringDraft({
             name: 'Mira',

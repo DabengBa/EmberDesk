@@ -40,9 +40,9 @@ export function runDeleteMessageCommand(command) {
     return deleteMessageCommands[command]();
 }
 
-export function runCharacterExportCommand(format) {
+export function runCharacterExportCommand(format, options) {
     if (!characterExportCommand) throw new Error('Character export command unavailable');
-    return characterExportCommand(format);
+    return characterExportCommand(format, options);
 }
 
 installWorkspaceInteractionCommands({ runHistoryRowCommand, runOptionsMenuCommand, runDialoguePopupCommand, runDeleteMessageCommand });
@@ -927,10 +927,10 @@ export async function bindLegacyShellHandlers() {
         }
     });
 
-    characterExportCommand = async function (format) {
+    characterExportCommand = async function (format, { presaved = false } = {}) {
         return shell().getCharacterExportCommand()(format, {
             close: closeCharacterExportPopup,
-            save: createOrEditCharacter,
+            save: presaved ? async () => {} : createOrEditCharacter,
             request: async format => {
                 const body = { format, avatar_url: state.characters[state.this_chid].avatar };
                 const response = await fetch('/api/characters/export', {

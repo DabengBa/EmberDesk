@@ -64,12 +64,21 @@ Do not place canonical data under `_cache`. Do not reuse `src/derived-cache-sqli
 
 Compatibility remains a hard boundary:
 
-- `/api/characters/*` response shapes stay stable.
+- `/api/characters/*` retains its existing response fields; full character reads can also include `canonical_card_version`.
 - Character avatar filenames remain visible compatibility identifiers.
 - PNG card import/export remains available.
 - Chat JSONL import/export remains available through the chat migration.
 - Full World Info authority is delivered; JSON files remain compatibility projection/import/export surfaces.
 - Extension-visible globals and `@sillytavern/*` imports remain frozen unless a later compatibility retirement decision says otherwise.
+
+Conditional writes protect participating editors from stale data without requiring legacy
+clients to send a version. Character edits may send `expected_card_json` from the full read's
+`canonical_card_version`; a mismatch returns HTTP 409 `character_card_conflict`. World Info
+reads expose `X-World-Info-Revision` and edits may send `expectedRevision`; stale edits return
+HTTP 409 `world_info_conflict`. Preset reads expose revisions and saves may send
+`expectedRevision`; stale saves return HTTP 409 `preset_conflict`. World Info revisions use
+migration v18; preset deletion tombstones introduced by v19 clear the stored payload and
+retain revision history so recreating a preset advances its revision.
 
 World Info, chat, and managed-media projection writes record repair intent with the
 canonical mutation. Recovery rechecks current authority under the SQLite writer lock

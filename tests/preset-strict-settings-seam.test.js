@@ -55,6 +55,7 @@ async function fixture() {
     const event_types = { CHAT_CHANGED: 'chat', SETTINGS_UPDATED: 'updated' };
     const presetEnv = {
         oai_settings: settings, openai_settings: presets, openai_setting_names: names,
+        openai_setting_revisions: { A: 4, B: 2 },
         settingsToUpdate: { extensions: ['#NULL_SELECTOR', 'extensions'] }, SECRET_KEYS: {}, default_settings: {},
         getSanitizedFilename: x => x, fetch, getRequestHeaders: () => ({}), eventSource, event_types,
         saveSettingsDebounced: jest.fn(), migrateChatCompletionSettings: () => {}, reconnectOpenAi: () => {},
@@ -143,7 +144,7 @@ test('a 409 during compensation exposes both failures and locks the real setting
     const error = await write(f).catch(value => value);
     expect(error).toBeInstanceOf(AggregateError);
     expect(error.message).toBe('Preset save failed and settings rollback failed');
-    expect(error.errors.map(value => value.message)).toEqual(['Failed to save preset', 'Failed to save settings: revision conflict']);
+    expect(error.errors.map(value => value.message)).toEqual(['Failed to save preset (HTTP 500)', 'Failed to save settings: revision conflict']);
     expect(f.owner.hasConflict()).toBe(true);
     expect(f.requests.map(x => x.url)).toEqual(['/api/settings/save', '/api/presets/save', '/api/settings/save']);
     expect(f.settings.extensions.regex).toEqual(['old']);
@@ -205,4 +206,17 @@ test('successful strict write commits settings before the preset with captured i
     expect(f.settings.extensions.regex).toEqual(['new']);
     expect(f.presets[0]).toBe(identity);
     expect(identity.extensions.regex).toEqual(['new']);
+});
+
+test('preset client sends and advances its revision and preserves the draft on conflict', async () => {
+    const f = await fixture();
+    f.setPresetResponse(() => response(200, { name: 'A', revision: 5 }));
+    await write(f);
+    expect(f.requests.find(request => request.url === '/api/presets/save').body.expectedRevision).toBe(4);
+    f.setPresetResponse(() => response(409, { error: 'preset_conflict', revision: 6 }));
+    await expect(write(f, { value: ['draft'] })).rejects.toThrow('HTTP 409');
+    const saves = f.requests.filter(request => request.url === '/api/presets/save');
+    expect(saves[1].body.expectedRevision).toBe(5);
+    expect(saves[1].body.preset.extensions.regex).toEqual(['draft']);
+    expect(f.presets[0].extensions.regex).toEqual(['new']);
 });
