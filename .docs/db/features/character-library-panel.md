@@ -44,6 +44,8 @@ Let users browse, search, filter, sort, bulk-select, and choose [character cards
 - Changes made elsewhere to the same library appear automatically without a manual reload, retaining the current search, filters, and sort. A temporary background read failure leaves the existing list visible and the update is retried; automatic updates wait while bulk selection or its tag operations are active, then catch up.
 - After delete flows, the panel keeps safe pagination context, prevents late snapshots from reintroducing deleted cards, and still falls back to full refresh for complex states when that is the clearer recovery path.
 - Membership changes from data refreshes — create, import, duplicate, rename, edit, and delete fallback reprints — keep the current page and scroll offset; only the explicit navigation re-entry gesture resets the library to page one and the top of the list.
+- Import can replace an existing card only in the importing user's library. If the requested replacement target no longer exists there, EmberDesk creates a newly named card instead and shows both the creation result and a warning that the replacement target was not found.
+- When a CharX card imports successfully but auxiliary media are skipped or fail to save, the character import notice shows the media outcomes separately from the card's success. Recognized expression images count as skipped; they are not installed as character sprites.
 
 ## Ownership Notes
 

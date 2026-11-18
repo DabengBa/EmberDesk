@@ -17,7 +17,10 @@ export function createChatImportOperation(formData, { send, operationId = crypto
         if (response.ok && data.res === true && Array.isArray(data.fileNames)) {
             return { ok: true, fileNames: data.fileNames };
         }
-        return { ok: false, error: typeof data.error === 'string' ? data.error : 'import_failed', completed: Array.isArray(data.completed) ? data.completed : [], status: response.status };
+        const error = data.error === 'canonical_chat_write_rejected' && data.reason === 'unregistered_attachment' ? data.reason
+            : typeof data.error === 'string' ? data.error
+            : typeof data.report?.reason === 'string' ? data.report.reason : 'import_failed';
+        return { ok: false, error, completed: Array.isArray(data.completed) ? data.completed : [], status: response.status };
     }
 
     return {
