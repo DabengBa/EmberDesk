@@ -1,11 +1,12 @@
 import { expect, test } from '@playwright/test';
 import { testSetup } from './frontend/frontent-test-utils.js';
 import { AUTHORIZATION_FIXTURES } from './helpers/authorization-fixtures.js';
-import { selectCharacterFromLibrary } from './helpers/character-selection.js';
+import { expandAuthoringAdvanced, selectCharacterFromLibrary } from './helpers/character-selection.js';
 
 test('a delayed Settings response cannot restore a revoked external media grant', async ({ page }) => {
     await testSetup.awaitST({ page });
     await selectCharacterFromLibrary(page, AUTHORIZATION_FIXTURES.delayedSettingsResponse);
+    await expandAuthoringAdvanced(page);
     const checkbox = page.locator('[data-react-authoring-owner="characterAuthoring"]').getByRole('checkbox', { name: /允许此角色的消息 CSS 加载外部资源|Allow external CSS resources/ });
     await expect(checkbox).toBeVisible();
     if (!await checkbox.isChecked()) await checkbox.check();
@@ -59,5 +60,6 @@ test('a delayed Settings response cannot restore a revoked external media grant'
     await page.reload();
     await testSetup.awaitST({ page });
     await selectCharacterFromLibrary(page, AUTHORIZATION_FIXTURES.delayedSettingsResponse);
+    await expandAuthoringAdvanced(page);
     await expect(checkbox).not.toBeChecked();
 });

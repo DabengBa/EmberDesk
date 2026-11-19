@@ -9,7 +9,7 @@ related: [page.chat_workspace, feature.character_library_panel, feature.world_in
 
 ## ID 解释
 
-`feature.character_text_replace` represents the user-visible workflow for running a single-character find & replace from Character Authoring. It covers the dialog opened from the authoring footer, the preview step listing every match across the three replaceable areas, per-match exclusion, and the apply step that writes the bound World Info book, the card, and the current chat through their canonical paths. It does not cover library-wide bulk replacement, renaming the card, or any historical chats other than the one currently open.
+`feature.character_text_replace` represents the user-visible workflow for running a single-character find & replace from Character Authoring. It covers the dialog opened from the upper authoring toolbar, the preview step listing every match across the three replaceable areas, per-match exclusion, and the apply step that writes the bound World Info book, the card, and the current chat through their canonical paths. It does not cover library-wide bulk replacement, renaming the card, or any historical chats other than the one currently open.
 
 ## Purpose
 
@@ -17,7 +17,7 @@ Let a user rename concepts, fix phrasing, or migrate terminology across the acti
 
 ## User-Visible Contract
 
-- The feature is reachable only for an existing character: a `查找替换` action appears in the Character Authoring footer in edit mode, not in create mode.
+- The feature is reachable only for an existing character: a `查找替换` action appears in the upper Character Authoring toolbar in edit mode, not in create mode.
 - The dialog collects find text, replacement text, and three match options — case-sensitive, whole-word, and regex (which keeps `$1`-style capture substitution) — plus scope checkboxes for card fields, World Info, and the current chat, each with their own field checkboxes.
 - Card fields cover the editable text surface: description, scenario, first message, example dialogue, alternate greetings, system prompt, post-history instructions, depth prompt, creator notes, creator, version, and tags; the card name, avatar file, world-book binding name, chat id, and timestamps are never offered for replacement.
 - World Info covers the bound book's entry content, comment, and trigger keys; when a book is bound the authoritative book is modified and the card's embedded `character_book` snapshot is refilled afterward, and an unbound card's embedded book is edited directly with its `keys`/`secondary_keys` field names.

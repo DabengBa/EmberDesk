@@ -173,6 +173,7 @@
     "Messages sent by the user.": "用户发送的消息。",
     "Messages sent using STscript commands.": "使用 STscript 命令发送的消息。",
     "More": "更多",
+    "Character actions": "角色操作",
     "More character actions": "更多角色操作",
     "New global regex script": "新建全局正则脚本",
     "New preset regex script": "新建预设正则脚本",
