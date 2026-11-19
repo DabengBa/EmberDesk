@@ -2,9 +2,10 @@ import { readFile } from 'node:fs/promises';
 
 import { expect, test } from '@playwright/test';
 
-const source = `<!doctype html><html><body>
+const source = `<!doctype html><html><head><style></style></head><body>
 <div id="frame-content" style="height: 1800px">Frame ready</div>
 <p id="frame-tail">Card end</p>
+<div id="viewport-content" style="min-height: 100vh" hidden></div>
 <script>
 try { parent.document.body.dataset.frameWrite = 'changed'; } catch {}
 try { parent.SillyTavern.marker = 'changed'; } catch {}
@@ -14,7 +15,7 @@ document.querySelector('#frame-content').dataset.jquery = typeof window.jQuery;
 </script></body></html>`;
 
 for (const useBlobUrl of [false, true]) {
-    test(`renders a scrollable isolated card without a parent bridge (legacy blob preference: ${useBlobUrl})`, async ({ page }) => {
+    test(`fits an isolated card to its changing content (legacy blob preference: ${useBlobUrl})`, async ({ page }) => {
         const [moduleSource, css] = await Promise.all([
             readFile(new URL('../public/scripts/frontend-frame.js', import.meta.url), 'utf8'),
             readFile(new URL('../public/css/toggle-dependent.css', import.meta.url), 'utf8'),
@@ -67,10 +68,50 @@ for (const useBlobUrl of [false, true]) {
         })).toBe(0);
 
         const tail = frame.locator('#frame-tail');
+        const height = () => iframe.evaluate(element => element.offsetHeight);
+        const contentHeight = () => tail.evaluate(element => Math.ceil(element.ownerDocument.documentElement.getBoundingClientRect().height));
+        await expect.poll(async () => await height() - await contentHeight()).toBe(0);
         await expect(tail).not.toBeInViewport();
-        await iframe.hover();
-        await page.mouse.wheel(0, 2000);
+        await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
         await expect(tail).toBeInViewport();
+        expect(await tail.evaluate(element => element.ownerDocument.defaultView.scrollY)).toBe(0);
+
+        const content = frame.locator('#frame-content');
+        // CSSOM changes don't generate DOM mutation records.
+        await content.evaluate(element => element.ownerDocument.styleSheets[0].insertRule('#frame-content { height: 90px !important; }'));
+        await expect.poll(async () => await height() - await contentHeight()).toBe(0);
+        await content.evaluate(element => element.ownerDocument.styleSheets[0].deleteRule(0));
+        await expect.poll(async () => await height() - await contentHeight()).toBe(0);
+
+        const resizeContent = px => content.evaluate((element, value) => { element.style.height = `${value}px`; }, px);
+        for (const px of [40, 450, 30]) {
+            await resizeContent(px);
+            await expect.poll(async () => await height() - await contentHeight()).toBe(0);
+        }
+        const shortHeight = await height();
+        await frame.locator('#viewport-content').evaluate(element => { element.hidden = false; });
+        await expect.poll(height).toBeGreaterThan(shortHeight);
+        const viewportHeight = await height();
+        // A 100vh element plus margins must not repeatedly grow with its iframe.
+        await iframe.evaluate(() => new Promise(resolve => {
+            let frames = 10;
+            function tick() { if (--frames) requestAnimationFrame(tick); else resolve(); }
+            requestAnimationFrame(tick);
+        }));
+        expect(await height()).toBe(viewportHeight);
+
+        await frame.locator('#viewport-content').evaluate(element => { element.hidden = true; });
+        await content.evaluate(element => {
+            element.style.overflowY = 'auto';
+            const inner = element.ownerDocument.createElement('div');
+            inner.style.height = '500px';
+            element.append(inner);
+        });
+        await expect.poll(height).toBe(shortHeight);
+        expect(await content.evaluate(element => {
+            element.scrollTop = 100;
+            return element.scrollTop;
+        })).toBe(100);
 
         await expect(page.locator('.mes_text').locator('details, summary, pre')).toHaveCount(0);
 

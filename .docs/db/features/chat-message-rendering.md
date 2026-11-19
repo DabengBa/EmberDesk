@@ -39,7 +39,7 @@ Let users reliably read opened chat history and finalized generated messages as 
 - Returning to a previously read chat in the same page session may restore the expanded history window and reading region when safe; if not safe, EmberDesk falls back to the normal open result.
 - Recoverable visible generation failure must not remove the user message or duplicate assistant rows; final success or final failed state remains on one stable assistant row.
 - There is no fallback list renderer. Rollback is deployment of a previous application version.
-- Eligible finalized message code blocks containing complete HTML can render in sandboxed `srcdoc` iframes inside `.mes_text`. Scripts run inside an opaque origin, with no parent DOM or host API access. Card buttons can copy plain text on a user click. Tall cards scroll inside the iframe. Streaming, editing, error, and over-depth rows do not execute cards. Disabling frames or making a row ineligible restores the original code block. Ordinary code collapse remains a separate setting.
+- Eligible finalized message code blocks containing complete HTML can render in sandboxed `srcdoc` iframes inside `.mes_text`. Scripts run inside an opaque origin, with no parent DOM or host API access. Card buttons can copy plain text on a user click. Cards grow and shrink with their content layout, so long cards can be read by scrolling the chat. Scrollable areas defined by the card itself still scroll inside the card. Streaming, editing, error, and over-depth rows do not execute cards. Disabling frames or making a row ineligible restores the original code block. Ordinary code collapse remains a separate setting.
 
 ## Ownership Direction
 
