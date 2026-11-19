@@ -1,6 +1,91 @@
 import { expect, test } from '@playwright/test';
 import { testSetup } from './frontend/frontent-test-utils.js';
 
+test('overlapping runtime fields are resolved in Settings against the values shown', async ({ page, context }) => {
+    await testSetup.awaitST({ page });
+    const other = await context.newPage();
+    await testSetup.awaitST({ page: other });
+    await Promise.all([page, other].map(tab => tab.waitForTimeout(2500)));
+    await saveModels(page, 'first-window', 'first-fallback', 500);
+    await expect(saveModels(other, 'my-model', 'my-fallback', 700)).rejects.toThrow('revision conflict');
+    const notice = other.locator('#toast-container').getByText(/Settings conflict|设置冲突/);
+    await expect(notice).toBeVisible();
+
+    await other.locator('[data-react-workspace-shell-chrome] nav button').filter({ hasText: '设置' }).click();
+    const recovery = other.locator('#SettingsPanel').getByTestId('runtime-settings-recovery');
+    const model = recovery.getByTestId('settings-conflict-oai_settings.openai_model');
+    const fallback = recovery.getByTestId('settings-conflict-oai_settings.fallback_provider_model');
+    await expect(model).toContainText('first-window');
+    await expect(model).toContainText('my-model');
+    const maxResponse = recovery.getByTestId('settings-conflict-oai_settings.openai_max_tokens');
+    await expect(maxResponse.locator('legend')).toHaveText(/Max Response|最大回复/);
+    await expect(maxResponse).toContainText('0.5k');
+    await expect(recovery.locator('fieldset')).toHaveCount(3);
+    const downloadPromise = other.waitForEvent('download');
+    await recovery.getByRole('button', { name: /download runtime settings only|仅下载运行时设置/i }).click();
+    const download = await downloadPromise;
+    const chunks = [];
+    for await (const chunk of await download.createReadStream()) chunks.push(chunk);
+    expect(JSON.parse(Buffer.concat(chunks).toString()).oai_settings).toMatchObject({ openai_model: 'my-model', fallback_provider_model: 'my-fallback' });
+    await model.getByRole('radio', { name: /Use mine|用我的/ }).check();
+    await fallback.getByRole('radio', { name: /Use saved|用已保存的/ }).check();
+    await maxResponse.getByRole('radio', { name: /Use saved|用已保存的/ }).check();
+
+    await saveModels(page, 'newer-window', 'first-fallback');
+    const apply = recovery.getByRole('button', { name: /Apply choices|应用选择/ });
+    await apply.click();
+    await expect(model).toContainText('newer-window');
+    await expect(recovery.getByRole('status')).toHaveText(/Choose again|重新选择/);
+    await expect(apply).toBeDisabled();
+    await expect(fallback.getByRole('radio', { name: /Use saved|用已保存的/ })).toBeChecked();
+    expect((await readStoredSettings(page)).openai_model).toBe('newer-window');
+
+    await model.getByRole('radio', { name: /Use mine|用我的/ }).check();
+    await apply.click();
+    await expect(recovery).toHaveCount(0);
+    await expect(notice).toHaveCount(0);
+    expect(await readStoredSettings(other)).toMatchObject({ openai_model: 'my-model', fallback_provider_model: 'first-fallback' });
+    expect(await other.evaluate(() => window.SillyTavern.getContext().chatCompletionSettings.fallback_provider_model)).toBe('first-fallback');
+    await startRuntimeSave(other, 'after-resolution');
+    expect(await other.evaluate(() => window.__settingsSave)).toBe('saved');
+});
+
+function saveModels(page, model, fallback, maxResponse) {
+    return page.evaluate(async ({ model, fallback, maxResponse }) => {
+        const { saveSettings } = await import('/script.js');
+        const settings = window.SillyTavern.getContext().chatCompletionSettings;
+        settings.openai_model = model;
+        settings.fallback_provider_model = fallback;
+        if (maxResponse !== undefined) settings.openai_max_tokens = maxResponse;
+        await saveSettings(0, { strict: true });
+    }, { model, fallback, maxResponse });
+}
+
+test('two open workspaces save different settings without overwriting each other', async ({ page, context }) => {
+    await testSetup.awaitST({ page });
+    const other = await context.newPage();
+    await testSetup.awaitST({ page: other });
+    await startRuntimeSave(page, 'model-from-first-window');
+    expect(await page.evaluate(() => window.__settingsSave)).toBe('saved');
+
+    await other.evaluate(async () => {
+        const { saveSettings } = await import('/script.js');
+        const settings = window.SillyTavern.getContext().chatCompletionSettings;
+        settings.fallback_provider_model = 'model-from-second-window';
+        await saveSettings(0, { strict: true });
+        // The second tab still has the old active model in memory. A later
+        // unrelated runtime save must not write it back.
+        settings.temperature = 0.42;
+        await saveSettings(0, { strict: true });
+    });
+    expect(await readStoredSettings(page)).toMatchObject({
+        openai_model: 'model-from-first-window',
+        fallback_provider_model: 'model-from-second-window',
+        temperature: 0.42,
+    });
+    await expect(other.locator('#toast-container').getByText(/Settings conflict|设置冲突/)).toHaveCount(0);
+});
+
 test('runtime saves wait for an in-flight runtime save and use its committed revision', async ({ page }) => {
     await testSetup.awaitST({ page });
     await page.waitForTimeout(2500);
@@ -87,6 +172,21 @@ async function readStoredSettings(page) {
         return JSON.parse((await response.json()).settings).oai_settings;
     });
 }
+
+test('a Settings form save preserves an already pending runtime edit', async ({ page }) => {
+    await testSetup.awaitST({ page });
+    await page.locator('[data-react-workspace-shell-chrome] nav button').filter({ hasText: '设置' }).click();
+    const panel = page.locator('#SettingsPanel');
+    const field = panel.locator('#settings-providers-fallbackProviderModel');
+    await field.fill('from-form');
+    await page.evaluate(() => {
+        globalThis.SillyTavern.getContext().chatCompletionSettings.openai_model = 'pending-runtime';
+    });
+    await panel.locator('button[type="submit"]').click();
+    await expect(panel.locator('.settings-status--success')).toBeVisible();
+    await page.evaluate(async () => (await import('/script.js')).saveSettings(0, { strict: true }));
+    expect(await readStoredSettings(page)).toMatchObject({ openai_model: 'pending-runtime', fallback_provider_model: 'from-form' });
+});
 
 test('a delayed runtime change is not overwritten by an earlier Settings response', async ({ page }) => {
     await testSetup.awaitST({ page });

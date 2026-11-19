@@ -41,6 +41,16 @@ describe('character sort save guard', () => {
         expect(listeners.size).toBe(0);
     });
 
+    test('a no-op at the same revision clears a reverted sort change', () => {
+        const { guard, listeners } = setup();
+        guard.changed();
+        guard.finish(guard.begin(1), 2);
+        guard.changed();
+        guard.changed();
+        guard.finish(guard.begin(2), 2);
+        expect(listeners.size).toBe(0);
+    });
+
     test('waits for overlapping requests and uses server revision, not response arrival order', () => {
         const { guard, listeners } = setup();
         const old = guard.begin();

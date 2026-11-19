@@ -21,6 +21,8 @@ function setup() {
         beginSettingsSaveSnapshot: revision => guard.begin(revision), finishSettingsSaveSnapshot: jest.fn((s, r) => guard.finish(s, r)),
         compressRequest: async request => request, getRequestHeaders: () => ({}),
         fetch: (_, request) => new Promise(resolve => requests.push({ request, resolve })),
+        requestSettings: async () => ({ ok: true, json: async () => ({ settings_revision: 4, settings: { power_user: { ...power_user, sort_order: 'custom' } } }) }),
+        resolveStartupSettingsPlan: ({ data }) => data,
         eventSource: { emit: async () => {} }, event_types: { SETTINGS_UPDATED: 'updated' },
         toastr: { error: jest.fn(), warning: jest.fn() }, t: strings => strings[0], console: { error: jest.fn(), warn: jest.fn() },
         runtimeSettingsConflict: createRuntimeSettingsConflictGuard(), window: { dispatchEvent: jest.fn() }, Event: class Event {},
@@ -28,33 +30,36 @@ function setup() {
     const helperStart = source.indexOf('const runtimeSettingsPersistence = createRuntimeSettingsPersistence({');
     context.createRuntimeSettingsPersistence = createRuntimeSettingsPersistence;
     const { saveSettings, buildRuntimeSettingsPayload } = runInNewContext(
-        `(() => { ${source.slice(helperStart, end).replace('export async function', 'async function')}; return { saveSettings, buildRuntimeSettingsPayload }; })()`, context,
+        `(() => { ${source.slice(helperStart, end).replace('export async function', 'async function')};
+            const { settings_revision, ...initial } = buildRuntimeSettingsPayload();
+            runtimeSettingsPersistence.initialize(initial, settings_revision);
+            return { saveSettings, buildRuntimeSettingsPayload }; })()`, context,
     );
     context.buildRuntimeSettingsPayload = buildRuntimeSettingsPayload;
-    return { saveSettings, guard, listeners, requests, power_user, context };
+    const changeSort = (order = 'desc') => { power_user.sort_order = order; guard.changed(); };
+    return { saveSettings, guard, listeners, requests, power_user, context, changeSort };
 }
 
 test('real saveSettings serializes sort snapshots and retains the guard through failure', async () => {
-    const { saveSettings, guard, listeners, requests, power_user, context } = setup();
-    guard.changed();
+    const { saveSettings, listeners, requests, context, changeSort } = setup();
+    changeSort('desc');
     const old = saveSettings();
     await new Promise(setImmediate);
-    power_user.sort_order = 'desc';
-    guard.changed();
+    changeSort('asc');
     const current = saveSettings();
     await new Promise(setImmediate);
-    expect(JSON.parse(requests[0].request.body).power_user.sort_order).toBe('asc');
+    expect(JSON.parse(requests[0].request.body).power_user.sort_order).toBe('desc');
     expect(requests).toHaveLength(1);
     requests[0].resolve({ ok: true, json: async () => ({ result: 'ok', settings_revision: 2 }) });
     await old;
     await new Promise(setImmediate);
     expect(listeners.size).toBe(1);
-    expect(JSON.parse(requests[1].request.body).power_user.sort_order).toBe('desc');
+    expect(JSON.parse(requests[1].request.body).power_user.sort_order).toBe('asc');
     expect(JSON.parse(requests[1].request.body).settings_revision).toBe(2);
     requests[1].resolve({ ok: true, json: async () => ({ result: 'ok', settings_revision: 3 }) });
     await current;
     expect(listeners.size).toBe(0);
-    guard.changed();
+    changeSort();
     const failed = saveSettings();
     await new Promise(setImmediate);
     requests[2].resolve({ ok: false, status: 500, statusText: 'error' });
@@ -71,8 +76,8 @@ test('real saveSettings serializes sort snapshots and retains the guard through 
 });
 
 test.each([{}, { result: 'ok' }, { result: 'ok', settings_revision: null }, { settings_revision: 2 }])('unconfirmed HTTP 200 %j retains the sort warning', async response => {
-    const { saveSettings, guard, listeners, requests } = setup();
-    guard.changed();
+    const { saveSettings, changeSort, listeners, requests } = setup();
+    changeSort();
     const save = saveSettings();
     await new Promise(setImmediate);
     requests[0].resolve({ ok: true, json: async () => response });
@@ -81,11 +86,11 @@ test.each([{}, { result: 'ok' }, { result: 'ok', settings_revision: null }, { se
 });
 
 test('confirmed save releases the warning while SETTINGS_UPDATED is still pending', async () => {
-    const { saveSettings, guard, listeners, requests, context } = setup();
+    const { saveSettings, guard, changeSort, listeners, requests, context } = setup();
     let finishEvent;
     context.eventSource.emit = jest.fn(() => new Promise(resolve => { finishEvent = resolve; }));
     const finishSnapshot = context.finishSettingsSaveSnapshot;
-    guard.changed();
+    changeSort();
     const save = saveSettings();
     await new Promise(setImmediate);
     requests[0].resolve({ ok: true, json: async () => ({ result: 'ok', settings_revision: 2 }) });
@@ -101,10 +106,10 @@ test('confirmed save releases the warning while SETTINGS_UPDATED is still pendin
 });
 
 test('a rejected SETTINGS_UPDATED callback does not undo a confirmed save or finish twice', async () => {
-    const { saveSettings, guard, listeners, requests, context } = setup();
+    const { saveSettings, changeSort, listeners, requests, context } = setup();
     context.eventSource.emit = jest.fn(async () => { throw new Error('listener failed'); });
     const finishSnapshot = context.finishSettingsSaveSnapshot;
-    guard.changed();
+    changeSort();
     const save = saveSettings();
     await new Promise(setImmediate);
     requests[0].resolve({ ok: true, json: async () => ({ result: 'ok', settings_revision: 2 }) });

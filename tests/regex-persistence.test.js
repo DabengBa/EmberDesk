@@ -110,6 +110,8 @@ function settingsSetup() {
         feature_settings: {}, tags: [], tag_map: {}, oai_settings: {}, background_settings: {}, settingsDocumentRevision: 1,
         beginSettingsSaveSnapshot: () => ({}), finishSettingsSaveSnapshot: jest.fn(), compressRequest: async x => x,
         getRequestHeaders: () => ({}), fetch: (_, request) => new Promise(resolve => requests.push({ request, resolve })),
+        requestSettings: async () => ({ ok: true, json: async () => ({ settings_revision: 4, settings: { amount_gen: 3 } }) }),
+        resolveStartupSettingsPlan: ({ data }) => data,
         eventSource: { emit: async () => {} }, event_types: { SETTINGS_UPDATED: 'updated' },
         toastr: { error: jest.fn(), warning: jest.fn() }, t: strings => strings[0], console: { warn: jest.fn(), error: jest.fn() },
         saveSettingsDebounced: jest.fn(),
@@ -120,7 +122,10 @@ function settingsSetup() {
     const start = source.indexOf('const runtimeSettingsPersistence = createRuntimeSettingsPersistence({');
     const end = source.indexOf('\n/**', source.indexOf('export async function saveSettings(', start));
     const { saveSettings: save, buildRuntimeSettingsPayload } = runInNewContext(
-        `(() => { ${source.slice(start, end).replace('export async function', 'async function')}; return { saveSettings, buildRuntimeSettingsPayload }; })()`, context,
+        `(() => { ${source.slice(start, end).replace('export async function', 'async function')};
+            const { settings_revision, ...initial } = buildRuntimeSettingsPayload();
+            runtimeSettingsPersistence.initialize(initial, settings_revision);
+            return { saveSettings, buildRuntimeSettingsPayload }; })()`, context,
     );
     context.buildRuntimeSettingsPayload = buildRuntimeSettingsPayload;
     context.saveSettings = save;
@@ -164,6 +169,7 @@ test.each([1, 2].flatMap(type => [true, false].map(allowed => ({ type, allowed }
 
 test('strict settings waits for response, fails closed on revision conflicts and rejects HTTP errors', async () => {
     const s = settingsSetup();
+    s.context.amount_gen = 2;
     let settled = false;
     const save = s.save(0, { strict: true }).finally(() => { settled = true; });
     await tick();
@@ -175,6 +181,7 @@ test('strict settings waits for response, fails closed on revision conflicts and
     await expect(s.save(0, { strict: true })).rejects.toThrow('runtime settings conflict');
     expect(s.requests).toHaveLength(1);
     const fresh = settingsSetup();
+    fresh.context.amount_gen = 2;
     const failed = fresh.save(0, { strict: true });
     await tick();
     fresh.requests[0].resolve({ ok: false, status: 500, statusText: 'offline' });

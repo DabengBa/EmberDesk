@@ -134,6 +134,11 @@ class AccountStorage {
     getState() {
         return structuredClone(this.#state);
     }
+
+    /** Apply account storage from a reconciled settings save without scheduling another save. */
+    replaceState(state) {
+        this.#state = structuredClone(state);
+    }
 }
 
 /**

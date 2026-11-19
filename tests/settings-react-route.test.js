@@ -525,7 +525,7 @@ describe('settings React route flag', () => {
             power_user: { fast_ui_mode: false },
             feature_settings: { stale: false },
         }]);
-        expect(routeSource).toContain('await saveSettingsToRuntime(savedPayload, runtime, runtimeBaseline, revision);');
+        expect(routeSource).toContain('await saveSettingsToRuntime(savedPayload, runtime, runtimeBaseline, revision, editedPaths);');
     });
 
     test('coerces string numeric enums into form numbers for lossless save validation', async () => {

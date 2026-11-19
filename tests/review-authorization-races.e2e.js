@@ -56,50 +56,18 @@ test('two tabs: stale unrelated settings save cannot restore a persisted revocat
     await expect.poll(async () => (await saved(page)).grants.includes(id)).toBe(false);
     const statuses = [];
     other.on('response', r => { if (r.url().includes('/api/settings/save')) statuses.push(r.status()); });
-    const unsavedModel = `authorization-recovery-${Date.now()}`;
-    const error = await other.evaluate(async value => {
-        window.SillyTavern.getContext().chatCompletionSettings.openai_model = value;
-        const { saveSettings } = await import('/script.js');
-        try { await saveSettings(0, { strict: true }); return null; } catch (error) { return error.message; }
-    }, unsavedModel);
-    const restored = await saved(page);
-    expect(error).toContain('revision conflict');
-    expect(statuses).toContain(409);
-    expect(statuses).not.toContain(200);
-    expect(restored.grants).not.toContain(id);
-    expect(restored.model).not.toBe(unsavedModel);
-    await expect(other.locator('#toast-container')).toContainText(/Settings conflict|设置冲突/);
-    await expect.poll(() => other.evaluate(() => window.SillyTavern.getContext().chatCompletionSettings.openai_model)).toBe(unsavedModel);
-    const writesBeforeRetry = statuses.length;
-    const retryError = await other.evaluate(async () => {
-        const { saveSettings } = await import('/script.js');
-        try { await saveSettings(0, { strict: true }); return null; } catch (error) { return error.message; }
-    });
-    expect(retryError).toContain('runtime settings conflict');
-    expect(statuses).toHaveLength(writesBeforeRetry);
-    await other.locator('[data-react-workspace-shell-chrome] nav button').filter({ hasText: '设置' }).click();
-    const recovery = other.locator('#SettingsPanel').getByTestId('runtime-settings-recovery');
-    await expect(recovery).toBeVisible();
-    await expect(recovery).toContainText(/saving is paused|已暂停保存/i);
-    await expect(other.locator('#SettingsPanel .settings-status--success')).toHaveCount(0);
-    const downloadPromise = other.waitForEvent('download');
-    await recovery.getByRole('button', { name: /download runtime settings only|仅下载运行时设置/i }).click();
-    const download = await downloadPromise;
-    const chunks = [];
-    for await (const chunk of await download.createReadStream()) chunks.push(chunk);
-    const exported = JSON.parse(Buffer.concat(chunks).toString());
-    expect(exported.oai_settings.openai_model).toBe(unsavedModel);
-    await page.close();
-    await other.reload(); await testSetup.awaitST({ page: other });
-    expect((await saved(other)).grants).not.toContain(id);
-    await other.waitForTimeout(2500);
+    const model = `authorization-merge-${Date.now()}`;
     await other.evaluate(async value => {
         window.SillyTavern.getContext().chatCompletionSettings.openai_model = value;
         const { saveSettings } = await import('/script.js');
         await saveSettings(0, { strict: true });
-    }, exported.oai_settings.openai_model);
-    await expect.poll(async () => (await saved(other)).model).toBe(unsavedModel);
-    expect((await saved(other)).grants).not.toContain(id);
+    }, model);
+    expect(statuses).toContain(409);
+    expect(statuses).toContain(200);
+    const merged = await saved(page);
+    expect(merged.grants).not.toContain(id);
+    expect(merged.model).toBe(model);
+    await expect(other.locator('#toast-container').getByText(/Settings conflict|设置冲突/)).toHaveCount(0);
     await other.reload(); await testSetup.awaitST({ page: other }); await select(other, name);
     await expect(permission(other)).not.toBeChecked();
     await other.close();
