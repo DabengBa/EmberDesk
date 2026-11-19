@@ -59,12 +59,20 @@ test('production request context sends session CSRF for JSON and FormData and re
 
 test('workspace initialization stops and reports a CSRF token load failure', async ({ page }) => {
     await testSetup.awaitST({ page });
-    const errors = [];
-    page.on('pageerror', error => errors.push(error.message));
-    await page.route('**/csrf-token', route => route.fulfill({ status: 503, contentType: 'text/plain', body: 'unavailable' }));
+    await page.route('**/csrf-token', route => route.fulfill({ status: 503, contentType: 'text/plain', body: 'unavailable' }), { times: 1 });
 
     await page.reload();
-    await expect(page.locator('.toast-error')).toContainText("Couldn't get CSRF token", { timeout: 30_000 });
-    await expect.poll(() => errors).toContain('Initialization failed');
-    await expect(page.locator('#preloader')).toBeAttached();
+    const startup = page.locator('#sheld > #workspace-startup');
+    await expect(startup.getByRole('alert')).toBeVisible({ timeout: 5_000 });
+    await expect(page.locator('#form_sheld')).toHaveAttribute('inert', '');
+    expect(await page.evaluate(() => window.__emberDeskStartup.appReadyAtMs ?? null)).toBeNull();
+    const reload = startup.getByRole('button', { name: /Reload|重新加载/ });
+    const labelLineCount = await reload.evaluate(button => {
+        const label = document.createRange();
+        label.selectNodeContents(button);
+        return label.getClientRects().length;
+    });
+    expect(labelLineCount).toBe(1);
+    await reload.click();
+    await expect.poll(() => page.evaluate(() => window.__emberDeskStartup?.appReadyAtMs)).toEqual(expect.any(Number));
 });

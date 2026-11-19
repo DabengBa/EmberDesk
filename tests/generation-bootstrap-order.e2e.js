@@ -20,7 +20,7 @@ test('synchronous stop is available while SPA panel preparation is waiting for i
     try {
         await page.reload({ waitUntil: 'commit' });
         await bundleStarted;
-        await expect(page.locator('#preloader')).toHaveAttribute('aria-busy', 'true');
+        await expect(page.locator('#workspace-startup').getByRole('status')).toBeVisible();
         const result = await page.evaluate(async () => {
             // Exercise the native runtime independently, keeping its normal module-graph entry order.
             await import('/scripts/i18n.js');
@@ -67,7 +67,7 @@ test('generation runtime remains usable independently when SPA panel preparation
     await testSetup.awaitST({ page });
     await page.route(workspacePanelEntry, route => route.abort());
     await page.reload({ waitUntil: 'commit' });
-    await expect(page.locator('#preloader')).toContainText('Unable to start the workspace.');
+    await expect(page.locator('#workspace-startup').getByRole('alert')).toBeVisible();
     const result = await page.evaluate(async () => {
         await import('/scripts/i18n.js');
         const script = await import('/script.js');

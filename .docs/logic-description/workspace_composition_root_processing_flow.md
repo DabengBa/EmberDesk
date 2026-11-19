@@ -67,17 +67,17 @@ The processing outputs are:
 1. `public/script.js` imports the extracted owners and the remaining workspace modules.
 2. The root calls `installPublicBrowserApi({ libs, getContext })`.
 3. The root registers the World Info shell context. The `extensionPromptRoles` value is read through a getter after the root has initialized that value.
-4. The root installs the jQuery Ajax CSRF prefilter.
-5. The jQuery-ready callback calls `bootstrapWorkspace()`.
+4. After the workspace hosts are committed and imports settle, the React entry calls `startWorkspaceRuntime(revealWorkspace)`.
+5. `bindLegacyShellHandlers()` binds the workspace hosts and calls `bootstrapWorkspace()` without waiting for `window.load`.
 
 ### Bootstrap
 
 1. `bootstrapWorkspace()` calls `loadCsrfToken()` inside the measured `csrfToken` stage.
-2. If token loading fails, it shows `Couldn't get CSRF token. Please refresh the page.`, throws `Initialization failed`, and does not emit `APP_INITIALIZED` or `APP_READY`.
-3. On success, it creates the splash overlay and runs the ordered UI, settings, character, feature, scraper, and late initialization stages.
+2. If token loading fails, startup rejects to the React host, which shows a reload action in the chat area. Neither `APP_INITIALIZED` nor `APP_READY` is emitted.
+3. On success, it runs the ordered UI, settings, character, feature, scraper, and late initialization stages while React shows local placeholders.
 4. It emits `APP_INITIALIZED` after late feature initialization.
-5. It hides the initialization loader, fixes the viewport, mounts the React workspace shell chrome, and emits `APP_READY`.
-6. It queues deferred version, backgrounds, extensions, and panel warmup work in a microtask after `APP_READY`.
+5. It fixes the viewport and mounts the React workspace shell chrome. The runtime wrapper reveals the interactive hosts, then emits `APP_READY`.
+6. It queues deferred version, built-in feature, and panel warmup work in a microtask after `APP_READY`.
 
 ### Reverse-import contract
 

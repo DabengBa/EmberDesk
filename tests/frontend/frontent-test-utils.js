@@ -47,7 +47,7 @@ async function isAppReady(page) {
     try {
         return await page.evaluate(() => Boolean(
             window.SillyTavern?.getContext
-            && document.getElementById('preloader') === null
+            && Number.isFinite(window.__emberDeskStartup?.appReadyAtMs)
         ));
     } catch {
         return false;
@@ -56,7 +56,8 @@ async function isAppReady(page) {
 
 async function waitForAppReady(page) {
     await page.waitForFunction(
-        'window.SillyTavern?.getContext && document.getElementById("preloader") === null',
+        () => window.SillyTavern?.getContext && Number.isFinite(window.__emberDeskStartup?.appReadyAtMs),
+        undefined,
         { timeout: 120_000 },
     );
 }

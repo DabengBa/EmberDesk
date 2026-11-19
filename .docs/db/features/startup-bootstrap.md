@@ -17,13 +17,13 @@ Bring the user from the root EmberDesk URL to a usable main workspace while slow
 
 ## User-Visible Contract
 
-- Opening or reloading the root workspace shows a startup overlay only while core workspace readiness is still required.
-- The overlay disappears when the main shell is usable for real interaction, even if secondary surfaces such as world info are still warming. Active chat background application is chat context, not a background-library panel.
+- Opening or reloading the root workspace shows the chat layout with local placeholders, not a full-screen splash. The composer cannot be used while the workspace is being prepared.
+- The placeholders clear when the main workspace is usable, even if secondary panels are still loading. If the workspace cannot start, the chat area shows an error and a reload action instead of remaining in a loading state.
 - Deferred panel failures surface in their own areas instead of returning the whole workspace to global loading.
-- Compatibility facades used during startup remain available without changing the visible startup experience; the workspace can finish core initialization before secondary compatibility work continues.
+
 - `/` opens the authenticated workspace in the same React application as login, setup, and settings. There is no second workspace UI to fall back to.
 - Refreshing the root URL repeats the same visible readiness contract and must not strand the user between shell and panel states.
-- The root entry invokes the explicit `bootstrapWorkspace()` composition-root bootstrap. This names the startup contract without implying that all remaining legacy domain and DOM owners have already moved out of `script.js`.
+
 
 ## Semantic Interaction IDs
 
@@ -34,20 +34,19 @@ Bring the user from the root EmberDesk URL to a usable main workspace while slow
 
 - As a returning workspace user who wants to start chatting, from the root URL open or reload EmberDesk; EmberDesk must show startup feedback only until the main shell can be used, secondary panels may still show local loading, and reload must repeat the same readiness contract. Failure is a blocked core shell or a global loading state that does not clear when the main workspace is ready.
 - As a user encountering a secondary surface failure during startup, from the usable workspace open the affected panel surface or apply an active chat background; EmberDesk must keep the main shell usable and show local retry, refresh, or error behavior, and failure is returning to global loading or leaving a blank surface with no recovery cue.
-- As a user opening the root workspace with World Info or other compatibility-dependent surfaces available, EmberDesk must finish main-shell initialization and remove the startup overlay before secondary panel work continues; failure is a compatibility initialization error that leaves the user stuck on global `Initializing...` feedback.
+
 
 ## Feature-Specific Evidence
 
-- Startup overlay disappearance, usable workspace controls, and local panel loading/error states are primary evidence.
+- The chat layout is visible before readiness, with the composer unavailable. After readiness, the placeholders clear and the composer can be used; core errors offer reload and secondary errors stay local.
 - Performance timings and profiler stages are supporting evidence only after the visible readiness contract is satisfied.
 
 ## Failure Signals
 
-- The global startup overlay remains after the main shell could otherwise be used.
+- The workspace is covered by a full-screen splash or allows sending before it is ready.
 - A retained active-background application failure blocks the whole workspace.
 - A secondary panel load failure blocks the whole workspace.
-- Refreshing the root URL leaves the user between a hidden overlay and unusable shell.
-- A compatibility surface fails during core initialization and blocks the shell from reaching ready.
+- A failed startup leaves a permanent placeholder with no reload action.
 
 ## Boundaries
 

@@ -64,9 +64,78 @@ test('the authenticated React workspace commits native hosts before starting the
     });
     try {
         await expect(page.getByRole('button', { name: /Character Library|角色库/ })).toBeVisible({ timeout: 15_000 });
-        await expect(page.locator('#preloader')).toHaveCount(0);
+        await expect.poll(() => page.evaluate(() => window.__emberDeskStartup?.appReadyAtMs)).toEqual(expect.any(Number));
     } catch (error) {
         throw new Error(`Workspace failed to start; native entry requests: ${scriptLoads.length}; browser errors: ${errors.join('\n')}`, { cause: error });
     }
     expect(scriptLoads).toHaveLength(1);
+});
+
+test('shows the workspace frame without admitting composer input while settings are held', async ({ page }, testInfo) => {
+    await signIn(page.request);
+    const held = Promise.withResolvers();
+    const release = Promise.withResolvers();
+    await page.route('**/api/settings/get', async route => {
+        held.resolve();
+        await release.promise;
+        await route.continue();
+    });
+    await page.goto('/', { waitUntil: 'domcontentloaded' });
+    try {
+        await held.promise;
+        await expect(page.locator('#sheld > #workspace-startup')).toBeVisible({ timeout: 3_000 });
+        await expect(page.locator('#preloader, #loader')).toHaveCount(0);
+        await expect(page.locator('#form_sheld')).toHaveAttribute('inert', '');
+        const pending = await page.evaluate(async () => {
+            const { eventSource, event_types } = await import('/script.js');
+            window.__readyEvents = 0;
+            eventSource.on(event_types.APP_READY, () => {
+                window.__readyEvents++;
+                window.__composerInertAtReady = document.querySelector('#form_sheld').inert;
+            });
+            const composer = document.querySelector('#send_textarea');
+            composer.focus();
+            return { focused: document.activeElement === composer, ready: window.__emberDeskStartup.appReadyAtMs ?? null };
+        });
+        expect(pending).toEqual({ focused: false, ready: null });
+        await page.screenshot({ path: testInfo.outputPath('settings-held.png') });
+        const originalViewport = page.viewportSize();
+        await page.setViewportSize({ width: 329, height: 580 });
+        await expect(page.locator('#sheld > #workspace-startup')).toBeVisible();
+        expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(329);
+        await page.screenshot({ path: testInfo.outputPath('settings-held-narrow.png') });
+        await page.setViewportSize(originalViewport);
+    } finally {
+        release.resolve();
+    }
+    await expect(page.locator('#workspace-startup')).toBeHidden();
+    await expect(page.locator('#send_textarea')).toBeEditable();
+    expect(await page.evaluate(() => [window.__readyEvents, window.__composerInertAtReady])).toEqual([1, false]);
+    await page.screenshot({ path: testInfo.outputPath('ready.png') });
+});
+
+test('workspace reaches APP_READY before an unrelated image finishes loading', async ({ page }) => {
+    await signIn(page.request);
+    const held = Promise.withResolvers();
+    const release = Promise.withResolvers();
+    await page.route('**/startup-proof-delayed-image.svg', async route => {
+        held.resolve();
+        await release.promise;
+        await route.fulfill({ contentType: 'image/svg+xml', body: '<svg xmlns="http://www.w3.org/2000/svg"/>' });
+    });
+    await page.route(url => url.pathname === '/', async route => {
+        const response = await route.fetch();
+        const body = (await response.text()).replace('</body>', '<img src="/startup-proof-delayed-image.svg" hidden></body>');
+        await route.fulfill({ response, body });
+    });
+    await page.goto('/', { waitUntil: 'domcontentloaded' });
+    try {
+        await held.promise;
+        await expect.poll(() => page.evaluate(() => window.__emberDeskStartup?.appReadyAtMs), { timeout: 5_000 })
+            .toEqual(expect.any(Number));
+        expect(await page.evaluate(() => document.readyState)).not.toBe('complete');
+        await expect(page.locator('#send_textarea')).toBeEditable();
+    } finally {
+        release.resolve();
+    }
 });
