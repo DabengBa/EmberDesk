@@ -266,7 +266,7 @@ describe('workspace bootstrap contract', () => {
         const source = read('public/script.js');
 
         expect(source).toContain('async function bootstrapWorkspace()');
-        expect(source).toContain("document.addEventListener('DOMContentLoaded', bindLegacyShellHandlers, { once: true })");
+        expect(source).toContain('export async function startWorkspaceRuntime(revealWorkspace)');
         expect(read('public/scripts/dom-handlers.js')).toContain('await bootstrapWorkspace();');
         expect(source).toContain('export { getRequestHeaders } from \'./scripts/request-context.js\';');
         expect(source).toContain('installPublicBrowserApi({ libs, getContext });');

@@ -80,7 +80,7 @@ describe('retired formatting preset managers', () => {
     test('config drawer mounts still run before getSettings', () => {
         const script = readRepoFile('public/script.js');
         const stageIndex = script.indexOf("measureStartupStage('mountConfigDrawers'");
-        const settingsIndex = script.indexOf('await getSettings(initLoaderHandle)');
+        const settingsIndex = script.indexOf('await getSettings()');
         expect(stageIndex).toBeGreaterThan(-1);
         expect(settingsIndex).toBeGreaterThan(-1);
         expect(stageIndex).toBeLessThan(settingsIndex);

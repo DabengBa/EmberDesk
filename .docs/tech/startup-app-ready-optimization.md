@@ -17,8 +17,8 @@ Primary files:
 - `public/scripts/public-api.js`
 - `public/scripts/events.js`
 - `public/scripts/startup-helpers.js`
-- `public/scripts/extensions.js`
-- `public/scripts/action-loader.js`
+- `app/components/workspace/WorkspaceHost.tsx`
+- `app/components/workspace/workspace-entry.ts`
 - `scripts/startup-performance-runner.mjs`
 - `src/endpoints/settings-cache.js`
 - `src/server-startup-profiler.js`
@@ -27,7 +27,7 @@ Primary files:
 ## Architecture And Constraints
 
 - `APP_READY` still means the main shell is visible and usable.
-- Startup preserves the readiness event names while using native DOM-ready wiring.
+- React commits the chat frame and local placeholders first. The workspace entry starts native initialization after committing the hosts and resolving imports, without waiting for `window.load`.
 - The optimization strategy is to remove non-first-screen work from the critical path, not to rename readiness events or change framework stack.
 - Daily-use measurement is browser-first and uses the `existing_server_browser_only` mode.
 
@@ -41,17 +41,17 @@ Primary files:
 - `getSettings.applyCore`
 - post-ready deferred tasks
 
-Before that sequence begins, module composition installs `globalThis.SillyTavern` explicitly and registers the World Info shell context. DOM-ready shell binding invokes `bootstrapWorkspace()`, which loads the CSRF token as its first measured stage; request headers come from `getRequestHeaders()`, not a jQuery prefilter. Request-context failure is propagated to the bootstrap owner and shows a persistent refresh error; no readiness event is emitted on that path.
+Before that sequence begins, module composition installs `globalThis.SillyTavern` explicitly and registers the World Info shell context. `startWorkspaceRuntime()` binds the committed native hosts and invokes `bootstrapWorkspace()`, which loads the CSRF token as its first measured stage. Core failures propagate to the React host, which keeps the composer inert and offers reload; no readiness event is emitted on that path.
 
 Critical path work still includes:
 
 - CSRF fetch
 - secrets and locale bootstrap
 - core module registration
-- extension UI skeleton binding
+
 - settings core apply
 - avatars and characters
-- loader removal
+- shell chrome mounting and synchronous reveal of the interactive hosts
 - `APP_READY`
 
 ### Deferred startup
@@ -59,11 +59,10 @@ Critical path work still includes:
 Post-ready work is scheduled through single-flight tasks from `public/scripts/startup-helpers.js`:
 
 - `deferred.getClientVersion`
-- `deferred.loadExtensionSettings`
+- `deferred.coreFeatureInit`
 
 The former deferred background catalog warmup and Background Library panel loading are retired. Active chat background application remains a chat-context/settings contract and does not create a catalog loader or startup panel.
 
-`public/scripts/extensions.js` exposes a deferred loader hook so the extensions UI can show a local placeholder and wait for the same in-flight activation task before opening details. When deferred loading fails, the placeholder switches to a retry state instead of leaving a permanent spinner behind.
 
 ### Settings-cache for /api/settings/get
 
@@ -86,14 +85,6 @@ The former deferred background catalog warmup and Background Library panel loadi
 - First batch: World Info editor body (`world-info-body`) and TextGen API settings (`textgen-api-settings`).
 - An idle warmup path may call `ensurePanel` after `APP_READY`, but correctness must not depend on warmup completing.
 
-### Loader exit behavior
-
-`public/scripts/action-loader.js` adds `overlayHideMode`.
-
-- Startup overlay uses `immediate`
-- regular loaders keep the default animated path
-
-This allows the first overlay to stop consuming a fixed chunk of `APP_READY` budget without changing the rest of the loader system.
 
 ### Measurement
 

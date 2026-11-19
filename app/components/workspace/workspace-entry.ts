@@ -47,7 +47,7 @@ function loadClassicScript(src: string): Promise<void> {
 
 let startup: Promise<void> | undefined;
 
-export function startWorkspace(): Promise<void> {
+export function startWorkspace(revealWorkspace: () => void): Promise<void> {
     // StrictMode can run mount effects twice. The native workspace has one runtime per document.
     return startup ??= (async () => {
         const { prepareWorkspacePanels } = await import('../../compat/workspace-panels-entry');
@@ -58,8 +58,11 @@ export function startWorkspace(): Promise<void> {
         }
         // Use original URLs so dependencies and the browser entry share module state.
         // Preserve the original graph root: importing /script.js first breaks its i18n/power-user cycle.
-        for (const path of ['/lib/structured-clone/monkey-patch.js', '/lib/eventemitter.js', '/scripts/i18n.js', '/script.js']) {
+        for (const path of ['/lib/structured-clone/monkey-patch.js', '/lib/eventemitter.js', '/scripts/i18n.js']) {
             await import(/* @vite-ignore */ path);
         }
+        const runtimePath = '/script.js';
+        const { startWorkspaceRuntime } = await import(/* @vite-ignore */ runtimePath);
+        await startWorkspaceRuntime(revealWorkspace);
     })();
 }

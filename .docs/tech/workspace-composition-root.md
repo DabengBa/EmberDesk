@@ -61,14 +61,14 @@ During `public/script.js` evaluation:
 1. The root imports `eventSource` / `event_types`, request-context helpers, and the browser library.
 2. `installPublicBrowserApi({ libs, getContext })` explicitly assigns the supported `globalThis.SillyTavern` object.
 3. `registerWorldInfoShellContext(...)` registers callable shell capabilities and a lazy `extensionPromptRoles` accessor. It does not cause `world-info.js` to import the root.
-4. Once the DOM and native imports are ready, `bindLegacyShellHandlers()` in `public/scripts/dom-handlers.js` binds the committed host and invokes `bootstrapWorkspace()`.
+4. After React commits the workspace hosts and native imports settle, the SPA calls `startWorkspaceRuntime(revealWorkspace)`. It awaits `bindLegacyShellHandlers()` in `public/scripts/dom-handlers.js`, which binds the committed hosts and calls `bootstrapWorkspace()`. It does not wait for `window.load`.
 
 ### Bootstrap order
 
 `bootstrapWorkspace()` currently performs the following ordered stages:
 
 1. Fetch the CSRF token. A failure shows a persistent error and rejects initialization before the main bootstrap stages continue.
-2. Load the cached workspace bundle and install its React popup factory, then create the splash overlay and initialization loader. This preparation precedes the first loader popup so synchronous dialog references are available to existing callers.
+2. Load the cached workspace bundle and install its React popup factory so synchronous dialog references are available to existing callers. React renders local startup placeholders independently of popup creation.
 3. Install the Provider and preset live contexts and synchronous Prompt Manager domain; register DOM/browser compatibility helpers, library shims, Markdown/DOMPurify patches, and browser fixes.
 4. Initialize secrets, locale, core chat and OpenAI modules, presets, and system messages.
 5. Load settings and apply post-settings UI bindings.
@@ -76,10 +76,10 @@ During `public/script.js` evaluation:
 7. Hydrate feature modules, including macro autocomplete, World Info, chat observers, and workspace helpers.
 8. Run scraper and late feature initialization.
 9. Emit `event_types.APP_INITIALIZED`.
-10. Hide the initialization loader, fix the viewport, mount the React workspace shell chrome, and emit `event_types.APP_READY`.
-11. Queue deferred version, background, extension, and panel warmup work after readiness.
+10. Fix the viewport and mount the React workspace shell chrome. The runtime wrapper commits the interactive workspace via `revealWorkspace`, then emits `event_types.APP_READY`.
+11. Start deferred version, built-in feature, and panel warmup work after readiness.
 
-`APP_READY` therefore follows core initialization, loader removal, viewport preparation, and React shell mounting. Deferred work is not allowed to delay the readiness event or make a secondary panel failure block the already initialized shell.
+`APP_READY` therefore follows core initialization, viewport preparation, React shell mounting and removal of the startup interaction block. Deferred work is not allowed to delay the readiness event or make a secondary panel failure block the already initialized shell.
 
 ### Extracted request and public API contracts
 

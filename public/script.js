@@ -3942,20 +3942,6 @@ export {
     getMaxPromptTokens as getMaxContextSize,
 };
 
-/**
- * Wait for page to load before continuing the app initialization.
- */
-const waitForLoadStartedAtMs = performance.now();
-await new Promise((resolve) => {
-    if (document.readyState === 'complete') {
-        resolve();
-    } else {
-        window.addEventListener('load', resolve);
-    }
-});
-pushStartupStage('awaitWindowLoad', waitForLoadStartedAtMs, performance.now());
-markStartup('window:load-ready');
-
 // Configure toast library:
 toastr.options = {
     positionClass: 'toast-top-center',
@@ -4452,40 +4438,10 @@ export async function pingServer() {
 //MARK: bootstrapWorkspace
 async function bootstrapWorkspace() {
     markStartup('bootstrapWorkspace:start');
-    try {
-        await measureStartupStage('csrfToken', async () => {
-            await loadCsrfToken();
-        });
-    } catch {
-        toastr.error(t`Couldn't get CSRF token. Please refresh the page.`, t`Error`, { timeOut: 0, extendedTimeOut: 0, preventDuplicates: true });
-        throw new Error('Initialization failed');
-    }
+    await measureStartupStage('csrfToken', () => loadCsrfToken());
 
     const workspace = await loadWorkspacePanelsModule();
     installPopupRuntime(workspace.createPopupRuntime);
-    const initLoaderOverlay = loader.createOverlay();
-    initLoaderOverlay.classList.add('splash-screen');
-
-    const splashLogo = document.createElement('img');
-    splashLogo.src = '/img/logo.png';
-    splashLogo.alt = 'EmberDesk';
-    splashLogo.className = 'splash-logo';
-    splashLogo.ariaLabel = 'EmberDesk Logo';
-
-    const splashMessage = document.createElement('h2');
-    splashMessage.className = 'splash-message';
-    splashMessage.textContent = t`Initializing…`;
-    splashMessage.dataset.i18n = 'Initializing…';
-
-    initLoaderOverlay.prepend(splashLogo);
-    initLoaderOverlay.appendChild(splashMessage);
-
-    const initLoaderHandle = loader.show({
-        slug: 'app-init',
-        toastMode: loader.ToastMode.NONE,
-        overlayContent: initLoaderOverlay,
-        overlayHideMode: 'immediate',
-    });
 
     await measureStartupStage('bootstrapUi', async () => {
         optionsMenuModuleRef = workspace;
@@ -4552,14 +4508,14 @@ async function bootstrapWorkspace() {
     await measureStartupStage('initPresetManager', () => initPresetManager());
     await measureStartupStage('initSystemMessages', () => initSystemMessages());
     await measureStartupStage('mountConfigDrawers', () => mountWorldInfoPanel());
-    await getSettings(initLoaderHandle);
+    await getSettings();
     await measureStartupStage('bindPostSettingsUi', () => Promise.resolve().then(() => {
         initKeyboard();
         initDynamicStyles();
         initTags();
         initBranchUI();
     }));
-    await measureStartupStage('getCharacters', () => getCharacters());
+    await measureStartupStage('getCharacters', () => enqueueCharacterRefresh({ required: true }));
     await measureStartupStage('initTokenizers', () => initTokenizers());
     await measureStartupStage('hydrateFeatureModules', async () => {
         bindMainChatMessageListBridgeObservers();
@@ -4583,9 +4539,17 @@ async function bootstrapWorkspace() {
     }));
     await measureStartupStage('emitAppInitialized', () => eventSource.emit(event_types.APP_INITIALIZED));
     markStartup('app:initialized');
-    await measureStartupStage('hideInitLoader', () => initLoaderHandle.hide());
     await measureStartupStage('fixViewport', () => fixViewport());
-    await measureStartupStage('mountReactWorkspaceShellChrome', () => mountReactWorkspaceShellChromeHost());
+    await measureStartupStage('mountReactWorkspaceShellChrome', async () => {
+        const result = await mountReactWorkspaceShellChromeHost();
+        if (result.status !== 'mounted') throw new Error(`Workspace chrome mount: ${result.status}`);
+    });
+}
+
+/** Starts the workspace after the SPA has committed its native hosts. */
+export async function startWorkspaceRuntime(revealWorkspace) {
+    await bindLegacyShellHandlers();
+    revealWorkspace();
     await measureStartupStage('emitAppReady', () => eventSource.emit(event_types.APP_READY));
     startCharacterLibraryRealtime();
     startupProfile.appReadyAtMs = roundStartupTime(performance.now());
@@ -5150,7 +5114,7 @@ export async function publishCharacterLibrarySnapshot(snapshot) {
 
 let characterRefreshTail = Promise.resolve();
 
-function enqueueCharacterRefresh(reportStatus = false) {
+function enqueueCharacterRefresh({ reportStatus = false, required = false } = {}) {
     const refresh = characterRefreshTail.then(async () => {
         try {
             if (reportStatus && characterGroupOverlay.isRealtimeRefreshBlocked) return null;
@@ -5165,6 +5129,7 @@ function enqueueCharacterRefresh(reportStatus = false) {
             if (errorData?.overflow && !reportStatus) {
                 await Popup.show.text(t`Character data length limit reached`, t`To resolve this, set "performance.lazyLoadCharacters" to "true" in config.yaml and restart the server.`);
             }
+            if (required) throw error;
             return reportStatus ? false : undefined;
         }
     });
@@ -5190,7 +5155,7 @@ function startCharacterLibraryRealtime() {
         try {
             while (dirty && !stopped) {
                 dirty = false;
-                const ok = await enqueueCharacterRefresh(true);
+                const ok = await enqueueCharacterRefresh({ reportStatus: true });
                 if (ok === null) {
                     dirty = true;
                     break;
@@ -7478,16 +7443,6 @@ export function changeMainAPI(api = null) {
     forceCharacterEditorTokenize();
 }
 
-function reloadLoop() {
-    const MAX_RELOADS = 5;
-    let reloads = Number(sessionStorage.getItem('reloads') || 0);
-    if (reloads < MAX_RELOADS) {
-        reloads++;
-        sessionStorage.setItem('reloads', String(reloads));
-        window.location.reload();
-    }
-}
-
 //MARK: getSettings()
 ///////////////////////////////////////////
 function requestSettings() {
@@ -7502,15 +7457,13 @@ function requestSettings() {
 async function fetchStartupSettings() {
     const response = await requestSettings();
     if (!response.ok) {
-        reloadLoop();
-        toastr.error(t`Settings could not be loaded after multiple attempts. Please try again later.`);
-        throw new Error('Error getting settings');
+        throw new Error(`Error getting settings: HTTP ${response.status}`);
     }
 
     return response.json();
 }
 
-async function applyStartupSettingsCore(data, _initLoaderHandle = null) {
+async function applyStartupSettingsCore(data) {
     const settingsPlan = resolveStartupSettingsPlan({ data });
     const canonical = structuredClone(settingsPlan.settings ?? {});
 
@@ -7590,10 +7543,10 @@ async function applyStartupSettingsCore(data, _initLoaderHandle = null) {
     return settingsPlan;
 }
 
-export async function getSettings(initLoaderHandle = null) {
+export async function getSettings() {
     return measureStartupStage('getSettings', async () => {
         const data = await measureStartupStage('getSettings.fetch', () => fetchStartupSettings());
-        return measureStartupStage('getSettings.applyCore', () => applyStartupSettingsCore(data, initLoaderHandle));
+        return measureStartupStage('getSettings.applyCore', () => applyStartupSettingsCore(data));
     });
 }
 
@@ -9897,13 +9850,4 @@ async function mountDialogueDelMesControls() {
     } catch (error) {
         console.error('Failed to mount dialogue delete-message controls:', error);
     }
-}
-
-// MARK: DOM Handlers Start
-if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', bindLegacyShellHandlers, { once: true });
-} else {
-    // A dynamic import after DOMContentLoaded can still be evaluating the
-    // i18n cycle when it reaches this module. Start after that graph settles.
-    setTimeout(bindLegacyShellHandlers, 0);
 }

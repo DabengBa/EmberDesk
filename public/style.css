@@ -848,6 +848,14 @@ body .panelControlBar {
     overflow-wrap: anywhere;
 }
 
+#chat,
+.workspace-startup-chat {
+    border: 1px solid var(--chat-workspace-border);
+    border-bottom: 0;
+    border-radius: 6px 6px 0 0;
+    background-color: var(--chat-workspace-bg);
+}
+
 #chat {
     max-height: calc(100vh - calc(var(--topBarBlockSize) + var(--bottomFormBlockSize)));
     overflow-x: hidden;
@@ -855,11 +863,7 @@ body .panelControlBar {
     overflow-y: scroll;
     display: flex;
     bottom: 10px;
-    border: 1px solid var(--chat-workspace-border);
-    border-bottom: 0;
-    border-radius: 6px 6px 0 0;
     backdrop-filter: blur(var(--SmartThemeBlurStrength));
-    background-color: var(--chat-workspace-bg);
     -webkit-backdrop-filter: blur(var(--SmartThemeBlurStrength));
     flex-direction: column;
     z-index: 30;
@@ -867,6 +871,84 @@ body .panelControlBar {
     gap: 2px;
     scrollbar-gutter: stable;
 }
+
+#sheld > [inert],
+#top-settings-holder[inert],
+body:has(#workspace-startup) #emberdesk-react-workspace-shell-chrome-host {
+    visibility: hidden;
+}
+
+#workspace-startup {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    z-index: 31;
+}
+
+.workspace-startup-chat {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    padding: 16px;
+}
+
+.workspace-startup-lines {
+    display: grid;
+    gap: 8px;
+    width: 54%;
+    max-width: 320px;
+}
+
+.workspace-startup-lines-user {
+    align-self: flex-end;
+    width: 35%;
+}
+
+.workspace-startup-lines span,
+.workspace-startup-composer span {
+    display: block;
+    height: 10px;
+    border-radius: 5px;
+    background: color-mix(in srgb, var(--SmartThemeBodyColor) 14%, transparent);
+}
+
+.workspace-startup-lines span:nth-child(2) {
+    width: 65%;
+}
+
+.workspace-startup-status,
+.workspace-startup-error {
+    margin: auto;
+    text-align: center;
+    overflow-wrap: anywhere;
+}
+
+.workspace-startup-status {
+    color: var(--SmartThemeQuoteColor);
+}
+
+#workspace-startup .workspace-startup-error button {
+    width: max-content;
+    max-width: 100%;
+    margin: 12px auto 0;
+}
+
+.workspace-startup-composer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    min-height: 52px;
+    margin: 0 20px 20px;
+    padding: 0 12px;
+    border: 1px solid var(--form-control-border-color);
+    border-radius: 5px;
+    background: var(--form-control-bg);
+}
+
+.workspace-startup-composer span:first-child { width: 28%; }
+.workspace-startup-composer span:last-child { width: 20px; height: 20px; }
 
 #form_sheld {
     white-space: nowrap;
@@ -4697,6 +4779,13 @@ h5 {
     padding: 0;
     height: 100%;
     overflow-y: auto;
+}
+
+#emberdesk-react-select-chat-host {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    width: 100%;
 }
 
 #select_chat_div hr {

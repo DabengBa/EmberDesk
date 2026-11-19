@@ -538,6 +538,35 @@ async function expectMainChatComposerVisibleOwner(page, expectedOwned) {
 }
 
 
+test('a failed settings panel request can retry without blocking chat generation', async ({ page }) => {
+    await testSetup.awaitST({ page });
+    await selectCharacterInFreshChat(page, characterName);
+    await enableOpenAiStreaming(page);
+    await installStreamingFetchStub(page, { chunks: ['Chat works ', 'while settings are unavailable.'] });
+
+    let failPanel = true;
+    await page.route('**/api/settings/get', route => failPanel
+        ? route.fulfill({ status: 503, body: 'unavailable' })
+        : route.continue());
+    const settings = page.locator('[data-react-workspace-shell-chrome] nav button').filter({ hasText: /设置|Settings/i });
+    await settings.click();
+    const retry = page.locator('#SettingsPanel').getByRole('button', { name: /Reload settings|重新加载设置/ });
+    await expect(retry).toBeVisible();
+    await expect(page.locator('#workspace-startup')).toHaveCount(0);
+    await expect(page.locator('#send_textarea')).toBeEditable();
+    await startGeneration(page, 'Reply while settings cannot load.');
+    await waitForGeneration(page);
+    await expect(page.locator('#chat')).toContainText('Chat works while settings are unavailable.');
+    await expect(retry).toBeVisible();
+
+    failPanel = false;
+    const settingsLoaded = page.waitForResponse(response => response.url().endsWith('/api/settings/get') && response.ok());
+    await retry.click();
+    await settingsLoaded;
+    await expect(retry).toHaveCount(0);
+
+});
+
 test.describe('chat message streaming', () => {
     test.describe.configure({ mode: 'serial' });
 

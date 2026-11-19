@@ -23,24 +23,6 @@ describe('chat workspace structure', () => {
         expect(frameStyleSource).toContain('max-width: 100%;');
     });
 
-    test('renders the workspace preloader before native startup scripts run', () => {
-        const host = readRepoFile('app/components/workspace/WorkspaceHost.tsx');
-        const loaderCss = readRepoFile('public/css/loader.css');
-
-        expect(host).toContain('const [failed, setFailed] = useState(false);');
-        expect(host).toMatch(/id="preloader"[^>]*\brole="status"[^>]*\baria-live="polite"[^>]*\baria-busy=\{!failed\}/);
-        expectContainsMarkers(host, [
-            'className="preloader-content"',
-            'className="preloader-logo"',
-            'className="preloader-spinner fa-solid fa-gear fa-spin"',
-            'className="preloader-message"',
-            'Initializing…',
-        ]);
-        expect(loaderCss).toContain('#preloader,');
-        expect(loaderCss).toContain('.preloader-content');
-        expect(loaderCss).toContain('max-width: min(320px, calc(100vw - 3rem));');
-        expect(loaderCss).toContain('overflow-wrap: anywhere;');
-    });
 
     test('retires same-version shell takeover flags and fallback diagnostics', () => {
         const scriptSource = readRepoFile('public/script.js');

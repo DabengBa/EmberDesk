@@ -355,18 +355,17 @@ test('slash delchat does not delete when the refreshed history has no selected r
 });
 
 
-test('workspace panel preparation failure leaves startup on the splash screen', async ({ page }) => {
+test('workspace panel preparation failure leaves an in-workspace reload action', async ({ page }) => {
     await testSetup.awaitST({ page });
     let requests = 0;
     await page.route('**/scripts/workspace-panels-react-bridge.js', route => { requests++; return route.abort('failed'); });
     await page.reload();
     await expect.poll(() => requests).toBeGreaterThan(0);
-    await expect(page.locator('#preloader')).toHaveAttribute('aria-busy', 'false');
-    await expect(page.locator('#preloader')).toHaveCount(1);
+    await expect(page.locator('#workspace-startup').getByRole('alert')).toBeVisible();
     await page.unroute('**/scripts/workspace-panels-react-bridge.js');
     await page.reload();
     await testSetup.awaitST({ page });
-    await expect(page.locator('#preloader')).toHaveCount(0);
+    await expect(page.locator('#workspace-startup')).toHaveCount(0);
 });
 
 test('history imports a supported JSON chat through the real endpoint', async ({ page }) => {

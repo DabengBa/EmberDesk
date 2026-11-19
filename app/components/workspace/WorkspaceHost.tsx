@@ -1,21 +1,25 @@
 import { useEffect, useState } from 'react';
-import { createPortal } from 'react-dom';
+import { createPortal, flushSync } from 'react-dom';
 import { translate } from '../../compat/i18n';
 import { startWorkspace, useWorkspacePresentation } from './workspace-entry';
 
 export function WorkspaceHost() {
     const [draggableTemplate, setDraggableTemplate] = useState<HTMLTemplateElement | null>(null);
-    const [failed, setFailed] = useState(false);
+    const [startup, setStartup] = useState<'loading' | 'ready' | 'failed'>('loading');
+    const ready = startup === 'ready';
     useWorkspacePresentation();
 
     useEffect(() => {
         // The native template fragment and all legacy hosts are committed now.
         if (!draggableTemplate) return;
         let active = true;
-        void startWorkspace().catch(error => {
+        void startWorkspace(() => {
+            // Commit the interactive hosts before notifying native APP_READY listeners.
+            flushSync(() => setStartup('ready'));
+        }).catch(error => {
             if (!active) return;
             console.error('Failed to start the workspace:', error);
-            setFailed(true);
+            setStartup('failed');
         });
         return () => { active = false; };
     }, [draggableTemplate]);
@@ -23,22 +27,11 @@ export function WorkspaceHost() {
     return (
         <>
             <meta name="theme-color" content="#333" />
-            {/* The legacy loader removes #preloader when it takes over. */}
-            <div>
-                <div id="preloader" role="status" aria-live="polite" aria-busy={!failed}>
-                    <div className="preloader-content">
-                        <img src="img/logo.png" alt="EmberDesk" className="preloader-logo" />
-                        <div className="preloader-spinner fa-solid fa-gear fa-spin" aria-hidden="true"></div>
-                        <div className="preloader-message" data-i18n={failed ? undefined : 'Initializing…'}>
-                            {translate(failed ? 'Unable to start the workspace. Reload to try again.' : 'Initializing…')}
-                        </div>
-                    </div>
-                </div>
-            </div>
+
             <div id="bg1"></div>
             <div id="character_context_menu" className="hidden">
             </div>
-            <div id="top-settings-holder">
+            <div id="top-settings-holder" inert={!ready}>
                 <div id="WI-SP-button" className="drawer">
                     <div id="WorldInfo" className="drawer-content closedDrawer">
                     </div>
@@ -599,14 +592,35 @@ export function WorkspaceHost() {
                 </div>
             </div>
             <div id="sheld">
-                <div id="chat">
+                <div id="chat" inert={!ready}>
                 </div>
-                <div id="form_sheld">
+                <div id="form_sheld" inert={!ready}>
                     <div id="dialogue_del_mes">
                     </div>
                     <div id="send_form" className="no-connection">
                     </div>
                 </div>
+                {!ready && (
+                    <div id="workspace-startup">
+                        <div className="workspace-startup-chat">
+                            {startup === 'failed' ? (
+                                <div className="workspace-startup-error">
+                                    <p role="alert">{translate('Unable to start the workspace.')}</p>
+                                    <button type="button" className="menu_button" onClick={() => location.reload()}>
+                                        {translate('Reload page')}
+                                    </button>
+                                </div>
+                            ) : (
+                                <>
+                                    <div className="workspace-startup-lines" aria-hidden="true"><span /><span /></div>
+                                    <div className="workspace-startup-lines workspace-startup-lines-user" aria-hidden="true"><span /></div>
+                                    <output className="workspace-startup-status">{translate('Loading workspace…')}</output>
+                                </>
+                            )}
+                        </div>
+                        <div className="workspace-startup-composer" aria-hidden="true"><span /><span /></div>
+                    </div>
+                )}
             </div>
             {/* popups live outside sheld to avoid blur conflicts */}
             <div id="options" className="font-family-reset" style={{ display: "none" }}>
