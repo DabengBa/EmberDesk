@@ -1,12 +1,13 @@
 import { test, expect } from '@playwright/test';
 import { testSetup } from './frontend/frontent-test-utils.js';
 import { AUTHORIZATION_FIXTURES, seededAvatar } from './helpers/authorization-fixtures.js';
-import { selectCharacterFromLibrary } from './helpers/character-selection.js';
+import { expandAuthoringAdvanced, selectCharacterFromLibrary } from './helpers/character-selection.js';
 
 
 const permission = page => page.locator('[data-react-authoring-owner="characterAuthoring"]').getByRole('checkbox', { name: /允许此角色的消息 CSS 加载外部资源|Allow external CSS resources/ });
 async function select(page, name) {
     await selectCharacterFromLibrary(page, name);
+    await expandAuthoringAdvanced(page);
     await expect(permission(page)).toBeVisible();
 }
 async function saved(page) {
@@ -20,9 +21,18 @@ async function saved(page) {
 
 test('delayed rename snapshot cannot overwrite a newer revoke', async ({ page }) => {
     await testSetup.awaitST({ page });
-    await select(page, 'Dev Character 048');
+    const source = `Review delayed rename ${crypto.randomUUID()}`;
+    await page.locator('[data-react-workspace-shell-chrome] nav button').filter({ hasText: '角色库' }).click();
+    await page.locator('#character_import_file').setInputFiles({
+        name: 'rename-source.json',
+        mimeType: 'application/json',
+        buffer: Buffer.from(JSON.stringify({ name: source, description: 'Authorization ordering fixture', first_mes: '' })),
+    });
+    await expect(page.locator('.toast-success')).toContainText(source);
+    await select(page, source);
     if (!await permission(page).isChecked()) await permission(page).check();
     const canonicalId = await page.evaluate(() => { const x = window.SillyTavern.getContext(); return x.characters[x.characterId].canonical_id; });
+    await expect(permission(page)).toBeEnabled();
     let release, ready;
     const gate = new Promise(resolve => { release = resolve; });
     const responseReady = new Promise(resolve => { ready = resolve; });
@@ -33,10 +43,10 @@ test('delayed rename snapshot cannot overwrite a newer revoke', async ({ page })
         await gate;
         await route.fulfill({ response });
     });
-    await page.evaluate(async () => {
+    await page.evaluate(async name => {
         const { renameCharacter } = await import('/scripts/character-lifecycle-service.js');
-        window.pendingRename = renameCharacter('Review delayed rename 048', { silent: true, renameChats: false });
-    });
+        window.pendingRename = renameCharacter(name, { silent: true, renameChats: false });
+    }, `${source} renamed`);
     const renamed = await responseReady;
     const revoke = await page.evaluate(async ({ avatar, canonicalId }) => {
         const { getRequestHeaders } = await import('/scripts/request-context.js');
@@ -82,6 +92,7 @@ test('rename atomically moves the grant even if later settings writes fail', asy
         return await renameCharacter(newName, { silent: true, renameChats: false });
     }, `Review Renamed ${source.slice(-3)}`);
     expect(renamed).toBe(true);
+    await expandAuthoringAdvanced(page);
     await expect(permission(page)).toBeChecked();
     await page.waitForTimeout(1400);
     const afterFailedSave = await saved(page);

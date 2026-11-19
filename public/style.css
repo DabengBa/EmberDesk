@@ -5500,6 +5500,25 @@ body:not(.caption) .mes_img_caption {
     margin: 0 4px 10px;
 }
 
+#emberdesk-react-right-nav-host:has([data-react-authoring-owner]) {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+}
+
+#emberdesk-react-right-nav-host:has([data-react-authoring-owner]) .scrollableInner {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+}
+
+/* The mounted authoring form and its sticky tools use the drawer body scroll. */
+#rm_ch_create_block:has([data-react-authoring-owner]) {
+    height: auto;
+    overflow: visible;
+}
+
 
 @media screen and (max-width: 800px) {
     #right-nav-panel.openDrawer:has([data-react-authoring-owner]) {

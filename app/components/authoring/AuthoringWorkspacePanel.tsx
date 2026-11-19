@@ -109,7 +109,7 @@ function AuthoringActionsMenu({
             <button
                 ref={triggerRef}
                 type="button"
-                className={`menu_button ${stylex.props(authoringStyles.toolAction).className ?? ''}`}
+                className={`menu_button ${stylex.props(authoringStyles.toolAction, authoringStyles.toolbarButton).className ?? ''}`}
                 disabled={disabled}
                 title="More character actions"
                 aria-label="More character actions"
@@ -464,6 +464,72 @@ export function AuthoringWorkspacePanel({
                     }
                 }}
             >
+                <div role="group" {...stylex.props(authoringStyles.toolbar)} aria-label={translate('Character actions')}>
+                    {!isCreateMode ? (
+                        <button
+                            type="button"
+                            className={`menu_button ${stylex.props(authoringStyles.toolbarButton, authoringStyles.dangerButton).className ?? ''}`}
+                            disabled={isActionPending}
+                            title={translate("Permanently delete this card — the confirmation can also remove its chats")}
+                            onClick={() => void commands?.deleteAuthoring?.(kind)}
+                        >
+                            <i className="fa-solid fa-triangle-exclamation" aria-hidden="true" />
+                            {translate('Delete')}
+                        </button>
+                    ) : null}
+                    <button
+                        type="button"
+                        className={`menu_button ${stylex.props(authoringStyles.toolAction, authoringStyles.toolbarButton).className ?? ''}`}
+                        disabled={isActionPending}
+                        onClick={() => void commands?.openWorldInfo?.(characterToolActionPayload)}
+                    >
+                        {translate('World Info')}
+                    </button>
+                    {!isCreateMode ? (
+                        <button
+                            type="button"
+                            className={`menu_button ${stylex.props(authoringStyles.toolAction, authoringStyles.toolbarButton).className ?? ''}`}
+                            disabled={isActionPending}
+                            data-character-export-trigger=""
+                            onClick={() => void (async () => {
+                                if (!characterToolActionPayload) return;
+                                const generation = saveGenerationRef.current;
+                                if (saveInFlightRef.current && !await saveInFlightRef.current) return;
+                                if (generation !== saveGenerationRef.current) return;
+                                const exportSave = (async () => {
+                                    try {
+                                        const result = await commands?.exportAuthoring?.(withCurrentVersion(characterToolActionPayload));
+                                        if (!result || typeof result !== 'object' || !('ok' in result) || result.ok !== true) return false;
+                                        rebaseSavedDraft(authoringSession.draft, result, generation);
+                                        return true;
+                                    } catch { return false; }
+                                })();
+                                saveInFlightRef.current = exportSave;
+                                await exportSave;
+                                if (saveInFlightRef.current === exportSave) saveInFlightRef.current = null;
+                            })()}
+                        >
+                            {translate('Export')}
+                        </button>
+                    ) : null}
+                    {!isCreateMode ? (
+                        <button
+                            type="button"
+                            className={`menu_button ${stylex.props(authoringStyles.toolAction, authoringStyles.toolbarButton).className ?? ''}`}
+                            disabled={isActionPending}
+                            title={translate('Find and replace text in the character card, bound world book, and current chat')}
+                            onClick={() => setTextReplaceOpen(true)}
+                        >
+                            {translate('Find and replace')}
+                        </button>
+                    ) : null}
+                    <AuthoringActionsMenu
+                        actions={liveManagementActions ?? managementActions}
+                        disabled={isActionPending}
+                        onOpen={refreshManagementActions}
+                        onRun={actionId => void commands?.runManagementAction?.({ ...characterToolActionPayload, actionId })}
+                    />
+                </div>
                 <fieldset
                     {...stylex.props(authoringStyles.fields)}
                     style={{ border: 0, margin: 0, minWidth: 0, padding: 0 }}
@@ -564,6 +630,17 @@ export function AuthoringWorkspacePanel({
                                         <i className={`fa-${draft.favorite ? 'solid' : 'regular'} fa-star`} aria-hidden="true" />
                                         {translate('Favorite')}
                                     </button>
+                                    <button
+                                        type="button"
+                                        {...stylex.props(authoringStyles.favToggle)}
+                                        data-react-authoring-field="tags"
+                                        aria-label={translate('Manage tags')}
+                                        onClick={() => setTagManagerOpen(true)}
+                                    >
+                                        <i className="fa-solid fa-tag" aria-hidden="true" />
+                                        {translate('Tags')} · {tagsList.length}
+                                        {isFieldDirty('tags') ? <span {...stylex.props(authoringStyles.dirtyDot)} title={translate('Unsaved change')} /> : null}
+                                    </button>
                                     {tokenTotal ? (
                                         <span
                                             {...stylex.props(authoringStyles.metaChip, authoringSession.dirty ? authoringStyles.metaChipStale : null)}
@@ -578,158 +655,102 @@ export function AuthoringWorkspacePanel({
                                 </div>
                             </div>
                         </div>
-                        <div {...stylex.props(authoringStyles.fieldRow)}>
-                            <div {...stylex.props(authoringStyles.fieldRowItem)}>
-                                <div {...stylex.props(authoringStyles.field)} data-react-authoring-field="tags">
-                                    <AuthoringFieldLabel text="Tags" dirty={isFieldDirty('tags')} />
-                                    <button
-                                        type="button"
-                                        {...stylex.props(authoringStyles.tagManagerTrigger)}
-                                        aria-label={translate('Manage tags')}
-                                        onClick={() => setTagManagerOpen(true)}
-                                    >
-                                        <span {...stylex.props(authoringStyles.tagManagerPreview)}>
-                                            {tagsList.slice(0, 4).map(tag => (
-                                                <span key={tag} {...stylex.props(authoringStyles.tagManagerPreviewChip)} title={tag}>{tag}</span>
-                                            ))}
-                                            {tagsList.length === 0 ? <span {...stylex.props(authoringStyles.tagManagerPreviewEmpty)}>{translate('No tags')}</span> : null}
-                                        </span>
-                                        <span {...stylex.props(authoringStyles.tagManagerPreviewCount)}>
-                                            {translate('Manage tags')} · {tagsList.length}
-                                        </span>
-                                    </button>
-                                </div>
+                        <div {...stylex.props(authoringStyles.worldBooks)} data-react-authoring-field="characterWorld">
+                            <div {...stylex.props(authoringStyles.worldLabel)}>
+                                <AuthoringFieldLabel text="World Info" dirty={isFieldDirty('characterWorld')} />
+                                <span {...stylex.props(authoringStyles.fieldMeta)}>{translate('Travels with card')}</span>
                             </div>
-                            <div {...stylex.props(authoringStyles.fieldRowItem)}>
-                                <div {...stylex.props(authoringStyles.field)} data-react-authoring-field="characterWorld">
-                                    <AuthoringFieldLabel text="World Info" dirty={isFieldDirty('characterWorld')} meta={translate('Travels with card')} />
-                                    <div {...stylex.props(authoringStyles.fieldInputRow)}>
-                                        <select
-                                            className="text_pole"
-                                            {...stylex.props(authoringStyles.control, authoringStyles.fieldInput)}
-                                            value={stringDraft('characterWorld')}
-                                            aria-label={translate("Bound World Info file")}
-                                            aria-invalid={Boolean(stringDraft('characterWorld').trim()) && worldNames.length > 0 && !worldNames.includes(stringDraft('characterWorld').trim()) ? 'true' : undefined}
-                                            onChange={(event) => {
-                                                const value = event.target.value;
-                                                if (value === '__create_new_world__') {
-                                                    void (async () => {
-                                                        const created = await commands?.createBoundWorldInfo?.(characterToolActionPayload) as string | false | null;
-                                                        if (typeof created === 'string' && created) {
-                                                            updateDraft({ characterWorld: created });
-                                                        }
-                                                    })();
-                                                } else {
-                                                    updateDraft({ characterWorld: value });
+                            <AuthoringFieldLabel text="Auxiliary books (local only)" />
+                            <div {...stylex.props(authoringStyles.fieldInputRow)}>
+                                <select
+                                    className="text_pole"
+                                    {...stylex.props(authoringStyles.control, authoringStyles.fieldInput, authoringStyles.worldSelect)}
+                                    value={stringDraft('characterWorld')}
+                                    aria-label={translate("Bound World Info file")}
+                                    aria-invalid={Boolean(stringDraft('characterWorld').trim()) && worldNames.length > 0 && !worldNames.includes(stringDraft('characterWorld').trim()) ? 'true' : undefined}
+                                    onChange={(event) => {
+                                        const value = event.target.value;
+                                        if (value === '__create_new_world__') {
+                                            void (async () => {
+                                                const created = await commands?.createBoundWorldInfo?.(characterToolActionPayload) as string | false | null;
+                                                if (typeof created === 'string' && created) {
+                                                    updateDraft({ characterWorld: created });
                                                 }
-                                            }}
-                                        >
-                                            <option value="">{translate("(no binding)")}</option>
-                                            {worldNames.map(name => (
-                                                <option key={name} value={name}>{name}</option>
-                                            ))}
-                                            {stringDraft('characterWorld').trim() && worldNames.length > 0 && !worldNames.includes(stringDraft('characterWorld').trim()) ? (
-                                                <option value={stringDraft('characterWorld')}>
-                                                    {translate("Not found")}: {stringDraft('characterWorld')}
-                                                </option>
-                                            ) : null}
-                                            <option value="__create_new_world__">{translate("+ Create new world book...")}</option>
-                                        </select>
-                                        <button
-                                            type="button"
-                                            className={`menu_button ${stylex.props(authoringStyles.toolAction, authoringStyles.fieldRowAction).className ?? ''}`}
-                                            data-react-authoring-action="openBoundWorldInfo"
-                                            disabled={!boundWorldInfoBookName || isActionPending}
-                                            title={boundWorldInfoBookName
-                                                ? translate('Open bound World Info book')
-                                                : translate('No bound world book to open')}
-                                            aria-label={boundWorldInfoBookName
-                                                ? translate('Open bound World Info book')
-                                                : translate('No bound world book to open')}
-                                            onClick={() => void commands?.openBoundWorldInfo?.(characterToolActionPayload)}
-                                        >
-                                            <i className="fa-solid fa-book-open" aria-hidden="true" />
-                                        </button>
-                                    </div>
-                                    <small {...stylex.props(authoringStyles.fieldHint)}>{translate("Auxiliary books (local only)")}</small>
-                                    {auxBooks.length > 0 ? (
-                                        <div {...stylex.props(chipInputStyles.box, authoringStyles.auxBox)}>
-                                            {auxBooks.map(name => (
-                                                <span key={name} {...stylex.props(chipInputStyles.chip)}>
-                                                    {name}
-                                                    <button
-                                                        type="button"
-                                                        {...stylex.props(chipInputStyles.chipRemove)}
-                                                        aria-label={translate("Remove auxiliary book ${0}").replace('${0}', name)}
-                                                        onClick={() => applyAuxBooks(auxBooks.filter(book => book !== name))}
-                                                    >
-                                                        ×
-                                                    </button>
-                                                </span>
-                                            ))}
-                                            <select
-                                                className="text_pole"
-                                                {...stylex.props(authoringStyles.auxAddSelect)}
-                                                value=""
-                                                aria-label={translate("Add auxiliary book")}
-                                                onChange={event => {
-                                                    const name = event.target.value;
-                                                    if (name) {
-                                                        applyAuxBooks([...auxBooks, name]);
-                                                    }
-                                                }}
-                                            >
-                                                <option value="">{translate("+ Add…")}</option>
-                                                {worldNames
-                                                    .filter(name => !auxBooks.includes(name) && name !== boundWorldInfoBookName)
-                                                    .map(name => (
-                                                        <option key={name} value={name}>{name}</option>
-                                                    ))}
-                                            </select>
-                                        </div>
-                                    ) : (
-                                        <select
-                                            {...stylex.props(authoringStyles.auxAddGhost)}
-                                            value=""
-                                            aria-label={translate("Add auxiliary book")}
-                                            onChange={event => {
-                                                const name = event.target.value;
-                                                if (name) {
-                                                    applyAuxBooks([...auxBooks, name]);
-                                                }
-                                            }}
-                                        >
-                                            <option value="">{translate("+ Add auxiliary book…")}</option>
-                                            {worldNames
-                                                .filter(name => name !== boundWorldInfoBookName)
-                                                .map(name => (
-                                                    <option key={name} value={name}>{name}</option>
-                                                ))}
-                                        </select>
-                                    )}
+                                            })();
+                                        } else {
+                                            updateDraft({ characterWorld: value });
+                                        }
+                                    }}
+                                >
+                                    <option value="">{translate("(no binding)")}</option>
+                                    {worldNames.map(name => (
+                                        <option key={name} value={name}>{name}</option>
+                                    ))}
                                     {stringDraft('characterWorld').trim() && worldNames.length > 0 && !worldNames.includes(stringDraft('characterWorld').trim()) ? (
-                                        <small {...stylex.props(authoringStyles.fieldWarning)}>{translate("No world file with this name — the link will be ignored.")}</small>
+                                        <option value={stringDraft('characterWorld')}>
+                                            {translate("Not found")}: {stringDraft('characterWorld')}
+                                        </option>
                                     ) : null}
-                                </div>
+                                    <option value="__create_new_world__">{translate("+ Create new world book...")}</option>
+                                </select>
+                                <button
+                                    type="button"
+                                    className={`menu_button ${stylex.props(authoringStyles.toolAction, authoringStyles.fieldRowAction).className ?? ''}`}
+                                    data-react-authoring-action="openBoundWorldInfo"
+                                    disabled={!boundWorldInfoBookName || isActionPending}
+                                    title={boundWorldInfoBookName
+                                        ? translate('Open bound World Info book')
+                                        : translate('No bound world book to open')}
+                                    aria-label={boundWorldInfoBookName
+                                        ? translate('Open bound World Info book')
+                                        : translate('No bound world book to open')}
+                                    onClick={() => void commands?.openBoundWorldInfo?.(characterToolActionPayload)}
+                                >
+                                    <i className="fa-solid fa-book-open" aria-hidden="true" />
+                                </button>
                             </div>
+                            <select
+                                className="text_pole"
+                                {...stylex.props(authoringStyles.control, authoringStyles.worldSelect)}
+                                value=""
+                                aria-label={translate("Add auxiliary book")}
+                                onChange={event => {
+                                    const name = event.target.value;
+                                    if (name) {
+                                        applyAuxBooks([...auxBooks, name]);
+                                    }
+                                }}
+                            >
+                                <option value="">{translate("+ Add auxiliary book…")}</option>
+                                {worldNames
+                                    .filter(name => !auxBooks.includes(name) && name !== boundWorldInfoBookName)
+                                    .map(name => (
+                                        <option key={name} value={name}>{name}</option>
+                                    ))}
+                            </select>
+                            {stringDraft('characterWorld').trim() && worldNames.length > 0 && !worldNames.includes(stringDraft('characterWorld').trim()) ? (
+                                <small {...stylex.props(authoringStyles.fieldWarning, authoringStyles.worldWarning)}>{translate("No world file with this name — the link will be ignored.")}</small>
+                            ) : null}
+                            {auxBooks.length > 0 ? (
+                                <div {...stylex.props(chipInputStyles.box, authoringStyles.auxBox)}>
+                                    {auxBooks.map(name => (
+                                        <span key={name} {...stylex.props(chipInputStyles.chip)}>
+                                            <span {...stylex.props(authoringStyles.auxChipName)} title={name}>{name}</span>
+                                            <button
+                                                type="button"
+                                                {...stylex.props(chipInputStyles.chipRemove)}
+                                                aria-label={translate("Remove auxiliary book ${0}").replace('${0}', name)}
+                                                onClick={() => applyAuxBooks(auxBooks.filter(book => book !== name))}
+                                            >
+                                                ×
+                                            </button>
+                                        </span>
+                                    ))}
+                                </div>
+                            ) : null}
                         </div>
                     </div>
                     <div {...stylex.props(authoringStyles.section)} data-react-authoring-section="content">
-                        <h4 {...stylex.props(authoringStyles.subsectionLabel)}>{translate("Card content")}</h4>
-                        {!isCreateMode && typeof draft.avatar === 'string' && draft.avatar ? (
-                            <label {...stylex.props(authoringStyles.checkboxLabel)}>
-                                <input {...stylex.props(authoringStyles.checkbox)} type="checkbox" checked={externalMediaAllowed} disabled={externalMediaSaving} onChange={event => {
-                                    const allowed = event.target.checked;
-                                    const characterId = draft.avatar as string;
-                                    setExternalMediaAllowed(allowed);
-                                    setExternalMediaSaving(true);
-                                    void Promise.resolve(commands?.setExternalMediaAllowed?.({ characterId, allowed })).then(result => {
-                                        if (result === false) setExternalMediaAllowed(!allowed);
-                                    }).catch(() => setExternalMediaAllowed(!allowed)).finally(() => setExternalMediaSaving(false));
-                                }} />
-                                {translate('Allow external CSS resources for this character')}
-                            </label>
-                        ) : null}
                         <label {...stylex.props(authoringStyles.field)} htmlFor="authoring-description" data-react-authoring-field="description">
                             <AuthoringFieldLabel
                                 text="Description"
@@ -823,11 +844,6 @@ export function AuthoringWorkspacePanel({
                                 </span>
                             ) : null}
                         </div>
-                        {!advancedOpen && advancedChips.length === 0 ? (
-                            <p {...stylex.props(authoringStyles.advancedHint)}>
-                                {translate('Prompt overrides, extra definition fields, character note and creator metadata.')}
-                            </p>
-                        ) : null}
                         <div {...stylex.props(authoringStyles.advancedClip, advancedOpen ? authoringStyles.advancedClipOpen : null)}>
                             <div
                                 id="character-authoring-advanced-body"
@@ -835,6 +851,20 @@ export function AuthoringWorkspacePanel({
                                 aria-hidden={!advancedOpen}
                                 {...stylex.props(authoringStyles.advancedBody)}
                             >
+                                {!isCreateMode && typeof draft.avatar === 'string' && draft.avatar ? (
+                                    <label {...stylex.props(authoringStyles.checkboxLabel)}>
+                                        <input {...stylex.props(authoringStyles.checkbox)} type="checkbox" checked={externalMediaAllowed} disabled={externalMediaSaving} onChange={event => {
+                                            const allowed = event.target.checked;
+                                            const characterId = draft.avatar as string;
+                                            setExternalMediaAllowed(allowed);
+                                            setExternalMediaSaving(true);
+                                            void Promise.resolve(commands?.setExternalMediaAllowed?.({ characterId, allowed })).then(result => {
+                                                if (result === false) setExternalMediaAllowed(!allowed);
+                                            }).catch(() => setExternalMediaAllowed(!allowed)).finally(() => setExternalMediaSaving(false));
+                                        }} />
+                                        {translate('Allow external CSS resources for this character')}
+                                    </label>
+                                ) : null}
                                 <div {...stylex.props(authoringStyles.advancedSubgroup)}>
                                     <h4 {...stylex.props(authoringStyles.subsectionLabel)}>{translate("Prompt overrides")}</h4>
                                     <label {...stylex.props(authoringStyles.field)} htmlFor="authoring-system-prompt" data-react-authoring-field="systemPrompt">
@@ -963,21 +993,8 @@ export function AuthoringWorkspacePanel({
                         </div>
                     </section>
                 </fieldset>
-                <div {...stylex.props(authoringStyles.panelActions)} aria-label={translate('${0} actions').replace('${0}', title)}>
-                    <div {...stylex.props(authoringStyles.footerPrimaryActions)}>
-                    {!isCreateMode ? (
-                        <button
-                            type="button"
-                            className={`menu_button ${stylex.props(authoringStyles.dangerButton).className ?? ''}`}
-                            disabled={isActionPending}
-                            title={translate("Permanently delete this card — the confirmation can also remove its chats")}
-                            onClick={() => void commands?.deleteAuthoring?.(kind)}
-                        >
-                            <i className="fa-solid fa-triangle-exclamation" aria-hidden="true" />
-                            {translate('Delete')}
-                        </button>
-                    ) : null}
-                    {isCreateMode ? (
+                {isCreateMode ? (
+                    <div {...stylex.props(authoringStyles.panelActions)}>
                         <button
                             type="button"
                             className={`menu_button ${stylex.props(authoringStyles.saveButton).className ?? ''}`}
@@ -987,63 +1004,8 @@ export function AuthoringWorkspacePanel({
                         >
                             {translate('Create')}
                         </button>
-                    ) : null}
                     </div>
-                    <div {...stylex.props(authoringStyles.footerTools)}>
-                        <button
-                            type="button"
-                            className={`menu_button ${stylex.props(authoringStyles.toolAction).className ?? ''}`}
-                            disabled={isActionPending}
-                            onClick={() => void commands?.openWorldInfo?.(characterToolActionPayload)}
-                        >
-                            {translate('World Info')}
-                        </button>
-                        {!isCreateMode ? (
-                            <button
-                                type="button"
-                                className={`menu_button ${stylex.props(authoringStyles.toolAction).className ?? ''}`}
-                                disabled={isActionPending}
-                                data-character-export-trigger=""
-                                onClick={() => void (async () => {
-                                    if (!characterToolActionPayload) return;
-                                    const generation = saveGenerationRef.current;
-                                    if (saveInFlightRef.current && !await saveInFlightRef.current) return;
-                                    if (generation !== saveGenerationRef.current) return;
-                                    const exportSave = (async () => {
-                                        try {
-                                            const result = await commands?.exportAuthoring?.(withCurrentVersion(characterToolActionPayload));
-                                            if (!result || typeof result !== 'object' || !('ok' in result) || result.ok !== true) return false;
-                                            rebaseSavedDraft(authoringSession.draft, result, generation);
-                                            return true;
-                                        } catch { return false; }
-                                    })();
-                                    saveInFlightRef.current = exportSave;
-                                    await exportSave;
-                                    if (saveInFlightRef.current === exportSave) saveInFlightRef.current = null;
-                                })()}
-                            >
-                                {translate('Export')}
-                            </button>
-                        ) : null}
-                        {!isCreateMode ? (
-                            <button
-                                type="button"
-                                className={`menu_button ${stylex.props(authoringStyles.toolAction).className ?? ''}`}
-                                disabled={isActionPending}
-                                title={translate('Find and replace text in the character card, bound world book, and current chat')}
-                                onClick={() => setTextReplaceOpen(true)}
-                            >
-                                {translate('Find and replace')}
-                            </button>
-                        ) : null}
-                        <AuthoringActionsMenu
-                            actions={liveManagementActions ?? managementActions}
-                            disabled={isActionPending}
-                            onOpen={refreshManagementActions}
-                            onRun={actionId => void commands?.runManagementAction?.({ ...characterToolActionPayload, actionId })}
-                        />
-                    </div>
-                </div>
+                ) : null}
                 {textReplaceOpen ? (
                     <CharacterAuthoringTextReplaceDialog
                         commands={{

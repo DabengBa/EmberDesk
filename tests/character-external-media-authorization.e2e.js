@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { testSetup } from './frontend/frontent-test-utils.js';
 import { AUTHORIZATION_FIXTURES } from './helpers/authorization-fixtures.js';
-import { selectCharacterFromLibrary } from './helpers/character-selection.js';
+import { expandAuthoringAdvanced, selectCharacterFromLibrary } from './helpers/character-selection.js';
 
 test('character media permission survives reopening and stays scoped when switching characters', async ({ page }) => {
     const primary = AUTHORIZATION_FIXTURES.scopedAuthorization;
@@ -10,6 +10,7 @@ test('character media permission survives reopening and stays scoped when switch
     const permission = page.locator('[data-react-authoring-owner="characterAuthoring"]').getByRole('checkbox', { name: /允许此角色的消息 CSS 加载外部资源|Allow external CSS resources/ });
     const selectCharacter = async name => {
         await selectCharacterFromLibrary(page, name);
+        await expandAuthoringAdvanced(page);
         await expect(permission).toBeVisible();
     };
     await selectCharacter(primary);

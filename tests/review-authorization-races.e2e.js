@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { testSetup } from './frontend/frontent-test-utils.js';
 import { AUTHORIZATION_FIXTURES } from './helpers/authorization-fixtures.js';
-import { selectCharacterFromLibrary } from './helpers/character-selection.js';
+import { expandAuthoringAdvanced, selectCharacterFromLibrary } from './helpers/character-selection.js';
 
 test.setTimeout(30000);
 
@@ -25,6 +25,7 @@ test('browser ignores a failed older grant after a newer revoke', async ({ page 
 const permission = page => page.locator('[data-react-authoring-owner="characterAuthoring"]').getByRole('checkbox', { name: /允许此角色的消息 CSS 加载外部资源|Allow external CSS resources/ });
 async function select(page, name) {
     await selectCharacterFromLibrary(page, name);
+    await expandAuthoringAdvanced(page);
     await expect(permission(page)).toBeVisible();
 }
 async function saved(page) {

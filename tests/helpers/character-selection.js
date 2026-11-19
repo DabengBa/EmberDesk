@@ -32,7 +32,13 @@ export async function selectCharacterFromLibrary(page, name) {
         if (!await characterRows(page).first().isVisible()) {
             await openCharacterLibrary(page);
         }
+        await page.getByRole('searchbox', { name: /Search characters|搜索角色/ }).fill(name);
         await row.click();
         await expect(workspaceContext(page)).toContainText(name, { timeout: 3000 });
     }).toPass({ timeout: 20_000 });
+}
+
+export async function expandAuthoringAdvanced(page) {
+    const advanced = page.locator('[data-react-authoring-owner="characterAuthoring"]').getByRole('button', { name: /^(高级|Advanced)$/ });
+    if (await advanced.getAttribute('aria-expanded') === 'false') await advanced.click();
 }
