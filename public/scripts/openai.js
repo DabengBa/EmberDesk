@@ -52,6 +52,7 @@ import {
     isAudioInliningSupportedForSettings,
     isImageInliningSupportedForSettings,
     isVideoInliningSupportedForSettings,
+    isLegacyOpenAICompletionSource,
     resolveReasoningEffort,
     resolveVerbosity,
 } from './openai-provider-capabilities.js';
@@ -2665,15 +2666,12 @@ function migrateChatCompletionSettings(settings) {
 
     const migrateMap = [
         { oldKey: 'names_in_completion', oldValue: true, newKey: 'names_behavior', newValue: character_names_behavior.COMPLETION },
-        { oldKey: 'chat_completion_source', oldValue: 'palm', newKey: 'chat_completion_source', newValue: 'openai' },
-        { oldKey: 'chat_completion_source', oldValue: 'makersuite', newKey: 'chat_completion_source', newValue: 'openai' },
+
         { oldKey: 'image_inlining', oldValue: false, newKey: 'media_inlining', newValue: false },
         { oldKey: 'image_inlining', oldValue: true, newKey: 'media_inlining', newValue: true },
         { oldKey: 'video_inlining', oldValue: true, newKey: 'media_inlining', newValue: true },
         { oldKey: 'audio_inlining', oldValue: true, newKey: 'media_inlining', newValue: true },
-        { oldKey: 'chat_completion_source', oldValue: 'custom', newKey: 'chat_completion_source', newValue: 'openai' },
-        { oldKey: 'chat_completion_source', oldValue: 'vertexai', newKey: 'chat_completion_source', newValue: 'openai' },
-        { oldKey: 'chat_completion_source', oldValue: 'claude', newKey: 'chat_completion_source', newValue: chat_completion_sources.OPENAI },
+
     ];
 
     for (const migration of migrateMap) {
@@ -2688,6 +2686,10 @@ function migrateChatCompletionSettings(settings) {
                 delete settings[migration.oldKey];
             }
         }
+    }
+
+    if (isLegacyOpenAICompletionSource(settings.chat_completion_source)) {
+        settings.chat_completion_source = chat_completion_sources.OPENAI;
     }
 
     // Migrate custom_model to openai_model when custom source was merged into openai

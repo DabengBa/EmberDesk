@@ -35,6 +35,14 @@ function invalid(message: string): never {
     throw new ServerPromptError('invalid_config', message);
 }
 
+export function resolveGenerationModelBaseUrl(url: unknown) {
+    if (typeof url !== 'string') return null;
+    const baseUrl = url.trim().replace(/\/+$/, '') || 'https://api.openai.com/v1';
+    const parsed = URL.parse(baseUrl);
+    if (!parsed || !['http:', 'https:'].includes(parsed.protocol) || parsed.username || parsed.password || /[?#]/.test(baseUrl)) return null;
+    return baseUrl;
+}
+
 function resolveConnection(preset: RecordView, settings: RecordView) {
     // Connection fields are independently saved by Settings. Never use a URL
     // embedded in an imported preset as authority for the model target.
@@ -42,11 +50,8 @@ function resolveConnection(preset: RecordView, settings: RecordView) {
     const modelValue = settings.openai_model ?? 'gpt-4-turbo';
     if (typeof modelValue !== 'string' || !modelValue.trim()) invalid('Invalid model name');
     const model = modelValue.trim();
-    const url = settings.custom_url ?? settings.reverse_proxy ?? '';
-    if (typeof url !== 'string') invalid('Invalid model base URL');
-    const baseUrl = url.trim().replace(/\/+$/, '') || 'https://api.openai.com/v1';
-    const parsed = URL.parse(baseUrl);
-    if (!parsed || !['http:', 'https:'].includes(parsed.protocol) || parsed.username || parsed.password || /[?#]/.test(baseUrl)) invalid('Invalid model base URL');
+    const baseUrl = resolveGenerationModelBaseUrl(settings.custom_url ?? settings.reverse_proxy ?? '');
+    if (!baseUrl) invalid('Invalid model base URL');
 
     const getNumber = (value: unknown, fallback: number, field: string, min: number, max: number) => {
         const result = value ?? fallback;

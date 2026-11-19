@@ -2,6 +2,11 @@ export const CHAT_COMPLETION_SOURCES = {
     OPENAI: 'openai',
 };
 
+/** @param {unknown} source */
+export function isLegacyOpenAICompletionSource(source) {
+    return ['palm', 'makersuite', 'custom', 'vertexai', 'claude'].some(legacy => source === legacy);
+}
+
 const REASONING_EFFORT_TYPES = {
     auto: 'auto',
     low: 'low',

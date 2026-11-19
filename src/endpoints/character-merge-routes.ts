@@ -29,10 +29,13 @@ export function createCharacterMergeHandler({ getCanonicalCharacterCardJsonSafe,
      * @param {((data: any) => boolean) | null} [shouldSkip] Optional function to determine if a character should be skipped based on its original data (used for bulk merge filtering)
      * @returns {Promise<{ok: boolean, error?: string, skipped?: boolean}>} Result of the merge operation, including any validation error
      */
-    async function mergeCharacterUpdate(_avatarPath: string, avatar: string, updateData: object, request: Request, shouldSkip: ((data: object) => boolean) | null = null): Promise<{ok: boolean; error?: string; skipped?: boolean}> {
+    async function mergeCharacterUpdate(_avatarPath: string, avatar: string, updateData: object, request: Request, shouldSkip: ((data: object) => boolean) | null = null, expectedCardJson?: string): Promise<{ok: boolean; error?: string; skipped?: boolean; cardVersion?: string}> {
         const pngStringData = await getCanonicalCharacterCardJsonSafe(request.user.profile?.handle ?? null, request.user.directories, avatar);
         if (!pngStringData) {
             return { ok: false, error: 'Invalid character file' };
+        }
+        if (expectedCardJson !== undefined && pngStringData !== expectedCardJson) {
+            return { ok: false, error: 'character_card_conflict' };
         }
 
         let character = JSON.parse(pngStringData);
@@ -43,6 +46,7 @@ export function createCharacterMergeHandler({ getCanonicalCharacterCardJsonSafe,
 
         const update = _.cloneDeep(updateData);
         _.unset(update, 'json_data');
+        _.unset(update, 'expected_card_json');
         _.unset(character, 'json_data');
 
         character = deepMerge(character, update);
@@ -60,6 +64,7 @@ export function createCharacterMergeHandler({ getCanonicalCharacterCardJsonSafe,
             avatarUrl: avatar,
             targetFile: targetImg,
             characterData: JSON.stringify(character),
+            expectedCardJson,
             dependencies: createCharacterWriteDependencies(),
         });
 
@@ -67,7 +72,7 @@ export function createCharacterMergeHandler({ getCanonicalCharacterCardJsonSafe,
             return { ok: false, error: result.message ?? 'Failed to write character data' };
         }
 
-        return { ok: true };
+        return { ok: true, cardVersion: result.cardVersion };
     }
 
     /**
@@ -96,7 +101,7 @@ export function createCharacterMergeHandler({ getCanonicalCharacterCardJsonSafe,
         try {
             // ── Bulk mode: avatars array is present ──────────────────
             if (Array.isArray(request.body.avatars)) {
-                const { avatars, data, filter } = request.body;
+                const { avatars, data, filter, expected_card_json_by_avatar } = request.body;
 
                 if (!_.isPlainObject(data)) {
                     return response.status(400).send({ message: 'No valid update data provided.' });
@@ -125,6 +130,9 @@ export function createCharacterMergeHandler({ getCanonicalCharacterCardJsonSafe,
                 const updated: string[] = [];
                 const skipped: string[] = [];
                 const failed: string[] = [];
+                const conflicts: string[] = [];
+                const missingVersions: string[] = [];
+                const canonicalCardVersions: Record<string, string> = Object.create(null);
 
                 /**
                  * Process a single character in bulk: read, filter, merge, validate, write.
@@ -134,6 +142,12 @@ export function createCharacterMergeHandler({ getCanonicalCharacterCardJsonSafe,
                     const avatarPath = path.join(request.user.directories.characters, avatar);
 
                     try {
+                        const expected = _.isPlainObject(expected_card_json_by_avatar) && Object.hasOwn(expected_card_json_by_avatar, avatar) ? expected_card_json_by_avatar[avatar] : undefined;
+                        if (typeof expected !== 'string' || !expected) {
+                            failed.push(avatar);
+                            missingVersions.push(avatar);
+                            return;
+                        }
                         /** @type {(character: object) => boolean} */
                         let shouldSkip: (character: object) => boolean = () => false;
 
@@ -145,16 +159,19 @@ export function createCharacterMergeHandler({ getCanonicalCharacterCardJsonSafe,
                             };
                         }
 
-                        const result = await mergeCharacterUpdate(avatarPath, avatar, data, request, shouldSkip);
+                        const result = await mergeCharacterUpdate(avatarPath, avatar, data, request, shouldSkip, expected);
                         if (result.ok) {
                             updated.push(avatar);
+                            if (result.cardVersion) canonicalCardVersions[avatar] = result.cardVersion;
                         } else if (result.skipped) {
                             skipped.push(avatar);
                         } else {
+                            if (result.error === 'character_card_conflict') conflicts.push(avatar);
                             console.warn(`Bulk merge failed for ${avatar}:`, result.error);
                             failed.push(avatar);
                         }
                     } catch (error) {
+                        if (error && typeof error === 'object' && 'code' in error && error.code === 'CHARACTER_CARD_CONFLICT') conflicts.push(avatar);
                         console.error(`Bulk merge failed for ${avatar}:`, error);
                         failed.push(avatar);
                     }
@@ -166,21 +183,29 @@ export function createCharacterMergeHandler({ getCanonicalCharacterCardJsonSafe,
                     await Promise.allSettled(batch.map(processOne));
                 }
 
-                return response.send({ updated, skipped, failed });
+                return response.send({ updated, skipped, failed, conflicts, missing_versions: missingVersions, canonical_card_versions: canonicalCardVersions });
             }
 
             // ── Single mode (default behavior) ───────────────────────
             const update = request.body;
+            if (typeof update.expected_card_json !== 'string' || !update.expected_card_json) {
+                return response.status(400).send('Error: expected_card_json is required');
+            }
             const avatarPath = path.join(request.user.directories.characters, update.avatar);
 
-            const result = await mergeCharacterUpdate(avatarPath, update.avatar, update, request);
+            const result = await mergeCharacterUpdate(avatarPath, update.avatar, update, request, null, update.expected_card_json);
             if (result.ok) {
-                response.sendStatus(200);
+                response.send({ canonical_card_version: result.cardVersion });
+            } else if (result.error === 'character_card_conflict') {
+                response.status(409).send({ error: 'character_card_conflict' });
             } else {
                 console.warn(result.error);
                 response.status(400).send({ message: `Validation failed for ${update.avatar}`, error: result.error });
             }
         } catch (exception) {
+            if (exception && typeof exception === 'object' && 'code' in exception && exception.code === 'CHARACTER_CARD_CONFLICT') {
+                return response.status(409).send({ error: 'character_card_conflict' });
+            }
             response.status(500).send({ message: 'Unexpected error while saving character.', error: (exception as { toString(): string }).toString() });
         }
     };

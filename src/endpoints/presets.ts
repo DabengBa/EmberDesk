@@ -179,7 +179,7 @@ router.post<Record<string, string>, unknown, PresetBody>('/save', async function
             name,
             payload: request.body.preset,
             source: 'user',
-            expectedRevision: request.body.expectedRevision,
+            expectedRevision: request.body.expectedRevision ?? 0,
         });
         if (!result.ok) {
             return response.status(409).send({ error: 'preset_conflict', revision: result.revision });

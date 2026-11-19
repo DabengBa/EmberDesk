@@ -1304,7 +1304,10 @@ async function importFromByaf(uploadPath, { request }, preservedFileName) {
     const byafData = await new ByafParser(data).parse();
     const card = readFromV2(byafData.card);
     const fileName = preservedFileName || getPngName(sanitize(byafData.character.displayName || card.name, { replacement: sanitizeSafeCharacterReplacements }), request.user.directories);
-    let conflicts = 0;
+    /** @type {NonNullable<import('./character-import-service.ts').CharacterImportResult['scenarios']>} */
+    const scenarios = { conflicts: 0, failed: [] };
+    /** @type {NonNullable<import('./character-import-service.ts').CharacterImportResult['backgrounds']>} */
+    const backgrounds = { failed: [] };
 
     // Don't import chats and images if the character is being replaced or updated, instead of newly imported.
     if (!preservedFileName) {
@@ -1312,28 +1315,39 @@ async function importFromByaf(uploadPath, { request }, preservedFileName) {
          * @param {Partial<ByafScenario>} scenario
         */
         const createChatAsCurrentPersona = async (scenario) => {
-            const chatName = sanitize(`${scenario.title || card.name} - ${humanizedDateTime()} imported.jsonl`, { replacement: sanitizeSafeCharacterReplacements });
+            const name = String(scenario.title || card.name);
+            const chatName = sanitize(`${name} - ${humanizedDateTime()} imported.jsonl`, { replacement: sanitizeSafeCharacterReplacements });
             const filePath = path.join(request.user.directories.chats, path.basename(fileName), chatName);
             const jsonlData = ByafParser.getChatFromScenario(scenario, request.body.user_name, card.name, byafData.chatBackgrounds);
-            const canonicalResult = await writeCanonicalChatSafe(request, path.basename(fileName), filePath, jsonlData);
-            if (canonicalResult?.authorityCommitted) {
-                console.log(`Created ${chatName} chat from BYAF import (canonical)`);
-                return chatName;
+            try {
+                const canonicalResult = await writeCanonicalChatSafe(request, path.basename(fileName), filePath, jsonlData);
+                if (canonicalResult?.authorityCommitted) {
+                    console.log(`Created ${chatName} chat from BYAF import (canonical)`);
+                    return chatName;
+                }
+                // No file-only fallback: an uncommitted session would be invisible.
+                const conflict = canonicalResult?.reason === 'conflict';
+                if (conflict) scenarios.conflicts++;
+                scenarios.failed.push({ name, reason: conflict ? 'conflict' : 'write_failed' });
+                console.warn(`Skipped ${chatName} chat from BYAF import: canonical create was not committed (${canonicalResult?.reason ?? 'chats unavailable'})`);
+            } catch (error) {
+                scenarios.failed.push({ name, reason: 'write_failed' });
+                console.warn(`Skipped ${chatName} chat from BYAF import: canonical create failed`, error);
             }
-            // No file-only fallback: an uncommitted session would be invisible.
-            if (canonicalResult?.reason === 'conflict') conflicts++;
-            console.warn(`Skipped ${chatName} chat from BYAF import: canonical create was not committed (${canonicalResult?.reason ?? 'chats unavailable'})`);
             return null;
         };
 
         // Upload backgrounds
         for (const bg of byafData.chatBackgrounds) {
-            const extension = path.extname(bg.paths?.[0]) || '.png';
-            const baseName = `${path.basename(fileName)}_bg`;
-            const filePath = path.join(request.user.directories.userImages, fileName);
-            if (!fs.existsSync(filePath)) fs.mkdirSync(filePath, { recursive: true });
-            const file = getUniqueName(baseName, (name) => fs.existsSync(path.join(filePath, `${name}${extension}`)));
-            if (Buffer.isBuffer(bg.data)) {
+            if (!Buffer.isBuffer(bg.data)) continue;
+            const sourcePath = bg.paths?.[0] ?? '';
+            const name = path.posix.basename(sourcePath) || bg.name;
+            try {
+                const extension = path.extname(sourcePath) || '.png';
+                const baseName = `${path.basename(fileName)}_bg`;
+                const filePath = path.join(request.user.directories.userImages, fileName);
+                if (!fs.existsSync(filePath)) fs.mkdirSync(filePath, { recursive: true });
+                const file = getUniqueName(baseName, (name) => fs.existsSync(path.join(filePath, `${name}${extension}`)));
                 const newFile = `${file}${extension}`;
                 const newFilePath = path.join(filePath, newFile);
                 // user/images/* is a managed-media domain: commit through the
@@ -1347,10 +1361,13 @@ async function importFromByaf(uploadPath, { request }, preservedFileName) {
                 if (canonicalResult) {
                     bg.name = clientRelativePath(request.user.directories.root, newFilePath); // Update background name to the new file
                     console.log(`Created ${newFile} background from BYAF import`);
-                } else {
-                    console.warn(`Skipped ${newFile} background from BYAF import: canonical managed media unavailable`);
+                    continue;
                 }
+                console.warn(`Skipped ${newFile} background from BYAF import: canonical managed media unavailable`);
+            } catch (error) {
+                console.warn(`Skipped ${name} background from BYAF import: could not prepare destination`, error);
             }
+            backgrounds.failed.push({ name, reason: 'write_failed' });
         }
 
         const chats = [];
@@ -1391,7 +1408,11 @@ async function importFromByaf(uploadPath, { request }, preservedFileName) {
         characterData: JSON.stringify(card),
         sourceImage: byafData.images[0].image,
     });
-    return result.ok && conflicts ? { ...result, scenarios: { conflicts } } : result;
+    return result.ok ? {
+        ...result,
+        ...(scenarios.failed.length && { scenarios }),
+        ...(backgrounds.failed.length && { backgrounds }),
+    } : result;
 }
 
 /**

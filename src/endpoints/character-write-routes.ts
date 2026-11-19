@@ -57,7 +57,7 @@ export function createCharacterWriteHandlers({ createWriteDependencies, getBustC
                 response.status(400).send('Error: no avatar_url in request body');
                 return;
             }
-            if (request.body.expected_card_json !== undefined && typeof request.body.expected_card_json !== 'string') {
+            if (typeof request.body.expected_card_json !== 'string' || !request.body.expected_card_json) {
                 return response.sendStatus(400);
             }
             try {
@@ -71,13 +71,12 @@ export function createCharacterWriteHandlers({ createWriteDependencies, getBustC
                     console.warn(result.message, result.avatarPath);
                     return response.status(400).send(result.message);
                 }
-                if (!result.ok && request.body.expected_card_json !== undefined && result.reason === 'projection_failed'
+                if (!result.ok && result.reason === 'projection_failed'
                     && result.authorityCommitted && typeof result.cardVersion === 'string') {
                     return response.status(500).send({ error: 'projection_failed', authority_committed: true, canonical_card_version: result.cardVersion });
                 }
                 if (!result.ok) return response.status(500).send(result.message);
-                if (request.body.expected_card_json !== undefined) return response.send({ canonical_card_version: result.cardVersion });
-                return response.sendStatus(200);
+                return response.send({ canonical_card_version: result.cardVersion });
             } catch (err) {
                 if (err && typeof err === 'object' && 'code' in err && err.code === 'CHARACTER_CARD_CONFLICT') {
                     return response.status(409).send({ error: 'character_card_conflict' });

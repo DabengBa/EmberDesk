@@ -2278,6 +2278,7 @@ describe('character index', () => {
 
             const mergeResponse = await invokeCharacterMergeAttributes(directories, 'alpha.png', {
                 description: 'Merged description',
+                expected_card_json: importResponse.body.canonical_card_version,
             });
             expect(mergeResponse.statusCode).toBe(200);
 

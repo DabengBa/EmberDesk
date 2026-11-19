@@ -205,6 +205,44 @@ const AUTHORING_FANOUT_FIELDS = new Set([
 
 const pendingCharacterSaves = new Map();
 const deletingCharacters = new Set();
+let legacyFormVersion = { avatar: '', version: undefined };
+
+// Rebase only from an acknowledged write based on this form's own snapshot.
+// A roster refresh is not an acknowledgement and must not clear a conflict.
+export function acknowledgeLegacyCharacterWrite(avatar, previousVersion, nextVersion, { favorite, chat } = {}) {
+    if (!avatar || legacyFormVersion.avatar !== avatar || legacyFormVersion.version !== previousVersion
+        || typeof previousVersion !== 'string' || !previousVersion || typeof nextVersion !== 'string' || !nextVersion
+        || document.getElementById('form_create')?.getAttribute('actiontype') !== 'editcharacter') {
+        return false;
+    }
+
+    const avatarField = document.getElementById('avatar_url_pole');
+    if (avatarField && avatarField.value !== avatar) return false;
+
+    legacyFormVersion = { avatar, version: nextVersion };
+    // The version is the canonical card JSON. The legacy full edit uses this
+    // mirror for fields not represented by individual form controls.
+    const jsonField = document.getElementById('character_json_data');
+    if (jsonField) {
+        const card = parseCanonicalCardVersion(nextVersion);
+        jsonField.value = typeof card?.json_data === 'string' ? card.json_data : nextVersion;
+    }
+    if (typeof favorite === 'boolean') updateFavButtonState(favorite);
+    if (typeof chat === 'string') {
+        const chatField = document.getElementById('selected_chat_pole');
+        // A new-chat or rename action can draft a different selection while the merge is in flight.
+        if (chatField && chatField.value === String(parseCanonicalCardVersion(previousVersion)?.chat ?? '')) chatField.value = chat;
+    }
+    return true;
+}
+
+function parseCanonicalCardVersion(version) {
+    try {
+        return JSON.parse(version);
+    } catch {
+        return null;
+    }
+}
 
 function beginCharacterSave(avatar) {
     if (!avatar) return () => {};
@@ -233,7 +271,7 @@ export async function saveCharacterAuthoringFromPayload(saveModel = {}) {
     if (!finishSave) return { ok: false, mode };
     let transition;
     try {
-        if (mode === 'edit' && sourceCharacter?.shallow && typeof saveModel?.expectedCardJson !== 'string') {
+        if (mode === 'edit' && (typeof saveModel?.expectedCardJson !== 'string' || !saveModel.expectedCardJson)) {
             toastr.error(t`The character has not finished loading. Your draft has been kept; reload the character before saving.`);
             throw new Error('Character not loaded');
         }
@@ -305,15 +343,32 @@ export async function saveCharacterAuthoringFromPayload(saveModel = {}) {
             throw new Error(`Character authoring ${mode} failed with status ${fetchResult.status}`);
         }
 
+        const savedVersion = mode === 'edit'
+            ? committedProjectionVersion ?? (await fetchResult.json()).canonical_card_version
+            : undefined;
+        const editedAvatar = mode === 'edit' ? String(formData.get('avatar_url') || sourceCharacter?.avatar || '') : '';
+        if (mode === 'edit' && acknowledgeLegacyCharacterWrite(editedAvatar, formData.get('expected_card_json'), savedVersion)) {
+            // The legacy greeting popup reads the roster, not the hidden form.
+            // This is also needed if the authority committed but projection failed.
+            const character = state.characters[state.this_chid];
+            if (character?.avatar === editedAvatar && character.data && Array.isArray(saveModel.fields?.alternate_greetings)) {
+                character.data.alternate_greetings = [...saveModel.fields.alternate_greetings];
+            }
+        }
         if (committedProjectionVersion !== undefined) {
             toastr.warning(t`The character was saved, but its compatibility projection failed. Some exports may be outdated until it is repaired.`, '', { timeOut: 0 });
+            // Chat loads repopulate the legacy form from the roster, so refresh
+            // the committed card even when writing its compatibility file failed.
+            if (shouldRefreshCharacterAfterEdit(state.characters, editedAvatar)) {
+                try {
+                    await getOneCharacter(editedAvatar);
+                } catch (error) {
+                    console.warn('Could not refresh the committed character card.', error);
+                }
+            }
             state.crop_data = undefined;
             return { ok: true, mode, canonicalCardVersion: committedProjectionVersion, projectionFailed: true };
         }
-
-        const savedVersion = mode === 'edit' && typeof saveModel?.expectedCardJson === 'string'
-            ? (await fetchResult.json()).canonical_card_version
-            : undefined;
 
         if (mode === 'create') {
             const avatarId = await fetchResult.text();
@@ -358,7 +413,6 @@ export async function saveCharacterAuthoringFromPayload(saveModel = {}) {
             };
         }
 
-        const editedAvatar = String(formData.get('avatar_url') || sourceCharacter?.avatar || '');
         // The file input keeps the just-uploaded File; without clearing it every
         // later autosave would re-attach and re-embed the same image.
         if (avatarFile) {
@@ -697,6 +751,7 @@ export function select_selected_character(chid, { switchMenu = true } = {}) {
         return false;
     }
 
+    legacyFormVersion = { avatar: character.avatar, version: character.canonical_card_version };
     setTemporaryChatStatus(false);
     if (document.getElementById('rm_print_characters_block')?.dataset.reactCharacterLibraryOwner === 'react') {
         // The existing panel snapshot derives its active row from this_chid.
@@ -879,6 +934,7 @@ export async function createOrEditCharacter(e) {
     if (infoAvatar) infoAvatar.innerHTML = '';
     const form = /** @type {HTMLFormElement} */ (document.getElementById('form_create'));
     const formData = new FormData(form || undefined);
+    const formVersion = legacyFormVersion;
     const editTarget = {
         id: String(state.this_chid), avatar: formData.get('avatar_url'),
         identity: shell().getCharacterWorldDraftIdentity?.(),
@@ -1001,6 +1057,10 @@ export async function createOrEditCharacter(e) {
             }
         } else {
             try {
+                if (formVersion.avatar !== formData.get('avatar_url') || typeof formVersion.version !== 'string' || !formVersion.version) {
+                    throw new Error('Character form version unavailable; reload before saving');
+                }
+                formData.set('expected_card_json', formVersion.version);
                 let url = '/api/characters/edit';
 
                 if (state.crop_data != undefined) {
@@ -1024,8 +1084,11 @@ export async function createOrEditCharacter(e) {
                 });
 
                 if (!fetchResult.ok) {
+                    if (fetchResult.status === 409) toastr.error(t`This character changed elsewhere. Your draft has been kept; copy your changes before reloading.`);
                     throw new Error('Fetch result is not ok');
                 }
+                const { canonical_card_version } = await fetchResult.json();
+                acknowledgeLegacyCharacterWrite(formData.get('avatar_url'), formVersion.version, canonical_card_version);
 
                 const editedAvatar = formData.get('avatar_url');
                 if (!shouldRefreshCharacterAfterEdit(state.characters, editedAvatar)) {

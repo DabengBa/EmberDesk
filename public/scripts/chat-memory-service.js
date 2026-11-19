@@ -1,8 +1,7 @@
 import { eventSource, event_types } from './events.js';
 import { getRequestHeaders } from './request-context.js';
 import { requireGenerationShellContext } from './generation-shell-context.js';
-import { buildChatCompletionRequest, getChatCompletionModel } from './openai.js';
-import { getFallbackOpenAIModel } from './chat-generation-auto-recovery.js';
+import { readStoredUiLocale } from './ui-locale.js';
 import { uuidv4 } from './utils.js';
 import {
     CHAT_MEMORY_METADATA_KEY,
@@ -30,13 +29,11 @@ import {
  *
  * Background work deliberately bypasses `Generate('quiet')`: the summarization
  * request must not run the full card/WI/pipeline assembly, emit generation
- * lifecycle events, or fight the foreground abort controller. It sends a
- * minimal two-message chat-completion body through the same backend route,
- * on the configured background model (the renamed fallback model field),
- * falling back to the primary model when unset.
+ * lifecycle events, or fight the foreground abort controller. It identifies
+ * the turn to summarize; the server assembles the model request.
  */
 
-const MEMORY_REQUEST_TYPE = 'chat_memory';
+
 
 const shell = () => requireGenerationShellContext();
 const state = new Proxy({}, {
@@ -186,7 +183,7 @@ async function runTurnAction(turnKey, action) {
     if (!sourceText.trim()) return { ok: false, error: 'Turn has no summarizable content' };
     try {
         const signal = maintenance.abort.signal;
-        const summaryText = await requestTurnSummary({ sourceText }, signal, () => {
+        const summaryText = await requestTurnSummary(turn, sourceHash, signal, () => {
             const current = eligibleTurn();
             return !!current && !foregroundStarting && !state.is_send_press && !state.generationPending && computeTurnHash(state.chat, current) === sourceHash && JSON.stringify(current.messageIds) === JSON.stringify(turn.messageIds);
         });
@@ -267,47 +264,25 @@ export function applyChatMemoryToCoreChat(coreChat, { chat = null, dryRun = fals
     });
 }
 
-/**
- * Builds and sends the minimal summarization request. Two messages only —
- * configured summary prompt + the turn's cleaned source text — never the
- * character card, world info, or other turns. Uses the background model
- * (`fallback_provider_model`, user-facing "后台模型") when configured.
- * @param {{sourceText: string}} job
- * @param {AbortSignal} signal
- * @returns {Promise<string>}
- */
-async function requestTurnSummary(job, signal, shouldSend = () => true) {
-    const trace = { type: MEMORY_REQUEST_TYPE, chatId: getCurrentChatId(), charName: state.name2 };
-    const settings = structuredClone(state.oai_settings);
-    settings.stream_openai = false;
-    const memorySettings = getSettings();
-    settings.openai_max_tokens = memorySettings.maxTokens;
-    const model = getFallbackOpenAIModel(settings) || getChatCompletionModel(settings);
-    const substitute = text => String(text ?? '')
-        .split('{{char}}').join(String(state.name2 ?? ''))
-        .split('{{user}}').join(String(state.name1 ?? ''));
-    const { generate_data } = await buildChatCompletionRequest({
-        type: MEMORY_REQUEST_TYPE,
-        messages: [
-            { role: 'system', content: substitute(memorySettings.prompt || getDefaultChatMemoryPrompt()) },
-            { role: 'user', content: substitute(job.sourceText) },
-        ],
-        settings,
-        model,
-        emitSettingsReady: false,
-    });
-    if (signal.aborted || !shouldSend()) throw new DOMException('Summary canceled', 'AbortError');
-    const response = await fetch('/api/backends/chat-completions/generate', {
-        method: 'POST',
-        headers: getRequestHeaders(),
-        body: JSON.stringify({ ...generate_data, _trace: trace }),
-        signal,
-    });
+/** Request work against the persisted turn, not a browser-built model payload. */
+async function requestTurnSummary(turn, contentHash, signal, shouldSend) {
+    const body = JSON.stringify({ avatar_url: state.characters[state.this_chid]?.avatar, file_name: getCurrentChatId(),
+        turnKey: turn.key, messageIds: turn.messageIds, contentHash, locale: readStoredUiLocale() });
+    const isCurrent = () => !signal.aborted && shouldSend();
+    const send = () => {
+        if (!isCurrent()) throw new DOMException('Summary canceled', 'AbortError');
+        return fetch('/api/chats/memory/summarize', { method: 'POST', headers: getRequestHeaders(), body, signal });
+    };
+    let response = await send();
+    // Newly assigned message IDs or a debounced edit may not yet be saved.
+    // Use the existing versioned save, then retry once with the same identity.
+    if (response.status === 409 && (await response.json()).error === 'stale_summary_turn' && isCurrent()) {
+        if (await shell().saveChatConditional(isCurrent)) response = await send();
+    }
     if (!response.ok) {
         throw new Error(`Chat memory summary request failed: HTTP ${response.status}`);
     }
-    const data = await response.json();
-    const text = shell().extractMessageFromData(data);
+    const { text } = await response.json();
     if (typeof text !== 'string' || !text.trim()) {
         throw new Error('Chat memory summary request returned empty content');
     }
@@ -405,7 +380,7 @@ async function runMaintenanceLoop() {
                 const candidate = current.summarizableTurns.find(item => item.key === job.turnKey);
                 return !!candidate && computeTurnHash(state.chat, candidate) === currentHash && JSON.stringify(candidate.messageIds) === JSON.stringify(turn.messageIds);
             };
-            const text = await requestTurnSummary({ sourceText }, signal, shouldSend);
+            const text = await requestTurnSummary(turn, currentHash, signal, shouldSend);
             // CAS write-back: chat unchanged and fingerprint still matching —
             // otherwise the result is discarded and reconcile re-queues.
             if (!ownsSession(token) || signal.aborted || foregroundStarting || state.is_send_press || state.generationPending) {

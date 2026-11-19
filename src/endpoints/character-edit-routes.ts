@@ -122,7 +122,7 @@ export function createCharacterEditHandlers({ canonicalCharacterExistsSafe, getC
                 return response.status(500).send(result.message);
             }
 
-            return response.sendStatus(200);
+            return response.send({ canonical_card_version: result.cardVersion });
         } catch (err) {
             if (err && typeof err === 'object' && 'code' in err && err.code === 'CHARACTER_CARD_CONFLICT') {
                 return response.status(409).send({ error: 'character_card_conflict' });

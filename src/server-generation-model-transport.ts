@@ -9,16 +9,16 @@ import { CHAT_COMPLETION_SOURCES, isChatCompletionStreaming } from '../public/sc
 
 type ModelStream = {
     baseUrl: string; model: string; messages: readonly object[]; maxTokens: number;
-    signal: AbortSignal; emit: (text: string) => void; apiKey?: string;
+    signal: AbortSignal; emit: (text: string) => void; apiKey?: string; stream?: false;
     temperature?: number; frequencyPenalty?: number; presencePenalty?: number; topP?: number;
-    tools?: readonly object[]; toolChoice?: object | 'none'; reasoningEffort?: string;
+    tools?: readonly object[]; toolChoice?: object | 'none'; reasoningEffort?: string; verbosity?: string;
     onTools?: (calls: ModelToolCall[]) => void;
 };
 export type ModelToolCall = { id: string; type: 'function'; function: { name: string; arguments: string } };
 
 function buildRequest(input: ModelStream) {
     const { model, reasoningEffort } = input;
-    const stream = isChatCompletionStreaming({ chat_completion_source: CHAT_COMPLETION_SOURCES.OPENAI, stream_openai: true }, model, 'normal');
+    const stream = input.stream ?? isChatCompletionStreaming({ chat_completion_source: CHAT_COMPLETION_SOURCES.OPENAI, stream_openai: true }, model, 'normal');
     // Match the legacy OpenAI request rules using this attempt's model, not the configured default.
     const o1 = model.startsWith('o1');
     const oSeries = o1 || model.startsWith('o3') || model.startsWith('o4');
@@ -40,6 +40,7 @@ function buildRequest(input: ModelStream) {
         tools: allowsTools ? input.tools : undefined,
         tool_choice: allowsTools ? input.toolChoice : undefined,
         reasoning_effort: reasoningEffort,
+        verbosity: input.verbosity,
     };
 }
 

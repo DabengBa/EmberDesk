@@ -6,9 +6,7 @@ let handlers;
 let refresh;
 jest.unstable_mockModule('../public/scripts/events.js', () => ({ eventSource: { on: (event, handler) => { handlers[event] = handler; } }, event_types: { CHAT_CHANGED: 'changed', CHAT_LOADED: 'loaded', GENERATION_STARTED: 'start', GENERATION_ENDED: 'end', GENERATION_STOPPED: 'stop', MESSAGE_DELETED: 'deleted', MESSAGE_EDITED: 'edited', MESSAGE_UPDATED: 'updated' } }));
 jest.unstable_mockModule('../public/scripts/request-context.js', () => ({ getRequestHeaders: () => ({}) }));
-jest.unstable_mockModule('../public/scripts/generation-shell-context.js', () => ({ requireGenerationShellContext: () => ({ state, saveChatConditional: save, scheduleMainChatMessageListPanelRefresh: refresh, extractMessageFromData: data => data.text }) }));
-jest.unstable_mockModule('../public/scripts/openai.js', () => ({ buildChatCompletionRequest: async ({ messages }) => ({ generate_data: { messages } }), getChatCompletionModel: () => 'model' }));
-jest.unstable_mockModule('../public/scripts/chat-generation-auto-recovery.js', () => ({ getFallbackOpenAIModel: () => null }));
+jest.unstable_mockModule('../public/scripts/generation-shell-context.js', () => ({ requireGenerationShellContext: () => ({ state, saveChatConditional: save, scheduleMainChatMessageListPanelRefresh: refresh }) }));
 jest.unstable_mockModule('../public/scripts/utils.js', () => ({ uuidv4: () => 'new-id' }));
 jest.unstable_mockModule('../public/scripts/constants.js', () => ({ IGNORE_SYMBOL: 'ignore' }));
 jest.unstable_mockModule('../public/scripts/i18n.js', () => ({ translate: value => value }));
@@ -22,6 +20,35 @@ beforeEach(() => {
     state = { chat: [{ is_user: true, mes: 'secret source', extra: { id: 'u' } }, { mes: 'reply', extra: { id: 'a' } }, { is_user: true, mes: 'next', extra: { id: 'v' } }, { mes: 'reply', extra: { id: 'b' } }], chat_metadata: {}, characters: [{ chat: 'chat', avatar: 'avatar' }], this_chid: 0, main_api: 'openai', oai_settings: { chat_memory_enabled: true, chat_memory_keep_turns: 1 } };
     service.initChatMemory();
     handlers.changed();
+});
+
+test('manual and automatic summaries send only session and turn identity to the summary command', async () => {
+    globalThis.fetch = jest.fn(async () => ({ ok: true, json: async () => ({ text: ' summary ' }) }));
+    const turn = core.partitionChatTurns(state.chat).turns[0];
+    const command = { avatar_url: 'avatar', file_name: 'chat', turnKey: turn.key, messageIds: turn.messageIds,
+        contentHash: core.computeTurnHash(state.chat, turn), locale: 'zh-cn' };
+    expect(await service.regenerateChatMemoryTurn('u')).toEqual({ ok: true });
+    expect(service.getChatMemoryView().summaries[0].text).toBe('summary');
+    state.chat[0].mes = 'edited source';
+    service.scheduleMemoryMaintenance();
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(fetch).toHaveBeenCalledTimes(2);
+    for (const [index, [url, request]] of fetch.mock.calls.entries()) {
+        expect(url).toBe('/api/chats/memory/summarize');
+        expect(JSON.parse(request.body)).toEqual({ ...command, ...(index ? { contentHash: core.computeTurnHash(state.chat, turn) } : {}) });
+        expect(request.signal).toBeInstanceOf(AbortSignal);
+    }
+});
+
+test('a turn not yet persisted uses the guarded chat save before retrying its command', async () => {
+    globalThis.fetch = jest.fn()
+        .mockResolvedValueOnce({ ok: false, status: 409, json: async () => ({ error: 'stale_summary_turn' }) })
+        .mockResolvedValueOnce({ ok: true, json: async () => ({ text: 'summary' }) });
+    expect(await service.regenerateChatMemoryTurn('u')).toEqual({ ok: true });
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(fetch.mock.calls[1][1].body).toBe(fetch.mock.calls[0][1].body);
+    expect(save).toHaveBeenCalledTimes(2);
+    expect(save.mock.invocationCallOrder[0]).toBeLessThan(fetch.mock.invocationCallOrder[1]);
 });
 
 test('view, local settings, subscriptions and persistence failures', async () => {
@@ -244,14 +271,15 @@ test('automatic maintenance also stops if saving a successful summary fails', as
     }
 });
 
-test('maintenance save guard rejects same-name session reopen', () => {
+test('maintenance save guard rejects same-name session reopen', async () => {
     state.is_send_press = false;
-    globalThis.fetch = jest.fn(() => new Promise(() => {}));
+    globalThis.fetch = jest.fn(async () => ({ ok: true, json: async () => ({ text: 'old summary' }) }));
     service.scheduleMemoryMaintenance();
     const guard = save.mock.calls[0][0];
     expect(guard()).toBe(true);
     handlers.changed();
     expect(guard()).toBe(false);
+    await new Promise(done => setTimeout(done, 0));
 });
 test('same-name reopen discards asynchronous success', async () => {
     let resolve;

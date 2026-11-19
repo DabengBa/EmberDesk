@@ -46,6 +46,7 @@ export function createCharacterImportHandler(importCharacterUpload: ReturnType<t
                 ...(requestedFileName && !preservedFileName && { ignored: ['replacement-target-not-found'] }),
                 ...(result.auxiliaryMedia && { auxiliaryMedia: result.auxiliaryMedia }),
                 ...(result.scenarios && { scenarios: result.scenarios }),
+                ...(result.backgrounds && { backgrounds: result.backgrounds }),
             };
             response.send({ file_name: result.fileName, ...(Object.keys(report).length && { report }) });
         } catch (err) {

@@ -1,5 +1,6 @@
 import { beforeEach, expect, jest, test } from '@jest/globals';
 import { readFileSync } from 'node:fs';
+import { runInNewContext } from 'node:vm';
 
 jest.unstable_mockModule('../public/scripts/notifications.js', () => ({ default: new Proxy({}, { get: (_target, key) => globalThis.toastr?.[key] }) }));
 const emit = jest.fn(async () => {});jest.unstable_mockModule('../public/scripts/events.js', () => ({ eventSource: { emit }, event_types: { CHARACTER_EDITED: 'edited', CHARACTER_DUPLICATED: 'duplicated' } }));
@@ -25,20 +26,24 @@ function fakeAvatarInput(file = { name: 'avatar.png' }) {
 beforeEach(() => {
     emit.mockClear();
     identity = {};
-    state = { settingsReady: true, this_chid: '0', characters: [{ avatar: 'alice.png', data: {} }, { avatar: 'bob.png', data: {} }], chat: [], chat_metadata: {}, favsToHotswap: jest.fn() };
+    state = { settingsReady: true, this_chid: '0', characters: [{ avatar: 'alice.png', canonical_card_version: 'form-version', data: {} }, { avatar: 'bob.png', data: {} }], chat: [], chat_metadata: {}, favsToHotswap: jest.fn() };
     shell = {
         state, getDraftTagIds: () => [], getCharacterWorldDraftIdentity: () => identity,
         getOneCharacter: jest.fn(async () => {}), getFirstMessage: jest.fn(() => ({ mes: 'Alice greeting' })),
         clearChat: jest.fn(async () => {}), printMessages: jest.fn(), saveChatConditional: jest.fn(),
+        setTemporaryChatStatus: jest.fn(), select_rm_create: jest.fn(), formatCreatorNotes: () => '', timestampToMoment: () => ({ toISOString: () => '' }),
+        updateFavButtonState: jest.fn(), getThumbnailUrl: () => '', setWorldInfoButtonClass: jest.fn(), checkEmbeddedWorld: jest.fn(), getCharacterSource: () => null, saveSettingsDebounced: jest.fn(),
         t: strings => strings.join(''),
     };
     registerCharacterLifecycleShellContext(shell);
     const field = { html() { return this; }, get: () => ({}), attr: (_name, value) => value === undefined ? 'editcharacter' : field, data: () => '0', val(value) { return value === undefined ? '' : this; }, clone() { return this; }, replaceWith() {} };
     globalThis.$ = () => field;
-    globalThis.document = { getElementById: id => id === 'form_create' ? { getAttribute: () => 'editcharacter' } : null, querySelector: () => ({ dataset: { chid: '0' } }) };
+    globalThis.document = { getElementById: id => id === 'form_create' ? { getAttribute: () => 'editcharacter', setAttribute: jest.fn() } : null, querySelector: () => ({ dataset: { chid: '0' } }), querySelectorAll: () => [] };
     globalThis.FormData = class extends Map { constructor() { super([['avatar_url', 'alice.png']]); } };
     globalThis.CustomEvent = class {};
     globalThis.toastr = { error: jest.fn(), warning: jest.fn(), success: jest.fn(), info: jest.fn() };
+    lifecycle.select_selected_character('0', { switchMenu: false });
+    emit.mockClear();
 });
 
 test('legacy edit sends greetings belonging to the editor identity without jQuery data', async () => {
@@ -59,6 +64,126 @@ test('legacy edit sends greetings belonging to the editor identity without jQuer
     expect(fetch.mock.calls[0][1].body.appended).toEqual([['alternate_greetings', 'Bob one'], ['alternate_greetings', 'Bob two']]);
 });
 
+test('legacy full form retains its captured version and draft on conflict', async () => {
+    state.characters[0].canonical_card_version = 'newer-roster-version';
+    globalThis.fetch = jest.fn(async () => ({ ok: false, status: 409 }));
+    await lifecycle.createOrEditCharacter();
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(fetch.mock.calls[0][0]).toBe('/api/characters/edit');
+    expect(fetch.mock.calls[0][1].body.get('expected_card_json')).toBe('form-version');
+    expect(toastr.error).toHaveBeenCalledWith(expect.stringContaining('draft has been kept'));
+    expect(shell.getOneCharacter).not.toHaveBeenCalled();
+});
+
+test.each(['old-chat', 'draft-chat'])('recent-chat merge rebases the legacy edit without overwriting a pending chat (%s)', async currentChat => {
+    const previous = JSON.stringify({ chat: 'old-chat' });
+    const cardJson = JSON.stringify({ chat: 'new-chat' });
+    const next = JSON.stringify({ chat: 'new-chat', json_data: cardJson });
+    Object.assign(state.characters[0], { chat: 'old-chat', canonical_card_version: previous });
+    const chat = { value: currentChat }, json = { value: previous };
+    const getElement = document.getElementById;
+    document.getElementById = id => id === 'selected_chat_pole' ? chat : id === 'character_json_data' ? json : getElement(id);
+    lifecycle.select_selected_character('0', { switchMenu: false });
+    chat.value = currentChat;
+    globalThis.FormData = class extends Map {
+        constructor() { super([['avatar_url', 'alice.png'], ['chat', chat.value], ['json_data', json.value]]); }
+    };
+    globalThis.fetch = jest.fn()
+        .mockResolvedValueOnce({ ok: true, json: async () => ({ canonical_card_version: next }) })
+        .mockResolvedValueOnce({ ok: false, status: 409 });
+    const source = readFileSync(new URL('../public/script.js', import.meta.url), 'utf8');
+    const start = source.indexOf('export async function updateRemoteChatName(');
+    const updateRemoteChatName = runInNewContext(`(${source.slice(start + 'export '.length, source.indexOf('\n}', start) + 2)})`, {
+        characters: state.characters, fetch, getRequestHeaders: () => ({}),
+        getCharacterPatchVersion: async character => character.canonical_card_version,
+        acknowledgeLegacyCharacterWrite: lifecycle.acknowledgeLegacyCharacterWrite,
+    });
+
+    await updateRemoteChatName(0, 'new-chat');
+    await lifecycle.createOrEditCharacter();
+    const { body } = fetch.mock.calls[1][1];
+    expect(body.get('expected_card_json')).toBe(next);
+    expect(body.get('chat')).toBe(currentChat === 'old-chat' ? 'new-chat' : currentChat);
+    expect(body.get('json_data')).toBe(cardJson);
+});
+
+test('acknowledged favorite is carried into the next legacy full write', async () => {
+    const favoriteVersion = JSON.stringify({ fav: true, data: { extensions: { fav: true } } });
+    shell.updateFavButtonState.mockImplementation(value => { state.fav_ch_checked = value; });
+    state.fav_ch_checked = false;
+    globalThis.fetch = jest.fn(async () => ({ ok: false, status: 409 }));
+
+    lifecycle.acknowledgeLegacyCharacterWrite('alice.png', 'form-version', favoriteVersion, { favorite: true });
+    await lifecycle.createOrEditCharacter();
+    const { body } = fetch.mock.calls[0][1];
+    expect(body.get('expected_card_json')).toBe(favoriteVersion);
+    expect(body.get('fav')).toBe('true');
+});
+
+test('new-chat reselection uses the committed card after an authoring projection error', async () => {
+    const { buildCharacterAuthoringFormData } = await import('../public/scripts/character-authoring.js');
+    const savedVersion = JSON.stringify({ description: 'saved description' });
+    state.create_save = {};
+    Object.assign(shell, {
+        getCurrentCharacterAuthoringMode: () => 'edit',
+        getCurrentCharacterAuthoringSource: () => state.characters[0],
+        applyCharacterAuthoringSaveModel: jest.fn(),
+    });
+    shell.getOneCharacter.mockImplementation(async () => {
+        Object.assign(state.characters[0], { canonical_card_version: savedVersion, json_data: savedVersion });
+    });
+    buildCharacterAuthoringFormData.mockReturnValue(new Map([['avatar_url', 'alice.png'], ['expected_card_json', 'form-version']]));
+    globalThis.fetch = jest.fn()
+        .mockResolvedValueOnce({
+            ok: false, status: 500,
+            json: async () => ({ error: 'projection_failed', authority_committed: true, canonical_card_version: savedVersion }),
+        })
+        .mockResolvedValueOnce({ ok: false, status: 409 });
+    try {
+        await lifecycle.saveCharacterAuthoringFromPayload({ fields: { name: 'Alice' }, expectedCardJson: 'form-version' });
+        // getChatResult fills the form again before new chat calls the legacy save.
+        lifecycle.select_selected_character('0', { switchMenu: false });
+        await lifecycle.createOrEditCharacter(new CustomEvent('newChat'));
+        expect(fetch.mock.calls[1][1].body.get('expected_card_json')).toBe(savedVersion);
+    } finally {
+        buildCharacterAuthoringFormData.mockReset();
+    }
+});
+
+test.each([
+    ['matching authoring write', 'alice.png', 'form-version', false, true],
+    ['matching authoring write with projection failure', 'alice.png', 'form-version', true, true],
+    ['authoring write based on another snapshot', 'alice.png', 'other-version', false, false],
+    ['authoring write for another avatar', 'bob.png', 'form-version', false, false],
+])('%s only rebases the corresponding legacy form', async (_label, avatar, expectedCardJson, projectionFailed, advances) => {
+    const { buildCharacterAuthoringFormData } = await import('../public/scripts/character-authoring.js');
+    const savedVersion = JSON.stringify({ description: 'saved description', data: { extensions: { regex_scripts: [] } } });
+    const jsonField = { value: '{"description":"old description"}' };
+    const getElement = document.getElementById;
+    document.getElementById = id => id === 'character_json_data' ? jsonField : getElement(id);
+    state.create_save = {};
+    Object.assign(shell, {
+        getCurrentCharacterAuthoringMode: () => 'edit',
+        getCurrentCharacterAuthoringSource: () => ({ avatar }),
+        applyCharacterAuthoringSaveModel: jest.fn(),
+    });
+    buildCharacterAuthoringFormData.mockReturnValue(new Map([['avatar_url', avatar], ['expected_card_json', expectedCardJson]]));
+    globalThis.fetch = jest.fn()
+        .mockResolvedValueOnce({
+            ok: !projectionFailed, status: projectionFailed ? 500 : 200,
+            json: async () => ({ error: 'projection_failed', authority_committed: true, canonical_card_version: savedVersion }),
+        })
+        .mockResolvedValueOnce({ ok: false, status: 409 });
+    try {
+        await lifecycle.saveCharacterAuthoringFromPayload({ fields: { name: 'Alice' }, expectedCardJson, changedFields: [] });
+        await lifecycle.createOrEditCharacter(new CustomEvent('newChat'));
+        expect(fetch.mock.calls[1][1].body.get('expected_card_json')).toBe(advances ? savedVersion : 'form-version');
+        expect(jsonField.value).toBe(advances ? savedVersion : '{"description":"old description"}');
+    } finally {
+        buildCharacterAuthoringFormData.mockReset();
+    }
+});
+
 test('a completed edit refreshes its card but does not touch another selected chat', async () => {
     let respond;
     globalThis.fetch = jest.fn(() => new Promise(resolve => { respond = resolve; }));
@@ -67,7 +192,7 @@ test('a completed edit refreshes its card but does not touch another selected ch
     identity = {};
     const bobChat = [{ mes: 'Bob conversation' }];
     state.chat = bobChat;
-    respond({ ok: true });
+    respond({ ok: true, json: async () => ({ canonical_card_version: 'new-version' }) });
     await saving;
     expect(shell.getOneCharacter).toHaveBeenCalledWith('alice.png');
     expect(shell.getFirstMessage).not.toHaveBeenCalled();
@@ -78,7 +203,7 @@ test('a completed edit refreshes its card but does not touch another selected ch
 
 test('leaving and reopening the same character invalidates an earlier edit completion', async () => {
     let refreshed;
-    globalThis.fetch = jest.fn(async () => ({ ok: true }));
+    globalThis.fetch = jest.fn(async () => ({ ok: true, json: async () => ({ canonical_card_version: 'new-version' }) }));
     shell.getOneCharacter.mockImplementation(() => new Promise(resolve => { refreshed = resolve; }));
     const saving = lifecycle.createOrEditCharacter();
     for (let i = 0; i < 8 && !refreshed; i++) await Promise.resolve();
@@ -106,7 +231,7 @@ test('authoring reads legacy fallback fields without jQuery before issuing the w
     const sentinel = new Error('stop after building');
     buildCharacterAuthoringFormData.mockImplementation(() => { throw sentinel; });
     try {
-        await expect(lifecycle.saveCharacterAuthoringFromPayload({ fields: { name: 'Alice' } })).rejects.toBe(sentinel);
+        await expect(lifecycle.saveCharacterAuthoringFromPayload({ fields: { name: 'Alice' }, expectedCardJson: 'form-version' })).rejects.toBe(sentinel);
         expect(buildCharacterAuthoringFormData).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
             existingAvatar: 'alice.png', chat: 'chat-legacy', createDate: 'date-legacy', jsonData: '{"legacy":true}', avatarFile: null,
         }));
@@ -228,7 +353,7 @@ test('a current character edit restores the save control without jQuery', async 
         return field;
     };
     state.chat_metadata.tainted = true;
-    globalThis.fetch = jest.fn(async () => ({ ok: true }));
+    globalThis.fetch = jest.fn(async () => ({ ok: true, json: async () => ({ canonical_card_version: 'new-version' }) }));
     await lifecycle.createOrEditCharacter();
     expect(saveButton.setAttribute).toHaveBeenCalledWith('value', 'Save');
     expect(emit).toHaveBeenCalledWith('edited', expect.objectContaining({ detail: expect.objectContaining({ id: '0' }) }));
@@ -314,9 +439,9 @@ test('payload edit clears the uploaded file without replacing its input or losin
     });
     buildCharacterAuthoringFormData.mockReturnValue(new Map([['avatar_url', 'alice.png']]));
     getCharacterAuthoringWriteUrl.mockReturnValue('/api/characters/edit');
-    globalThis.fetch = jest.fn(async () => ({ ok: true }));
+    globalThis.fetch = jest.fn(async () => ({ ok: true, json: async () => ({ canonical_card_version: 'new-version' }) }));
     try {
-        const result = await lifecycle.saveCharacterAuthoringFromPayload({ fields: { name: 'Alice' }, changedFields: [] });
+        const result = await lifecycle.saveCharacterAuthoringFromPayload({ fields: { name: 'Alice' }, expectedCardJson: 'form-version', changedFields: [] });
         expect(result.ok).toBe(true);
         expect(avatarInput.files).toHaveLength(0);
         expect(state.create_save.avatar).toBeNull();
