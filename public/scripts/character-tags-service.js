@@ -91,10 +91,6 @@ export function createCharacterTagsService({ getTags, getMap, getCharacters, equ
         return (getMap()[key] || []).map(id => getTags().find(tag => tag.id === id)).filter(Boolean);
     }
 
-    function ensureKey(key) {
-        if (key && !Object.hasOwn(getMap(), key)) getMap()[key] = [];
-        return key;
-    }
 
     function filterState(data, id, state) {
         const selected = (data.selected || []).filter(value => String(value) !== String(id));
@@ -249,5 +245,5 @@ export function createCharacterTagsService({ getTags, getMap, getCharacters, equ
         return { valid: true, warnings };
     }
 
-    return { find, create, assign, remove, mutual, reset, replace, deleteKey, getDraft, setDraft, list, ensureKey, filterState, filterEntities, rename, setProperty, deleteTag, copyKey, renameKey, compare, sorted, reorder, prune, restore, notify };
+    return { find, create, assign, remove, mutual, reset, replace, deleteKey, getDraft, setDraft, list, filterState, filterEntities, rename, setProperty, deleteTag, copyKey, renameKey, compare, sorted, reorder, prune, restore, notify };
 }
