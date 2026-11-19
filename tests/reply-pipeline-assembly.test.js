@@ -349,7 +349,7 @@ test('pipeline history projects old users and effective replies once without cha
     for (const call of calls) {
         const index = messages.findIndex(message => message.tool_calls?.some(item => item.id === call.id));
         expect(messages[index].role).toBe('assistant');
-        expect(messages[index + 1]).toEqual({ role: 'tool', content: '已收到。', tool_call_id: call.id });
+        expect(messages[index + 1]).toEqual({ role: 'tool', content: 'OK', tool_call_id: call.id });
     }
     expect(messages.filter(message => message.role === 'user')).toEqual([
         { role: 'user', content: '以下是此前已经发生的对话。' },

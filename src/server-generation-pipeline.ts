@@ -114,7 +114,7 @@ export async function runServerPipeline({ prepared, snapshot, runtime, apiKey, r
             if (typeof args.content !== 'string') throw new Error('Invalid pipeline tool content');
             result = step.actionBody === undefined ? args.content : await waitForStep({ name: step.tool, args, actionBody: step.actionBody });
             transcript.push({ role: 'assistant', content: raw || null, tool_calls: calls },
-                { role: 'tool', tool_call_id: id, content: step.actionBody === undefined ? '已收到。' : result });
+                { role: 'tool', tool_call_id: id, content: step.actionBody === undefined ? 'OK' : result });
         } else if (raw.trim()) {
             transcript.push({ role: 'assistant', content: raw });
         } else {
