@@ -33,6 +33,7 @@ import { createChatBackupPlan } from './chat-backup-helpers.ts';
 import { registerChatGetRoute, registerChatSearchRoute, registerChatRecentRoute } from './chat-read-routes.ts';
 import { registerChatSaveRoute, registerChatRenameRoute, registerChatDeleteRoute } from './chat-write-routes.ts';
 import { registerChatGenerationRoutes } from './chat-generation-routes.ts';
+import { registerChatMemoryRoutes } from './chat-memory-routes.ts';
 import { registerChatImportRoute } from './chat-import-routes.ts';
 import { registerChatExportRoute } from './chat-compatibility.ts';
 import { getCanonicalStorageSlice } from '../canonical-storage-slice-registry.ts';
@@ -673,6 +674,7 @@ export const chatRouteContext = {
 
 registerChatSaveRoute(chatRouteContext);
 registerChatGenerationRoutes(chatRouteContext);
+registerChatMemoryRoutes(chatRouteContext);
 
 /**
  * Gets the chat as an object.

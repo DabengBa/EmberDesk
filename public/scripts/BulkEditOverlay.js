@@ -14,6 +14,8 @@ import { debounce_timeout } from './constants.js';
 import { createBulkTagEditorRuntime, openCharacterTagManager } from './tags.js';
 import { loadWorkspacePanelsModule } from './workspace-panels-react-bridge.js';
 import { t } from './i18n.js';
+import { getCharacterPatchVersion } from './character-version.js';
+import { acknowledgeLegacyCharacterWrite } from './character-lifecycle-service.js';
 
 /**
  * Static object representing the actions of the
@@ -120,6 +122,7 @@ class CharacterContextMenu {
         const data = {
             name: character.name,
             avatar: character.avatar,
+            expected_card_json: await getCharacterPatchVersion(character),
             data: {
                 extensions: {
                     fav: newFavState,
@@ -138,8 +141,11 @@ class CharacterContextMenu {
             mergeResponse.json().then(json => toastr.error(`Character not saved. Error: ${json.message}. Field: ${json.error}`));
             return;
         }
+        const { canonical_card_version } = await mergeResponse.json();
+        acknowledgeLegacyCharacterWrite(data.avatar, data.expected_card_json, canonical_card_version, { favorite: newFavState });
         const current = requireCharacterLifecycleShellContext().state.characters.find(item => item?.avatar === data.avatar);
         if (current) {
+            if (current === character) current.canonical_card_version = canonical_card_version;
             current.fav = newFavState;
             current.data.extensions.fav = newFavState;
             void requireCharacterLifecycleShellContext().syncReactCharacterLibraryToolbarState();

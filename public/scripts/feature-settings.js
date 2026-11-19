@@ -13,6 +13,8 @@ import { renderTemplate, renderTemplateAsync } from './templates.js';
 import { deleteValueByPath, setValueByPath } from './utils.js';
 import { getContext } from './st-context.js';
 import { debounce_timeout } from './constants.js';
+import { getCharacterPatchVersion } from './character-version.js';
+import { acknowledgeLegacyCharacterWrite } from './character-lifecycle-service.js';
 
 export { getContext };
 
@@ -162,13 +164,14 @@ export async function writeExtensionField(characterId, key, value, options = {})
             // Make sure the data doesn't get lost when saving the current character
             if (Number(characterId) === Number(context.characterId)) {
                 const field = document.getElementById('character_json_data');
-                if (field) field.value = character.json_data;
+                if (field?.value === previousJson) field.value = character.json_data;
             }
         }
 
         // Save data to the server
         const saveDataRequest = {
             avatar: character.avatar,
+            expected_card_json: await getCharacterPatchVersion(character),
             data: {
                 extensions: {
                     [key]: value,
@@ -184,6 +187,9 @@ export async function writeExtensionField(characterId, key, value, options = {})
         if (!mergeResponse.ok) {
             console.error('Failed to save extension field', mergeResponse.statusText);
             if (options.strict) throw new Error(`Failed to save extension field: ${mergeResponse.statusText}`);
+        } else {
+            character.canonical_card_version = (await mergeResponse.json()).canonical_card_version;
+            acknowledgeLegacyCharacterWrite(saveDataRequest.avatar, saveDataRequest.expected_card_json, character.canonical_card_version);
         }
     } catch (error) {
         // Only undo a value we still own, including its contents: another
@@ -262,6 +268,7 @@ export async function writeExtensionFieldBulk(avatars, key, value, { filterPath 
     // Build the server request
     const requestBody = {
         avatars: Array.isArray(avatars) && avatars.length > 0 ? avatars : [],
+        expected_card_json_by_avatar: {},
         data: {
             data: {
                 extensions: {
@@ -270,6 +277,15 @@ export async function writeExtensionFieldBulk(avatars, key, value, { filterPath 
             },
         },
     };
+
+    const targets = requestBody.avatars.length ? context.characters.filter(character => character && requestBody.avatars.includes(character.avatar)) : context.characters.filter(Boolean);
+    await Promise.all(targets.map(async character => {
+        try {
+            requestBody.expected_card_json_by_avatar[character.avatar] = await getCharacterPatchVersion(character);
+        } catch (error) {
+            console.warn(`Unable to load version for ${character.avatar}`, error);
+        }
+    }));
 
     // Default filter: when unsetting, only touch characters that have the field
     const resolvedFilterPath = filterPath ?? (isUnset ? extensionPath : undefined);
@@ -293,8 +309,12 @@ export async function writeExtensionFieldBulk(avatars, key, value, { filterPath 
 
     // Sync in-memory character objects for successfully updated characters
     const updatedSet = new Set(result.updated);
+    for (const avatar of updatedSet) {
+        acknowledgeLegacyCharacterWrite(avatar, requestBody.expected_card_json_by_avatar[avatar], result.canonical_card_versions?.[avatar]);
+    }
     for (const character of context.characters) {
         if (!character || !updatedSet.has(character.avatar)) continue;
+        character.canonical_card_version = result.canonical_card_versions?.[character.avatar];
 
         if (isUnset) {
             deleteValueByPath(character, extensionPath);
@@ -311,15 +331,6 @@ export async function writeExtensionFieldBulk(avatars, key, value, { filterPath 
                 setValueByPath(jsonData, extensionPath, value);
             }
             character.json_data = JSON.stringify(jsonData);
-        }
-    }
-
-    // If the currently active character was updated, sync the hidden input
-    if (context.characterId !== undefined) {
-        const activeChar = context.characters[context.characterId];
-        if (activeChar && updatedSet.has(activeChar.avatar) && activeChar.json_data) {
-            const field = document.getElementById('character_json_data');
-            if (field) field.value = activeChar.json_data;
         }
     }
 

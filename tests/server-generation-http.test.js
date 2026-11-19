@@ -11,6 +11,7 @@ import { upsertCanonicalCharacter } from '../src/endpoints/character-store.ts';
 import { getCanonicalSettingsDocument, upsertCanonicalSettingsDocument } from '../src/endpoints/settings-store.ts';
 import { upsertCanonicalWorldInfoBook } from '../src/endpoints/world-info-store.ts';
 import { router as filesRouter } from '../src/endpoints/files.js';
+import { createChatMemoryCore } from '../public/scripts/chat-memory-shared.js';
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ed-generation-http-'));
 const config = path.join(root, 'config.yaml');
@@ -23,6 +24,8 @@ const calls = [];
 let url;
 const hold = Promise.withResolvers();
 const holdRegex = Promise.withResolvers();
+const summaryOpened = Promise.withResolvers();
+const summaryClosed = Promise.withResolvers();
 let closingAttempts = 0;
 
 async function listen(server) {
@@ -37,6 +40,17 @@ beforeAll(async () => {
         for await (const chunk of req) body += chunk;
         const completion = JSON.parse(body);
         calls.push(completion);
+        if (completion.stream === false && completion.messages[0]?.content.startsWith('Summarize for Mira and ')) {
+            if (completion.messages[1]?.content.includes('Hold summary')) {
+                res.once('close', summaryClosed.resolve);
+                res.writeHead(200, { 'content-type': 'application/json' }).flushHeaders();
+                summaryOpened.resolve();
+                return;
+            }
+            res.writeHead(200, { 'content-type': 'application/json' });
+            res.end(JSON.stringify({ choices: [{ message: { content: '  Canonical summary  ' } }] }));
+            return;
+        }
         const hasStoryInput = text => completion.messages.some(message => message.tool_calls?.some(call =>
             call.function.name === 'submit_story' && JSON.parse(call.function.arguments).content === text));
         if (completion.tool_choice?.function?.name === 'first' && completion.model !== 'gpt-4o-mini'
@@ -119,6 +133,87 @@ function call(route, body, user = 'alice') {
         ...(body ? { body: JSON.stringify(body) } : {}),
     });
 }
+
+test('chat memory resolves the authenticated persisted turn and settings, and aborts its nonstreaming model request', async () => {
+    const db = canonicalSqliteManager.open({ handle: 'alice', directories: users.get('alice').directories, featureFlags: { enabled: true } });
+    const settings = getCanonicalSettingsDocument(db, { userId: 'alice' });
+    const setModel = (fallback, overrides = {}) => {
+        const current = getCanonicalSettingsDocument(db, { userId: 'alice' });
+        upsertCanonicalSettingsDocument(db, { userId: 'alice', expectedRevision: current.revision, payload: {
+            ...settings.payload, oai_settings: { ...settings.payload.oai_settings, fallback_provider_model: fallback,
+                chat_memory_keep_turns: 5, chat_memory_prompt: 'Global prompt', chat_memory_max_tokens: 400, stream_openai: true, ...overrides },
+        } });
+    };
+    const core = createChatMemoryCore(value => value, Symbol.for('ignore'));
+    async function seed(file_name, source, userName = 'unused') {
+        const target = { avatar_url: 'mira.png', file_name };
+        const rows = [
+            { user_name: userName, chat_metadata: { chat_memory: { keepTurns: 1, prompt: 'Summarize for {{char}} and {{user}}', maxTokens: 123 } } },
+            { name: 'User', is_user: true, mes: source, extra: { id: 'turn' } },
+            { name: 'Mira', mes: 'Navigation reply', extra: { id: 'reply' } },
+            { is_system: true, mes: 'System noise', extra: { id: 'noise' } },
+            { is_user: true, mes: 'Unrelated newest input', extra: { id: 'new' } },
+            { mes: 'Unrelated newest reply', extra: { id: 'new-reply' } },
+        ];
+        expect((await call('/save', { ...target, create: true, operationId: `seed-${file_name}`, chat: rows })).status).toBe(200);
+        const turn = core.partitionChatTurns(rows.slice(1)).turns[0];
+        return { target, rows, command: { ...target, turnKey: turn.key, messageIds: turn.messageIds, contentHash: core.computeTurnHash(rows.slice(1), turn), locale: 'en' } };
+    }
+    const route = '/memory/summarize';
+    try {
+        setModel('  gpt-4o-mini ');
+        const { target, rows, command } = await seed('summary-authority', 'Ask {{char}} as {{user}}');
+        const start = calls.length;
+        expect((await call(route, command, 'unknown')).status).toBe(401);
+        expect((await call(route, command, 'bob')).status).toBe(404);
+        expect((await call(route, { ...command, model: 'override', messages: [], custom_url: 'http://example.test/v1' })).status).toBe(400);
+        expect((await call(route, { ...command, contentHash: 'deadbeef' })).status).toBe(409);
+        expect(calls).toHaveLength(start);
+        const result = await call(route, command);
+        expect(result.status).toBe(200);
+        expect(await result.json()).toEqual({ text: 'Canonical summary' });
+        expect(calls[start]).toMatchObject({ model: 'gpt-4o-mini', stream: false, max_tokens: 123, messages: [
+            { role: 'system', content: 'Summarize for Mira and User' },
+            { role: 'user', content: 'User: Ask Mira as User\n\nMira: Navigation reply' },
+        ] });
+        expect(calls[start]).not.toHaveProperty('tools');
+        expect(calls[start]).not.toHaveProperty('tool_choice');
+        expect(await (await call('/get', target)).json()).toEqual(rows);
+
+        setModel('');
+        expect((await call(route, command)).status).toBe(200);
+        expect(calls[start + 1].model).toBe('gpt-4o');
+
+        const named = await seed('summary-named-user', 'Ask {{char}} as {{user}}', 'Avery');
+        expect((await call(route, named.command)).status).toBe(200);
+        expect(calls.at(-1).messages).toEqual([
+            { role: 'system', content: 'Summarize for Mira and Avery' },
+            { role: 'user', content: 'User: Ask Mira as Avery\n\nMira: Navigation reply' },
+        ]);
+
+        setModel('disabled-model', { chat_completion_source: 'custom', custom_url: '', reverse_proxy: settings.payload.oai_settings.custom_url,
+            openai_model: 'gpt-4-turbo', custom_model: 'gpt-4o', fallback_provider_enabled: false });
+        const beforeLegacy = calls.length;
+        expect((await call(route, command)).status).toBe(200);
+        expect(calls).toHaveLength(beforeLegacy + 1);
+        expect(calls.at(-1).model).toBe('gpt-4o');
+        setModel('');
+
+        const held = await seed('summary-cancel', 'Hold summary');
+        const abort = new AbortController();
+        const request = fetch(`${url}${route}`, { method: 'POST', headers: { 'x-test-user': 'alice', 'content-type': 'application/json' },
+            body: JSON.stringify(held.command), signal: abort.signal });
+        try {
+            await summaryOpened.promise;
+        } finally { abort.abort(); }
+        await expect(request).rejects.toMatchObject({ name: 'AbortError' });
+        await summaryClosed.promise;
+        expect(await (await call('/get', held.target)).json()).toEqual(held.rows);
+    } finally {
+        const current = getCanonicalSettingsDocument(db, { userId: 'alice' });
+        upsertCanonicalSettingsDocument(db, { userId: 'alice', expectedRevision: current.revision, payload: settings.payload });
+    }
+});
 
 test('temporary exit cancels before create or after an SSE disconnect, scoped to the authenticated user', async () => {
     const command = { temporary: true, action: 'send', text: 'Hold this chat', history: [] };

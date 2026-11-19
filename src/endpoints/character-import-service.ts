@@ -1,7 +1,8 @@
 import type { Request, Response } from 'express';
 
 type AuxiliaryMediaReport = { imported: number; skipped: number; failed: number } | { unconfirmed: true };
-type ScenarioReport = { conflicts: number };
+type ScenarioReport = { conflicts: number; failed: { name: string; reason: 'conflict' | 'write_failed' }[] };
+type BackgroundReport = { failed: { name: string; reason: 'write_failed' }[] };
 
 export type CharacterImportResult = {
     ok: boolean;
@@ -12,6 +13,7 @@ export type CharacterImportResult = {
     refreshHandled?: boolean;
     auxiliaryMedia?: AuxiliaryMediaReport;
     scenarios?: ScenarioReport;
+    backgrounds?: BackgroundReport;
 };
 
 export type CharacterImportHandler = (
@@ -37,7 +39,7 @@ export type CharacterImportOptions = {
 };
 
 type NormalizedImportResult =
-    | { ok: true; fileName: string; auxiliaryMedia?: AuxiliaryMediaReport; scenarios?: ScenarioReport }
+    | { ok: true; fileName: string; auxiliaryMedia?: AuxiliaryMediaReport; scenarios?: ScenarioReport; backgrounds?: BackgroundReport }
     | { ok: false; reason: string; message?: string };
 
 function getAvatarName(fileName: string): string {
@@ -73,6 +75,7 @@ function normalizeImportResult(importResult: string | CharacterImportResult | nu
         fileName,
         ...(importResult.auxiliaryMedia && { auxiliaryMedia: importResult.auxiliaryMedia }),
         ...(importResult.scenarios && { scenarios: importResult.scenarios }),
+        ...(importResult.backgrounds && { backgrounds: importResult.backgrounds }),
     };
 }
 
@@ -137,6 +140,7 @@ export function createCharacterImportCoordinator({
             avatarName: getAvatarName(fileName),
             ...(importResult.auxiliaryMedia && { auxiliaryMedia: importResult.auxiliaryMedia }),
             ...(importResult.scenarios && { scenarios: importResult.scenarios }),
+            ...(importResult.backgrounds && { backgrounds: importResult.backgrounds }),
         };
     };
 }

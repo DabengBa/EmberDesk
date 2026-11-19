@@ -286,6 +286,7 @@ import {
     updateEditArrowClasses,
 } from './scripts/generation-service.js';
 import {
+    acknowledgeLegacyCharacterWrite,
     createOrEditCharacter,
     duplicateCharacter as duplicateCharacterInLifecycle,
     deleteCharacter,
@@ -413,6 +414,7 @@ import {
 import { mountReactWorkspaceShellChrome, mountReactSettingsPanel, loadWorkspacePanelsModule } from './scripts/workspace-panels-react-bridge.js';
 import { initChatMemory, getChatMemoryDisplayItems } from './scripts/chat-memory-service.js';
 import { getRequestHeaders, loadCsrfToken } from './scripts/request-context.js';
+import { getCharacterPatchVersion } from './scripts/character-version.js';
 import { installPublicBrowserApi } from './scripts/public-api.js';
 import { createReactRuntimeProvider } from './scripts/react-runtime-provider.js';
 import { createSettingsWriteOwner } from './scripts/settings-write-owner.js';
@@ -5743,7 +5745,10 @@ async function submitComposerMessage(composerSubmission) {
     if (is_send_press || workspaceGeneration.busy()) return;
     if (generationCaller.regenerateRequestInFlight || generationCaller.generationEntryPending) return;
 
-    const textareaText = composerSubmission.value;
+    const attachmentPending = hasPendingFileAttachment();
+    const textareaText = composerSubmission.value === '' && !attachmentPending && usesWorkspaceGeneration()
+        ? oai_settings.send_if_empty.trim()
+        : composerSubmission.value;
     const currentComposer = getComposerSnapshot();
     if (composerSubmission.contextKey !== currentComposer.contextKey || composerSubmission.contextRevision !== currentComposer.contextRevision) return;
 
@@ -5753,7 +5758,7 @@ async function submitComposerMessage(composerSubmission) {
         return;
     }
 
-    if ((textareaText || hasPendingFileAttachment()) && this_chid === undefined && name2 !== neutralCharacterName) {
+    if ((textareaText || attachmentPending) && this_chid === undefined && name2 !== neutralCharacterName) {
         await newAssistantChat({ temporary: false });
         if (this_chid !== undefined || name2 !== neutralCharacterName) return;
         const currentComposer = getComposerSnapshot();
@@ -8755,6 +8760,18 @@ async function importCharacter(file, { preserveFileName = '', importTags = false
             if (data.report?.scenarios?.conflicts > 0) {
                 toastr.warning(t`BYAF: ${data.report.scenarios.conflicts} chat scenario(s) skipped due to a conflict. Existing chats were kept.`, t`Character import`);
             }
+            const failedScenarios = data.report?.scenarios?.failed;
+            if (Array.isArray(failedScenarios) && failedScenarios.length) {
+                const details = failedScenarios.map(({ name, reason }) => reason === 'conflict'
+                    ? t`${name}: a chat with that name already exists`
+                    : t`${name}: could not be saved`).join('; ');
+                toastr.warning(t`BYAF chat scenarios skipped: ${details}`, t`Character import`, { escapeHtml: true });
+            }
+            const failedBackgrounds = data.report?.backgrounds?.failed;
+            if (Array.isArray(failedBackgrounds) && failedBackgrounds.length) {
+                const details = failedBackgrounds.map(({ name }) => t`${name}: could not be saved`).join('; ');
+                toastr.warning(t`BYAF backgrounds skipped: ${details}`, t`Character import`, { escapeHtml: true });
+            }
             if (importTags) {
                 await importCharactersTags([avatarFileName]);
                 selectImportedChar(data.file_name);
@@ -8885,6 +8902,7 @@ export async function updateRemoteChatName(characterId, newName) {
     const mergeRequest = {
         avatar: character.avatar,
         chat: newName,
+        expected_card_json: await getCharacterPatchVersion(character),
     };
     const mergeResponse = await fetch('/api/characters/merge-attributes', {
         method: 'POST',
@@ -8893,6 +8911,9 @@ export async function updateRemoteChatName(characterId, newName) {
     });
     if (!mergeResponse.ok) {
         console.error('Failed to save extension field', mergeResponse.statusText);
+    } else {
+        character.canonical_card_version = (await mergeResponse.json()).canonical_card_version;
+        acknowledgeLegacyCharacterWrite(mergeRequest.avatar, mergeRequest.expected_card_json, character.canonical_card_version, { chat: mergeRequest.chat });
     }
 }
 

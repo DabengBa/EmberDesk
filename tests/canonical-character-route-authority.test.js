@@ -163,10 +163,40 @@ async function writeByafArchive(filePath, entries) {
         archive.on('error', reject);
         archive.pipe(output);
         for (const entry of entries) {
-            archive.append(JSON.stringify(entry.data), { name: entry.name });
+            archive.append(Buffer.isBuffer(entry.data) ? entry.data : JSON.stringify(entry.data), { name: entry.name });
         }
         archive.finalize();
     });
+}
+
+async function callByafImport(directories, uploadName) {
+    const response = makeResponse();
+    const previousCwd = process.cwd();
+    try {
+        process.chdir(repoRoot);
+        await getRouteHandler('/import')({
+            body: { file_type: 'byaf', user_name: 'User' },
+            file: { destination: directories.root, filename: uploadName },
+            user: { directories, profile: { handle: 'alice' } },
+        }, response);
+    } finally {
+        process.chdir(previousCwd);
+    }
+    return response;
+}
+
+async function runByafImportNotice(response) {
+    const source = fs.readFileSync(path.join(repoRoot, 'public/script.js'), 'utf8');
+    const entry = source.match(/async function importCharacter\([\s\S]*?\n}\n/)[0];
+    const toastr = { success: jest.fn(), warning: jest.fn(), error: jest.fn() };
+    const importCharacter = runInNewContext(`(${entry})`, {
+        is_send_press: false, document: { getElementById: () => null },
+        name1: 'User', FormData, HTMLInputElement: class {}, toastr, console,
+        t: (parts, ...values) => String.raw({ raw: parts }, ...values),
+        getRequestHeaders: () => ({}), fetch: async () => Response.json(response.body),
+    });
+    const avatar = await importCharacter(new File([], 'import.byaf'));
+    return { avatar, toastr };
 }
 
 function openDb(directories, handle = 'alice') {
@@ -347,12 +377,40 @@ describe('characters projection off', () => {
                 })) form.set(key, value);
                 return fetch(url + '/edit', { method: 'POST', body: form });
             };
+            const missingVersion = await post('/edit', { avatar_url: 'alice.png', ch_name: 'Alice', description: 'unversioned', json_data: first.json_data });
+            expect(missingVersion.status).toBe(400);
             const saved = await edit(first, 'first edit');
             expect(saved.status).toBe(200);
             const savedVersion = (await saved.json()).canonical_card_version;
             expect(savedVersion).toBe(db.prepare('SELECT card_json FROM characters WHERE avatar_filename = ?').get('alice.png').card_json);
             expect((await edit(second, 'stale edit')).status).toBe(409);
             expect(JSON.parse(db.prepare('SELECT card_json FROM characters WHERE avatar_filename = ?').get('alice.png').card_json).description).toBe('first edit');
+            const attribute = await post('/edit-attribute', { avatar_url: 'alice.png', ch_name: 'Alice', field: 'description', value: 'attribute edit', expected_card_json: savedVersion });
+            expect(attribute.status).toBe(200);
+            expect((await attribute.json()).canonical_card_version).toBe(db.prepare('SELECT card_json FROM characters WHERE avatar_filename = ?').get('alice.png').card_json);
+            expect((await post('/edit-attribute', { avatar_url: 'alice.png', ch_name: 'Alice', field: 'description', value: 'stale attribute', expected_card_json: savedVersion })).status).toBe(409);
+            expect(JSON.parse(db.prepare('SELECT card_json FROM characters WHERE avatar_filename = ?').get('alice.png').card_json).description).toBe('attribute edit');
+            const currentVersion = db.prepare('SELECT card_json FROM characters WHERE avatar_filename = ?').get('alice.png').card_json;
+            expect((await post('/merge-attributes', { avatar: 'alice.png', description: 'missing version' })).status).toBe(400);
+            const merged = await post('/merge-attributes', { avatar: 'alice.png', description: 'merged', expected_card_json: currentVersion });
+            expect(merged.status).toBe(200);
+            expect((await merged.json()).canonical_card_version).toBe(db.prepare('SELECT card_json FROM characters WHERE avatar_filename = ?').get('alice.png').card_json);
+            expect((await post('/merge-attributes', { avatar: 'alice.png', description: 'stale merge', expected_card_json: currentVersion })).status).toBe(409);
+            expect(JSON.parse(db.prepare('SELECT card_json FROM characters WHERE avatar_filename = ?').get('alice.png').card_json).description).toBe('merged');
+            const bob = JSON.parse(db.prepare('SELECT card_json FROM characters WHERE avatar_filename = ?').get('alice.png').card_json);
+            upsertCanonicalCharacter(db, { id: 'character-bob.png', avatarFilename: 'bob.png', fullPayload: { ...bob, avatar: 'bob.png' }, shallowPayload: { name: 'Bob', avatar: 'bob.png' }, createdAtMs: 1700000000000, updatedAtMs: 1700000000000 });
+            const bobVersion = db.prepare('SELECT card_json FROM characters WHERE avatar_filename = ?').get('bob.png').card_json;
+            const bulk = await post('/merge-attributes', { avatars: ['alice.png', 'bob.png'], data: { description: 'bulk' }, expected_card_json_by_avatar: { 'alice.png': currentVersion, 'bob.png': bobVersion } });
+            expect(bulk.status).toBe(200);
+            const bulkResult = await bulk.json();
+            expect(bulkResult.updated).toEqual(['bob.png']);
+            expect(bulkResult.failed).toEqual(['alice.png']);
+            expect(bulkResult.conflicts).toEqual(['alice.png']);
+            expect(bulkResult.canonical_card_versions['bob.png']).toBe(db.prepare('SELECT card_json FROM characters WHERE avatar_filename = ?').get('bob.png').card_json);
+            expect(JSON.parse(db.prepare('SELECT card_json FROM characters WHERE avatar_filename = ?').get('alice.png').card_json).description).toBe('merged');
+            const noSnapshots = await post('/merge-attributes', { avatars: ['alice.png'], data: { description: 'unsafe' } });
+            expect((await noSnapshots.json()).failed).toContain('alice.png');
+            expect(JSON.parse(db.prepare('SELECT card_json FROM characters WHERE avatar_filename = ?').get('alice.png').card_json).description).toBe('merged');
         } finally {
             await new Promise(resolve => server.close(resolve));
         }
@@ -399,32 +457,16 @@ describe('characters projection off', () => {
                 },
             ]);
 
-            const response = makeResponse();
-            const previousCwd = process.cwd();
-            try {
-                process.chdir(repoRoot);
-                await getRouteHandler('/import')({
-                    body: { file_type: 'byaf', user_name: 'User' },
-                    file: { destination: directories.root, filename: uploadName },
-                    user: { directories, profile: { handle: 'alice' } },
-                }, response);
-            } finally {
-                process.chdir(previousCwd);
-            }
-
+            const response = await callByafImport(directories, uploadName);
             expect(response.statusCode).toBe(200);
-            expect(response.body).toEqual({ file_name: ownerId, report: { scenarios: { conflicts: 1 } } });
-            const source = fs.readFileSync(path.join(repoRoot, 'public/script.js'), 'utf8');
-            const entry = source.match(/async function importCharacter\([\s\S]*?\n}\n/)[0];
-            const toastr = { success: jest.fn(), warning: jest.fn(), error: jest.fn() };
-            const importCharacter = runInNewContext(`(${entry})`, {
-                is_send_press: false, document: { getElementById: () => null },
-                name1: 'User', FormData, HTMLInputElement: class {}, toastr, console,
-                t: (parts, ...values) => String.raw({ raw: parts }, ...values),
-                getRequestHeaders: () => ({}), fetch: async () => Response.json(response.body),
+            expect(response.body).toEqual({
+                file_name: ownerId,
+                report: { scenarios: { conflicts: 1, failed: [{ name: 'Collision', reason: 'conflict' }] } },
             });
-            expect(await importCharacter(new File([], 'import.byaf'))).toBe(`${ownerId}.png`);
+            const { avatar, toastr } = await runByafImportNotice(response);
+            expect(avatar).toBe(`${ownerId}.png`);
             expect(toastr.warning).toHaveBeenCalledWith(expect.stringMatching(/1.*conflict/i), 'Character import');
+            expect(toastr.warning).toHaveBeenCalledWith(expect.stringMatching(/Collision.*already exists/i), 'Character import', { escapeHtml: true });
             const canonicalAfter = db.prepare(`
                 SELECT source_jsonl FROM chat_sessions
                 WHERE owner_type = 'character' AND owner_id = ? AND source_path = ?
@@ -436,6 +478,60 @@ describe('characters projection off', () => {
         } finally {
             clock.mockRestore();
         }
+    });
+
+    test('BYAF import reports failed writes by name and keeps committed scenarios and backgrounds', async () => {
+        const directories = makeDirectories();
+        const db = openDb(directories);
+        const ownerId = 'Mixed BYAF';
+        const failedBackground = fs.readFileSync(path.join(repoRoot, 'public/img/user-default.png'));
+        expect(failedBackground.length).not.toBe(REAL_AVATAR_PNG.length);
+        db.exec(`
+            CREATE TEMP TRIGGER fail_byaf_chat BEFORE INSERT ON chat_sessions
+            WHEN NEW.source_path LIKE 'chats/Mixed BYAF/Failed%'
+            BEGIN SELECT RAISE(ABORT, 'test chat write failure'); END;
+            CREATE TEMP TRIGGER fail_byaf_background BEFORE INSERT ON media_references
+            WHEN NEW.owner_type = 'user_image' AND NEW.blob_id IN (
+                SELECT id FROM managed_blobs WHERE size_bytes = ${failedBackground.length}
+            )
+            BEGIN SELECT RAISE(ABORT, 'test background write failure'); END;
+        `);
+
+        const uploadName = 'mixed.byaf';
+        await writeByafArchive(path.join(directories.root, uploadName), [
+            { name: 'manifest.json', data: { characters: ['card.json'], scenarios: ['failed.json', 'kept.json'], author: {} } },
+            { name: 'card.json', data: { name: ownerId, displayName: ownerId, persona: '', images: [] } },
+            { name: 'failed.json', data: { title: 'Failed <draft>', firstMessages: [], messages: [], backgroundImage: 'bg/rejected.png' } },
+            { name: 'kept.json', data: { title: 'Kept', firstMessages: [{ text: 'Welcome' }], messages: [], backgroundImage: 'bg/kept.png' } },
+            { name: 'bg/rejected.png', data: failedBackground },
+            { name: 'bg/kept.png', data: REAL_AVATAR_PNG },
+        ]);
+
+        const response = await callByafImport(directories, uploadName);
+        expect(response.statusCode).toBe(200);
+        expect(response.body).toEqual({
+            file_name: ownerId,
+            report: {
+                scenarios: { conflicts: 0, failed: [{ name: 'Failed <draft>', reason: 'write_failed' }] },
+                backgrounds: { failed: [{ name: 'rejected.png', reason: 'write_failed' }] },
+            },
+        });
+        const sessions = db.prepare('SELECT source_path, source_jsonl FROM chat_sessions WHERE owner_id = ?').all(ownerId);
+        expect(sessions).toEqual([{
+            source_path: expect.stringMatching(/^chats\/Mixed BYAF\/Kept - .* imported\.jsonl$/),
+            source_jsonl: expect.stringContaining('Welcome'),
+        }]);
+        const importedCard = JSON.parse(db.prepare('SELECT card_json FROM characters WHERE avatar_filename = ?').get(`${ownerId}.png`).card_json);
+        expect(importedCard.chat).toBe(path.basename(sessions[0].source_path, '.jsonl'));
+        const [backgroundPath] = JSON.parse(sessions[0].source_jsonl.split('\n')[0]).chat_metadata.chat_backgrounds;
+        expect(backgroundPath).toMatch(/^\/user\/images\/Mixed BYAF\//);
+        expect(readManagedMediaContent(db, directories, backgroundPath.slice(1))).toMatchObject({ contents: REAL_AVATAR_PNG });
+
+        const { avatar, toastr } = await runByafImportNotice(response);
+        expect(avatar).toBe(`${ownerId}.png`);
+        expect(toastr.success).toHaveBeenCalledTimes(1);
+        expect(toastr.warning).toHaveBeenCalledWith(expect.stringMatching(/scenario.*Failed <draft>.*could not be saved/i), 'Character import', { escapeHtml: true });
+        expect(toastr.warning).toHaveBeenCalledWith(expect.stringMatching(/background.*rejected\.png.*could not be saved/i), 'Character import', { escapeHtml: true });
     });
 
     test('renaming an unmapped legacy grant does not bind it to a canonical identity', async () => {

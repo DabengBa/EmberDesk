@@ -1,5 +1,6 @@
 import notificationOwner from './notifications.js';
 import { world_info, world_names, selected_world_info, setWorldNames } from './world-info-state.js';
+import { getCharacterPatchVersion } from './character-version.js';
 
 const toastr = notificationOwner.native ?? notificationOwner;
 
@@ -104,6 +105,7 @@ export function createWorldInfoBookCommands({ POPUP_TYPE, showLocalDialog, t, eq
                         headers: getRequestHeaders(),
                         body: JSON.stringify({
                             avatar: character.avatar,
+                            expected_card_json: await getCharacterPatchVersion(character),
                             data: {
                                 extensions: {
                                     world: newName,

@@ -261,6 +261,18 @@ describe('preset file one-shot import', () => {
 });
 
 describe('presets routes', () => {
+    test('/save creates without a revision but cannot overwrite an existing preset without one', async () => {
+        const directories = makeDirectories();
+        const body = { apiId: 'openai', name: 'Alpha', preset: { value: 'original' } };
+        const created = await invokeRoute(presetsRouter, '/save', { directories, body });
+        expect(created.statusCode).toBe(200);
+        expect(created.body.revision).toBe(1);
+        const missing = await invokeRoute(presetsRouter, '/save', { directories, body: { ...body, preset: { value: 'stale' } } });
+        expect(missing.statusCode).toBe(409);
+        const db = openDb(directories);
+        expect(JSON.parse(getCanonicalPreset(db, { name: 'Alpha' }).payloadJson)).toEqual({ value: 'original' });
+    });
+
     test('/save upserts a canonical row and /delete removes it', async () => {
         const directories = makeDirectories();
 

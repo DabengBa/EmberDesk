@@ -7,9 +7,11 @@ const fetchMock = jest.fn();
 const getCharacters = jest.fn();
 const favsToHotswap = jest.fn();
 const emit = jest.fn(() => Promise.resolve());
+const acknowledgeLegacyCharacterWrite = jest.fn();
 
 
 jest.unstable_mockModule('../public/scripts/events.js', () => ({ eventSource: { on: jest.fn(), emit }, event_types: {} }));
+jest.unstable_mockModule('../public/scripts/character-lifecycle-service.js', () => ({ acknowledgeLegacyCharacterWrite }));
 jest.unstable_mockModule('../public/scripts/request-context.js', () => ({ getRequestHeaders: () => ({ 'Content-Type': 'application/json' }) }));
 jest.unstable_mockModule('../public/scripts/RossAscends-mods.js', () => ({ favsToHotswap }));
 jest.unstable_mockModule('../public/scripts/action-loader.js', () => ({ loader: {}, ToastMode: {} }));
@@ -27,7 +29,7 @@ jest.unstable_mockModule('../public/scripts/i18n.js', () => ({ t: parts => parts
 const { BulkEditOverlay, BulkEditOverlayState, CharacterContextMenu } = await import('../public/scripts/BulkEditOverlay.js');
 const { registerCharacterLifecycleShellContext } = await import('../public/scripts/character-lifecycle-shell-context.js');
 const overlay = new BulkEditOverlay();
-const character = (name, avatar, fav = false) => ({ name, avatar, fav, data: { extensions: { fav } } });
+const character = (name, avatar, fav = false) => ({ name, avatar, fav, canonical_card_version: `${avatar}-version`, data: { extensions: { fav } } });
 const deferred = () => {
     let resolve, reject;
     const promise = new Promise((res, rej) => { resolve = res; reject = rej; });
@@ -45,6 +47,7 @@ beforeEach(async () => {
     getCharacters.mockReset().mockResolvedValue(undefined);
     favsToHotswap.mockReset().mockResolvedValue(undefined);
     emit.mockClear();
+    acknowledgeLegacyCharacterWrite.mockClear();
     globalThis.fetch = fetchMock;
     globalThis.toastr = { error: jest.fn() };
     globalThis.document = { getElementById: jest.fn(() => null) };
@@ -63,15 +66,19 @@ test('real bulk handler never toggles the replacement row after the selected cha
     document.getElementById.mockReturnValue(betaRow);
 
     const pending = overlay.handleContextMenuFavorite();
+    await Promise.resolve();
     expect(fetchMock).toHaveBeenCalledWith('/api/characters/merge-attributes', expect.objectContaining({
         method: 'POST', headers: { 'Content-Type': 'application/json' },
     }));
     expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({
-        name: 'Alpha', avatar: 'a.png', data: { extensions: { fav: true } }, fav: true,
+        name: 'Alpha', avatar: 'a.png', expected_card_json: 'a.png-version', data: { extensions: { fav: true } }, fav: true,
     });
     characters.splice(0, 2, beta, alpha);
-    request.resolve({ ok: true });
+    request.resolve({ ok: true, json: async () => ({ canonical_card_version: 'updated-version' }) });
     await pending;
+
+    expect(alpha.canonical_card_version).toBe('updated-version');
+    expect(acknowledgeLegacyCharacterWrite).toHaveBeenCalledWith('a.png', 'a.png-version', 'updated-version', { favorite: true });
 
     expect(betaRow.classList.toggle).not.toHaveBeenCalled();
     expect(getCharacters).toHaveBeenCalledTimes(1);
@@ -84,7 +91,7 @@ test('single favorite resolves after its row is unmounted, rather than rejecting
     const request = deferred();
     fetchMock.mockReturnValue(request.promise);
     const pending = CharacterContextMenu.favorite(0);
-    request.resolve({ ok: true });
+    request.resolve({ ok: true, json: async () => ({ canonical_card_version: 'updated-version' }) });
     await expect(pending).resolves.toBeUndefined();
     expect(JSON.parse(fetchMock.mock.calls[0][1].body).avatar).toBe('a.png');
 });
@@ -104,7 +111,7 @@ test('HTTP failure preserves the error message and never toggles a row', async (
 test('mixed success, HTTP failure and network rejection still run the bulk completion flow', async () => {
     characters.push(character('Alpha', 'a.png'), character('Beta', 'b.png'), character('Gamma', 'c.png'));
     overlay.selectedCharacters.push(0, 1, 2);
-    fetchMock.mockResolvedValueOnce({ ok: true })
+    fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({ canonical_card_version: 'updated-version' }) })
         .mockResolvedValueOnce({ ok: false, json: async () => ({ message: 'Denied', error: 'fav' }) })
         .mockRejectedValueOnce(new Error('offline'));
     const row = { classList: { toggle: jest.fn() } };

@@ -544,9 +544,11 @@ describe('thumbnail write-time pregeneration hooks', () => {
         const { router, mocks } = await importCharacterRoutes();
         const avatarPath = path.join(directories.characters, 'Tester.png');
         fs.writeFileSync(avatarPath, Buffer.from('png'));
+        const card = await invokeRoute(router, 'post', '/get', { user: { directories, profile: { handle: 'default-user' } }, body: { avatar_url: 'Tester.png' } });
         const request = {
             body: {
                 avatar_url: 'Tester.png',
+                expected_card_json: card.body.canonical_card_version,
                 ch_name: 'Tester',
                 description: 'updated',
                 scenario: '',
@@ -589,6 +591,7 @@ describe('thumbnail write-time pregeneration hooks', () => {
         const request = {
             body: {
                 avatar_url: 'Missing.png',
+                expected_card_json: 'missing',
                 ch_name: 'Missing',
                 description: 'updated',
                 scenario: '',
@@ -688,9 +691,11 @@ describe('thumbnail write-time pregeneration hooks', () => {
         const { router, mocks } = await importCharacterRoutes();
         const avatarPath = path.join(directories.characters, 'Tester.png');
         fs.writeFileSync(avatarPath, Buffer.from('png'));
+        const card = await invokeRoute(router, 'post', '/get', { user: { directories, profile: { handle: 'default-user' } }, body: { avatar_url: 'Tester.png' } });
         const request = {
             body: {
                 avatar: 'Tester.png',
+                expected_card_json: card.body.canonical_card_version,
                 data: {
                     data: {
                         creator_notes: 'updated',

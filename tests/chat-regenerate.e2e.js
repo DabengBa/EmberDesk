@@ -742,6 +742,25 @@ test.describe('chat regenerate', () => {
         expect(await lastMessageText(page)).toBe('OLD_REPLY');
     });
 
+    test('sends the configured empty composer text through server generation', async ({ page, characterModel }) => {
+        const requests = await characterModel([{ content: 'EMPTY_COMPOSER_REPLY' }]);
+        await page.evaluate(() => {
+            window.SillyTavern.getContext().chatCompletionSettings.send_if_empty = '  SENTINEL_EMPTY_TEXT  ';
+        });
+        const browserRequests = [];
+        page.on('request', request => {
+            if (request.url().endsWith('/api/backends/chat-completions/generate')) browserRequests.push(request.url());
+        });
+
+        await expect(page.locator('#send_textarea')).toHaveValue('');
+        await page.locator('#send_but').click();
+        await expect.poll(() => lastMessageText(page)).toBe('EMPTY_COMPOSER_REPLY');
+        expect(browserRequests).toEqual([]);
+        expect(requests).toHaveLength(1);
+        expect(requests[0].messages).toContainEqual(expect.objectContaining({ role: 'user', content: 'SENTINEL_EMPTY_TEXT' }));
+        expect((await chatSnapshot(page)).filter(message => message.is_user).map(message => message.mes)).toEqual(['SENTINEL_EMPTY_TEXT']);
+    });
+
     test('never fires send_if_empty and never adds a synthetic user message', async ({ page, characterModel }) => {
         const requests = await characterModel([
             { content: 'ORIGINAL_REPLY' },

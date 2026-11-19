@@ -203,6 +203,7 @@ test('character strict non-OK rejects without reverting a later edit', async () 
     const context = {
         getContext: () => ({ characters: [character], characterId: 0 }), UNSET_VALUE: '__unset',
         extensionFieldWrites: new WeakMap(),
+        getCharacterPatchVersion: async () => 'card-version',
         setValueByPath: (object, path, value) => { object.data.extensions.regex_scripts = value; },
         deleteValueByPath: jest.fn(), getRequestHeaders: () => ({}), console,
         fetch: () => new Promise(resolve => { finish = resolve; }),
@@ -210,9 +211,32 @@ test('character strict non-OK rejects without reverting a later edit', async () 
     const write = extract('public/scripts/feature-settings.js', 'export async function writeExtensionField(', '\n/**', context);
     const first = write(0, 'regex_scripts', [{ id: 'first' }], { strict: true });
     character.data.extensions.regex_scripts = [{ id: 'later' }];
+    await tick();
     finish({ ok: false, statusText: 'offline' });
     await expect(first).rejects.toThrow('offline');
     expect(character.data.extensions.regex_scripts).toEqual([{ id: 'later' }]);
+});
+
+test('bulk extension write sends roster snapshots and applies only successful versions', async () => {
+    const alice = { avatar: 'alice.png', canonical_card_version: 'alice-old', data: { extensions: {} } };
+    const bob = { avatar: 'bob.png', canonical_card_version: 'bob-old', data: { extensions: {} } };
+    const response = { updated: ['alice.png'], skipped: [], failed: ['bob.png'], conflicts: ['bob.png'], canonical_card_versions: { 'alice.png': 'alice-new' } };
+    const fetch = jest.fn(async () => ({ ok: true, json: async () => response }));
+    const context = {
+        getContext: () => ({ characters: [alice, bob] }), UNSET_VALUE: '__@@UNSET@@__',
+        getCharacterPatchVersion: async character => character.canonical_card_version,
+        acknowledgeLegacyCharacterWrite: jest.fn(),
+        getRequestHeaders: () => ({}), setValueByPath, deleteValueByPath: jest.fn(), fetch, console,
+    };
+    const write = extract('public/scripts/feature-settings.js', 'export async function writeExtensionFieldBulk(', '\nconst coreFeatureInitPromises', context);
+    const result = await write([], 'example', 'value', { filterPath: 'data.extensions.example' });
+    expect(JSON.parse(fetch.mock.calls[0][1].body)).toEqual({ avatars: [], expected_card_json_by_avatar: { 'alice.png': 'alice-old', 'bob.png': 'bob-old' }, data: { data: { extensions: { example: 'value' } } }, filter: { path: 'data.extensions.example' } });
+    expect(result).toBe(response);
+    expect(alice.canonical_card_version).toBe('alice-new');
+    expect(alice.data.extensions.example).toBe('value');
+    expect(context.acknowledgeLegacyCharacterWrite.mock.calls).toEqual([['alice.png', 'alice-old', 'alice-new']]);
+    expect(bob.canonical_card_version).toBe('bob-old');
+    expect(bob.data.extensions.example).toBeUndefined();
 });
 
 function presetSetup() {
@@ -557,6 +581,7 @@ function integratedMoveSetup(sourceType, { noJQuery = false, missingField = fals
     const fetch = jest.fn(async (url, request) => {
         requests.push({ url, body: JSON.parse(request.body) });
         if (url === failUrl) { failUrl = undefined; return { ok: false, status: 500, statusText: 'offline' }; }
+        if (url === '/api/characters/merge-attributes') return { ok: true, json: async () => ({ canonical_card_version: 'saved-card-version' }) };
         return success(2);
     });
     settings.context.feature_settings = featureSettings;
@@ -564,6 +589,8 @@ function integratedMoveSetup(sourceType, { noJQuery = false, missingField = fals
     const characterContext = {
         getContext: () => ({ characters: [character], characterId: 0 }), UNSET_VALUE: '__@@UNSET@@__',
         extensionFieldWrites: new WeakMap(),
+        getCharacterPatchVersion: async () => 'card-version',
+        acknowledgeLegacyCharacterWrite: jest.fn(),
         setValueByPath, deleteValueByPath: extract('public/scripts/utils.js', 'export function deleteValueByPath(', '\n/**', {}),
         getRequestHeaders: () => ({}), fetch, console: { error: jest.fn(), warn: jest.fn() },
         $: () => ({ val: value => value === undefined ? domValue : (domValue = value) }),
@@ -582,7 +609,7 @@ function integratedMoveSetup(sourceType, { noJQuery = false, missingField = fals
         save: engine.saveScriptsByType, authorize: async () => {}, confirm: async () => true,
         edit: async () => {}, exportScripts: () => {}, afterChange: async () => {} });
     bridge.refresh();
-    return { bridge, engine, character, featureSettings, requests, fetch, getDom: () => domValue, setDom: value => { domValue = value; },
+    return { bridge, engine, character, featureSettings, requests, fetch, acknowledgeLegacyCharacterWrite: characterContext.acknowledgeLegacyCharacterWrite, getDom: () => domValue, setDom: value => { domValue = value; },
         failNext: url => { failUrl = url; } };
 }
 
@@ -591,6 +618,7 @@ test('actual scoped regex save updates the character mirror without jQuery', asy
     await s.engine.saveScriptsByType([{ id: 'saved' }], 1, s.engine.captureRegexTarget(1));
     expect(s.requests.at(-1).url).toBe('/api/characters/merge-attributes');
     expect(JSON.parse(s.getDom()).data.extensions.regex_scripts).toEqual([{ id: 'saved' }]);
+    expect(s.acknowledgeLegacyCharacterWrite).toHaveBeenCalledWith('alice.png', 'card-version', 'saved-card-version');
 });
 
 test('scoped save without jQuery tolerates a missing character JSON field', async () => {
