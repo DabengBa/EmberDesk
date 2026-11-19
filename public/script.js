@@ -8632,7 +8632,7 @@ function addAlternateGreeting(template, greeting, index, getArray, popup) {
  * Imports supported files dropped into the app window.
  * @param {File[]} files Array of files to process
  * @param {Map<File, string>} [data] Extra data to pass to the import function
- * @returns {Promise<void>}
+ * @returns {Promise<string[]>} Saved avatar filenames
  */
 export async function processDroppedFiles(files, data = new Map()) {
     const allowedMimeTypes = [
@@ -8664,9 +8664,15 @@ export async function processDroppedFiles(files, data = new Map()) {
     }
 
     if (avatarFileNames.length > 0) {
-        await handleUnifiedImport(avatarFileNames);
-        selectImportedChar(avatarFileNames[avatarFileNames.length - 1]);
+        try {
+            await handleUnifiedImport(avatarFileNames);
+            selectImportedChar(avatarFileNames[avatarFileNames.length - 1]);
+        } catch (error) {
+            console.error('Could not finish character import follow-up:', error);
+            toastr.warning(t`Character saved, but import follow-up could not finish.`);
+        }
     }
+    return avatarFileNames;
 }
 
 /**
@@ -8738,7 +8744,7 @@ function selectImportedChar(charId) {
  * @param {object} [options] - Options
  * @param {string} [options.preserveFileName] Whether to preserve original file name
  * @param {Boolean} [options.importTags=false] Whether to import tags
- * @returns {Promise<string>}
+ * @returns {Promise<string | undefined>}
  */
 async function importCharacter(file, { preserveFileName = '', importTags = false } = {}) {
     if (is_send_press) {
@@ -8762,6 +8768,7 @@ async function importCharacter(file, { preserveFileName = '', importTags = false
     formData.append('user_name', name1);
     if (preserveFileName) formData.append('preserved_name', preserveFileName);
 
+    let avatarFileName;
     try {
         const result = await fetch('/api/characters/import', {
             method: 'POST',
@@ -8781,7 +8788,7 @@ async function importCharacter(file, { preserveFileName = '', importTags = false
         }
 
         if (data.file_name !== undefined) {
-            let avatarFileName = `${data.file_name}.png`;
+            avatarFileName = `${data.file_name}.png`;
             const replacementIgnored = data.report?.ignored?.includes('replacement-target-not-found');
             const replaced = !replacementIgnored && (exists || preserveFileName === avatarFileName);
 
@@ -8829,12 +8836,13 @@ async function importCharacter(file, { preserveFileName = '', importTags = false
                 await importCharactersTags([avatarFileName]);
                 selectImportedChar(data.file_name);
             }
-            return avatarFileName;
         }
     } catch (error) {
         console.error('Error importing character', error);
-        toastr.error(t`The file is likely invalid or corrupted.`, t`Could not import character`);
+        if (avatarFileName) toastr.warning(t`Character saved, but import follow-up could not finish.`);
+        else toastr.error(t`The file is likely invalid or corrupted.`, t`Could not import character`);
     }
+    return avatarFileName;
 }
 
 async function importFromURL(items, files) {

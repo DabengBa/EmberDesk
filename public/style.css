@@ -3602,21 +3602,51 @@ textarea:focus-visible {
     height: 100%;
 }
 
-#dialogue_popup .sources_list,
-.popup .sources_list {
-    max-width: 100%;
+.external-import-dialog {
+    box-sizing: border-box;
+    width: min(520px, calc(100% - 32px));
+    max-height: calc(100dvh - 32px);
+    padding: 20px;
+    border: 1px solid var(--SmartThemeBorderColor);
+    border-radius: 8px;
+    color: var(--SmartThemeBodyColor);
+    background: var(--SmartThemeBlurTintColor);
+    box-shadow: 0 18px 48px var(--SmartThemeShadowColor);
+}
+
+.external-import-dialog h2 {
+    margin: 0 0 12px;
+}
+
+.external-import-dialog textarea {
+    display: block;
+    box-sizing: border-box;
+    width: 100%;
+    resize: vertical;
+}
+
+.external-import-results {
+    list-style: none;
+    padding: 0;
+    margin: 0;
     overflow-wrap: anywhere;
 }
 
-#dialogue_popup .sources_list ul,
-.popup .sources_list ul {
-    padding-left: 1.35em;
+.external-import-results li {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: 4px 12px;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--SmartThemeBorderColor);
 }
 
-#dialogue_popup .sources_list tt,
-.popup .sources_list tt {
-    white-space: normal;
-    overflow-wrap: anywhere;
+.external-import-dialog footer {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 16px;
 }
 
 #dialogue_popup_controls {
@@ -6529,7 +6559,7 @@ body:has(#emberdesk-react-workspace-shell-chrome-host) {
 
 .prompt-inspector-round {
     width: auto;
-    max-width: 220px;
+    max-width: 100%;
     margin: 0;
     padding: 2px 6px;
     font-size: calc(var(--mainFontSize) * 0.85);

@@ -14,6 +14,8 @@ import { Theme } from '@astryxdesign/core';
 import { emberDeskTheme } from './lib/theme-tokens';
 import '@astryxdesign/core/astryx.css';
 
+export { mountExternalImportDialog } from './components/character-library/ExternalImportDialog';
+
 let panelPortal: WorkspacePortalMount | null = null;
 let mountContainer: HTMLElement | null = null;
 let bridgeRef: CharacterLibraryPanelBridge | null = null;

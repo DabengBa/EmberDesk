@@ -74,7 +74,11 @@ export async function runWorldInfoFileImport(file, { overwriteMode = 'confirm', 
             }
             const data = await result.json();
             if (data.name) {
-                await deps.onImported(data.name, metadata);
+                try { await deps.onImported(data.name, metadata); }
+                catch (error) {
+                    console.error('Could not finish World Info import follow-up:', error);
+                    toastr.warning(t`World book saved, but import follow-up could not finish.`);
+                }
                 return createWorldInfoImportResult('success', file, data.name);
             }
             return createWorldInfoImportResult('failed', file);

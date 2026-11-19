@@ -132,12 +132,12 @@ export function computeDepthEligible({ messageId, renderedIds, isSystemById = {}
  */
 
 /**
- * Removes one mounted frame slot: the hidden source `<pre>` is restored to the
+ * Removes one mounted frame slot: the inert source `<pre>` is restored to the
  * slot's position and the iframe subtree is destroyed.
  * @param {Element} slot `.ed-frontend-frame` element
  */
 export function unmountFrontendSlot(slot) {
-    const pre = slot.querySelector(':scope > details > pre');
+    const pre = slot.querySelector(':scope > template')?.content.firstElementChild;
     if (pre instanceof HTMLElement) {
         slot.replaceWith(pre);
     } else {
@@ -242,13 +242,12 @@ function decoratePlainCodeBlock(pre, expandKey, translate) {
 }
 
 /**
- * Mounts one isolated iframe and a host-owned disclosure for its inert source.
+ * Mounts one isolated iframe, retaining its source in an inert template for teardown.
  * @param {HTMLPreElement} pre
  * @param {string} frameId
  * @param {FrontendFrameContext['emit']} emit
- * @param {(text:string)=>string} translate
  */
-function mountFrontendSlot(pre, frameId, emit, translate) {
+function mountFrontendSlot(pre, frameId, emit) {
     const slot = document.createElement('div');
     slot.className = FRONTEND_FRAME_SLOT_CLASS;
     slot.setAttribute(FRONTEND_FRAME_SLOT_ATTR, frameId);
@@ -262,12 +261,9 @@ function mountFrontendSlot(pre, frameId, emit, translate) {
     iframe.srcdoc = withCardClipboard(pre.textContent ?? '');
     iframe.addEventListener('load', () => emit?.(FRONTEND_FRAME_EVENTS.ended, frameId));
 
-    const source = document.createElement('details');
-    const summary = document.createElement('summary');
-    summary.textContent = translate('View HTML source');
-    source.appendChild(summary);
+    const source = document.createElement('template');
     pre.replaceWith(slot);
-    source.appendChild(pre);
+    source.content.appendChild(pre);
     slot.appendChild(source);
     emit?.(FRONTEND_FRAME_EVENTS.started, frameId);
     slot.prepend(iframe);
@@ -311,7 +307,7 @@ export function mountFrontendFrames(mesTextEl, ctx = {}) {
     const blocks = findFrontendBlocks(mesTextEl);
     blocks.forEach((pre, index) => {
         const frameId = `ed-frame--${frameIdSeed}--${index}`;
-        mountFrontendSlot(pre, frameId, ctx.emit, translate);
+        mountFrontendSlot(pre, frameId, ctx.emit);
     });
     return blocks.length;
 }

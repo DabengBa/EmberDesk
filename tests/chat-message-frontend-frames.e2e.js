@@ -160,6 +160,7 @@ test.describe('chat message frontend frames', () => {
         await expect(slots).toHaveCount(2, { timeout: 15_000 });
         await expect(page.locator('.mes[mesid="1"] .ed-frontend-frame')).toHaveCount(1);
         await expect(page.locator('.mes[mesid="3"] .ed-frontend-frame')).toHaveCount(1);
+        await expect(page.locator('.mes[mesid="1"] .mes_text, .mes[mesid="3"] .mes_text').locator('details, summary, pre')).toHaveCount(0);
         // The plain js code block must not be framed.
         await expect(page.locator('.mes[mesid="2"] .ed-frontend-frame')).toHaveCount(0);
 
@@ -188,21 +189,6 @@ test.describe('chat message frontend frames', () => {
         expect(await page.evaluate(() => navigator.clipboard.readText())).toBe('FRAME CONTENT ONE');
     });
 
-    test('discloses the original fenced HTML as text', async ({ page }) => {
-        await testSetup.awaitST({ page });
-        await selectCharacterByName(page, characterName);
-        await openFrontendChat(page);
-
-        const slot = page.locator('.mes[mesid="1"] .ed-frontend-frame');
-        await expect(slot).toHaveCount(1, { timeout: 15_000 });
-        const sourcePre = slot.locator('pre');
-
-        await expect(sourcePre).toBeHidden();
-        await expect(slot.locator('iframe')).toBeVisible();
-        await slot.locator('summary').click();
-        await expect(sourcePre).toBeVisible();
-        expect((await sourcePre.textContent()).trimEnd()).toBe(FRAME_DOCUMENT_ONE);
-    });
 
     test('preserves ordinary code collapse and restores card sources on teardown', async ({ page }) => {
         const facts = await page.evaluate(async (html) => {
@@ -225,17 +211,20 @@ test.describe('chat message frontend frames', () => {
                 const ordinaryCollapsed = plain.style.display === 'none';
                 toggle.click();
                 const ordinaryExpanded = plain.style.display === '';
-                const cardSourcesHidden = !source.closest('.ed-frontend-frame details').open
-                    && !second.closest('.ed-frontend-frame details').open;
+                const cardSourcesDetached = !source.isConnected && !second.isConnected;
                 frames.unmountFrontendFrames(text);
-                const inlineRestored = source.style.display === ''
+                const inlineRestored = text.children.length === 3
+                    && text.children[0] === source
+                    && text.children[1] === second
+                    && text.children[2] === plain
+                    && source.style.display === ''
                     && second.style.display === ''
                     && !text.querySelector('button, iframe');
                 // The streaming preview is retired: no module entry point can
                 // mount a frame while a row is still receiving tokens.
                 const retiredRuntime = ['mountStreamingFrames', 'unmountStreamingFrames', 'findClosedFrontendDocuments', 'FRONTEND_STREAM_HOST_CLASS']
                     .filter(name => name in frames);
-                return { mounted, ordinaryCollapsed, ordinaryExpanded, cardSourcesHidden, inlineRestored, retiredRuntime };
+                return { mounted, ordinaryCollapsed, ordinaryExpanded, cardSourcesDetached, inlineRestored, retiredRuntime };
             } finally {
                 frames.unmountFrontendFrames(text);
                 row.remove();
@@ -245,7 +234,7 @@ test.describe('chat message frontend frames', () => {
             mounted: 2,
             ordinaryCollapsed: true,
             ordinaryExpanded: true,
-            cardSourcesHidden: true,
+            cardSourcesDetached: true,
             inlineRestored: true,
             retiredRuntime: [],
         });
@@ -519,10 +508,10 @@ test.describe('chat message frontend frames — streaming', () => {
             await expect(streamingCardSource(page)).toBeVisible();
             await expect(page.locator('#chat .mes.last_mes .mes_text iframe')).toHaveCount(0);
 
-            // Abort finalizes the row: the finished card mounts and its source hides.
+            // Abort finalizes the row: finished cards replace the source blocks.
             await stopAndFinalize(page);
             await expect(page.locator('#chat .mes.last_mes .mes_text .ed-frontend-frame iframe')).toHaveCount(2, { timeout: 15_000 });
-            await expect(streamingCardSource(page)).toBeHidden();
+            await expect(streamingCardSource(page)).toHaveCount(0);
         });
     }
 
@@ -543,6 +532,6 @@ test.describe('chat message frontend frames — streaming', () => {
         await page.evaluate(() => window.__edFinishStream());
         await settleGeneration(page);
         await expect(page.locator('#chat .mes.last_mes .mes_text .ed-frontend-frame iframe')).toHaveCount(1, { timeout: 15_000 });
-        await expect(streamingCardSource(page)).toBeHidden();
+        await expect(streamingCardSource(page)).toHaveCount(0);
     });
 });

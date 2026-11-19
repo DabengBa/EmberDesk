@@ -54,6 +54,18 @@ afterEach(() => {
 });
 
 describe('World Info scan uses confirmed repository data without an editor', () => {
+    test('a known character without a tag mapping still respects tag filters', async () => {
+        state.setSelectedWorldInfo(['Book']);
+        shell.getTagKeyForEntity = () => 'untagged.png';
+        state.worldInfoCache.set('Book', { entries: {
+            1: entry(1, 20, { content: 'requires tag', characterFilter: { tags: ['tag'], isExclude: false } }),
+            2: entry(2, 10, { content: 'excludes tag', characterFilter: { tags: ['tag'], isExclude: true } }),
+        } });
+        const result = await getWorldInfoPrompt(['cat'], 4096, true);
+        expect(result.worldInfo).not.toContain('requires tag');
+        expect(result.worldInfo).toContain('excludes tag');
+    });
+
     test('request-scoped scan prompts activate entries without reading or modifying the global prompt map', async () => {
         state.setSelectedWorldInfo(['Book']);
         state.worldInfoCache.set('Book', { entries: { 1: entry(1, 10, { key: ['private-trigger'], content: 'scoped lore' }) } });

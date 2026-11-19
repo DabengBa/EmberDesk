@@ -2637,9 +2637,10 @@ export function setupScrollToTop({ scrollContainerId, buttonId, drawerId, visibi
  * @param {string} url URL or UUID of the content to import.
  * @param {Object} [options={}] Options object.
  * @param {string|null} [options.preserveFileName=null] Optional file name to use for the imported content.
- * @returns {Promise<void>} A promise that resolves when the import is complete.
+ * @param {boolean} [options.showDownloadErrors=true] Show download errors when there is no per-item result UI.
+ * @returns {Promise<'character' | 'lorebook' | 'skipped' | 'failed'>} The result of saving the downloaded content.
  */
-export async function importFromExternalUrl(url, { preserveFileName = null } = {}) {
+export async function importFromExternalUrl(url, { preserveFileName = null, showDownloadErrors = true } = {}) {
     let request;
 
     if (isValidUrl(url)) {
@@ -2659,33 +2660,34 @@ export async function importFromExternalUrl(url, { preserveFileName = null } = {
     }
 
     if (!request.ok) {
-        toastr.error(request.statusText || `HTTP ${request.status}`, 'Custom content import failed');
+        if (showDownloadErrors) toastr.error(request.statusText || `HTTP ${request.status}`, 'Custom content import failed');
         console.error('Custom content import failed', request.status, request.statusText);
-        return;
+        return 'failed';
     }
 
     const data = await request.blob();
     const customContentType = request.headers.get('X-Custom-Content-Type');
-    let fileName = request.headers.get('Content-Disposition').split('filename=')[1].replace(/"/g, '');
+    const fileName = request.headers.get('Content-Disposition')?.split('filename=')[1]?.replace(/"/g, '');
+    if (!fileName) return 'failed';
     const file = new File([data], fileName, { type: data.type });
 
     const extraData = new Map();
     if (preserveFileName) {
-        fileName = preserveFileName;
         extraData.set(file, preserveFileName);
     }
 
     switch (customContentType) {
         case 'character':
-            await processDroppedFiles([file], extraData);
-            break;
-        case 'lorebook':
-            await importWorldInfo(file);
-            break;
+            return (await processDroppedFiles([file], extraData)).length ? 'character' : 'failed';
+        case 'lorebook': {
+            const { status } = await importWorldInfo(file);
+            if (status === 'success') return 'lorebook';
+            return status === 'cancelled' || status === 'skipped' ? 'skipped' : 'failed';
+        }
         default:
-            toastr.warning('Unknown content type');
+            if (showDownloadErrors) toastr.warning('Unknown content type');
             console.error('Unknown content type', customContentType);
-            break;
+            return 'failed';
     }
 }
 

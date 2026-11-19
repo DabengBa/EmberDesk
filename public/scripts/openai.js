@@ -764,7 +764,7 @@ async function populateChatHistory(messages, prompts, chatCompletion, assemblySe
             const content = chatMessage.name && !chatMessage.content.startsWith(`${chatMessage.name}: `)
                 ? `${chatMessage.name}: ${chatMessage.content}` : chatMessage.content;
             await call.setToolCalls([{ id, name: 'submit_story', parameters: JSON.stringify({ content }) }], false);
-            const receipt = await Message.createAsync('tool', '已收到。', id);
+            const receipt = await Message.createAsync('tool', 'OK', id);
             // Strict server processing requires a leading user. Count an
             // explicit history anchor instead of an unknown server placeholder.
             historyAnchor ??= await Message.createAsync('user', '以下是此前已经发生的对话。', 'pipelineHistoryAnchor');

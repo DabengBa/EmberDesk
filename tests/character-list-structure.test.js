@@ -348,23 +348,6 @@ describe('character list structure', () => {
         expect(styleSource).toMatch(/@media screen and \(max-width: 600px\)[\s\S]*grid-template-areas:\s*["']create["'][\s\S]*["']sort["'][\s\S]*["']view["'][\s\S]*["']bulk["']/);
     });
 
-    test('keeps character URL import examples readable inside narrow popups', () => {
-        const styleSource = read('public/style.css');
-        const importTemplate = read('public/scripts/templates/importCharacters.html');
-        const sourcesRule = styleSource.match(/#dialogue_popup \.sources_list,\s*\.popup \.sources_list\s*\{(?<body>[^}]+)\}/)?.groups?.body;
-        const sourcesListRule = styleSource.match(/#dialogue_popup \.sources_list ul,\s*\.popup \.sources_list ul\s*\{(?<body>[^}]+)\}/)?.groups?.body;
-        const sourcesExampleRule = styleSource.match(/#dialogue_popup \.sources_list tt,\s*\.popup \.sources_list tt\s*\{(?<body>[^}]+)\}/)?.groups?.body;
-
-        expect(importTemplate).toContain('class="sources_list justifyLeft"');
-        expect(importTemplate).toContain('<tt>Anonymous/example-character</tt>');
-        expect(importTemplate).toContain('Perchance Character');
-        expect(sourcesRule).toContain('max-width: 100%');
-        expect(sourcesRule).toContain('overflow-wrap: anywhere');
-        expect(sourcesListRule).toContain('padding-left: 1.35em');
-        expect(sourcesExampleRule).toContain('white-space: normal');
-        expect(sourcesExampleRule).toContain('overflow-wrap: anywhere');
-    });
-
     test('keeps ordinary character type badges quiet', () => {
         const styleSource = read('public/style.css');
 

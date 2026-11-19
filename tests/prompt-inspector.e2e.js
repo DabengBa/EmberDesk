@@ -61,7 +61,7 @@ async function installGenerateStub(page, { story = false } = {}) {
             const pipeline = story;
             return new Response(JSON.stringify({
                 choices: [{ index: 0, finish_reason: pipeline ? 'tool_calls' : 'stop', message: pipeline
-                    ? { role: 'assistant', content: null, tool_calls: [{ id: 'call_preview_live', type: 'function', function: { name: 'submit_story', arguments: JSON.stringify({ content: 'stub reply' }) } }] }
+                    ? { role: 'assistant', content: null, tool_calls: [{ id: 'call_preview_live', type: 'function', function: { name: body.tool_choice.function.name, arguments: JSON.stringify({ content: 'stub reply' }) } }] }
                     : { content: 'stub reply' } }],
             }), {
                 status: 200,
@@ -239,6 +239,52 @@ test.describe('prompt inspector (request preview)', () => {
         await expect(overlay).toHaveCount(0);
     });
 
+    test('previews a conditional pipeline fallback without sending it', async ({ page }) => {
+        await testSetup.awaitST({ page });
+        await selectCharacterInSeededChat(page);
+        await enableOpenAiBackend(page);
+        await installGenerateStub(page);
+        await page.evaluate(async () => {
+            const { feature_settings } = await import('/scripts/feature-settings.js');
+            feature_settings.tool_bindings = [{ name: 'submit_story', enabled: true }];
+            const settings = window.SillyTavern.getContext().chatCompletionSettings;
+            settings.reply_pipeline = { enabled: true, steps: [{ tool: 'submit_story' }] };
+            const { reloadUserToolBindings } = await import('/scripts/tool-bindings.js');
+            reloadUserToolBindings();
+        });
+        await page.locator('#send_textarea').fill(PROBE_TEXT);
+        await page.locator('[data-react-workspace-shell-chrome] nav button').filter({ hasText: '提示词' }).first().click();
+        const open = page.getByRole('button', { name: '查看 Prompt' });
+        const overlay = page.getByRole('dialog', { name: 'Prompt 预览' });
+        const rounds = overlay.getByRole('combobox', { name: '管线轮次' });
+        const first = '轮次 1/1 · submit_story';
+        const fallback = '兜底请求（仅当末步无可用回复时）';
+
+        await open.click();
+        await expect(rounds.locator('option:checked')).toHaveText(first, { timeout: 15_000 });
+        await rounds.selectOption({ label: fallback });
+        await expect(overlay.locator('.prompt-inspector-pipeline-note')).toContainText('不发送工具');
+        await expect(overlay.getByText('预览（未发送）', { exact: true })).toBeVisible();
+        // Compare against native intrinsic sizing, including the dropdown arrow.
+        const { actual, intrinsic } = await rounds.evaluate(select => {
+            const probe = select.cloneNode(true);
+            Object.assign(probe.style, { position: 'absolute', visibility: 'hidden', maxWidth: 'none', width: 'max-content' });
+            select.parentElement.append(probe);
+            try {
+                return { actual: select.offsetWidth, intrinsic: probe.offsetWidth };
+            } finally {
+                probe.remove();
+            }
+        });
+        expect(actual).toBeGreaterThanOrEqual(intrinsic);
+
+        await page.keyboard.press('Escape');
+        await expect(overlay).toHaveCount(0);
+        await open.click();
+        await expect(rounds.locator('option:checked')).toHaveText(first, { timeout: 15_000 });
+        expect(await page.evaluate(() => window.__promptInspectorRequests.length)).toBe(0);
+    });
+
     test('closing and reopening during a delayed preview ignores the old result', async ({ page }) => {
         await testSetup.awaitST({ page });
         await selectCharacterInSeededChat(page);
@@ -373,9 +419,11 @@ test.describe('prompt inspector (request preview)', () => {
         const submittedTexts = submissions.map(call => JSON.parse(call.function.arguments).content.trim());
         expect(submittedTexts.filter(text => text === 'PIPELINE_REPLY_TEXT')).toHaveLength(1);
         expect(submittedTexts.filter(text => text === 'OLD_USER_TEXT')).toHaveLength(1);
+        const receiptIndexes = [];
         for (const call of submissions) {
-            const index = messages.findIndex(message => message.tool_calls?.some(item => item.id === call.id));
-            expect(messages[index + 1]).toEqual({ role: 'tool', content: '已收到。', tool_call_id: call.id });
+            const index = messages.findIndex(message => message.tool_calls?.some(item => item.id === call.id)) + 1;
+            expect(messages[index]).toEqual({ role: 'tool', content: 'OK', tool_call_id: call.id });
+            receiptIndexes.push(index);
         }
         expect(messages.some(message => message.role === 'user' && message.content.includes('CURRENT_USER_TEXT'))).toBe(true);
         expect(wire.match(/PIPELINE_REPLY_TEXT/g)).toHaveLength(1);
@@ -383,8 +431,32 @@ test.describe('prompt inspector (request preview)', () => {
         expect(wire).not.toContain('BARE_ANALYSIS_TEXT');
 
         // Non-pipeline tool cards keep the structured replay.
-        expect(messages.some(m => m.role === 'tool' && m.tool_call_id === 'call_np1')).toBe(true);
+        expect(messages.find(m => m.role === 'tool' && m.tool_call_id === 'call_np1')?.content).toBe('{"temp":20}');
         expect(assistantToolCalls.map(call => call?.function?.name)).toEqual(expect.arrayContaining(['get_weather']));
+
+        await page.locator('[data-react-workspace-shell-chrome] nav button').filter({ hasText: '提示词' }).first().click();
+        const open = page.locator('button', { hasText: '查看 Prompt' }).first();
+        const overlay = page.locator('.prompt-inspector-overlay');
+        const rows = overlay.locator('.prompt-inspector-item');
+        await open.click();
+        await expect(rows.first()).toBeVisible();
+        await page.keyboard.press('Escape');
+        await expect(overlay).toHaveCount(0);
+
+        // The fixture seeds browser-only history; use its real browser preview.
+        await page.evaluate(async () => {
+            const { previewNextGenerationRequest } = await import('/scripts/generation-service.js');
+            window.__emberDeskPromptInspectorBridge.preview = (round = 0) => previewNextGenerationRequest({ round });
+        });
+        await open.click();
+        await expect(rows).toHaveCount(messages.length);
+        for (const index of receiptIndexes) {
+            const content = rows.nth(index).locator('.prompt-inspector-item-preview');
+            await expect(content).toBeVisible();
+            await expect(content).toHaveText('OK');
+        }
+        await page.keyboard.press('Escape');
+        await expect(overlay).toHaveCount(0);
 
         expect(await page.evaluate(() => window.__promptInspectorRequests.length)).toBe(0);
         expect(await page.evaluate(() => window.SillyTavern.getContext().chat)).toEqual(before);
@@ -396,7 +468,7 @@ test.describe('prompt inspector (request preview)', () => {
         expect(await budgetSettings()).toEqual(settingsBeforePreview);
         expect(await page.evaluate(() => window.__promptInspectorRequests.length)).toBe(1);
         const [live] = await page.evaluate(() => window.__promptInspectorRequests);
-        expect(live.tools.map(tool => tool.function.name)).toEqual(['submit_story']);
+        expect(live.tools.map(tool => tool.function.name)).toEqual(['get_weather']);
         // Compare what actually travels over JSON: undefined object fields are omitted.
         expect(live.messages).toEqual(JSON.parse(JSON.stringify(messages)));
     });
