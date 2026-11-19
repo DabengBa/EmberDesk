@@ -10,7 +10,7 @@ const FRAME_DOCUMENT_ONE = [
     '<!DOCTYPE html>',
     '<html>',
     '<body>',
-    '<div id="ed-e2e-app" style="min-height: 50vh">FRAME CONTENT ONE</div>',
+    '<div id="ed-e2e-app">FRAME CONTENT ONE</div>',
     '<style>#ed-e2e-app { background-color: rgb(18, 52, 86); }</style>',
     '<script>document.querySelector("#ed-e2e-app").dataset.marker = "42";</scr' + 'ipt>',
     '<button id="copy">Copy card text</button><output id="copy-result"></output>',
@@ -176,6 +176,29 @@ test.describe('chat message frontend frames', () => {
         await expect(app).toHaveCSS('background-color', 'rgb(18, 52, 86)');
     });
 
+    test('reaches the end of a tall card by scrolling the main chat', async ({ page }) => {
+        await selectCharacterByName(page, characterName);
+        await openFrontendChat(page);
+
+        const iframe = page.locator('.mes[mesid="3"] iframe.ed-frontend-frame__iframe');
+        const card = iframe.contentFrame();
+        const chat = page.locator('#chat');
+        await card.locator('#ed-e2e-app-two').evaluate(element => {
+            element.style.height = '1800px';
+            const tail = element.ownerDocument.createElement('div');
+            tail.textContent = 'End of the card';
+            element.after(tail);
+        });
+
+        const tail = card.getByText('End of the card');
+        await expect.poll(() => iframe.evaluate(element => element.offsetHeight)).toBeGreaterThan(1800);
+        await chat.evaluate(element => { element.scrollTop = 0; });
+        await expect(tail).not.toBeInViewport();
+        await chat.evaluate(element => { element.scrollTop = element.scrollHeight; });
+        await expect(tail).toBeInViewport();
+        expect(await tail.evaluate(element => element.ownerDocument.defaultView.scrollY)).toBe(0);
+    });
+
     test('copies text from an isolated message card', async ({ page, context }) => {
         await selectCharacterByName(page, characterName);
         await openFrontendChat(page);
@@ -296,6 +319,7 @@ test.describe('chat message frontend frames', () => {
         await selectCharacterByName(page, characterName);
         await openFrontendChat(page);
         await expect(page.locator('.ed-frontend-frame iframe')).toHaveCount(2, { timeout: 15_000 });
+        await expect(page.locator('.ed-frontend-frame iframe[style*="height"]')).toHaveCount(2);
 
         // Mark the live iframe + .mes_text elements, then hook srcdoc so any
         // reassignment is counted. Element identity survives because React keys

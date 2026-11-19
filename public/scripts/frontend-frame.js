@@ -195,14 +195,73 @@ const clipboardScript = `<script>(function () {
     };
 })();</script>`;
 
+const CARD_HEIGHT_MESSAGE = 'ed:frontend-frame-height';
+
+const sizingScript = `<script>(function () {
+    document.addEventListener('DOMContentLoaded', () => {
+        const root = document.documentElement;
+        let pending = false;
+        let lastHeight;
+        let viewportWidth = window.innerWidth;
+        let viewportHeight = window.innerHeight;
+        let heightOnlyResize = false;
+
+        function scheduleMeasurement() {
+            if (pending) return;
+            pending = true;
+            requestAnimationFrame(() => {
+                pending = false;
+                // scrollHeight cannot shrink below the existing iframe viewport.
+                const height = Math.ceil(root.getBoundingClientRect().height);
+                if (height === lastHeight) return;
+                lastHeight = height;
+                window.parent.postMessage({ type: '${CARD_HEIGHT_MESSAGE}', height }, '*');
+            });
+        }
+
+        window.addEventListener('resize', () => {
+            // Don't feed a height-only viewport change back to the host: a
+            // 100vh block plus margins could otherwise grow forever.
+            heightOnlyResize = window.innerHeight !== viewportHeight && window.innerWidth === viewportWidth;
+            viewportWidth = window.innerWidth;
+            viewportHeight = window.innerHeight;
+            // Clear after this rendering update, even if no box changed and
+            // ResizeObserver had nothing to report.
+            if (heightOnlyResize) setTimeout(() => { heightOnlyResize = false; }, 0);
+        });
+        new ResizeObserver(() => {
+            if (!heightOnlyResize) scheduleMeasurement();
+        }).observe(root, { box: 'border-box' });
+        new MutationObserver(scheduleMeasurement).observe(document, {
+            subtree: true, childList: true, attributes: true, characterData: true,
+        });
+        document.addEventListener('load', scheduleMeasurement, true);
+        scheduleMeasurement();
+    }, { once: true });
+})();</script>`;
+
+/** @type {WeakMap<Window, HTMLIFrameElement>} */
+const mountedCardWindows = new WeakMap();
+let listeningForCardHeight = false;
+
+/** @param {MessageEvent} event */
+function applyCardHeight(event) {
+    const data = event.data;
+    if (event.origin !== 'null' || data?.type !== CARD_HEIGHT_MESSAGE || !Number.isSafeInteger(data.height) || data.height < 0) return;
+    const iframe = mountedCardWindows.get(/** @type {Window} */ (event.source));
+    if (!iframe?.isConnected || iframe.contentWindow !== event.source) return;
+    const height = `${data.height}px`;
+    if (iframe.style.height !== height) iframe.style.height = height;
+}
+
 /**
- * Installs the copy helper before card scripts without displacing the doctype or head.
+ * Installs frame-local helpers before card scripts without displacing the doctype or head.
  * @param {string} source
  */
-function withCardClipboard(source) {
+function withCardHelpers(source) {
     const preamble = /^(?:(?:\s+|<!--[\s\S]*?-->|<!doctype\s[^>]*>)|<(?:html|head)(?=[\s>])(?:"[^"]*"|'[^']*'|[^'">])*>)*/i;
     const offset = source.match(preamble)?.[0].length ?? 0;
-    return source.slice(0, offset) + clipboardScript + source.slice(offset);
+    return source.slice(0, offset) + clipboardScript + sizingScript + source.slice(offset);
 }
 
 function expandedKey(kind, messageId, index) {
@@ -258,7 +317,7 @@ function mountFrontendSlot(pre, frameId, emit) {
     iframe.setAttribute('loading', 'lazy');
     // Do not mint an app-origin blob URL for untrusted executable documents.
     iframe.setAttribute('sandbox', 'allow-scripts');
-    iframe.srcdoc = withCardClipboard(pre.textContent ?? '');
+    iframe.srcdoc = withCardHelpers(pre.textContent ?? '');
     iframe.addEventListener('load', () => emit?.(FRONTEND_FRAME_EVENTS.ended, frameId));
 
     const source = document.createElement('template');
@@ -267,6 +326,13 @@ function mountFrontendSlot(pre, frameId, emit) {
     slot.appendChild(source);
     emit?.(FRONTEND_FRAME_EVENTS.started, frameId);
     slot.prepend(iframe);
+    if (iframe.contentWindow) {
+        mountedCardWindows.set(iframe.contentWindow, iframe);
+        if (!listeningForCardHeight) {
+            window.addEventListener('message', applyCardHeight);
+            listeningForCardHeight = true;
+        }
+    }
 }
 
 /**
