@@ -693,12 +693,7 @@ export function getTagKeyForEntity(entityOrKey) {
     if (!character) character = requireCharacterTagsShellContext().state.characters.find(y => y.avatar === x); // check if its a char key
 
     if (character) {
-        x = character.avatar;
-    }
-
-    // Uninitialized character tag map
-    if (character && !(x in tag_map)) {
-        return characterTagsService.ensureKey(x);
+        return character.avatar;
     }
 
     // We should hopefully have a key now. Let's check

@@ -2,6 +2,8 @@ import { expect, jest, test } from '@jest/globals';
 import fs from 'node:fs';
 import vm from 'node:vm';
 import { createRequire } from 'node:module';
+import { createRuntimeSettingsPersistence } from '../public/scripts/runtime-settings-persistence.js';
+import { createSettingsWriteOwner } from '../public/scripts/settings-write-owner.js';
 
 globalThis.$ = jest.fn(() => ({ children: () => ({ each: jest.fn() }) }));
 jest.unstable_mockModule('../public/scripts/notifications.js', () => ({ default: { success: jest.fn(), error: jest.fn(), warning: jest.fn() } }));
@@ -572,6 +574,83 @@ test('ASK import limits card tags to 50 and retains removals without jQuery', as
         expect(tags.tag_map['long.png']).not.toContain('t0');
         expect(tags.tag_map['long.png']).not.toContain('t50');
     } finally { globalThis.document = original.document; globalThis.$ = original.$; }
+});
+
+test.each([false, true])('importing card tags after another window saves settings (explicit clear: %s)', async clearTags => {
+    const character = { avatar: 'imported.png', tags: ['Imported'] };
+    const initial = {
+        tags: [{ id: 'previous', name: 'Previous' }, { id: 'imported', name: 'Imported' }],
+        tag_map: clearTags ? { [character.avatar]: ['previous'] } : {},
+        amount_gen: 80,
+    };
+    let saved = { document: initial, revision: 1 };
+    const fetchLatest = jest.fn(async () => saved);
+    const post = async request => {
+        const { settings_revision, ...document } = JSON.parse(request.body);
+        if (settings_revision !== saved.revision) return { status: 409 };
+        saved = { document, revision: saved.revision + 1 };
+        return { ok: true, json: async () => ({ result: 'ok', settings_revision: saved.revision }) };
+    };
+    function createWindow() {
+        const settings = structuredClone(initial);
+        const live = { amount: initial.amount_gen };
+        const saveSettingsDebounced = jest.fn();
+        const activate = () => {
+            registerCharacterTagsShellContext({
+                state: { characters: [character], entitiesFilter: { getFilterData: () => ({ selected: [], excluded: [] }) } },
+                saveSettingsDebounced, printCharactersDebounced: jest.fn(),
+            });
+            tags.loadTagsSettings(settings);
+        };
+        const persistence = createRuntimeSettingsPersistence({
+            conflict: createSettingsWriteOwner(), isReady: () => true, isResponseCustomized: () => false,
+            accountStorage: () => ({}), persistedCurrentVersion: () => '1', version: () => '1',
+            activeCharacter: () => '', amountGen: () => live.amount, maxContext: () => 2048, mainApi: () => 'openai',
+            worldInfoSettings: () => ({}), powerUser: () => ({}), featureSettings: () => ({}),
+            tags: () => settings.tags, tagMap: () => settings.tag_map, oaiSettings: () => ({}), background: () => ({}),
+            getRevision: () => 1, setRevision: () => {}, setDocument: () => {},
+            beginSnapshot: () => {}, finishSnapshot: () => {}, compress: async request => request, headers: () => ({}),
+            post, fetchLatest, onConflict: () => {}, onError: () => {}, emitUpdated: async () => {},
+        });
+        persistence.initialize(persistence.buildRuntimeSettingsPayload(), 1);
+        return { activate, live, persistence, saveSettingsDebounced };
+    }
+    const importing = createWindow();
+    const browsing = createWindow();
+
+    browsing.activate();
+    expect(tags.getTagKeyForEntity(0)).toBe(character.avatar);
+    expect(browsing.saveSettingsDebounced).not.toHaveBeenCalled();
+    const originalDocument = globalThis.document;
+    globalThis.document = { getElementById: () => null };
+    let afterBrowsing;
+    try {
+        if (clearTags) tags.assignTagIdsToAvatar(character.avatar, []);
+        browsing.live.amount = 100;
+        await browsing.persistence.saveSettings(0, { strict: true });
+        afterBrowsing = saved.document;
+
+        importing.activate();
+        expect(await tags.importTags(character, { importSetting: tags.tag_import_setting.ALL })).toBe(true);
+    } finally {
+        globalThis.document = originalDocument;
+    }
+    expect(importing.saveSettingsDebounced).toHaveBeenCalled();
+    const save = importing.persistence.saveSettings(0, { strict: true });
+    if (clearTags) {
+        await expect(save).rejects.toThrow('Failed to save settings: revision conflict');
+        expect(importing.persistence.conflictRows()).toEqual([expect.objectContaining({
+            path: ['tag_map', character.avatar], mine: ['previous', 'imported'], saved: [],
+        })]);
+        expect(saved.document.tag_map[character.avatar]).toEqual([]);
+    } else {
+        await save;
+        expect(afterBrowsing.tag_map).toEqual({});
+        expect(importing.persistence.conflictRows()).toEqual([]);
+        expect(saved.document.tag_map[character.avatar]).toEqual(['imported']);
+    }
+    expect(fetchLatest).toHaveBeenCalledTimes(1);
+    expect(saved.document.amount_gen).toBe(100);
 });
 
 test('tag entity key lookup accepts selector, element and legacy wrapper without jQuery', () => {
