@@ -8,6 +8,7 @@ import { renameComposerDraftContext, setComposerDraftContext, requestComposerFoc
 import { installWorkspaceInteractionCommands } from './workspace-interaction-commands.js';
 import { transitionOpacity } from './chat-ui-motion.js';
 import { fixToastrForDialogs } from './popup.js';
+import { loadWorkspacePanelsModule } from './workspace-panels-react-bridge.js';
 
 function shell() {
     return requireDomHandlersShellContext();
@@ -1203,20 +1204,30 @@ export async function bindLegacyShellHandlers() {
         }
     });
 
+    let externalImportOpen = false;
     delegate('click', '.external_import_button, #external_import_button', async () => {
-        const html = await renderTemplateAsync('importCharacters');
-        const input = await callGenericPopup(html, state.POPUP_TYPE.INPUT, '', { allowVerticalScrolling: true, wider: true, okButton: document.getElementById('popup_template')?.getAttribute('popup-button-import') ?? undefined, rows: 4 });
-
-        if (!input) {
-            console.debug('Custom content import cancelled');
-            return;
-        }
-
-        // break input into one input per line
-        const inputs = String(input).split('\n').map(x => x.trim()).filter(x => x.length > 0);
-
-        for (const url of inputs) {
-            await importFromExternalUrl(url);
+        if (externalImportOpen) return;
+        externalImportOpen = true;
+        const previousFocus = document.activeElement;
+        const host = document.createElement('div');
+        let unmount;
+        const close = () => {
+            externalImportOpen = false;
+            try { unmount?.(); } finally { host.remove(); }
+            if (previousFocus instanceof HTMLElement && previousFocus.isConnected) previousFocus.focus();
+        };
+        const fail = error => {
+            close();
+            console.error('Could not open external import:', error);
+            toastr.error(t`Import failed`);
+        };
+        try {
+            const { mountExternalImportDialog } = await loadWorkspacePanelsModule();
+            document.body.append(host);
+            unmount = mountExternalImportDialog(host, url => importFromExternalUrl(url, { showDownloadErrors: false }), close,
+                () => document.getElementById('character_import_file')?.click(), fail);
+        } catch (error) {
+            fail(error);
         }
     });
 
