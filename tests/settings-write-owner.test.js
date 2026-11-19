@@ -46,7 +46,7 @@ describe('settings write owner', () => {
         const result = await owner.saveForm({ payload: { value: 'draft' }, post, rebase });
         expect(result.payload).toEqual({ value: 'merged' });
         expect(post).toHaveBeenCalledTimes(2);
-        await expect(owner.saveRuntime({ post: async () => ({ ok: false, status: 409 }) })).rejects.toThrow('revision conflict');
+        owner.markConflict();
         expect(owner.hasConflict()).toBe(true);
         await expect(owner.saveForm({ payload: {}, post, rebase })).rejects.toThrow('runtime settings conflict');
         expect(post).toHaveBeenCalledTimes(2);
@@ -62,7 +62,7 @@ describe('settings write owner', () => {
         const save = owner.saveForm({ payload: { value: 1 }, post, rebase });
         await Promise.resolve();
         await Promise.resolve();
-        await expect(owner.saveRuntime({ post: async () => ({ ok: false, status: 409 }) })).rejects.toThrow('revision conflict');
+        owner.markConflict();
         resume();
         await expect(save).rejects.toThrow('runtime settings conflict');
         expect(post).toHaveBeenCalledTimes(1);

@@ -484,12 +484,13 @@ export function buildSettingsSavePayload(baseSettings, formValues, { settingsRev
  * Sends a saved Settings document through the injected runtime command port.
  *
  * @param {import('../compat/runtime-port').SettingsDocument} settings
- * @param {{ commands?: { saveSettings?: (settings: import('../compat/runtime-port').SettingsDocument, baseline?: import('../compat/runtime-port').SettingsDocument, revision?: number) => Promise<void> } }|undefined} [runtime]
+ * @param {{ commands?: { saveSettings?: import('../compat/runtime-port').RuntimeCommands['saveSettings'] } }|undefined} [runtime]
  * @param {import('../compat/runtime-port').SettingsDocument} [baseline]
  * @param {number} [revision]
+ * @param {string[][]} [editedPaths]
  * @returns {Promise<boolean>}
  */
-export async function saveSettingsToRuntime(settings, runtime, baseline, revision) {
+export async function saveSettingsToRuntime(settings, runtime, baseline, revision, editedPaths) {
     if (
         !runtime
         || typeof runtime !== 'object'
@@ -501,7 +502,7 @@ export async function saveSettingsToRuntime(settings, runtime, baseline, revisio
         return false;
     }
 
-    await runtime.commands.saveSettings(settings, baseline, revision);
+    await runtime.commands.saveSettings(settings, baseline, revision, editedPaths);
     return true;
 }
 

@@ -83,11 +83,18 @@ async function fixture() {
         getWorldInfoSettings: () => ({}), power_user: {}, feature_settings: {}, tags: [], tag_map: {}, background_settings: {},
         beginSettingsSaveSnapshot: () => 'snapshot', finishSettingsSaveSnapshot: () => {},
         compressRequest: async request => request, getRequestHeaders: () => ({}),
+        requestSettings: async () => {
+            requests.push({ url: '/api/settings/get' });
+            return response(200, { settings: { oai_settings: { ...settings, extensions: { regex: ['remote'] } } }, settings_revision: 4 });
+        },
+        resolveStartupSettingsPlan: ({ data }) => data,
         window: { dispatchEvent: jest.fn() }, Event: class {}, toastr: { warning: jest.fn(), error: jest.fn() },
         t: strings => strings[0],
     };
     const shellApi = new Function(...Object.keys(shellEnv), `let settingsReady = true, settingsDocumentRevision = 2, settings = {};
         ${saveCode.replace('export async function ', 'async function ')}
+        const { settings_revision, ...initial } = buildRuntimeSettingsPayload();
+        runtimeSettingsPersistence.initialize(initial, settings_revision);
         ${installCode}
         return { setReady: value => { settingsReady = value; }, getRevision: () => settingsDocumentRevision };`)(...Object.values(shellEnv));
     await manager.initPresetManager();
@@ -110,14 +117,14 @@ test('queued strict write rejects before any settings or preset HTTP request', a
     expect(f.presets[0].extensions.regex).toEqual(['old']);
 });
 
-test('409 marks the real owner conflicted and prevents preset and later settings writes', async () => {
+test('409 with an overlapping edit marks the real owner conflicted and prevents later writes', async () => {
     const f = await fixture();
     f.setSettingsResponse(() => response(409));
     await expect(write(f)).rejects.toThrow('Failed to save settings: revision conflict');
     expect(f.owner.hasConflict()).toBe(true);
     expect(f.settings.extensions.regex).toEqual(['old']);
     await expect(write(f)).rejects.toThrow('Unresolved runtime settings conflict');
-    expect(f.requests.map(x => x.url)).toEqual(['/api/settings/save']);
+    expect(f.requests.map(x => x.url)).toEqual(['/api/settings/save', '/api/settings/get']);
     expect(f.presets[0].extensions.regex).toEqual(['old']);
 });
 
@@ -146,7 +153,7 @@ test('a 409 during compensation exposes both failures and locks the real setting
     expect(error.message).toBe('Preset save failed and settings rollback failed');
     expect(error.errors.map(value => value.message)).toEqual(['Failed to save preset (HTTP 500)', 'Failed to save settings: revision conflict']);
     expect(f.owner.hasConflict()).toBe(true);
-    expect(f.requests.map(x => x.url)).toEqual(['/api/settings/save', '/api/presets/save', '/api/settings/save']);
+    expect(f.requests.map(x => x.url)).toEqual(['/api/settings/save', '/api/presets/save', '/api/settings/save', '/api/settings/get']);
     expect(f.settings.extensions.regex).toEqual(['old']);
     expect(f.presets[0].extensions.regex).toEqual(['old']);
 });

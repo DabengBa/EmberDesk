@@ -29,7 +29,8 @@ export function createSortSaveGuard(target) {
             if (revision !== undefined) {
                 if (revision === null && save.overlapped) ambiguous = true;
                 if (!save.overlapped) ambiguous = false;
-                if (revision !== null && (!latestSuccess || latestSuccess.revision === null || revision > latestSuccess.revision)) {
+                if (revision !== null && (!latestSuccess || latestSuccess.revision === null || revision > latestSuccess.revision
+                    || (revision === latestSuccess.revision && save.version > latestSuccess.version))) {
                     latestSuccess = { version: save.version, revision };
                 } else if (revision === null && !save.overlapped) {
                     latestSuccess = { version: save.version, revision };

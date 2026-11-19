@@ -392,6 +392,23 @@ export const settingsStyles = stylex.create({
     statusInfo: {
         backgroundColor: 'var(--settings-surface-sunken)',
     },
+    conflictPanel: {
+        display: 'grid',
+        gap: '10px',
+        color: 'var(--settings-body)',
+    },
+    conflictRow: {
+        minWidth: 0,
+        margin: 0,
+        borderWidth: '1px',
+        borderStyle: 'solid',
+        borderColor: 'var(--settings-border)',
+        borderRadius: '5px',
+    },
+    conflictValue: {
+        whiteSpace: 'pre-wrap',
+        overflowWrap: 'anywhere',
+    },
     statusSuccess: {
         borderColor: 'color-mix(in srgb, var(--settings-success) 55%, var(--settings-border) 45%)',
         backgroundColor: 'color-mix(in srgb, var(--settings-success) 15%, var(--settings-surface) 85%)',

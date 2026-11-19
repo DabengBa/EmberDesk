@@ -209,10 +209,16 @@ describe('native notifications compatibility', () => {
             feature_settings: {}, tags: [], tag_map: {}, oai_settings: {}, background_settings: {}, settingsDocumentRevision: 1,
             beginSettingsSaveSnapshot: () => ({}), finishSettingsSaveSnapshot: () => {}, compressRequest: async value => value,
             getRequestHeaders: () => ({}), fetch: async () => ({ ok: false, status, statusText: 'offline', json: async () => ({ settings_revision: 2 }) }),
+            requestSettings: async () => ({ ok: true, json: async () => ({ settings_revision: 2, settings: { amount_gen: 3 } }) }),
+            resolveStartupSettingsPlan: ({ data }) => data,
             eventSource: { emit: async () => {} }, event_types: {}, toastr: notifications, t: strings => strings[0],
             window: { dispatchEvent: jest.fn() }, Event: class Event {}, saveSettingsDebounced: jest.fn(), console: { warn: jest.fn(), error: jest.fn() },
         };
-        const save = runInNewContext(`(() => { ${source.slice(start, end).replace('export async function', 'async function')}; return saveSettings; })()`, context);
+        const save = runInNewContext(`(() => { ${source.slice(start, end).replace('export async function', 'async function')};
+            const { settings_revision, ...initial } = buildRuntimeSettingsPayload();
+            runtimeSettingsPersistence.initialize(initial, settings_revision);
+            return saveSettings; })()`, context);
+        context.amount_gen = 2;
         await expect(save(0, { strict: true })).rejects.toThrow(status === 409 ? 'revision conflict' : 'offline');
         expect(document.getElementById('toast-container').firstElementChild).not.toBeNull();
     });

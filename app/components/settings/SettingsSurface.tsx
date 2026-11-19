@@ -22,7 +22,8 @@ import { settingsStyles } from '@/styles/settings-surface.styles';
 import { SettingsTabs } from '@/components/settings/SettingsTabs';
 import { translate, useTranslated } from '@/compat/i18n.js';
 import { readStoredUiLocale, setUiLocale, uiLocaleOptions } from '../../../public/scripts/ui-locale.js';
-import type { RuntimePort } from '@/compat/runtime-port';
+import type { RuntimePort, SettingsConflictChoice, SettingsConflictRow } from '@/compat/runtime-port';
+import { equalSettingsValues, settingsChanges } from '../../../public/scripts/settings-document-changes.js';
 import { createSettingsWriteOwner } from '@/lib/settings-write-owner';
 import { connectProvider, ProviderConnectionError, testProviderConnection } from '@/lib/provider-connection-service';
 import {
@@ -44,6 +45,28 @@ let standaloneSettingsWriteOwner: ReturnType<typeof createSettingsWriteOwner> | 
 
 /** Translates a UI string; the key doubles as the English source text. */
 const t = (key: string) => translate(key, null);
+
+function conflictTokenLabel(path: string[]) {
+    if (path[0] !== 'oai_settings') return undefined;
+    if (path[1] === 'openai_max_tokens') return 'Max Response';
+    if (path[1] === 'openai_max_context') return 'Context';
+    return undefined;
+}
+
+function conflictLabel(path: string[]) {
+    const tokenLabel = conflictTokenLabel(path);
+    if (tokenLabel) return t(tokenLabel);
+    if (path[0] === 'oai_settings' && path[1] === 'openai_model') return t('Model');
+    if (path[0] === 'oai_settings' && path[1] === 'fallback_provider_model') return t('Background model');
+    return path.join(' / ');
+}
+
+function conflictValue(path: string[], value: unknown) {
+    if (value === undefined) return t('Not set');
+    if (typeof value === 'number' && conflictTokenLabel(path)) return `${value / 1000}k`;
+    if (typeof value === 'string' && value !== '') return value;
+    return JSON.stringify(value);
+}
 
 const settingsSchema = z.object({
     providers: z.object({
@@ -150,8 +173,19 @@ export function SettingsSurface({
     const [saveStatus, setSaveStatus] = useState<{ kind: 'success' | 'info'; message: string } | null>(null);
     const [hasRevisionConflict, setHasRevisionConflict] = useState(false);
     const [hasRuntimeConflict, setHasRuntimeConflict] = useState(() => runtime?.hasSettingsConflict?.() ?? false);
+    const [conflictRows, setConflictRows] = useState<SettingsConflictRow[]>(() => runtime?.getSettingsConflictRows?.() ?? []);
+    const [conflictChoices, setConflictChoices] = useState<SettingsConflictChoice[]>([]);
+    const [resolvingConflict, setResolvingConflict] = useState(false);
+    const [resolutionStatus, setResolutionStatus] = useState<'error' | 'changed' | null>(null);
     useEffect(() => {
-        const update = () => setHasRuntimeConflict(runtime?.hasSettingsConflict?.() ?? false);
+        const update = () => {
+            const rows = runtime?.getSettingsConflictRows?.() ?? [];
+            setHasRuntimeConflict(runtime?.hasSettingsConflict?.() ?? false);
+            if (!runtime?.hasSettingsConflict?.()) setResolutionStatus(null);
+            setConflictRows(rows);
+            setConflictChoices(current => current.filter(choice => rows.some(row => row.id === choice.id
+                && equalSettingsValues(row.mine, choice.mine) && equalSettingsValues(row.saved, choice.saved))));
+        };
         window.addEventListener('emberdesk:runtime-settings-conflict', update);
         update();
         return () => window.removeEventListener('emberdesk:runtime-settings-conflict', update);
@@ -342,6 +376,7 @@ export function SettingsSurface({
         () => (settingsData ? parseSettingsPayload(settingsData) : null),
         [settingsData],
     );
+    const displayedPayload = useRef<Pick<NonNullable<typeof parsedPayload>, 'settings' | 'settingsRevision'> | null>(null);
 
     const settingsForm = useForm({
         canSubmitWhenInvalid: true,
@@ -355,7 +390,7 @@ export function SettingsSurface({
             setPageError(getSchemaErrorMessage(settingsSchema, value));
         },
         onSubmit: async ({ value }) => {
-            if (!parsedPayload) {
+            if (!displayedPayload.current) {
                 setPageError(t('Settings have not finished loading.'));
                 return;
             }
@@ -368,11 +403,12 @@ export function SettingsSurface({
             setSaveStatus(null);
 
             try {
-                await saveMutation.mutateAsync(value);
+                const committed = await saveMutation.mutateAsync(value);
                 // Saved values become the new baseline; without this the form
                 // stays dirty and the close path wrongly prompts for unsaved
                 // changes.
-                settingsForm.reset(value);
+                displayedPayload.current = committed;
+                settingsForm.reset(buildSettingsFormDefaults(committed.settings));
             } catch (error) {
                 setSaveStatus(null);
                 if (!(error instanceof SettingsRevisionConflictError)) {
@@ -385,29 +421,28 @@ export function SettingsSurface({
 
     const saveMutation = useMutation({
         mutationFn: async (values: typeof defaultSettingsFormValues) => {
+            const parsedPayload = displayedPayload.current;
             if (!parsedPayload) {
                 throw new MessageError(t('Settings have not finished loading.'));
             }
             if (runtime?.hasSettingsConflict?.()) {
-                throw new MessageError(t('Download your unsaved runtime settings before reloading. Saving is paused until reload.'));
+                throw new MessageError(t('Choose which settings values to keep before saving.'));
             }
 
             const csrfToken = await ensureCsrfToken();
             const { savedPayload, revision } = await writeOwner.runWrite(async () => {
                 const baselineFormValues = buildSettingsFormDefaults(parsedPayload.settings);
                 const runtimeBaseline = runtime?.getSettingsSnapshot();
-                // The prompt drawer may have changed the active preset since this
-                // form loaded. Overlay only dirty form fields on the live authority,
-                // not the stale settings query's copy of those generation values.
                 const buildPayload = (base: typeof parsedPayload.settings, revision: typeof parsedPayload.settingsRevision) =>
-                    buildSettingsSavePayload(runtime ? { ...base, oai_settings: runtime.getChatCompletionSettings() } : base, values, {
+                    buildSettingsSavePayload(base, values, {
                         settingsRevision: revision,
                         baselineFormValues,
                     });
                 const payload = buildPayload(parsedPayload.settings, parsedPayload.settingsRevision);
+                const editedPaths: string[][] = settingsChanges(parsedPayload.settings, payload).map(change => change.path);
                 const postSettings = (nextPayload: typeof payload) => {
                     if (runtime?.hasSettingsConflict?.()) {
-                        throw new MessageError(t('Download your unsaved runtime settings before reloading. Saving is paused until reload.'));
+                        throw new MessageError(t('Choose which settings values to keep before saving.'));
                     }
                     return fetch('/api/settings/save', {
                         method: 'POST',
@@ -453,7 +488,7 @@ export function SettingsSurface({
 
                 const result = await response.clone().json().catch(() => null);
                 const revision = Number.isSafeInteger(result?.settings_revision) ? result.settings_revision : undefined;
-                await saveSettingsToRuntime(savedPayload, runtime, runtimeBaseline, revision);
+                await saveSettingsToRuntime(savedPayload, runtime, runtimeBaseline, revision, editedPaths);
                 return { savedPayload, revision };
             });
             await refetchSettings();
@@ -465,7 +500,7 @@ export function SettingsSurface({
             } catch {
                 // sessionStorage may be unavailable in private contexts
             }
-            return savedPayload;
+            return { settings: savedPayload, settingsRevision: revision ?? null };
         },
         retry: false,
     });
@@ -557,6 +592,7 @@ export function SettingsSurface({
         }
 
         const nextDefaults = buildSettingsFormDefaults(parsedPayload.settings);
+        displayedPayload.current = parsedPayload;
         settingsForm.reset(nextDefaults, { keepDefaultValues: true });
         setPageError('');
         setIsSettingsFormLoaded(true);
@@ -600,6 +636,7 @@ export function SettingsSurface({
         if (variant !== 'drawer') return;
         const discardDraft = () => {
             if (parsedPayload) {
+                displayedPayload.current = parsedPayload;
                 settingsForm.reset(buildSettingsFormDefaults(parsedPayload.settings), { keepDefaultValues: true });
             }
             setProviderSecretInput('');
@@ -633,6 +670,7 @@ export function SettingsSurface({
         }
 
         const refreshedPayload = parseSettingsPayload(result.data);
+        displayedPayload.current = refreshedPayload;
         settingsForm.reset(buildSettingsFormDefaults(refreshedPayload.settings), { keepDefaultValues: true });
         setHasRevisionConflict(false);
     }
@@ -759,13 +797,49 @@ export function SettingsSurface({
                         )}
 
                         {hasRuntimeConflict && (
-                            <div {...stylex.props(settingsStyles.status, settingsStyles.statusError)} role="alert" data-testid="runtime-settings-recovery">
-                                <p>{t('Runtime settings could not be saved because settings changed elsewhere. Saving is paused in this tab. Download the local settings before reloading, then compare the file with the current settings and reapply your changes manually.')}</p>
-                                <p>{t('The file may contain sensitive settings. It does not include unsaved edits in this form; copy those separately before closing the form or reloading.')}</p>
+                            <section {...stylex.props(settingsStyles.status, settingsStyles.statusError, settingsStyles.conflictPanel)} aria-label={t('Settings conflict')} data-testid="runtime-settings-recovery">
+                                <h3 {...stylex.props(settingsStyles.sectionTitle)}>{t('Settings conflict')}</h3>
+                                {conflictRows.map(row => (
+                                    <fieldset key={row.id} {...stylex.props(settingsStyles.conflictRow)} data-testid={`settings-conflict-${row.path.join('.')}`} disabled={resolvingConflict}>
+                                        <legend>{conflictLabel(row.path)}</legend>
+                                        {(['mine', 'saved'] as const).map(use => (
+                                            <div key={use}>
+                                                <label>
+                                                    <input type="radio" name={`conflict-${row.id}`}
+                                                        checked={conflictChoices.some(choice => choice.id === row.id && choice.use === use)}
+                                                        onChange={() => setConflictChoices(current => [...current.filter(choice => choice.id !== row.id), { ...row, use }])}
+                                                    />
+                                                    {t(use === 'mine' ? 'Use mine' : 'Use saved')}: <code {...stylex.props(settingsStyles.conflictValue)}>{conflictValue(row.path, row[use])}</code>
+                                                </label>
+                                            </div>
+                                        ))}
+                                    </fieldset>
+                                ))}
+                                {resolutionStatus === 'error' && <p role="alert">{t('Settings could not be saved.')}</p>}
+                                {resolutionStatus === 'changed' && <output>{t('Some values changed. Choose again for the fields without a selection.')}</output>}
+                                {conflictRows.length > 0 && (
+                                    <button type="button" {...stylex.props(settingsStyles.button, settingsStyles.buttonPrimary)}
+                                        disabled={resolvingConflict || conflictChoices.length !== conflictRows.length}
+                                        onClick={async () => {
+                                            setResolvingConflict(true);
+                                            setResolutionStatus(null);
+                                            try {
+                                                await runtime?.resolveSettingsConflict?.(conflictChoices);
+                                                if (runtime?.hasSettingsConflict?.()) setResolutionStatus('changed');
+                                                else if (settingsForm.state.isPristine) await refetchSettings();
+                                            } catch {
+                                                setResolutionStatus('error');
+                                            } finally {
+                                                setResolvingConflict(false);
+                                            }
+                                        }}>
+                                        {t('Apply choices')}
+                                    </button>
+                                )}
                                 <button type="button" {...stylex.props(settingsStyles.button, settingsStyles.buttonSecondary)} onClick={() => runtime?.downloadSettingsRecovery?.()}>
                                     {t('Download runtime settings only')}
                                 </button>
-                            </div>
+                            </section>
                         )}
 
                         {hasRevisionConflict && (

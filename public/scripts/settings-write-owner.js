@@ -16,6 +16,7 @@ export function createSettingsWriteOwner() {
         },
         hasConflict: () => conflict,
         markConflict: () => { conflict = true; },
+        clearConflict: () => { conflict = false; },
         assertWritable,
         rebaseForm                                          (ports
 
@@ -29,19 +30,7 @@ export function createSettingsWriteOwner() {
             if (provider === null || ports.formConflict(ports.baseline, ports.values, ports.formDefaults(ports.remote))) return null;
             return { ...ports.buildPayload(ports.remote, ports.values, { settingsRevision: ports.revision, baselineFormValues: ports.baseline }), oai_settings: provider };
         },
-        async saveRuntime                                           ({ post, onConflict }
 
-
-         )             {
-            assertWritable();
-            const response = await post();
-            if (response.status === 409) {
-                conflict = true;
-                onConflict?.();
-                throw new Error('Failed to save settings: revision conflict');
-            }
-            return response;
-        },
         async saveForm                                              ({ payload, post, rebase }
 
 

@@ -135,6 +135,12 @@ export function createReactRuntimeProvider({
         hasSettingsConflict() {
             return commands.hasSettingsConflict?.() ?? false;
         },
+        getSettingsConflictRows() {
+            return commands.getSettingsConflictRows?.() ?? [];
+        },
+        resolveSettingsConflict(choices) {
+            return Promise.resolve(commands.resolveSettingsConflict?.(choices));
+        },
         downloadSettingsRecovery() {
             return commands.downloadSettingsRecovery?.();
         },
@@ -151,9 +157,9 @@ export function createReactRuntimeProvider({
             submitMessage: input => Promise.resolve(commands.submitMessage(input)),
             stopGeneration: () => commands.stopGeneration(),
             loadEarlier: anchorId => Promise.resolve(commands.loadEarlier(anchorId)),
-            saveSettings: (settings, baseline, revision) => Promise.resolve(baseline === undefined && revision === undefined
+            saveSettings: (settings, baseline, revision, editedPaths) => Promise.resolve(baseline === undefined && revision === undefined && editedPaths === undefined
                 ? commands.saveSettings(settings)
-                : commands.saveSettings(settings, baseline, revision)),
+                : commands.saveSettings(settings, baseline, revision, editedPaths)),
             connectProvider: input => Promise.resolve(commands.connectProvider(input)),
             testProviderConnection: input => Promise.resolve(commands.testProviderConnection(input)),
         }),

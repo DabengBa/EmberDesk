@@ -14,6 +14,7 @@ export function createSettingsWriteOwner() {
         },
         hasConflict: () => conflict,
         markConflict: () => { conflict = true; },
+        clearConflict: () => { conflict = false; },
         assertWritable,
         rebaseForm<D extends object, V, P extends object, S>(ports: {
             base: D; local: P; remote: D; values: V; baseline: V; revision: number | null;
@@ -27,19 +28,7 @@ export function createSettingsWriteOwner() {
             if (provider === null || ports.formConflict(ports.baseline, ports.values, ports.formDefaults(ports.remote))) return null;
             return { ...ports.buildPayload(ports.remote, ports.values, { settingsRevision: ports.revision, baselineFormValues: ports.baseline }), oai_settings: provider };
         },
-        async saveRuntime<R extends { ok: boolean; status: number }>({ post, onConflict }: {
-            post: () => Promise<R>;
-            onConflict?: () => void;
-        }): Promise<R> {
-            assertWritable();
-            const response = await post();
-            if (response.status === 409) {
-                conflict = true;
-                onConflict?.();
-                throw new Error('Failed to save settings: revision conflict');
-            }
-            return response;
-        },
+
         async saveForm<P, R extends { ok: boolean; status: number }>({ payload, post, rebase }: {
             payload: P;
             post: (payload: P) => Promise<R>;

@@ -214,6 +214,8 @@ import { initLocales, t, translate } from './scripts/i18n.js';
 import { countTokensOpenAIAsync, getFriendlyTokenizerName, getTokenCountAsync, initTokenizers, saveTokenCache } from './scripts/tokenizers.js';
 import { loader } from './scripts/action-loader.js';
 import { createSingleFlightTask, resolvePersistedCurrentVersion, resolveStartupSettingsPlan } from './scripts/startup-helpers.js';
+import { setSettingsValue } from './scripts/settings-document-changes.js';
+import { setSelectedWorldInfo } from './scripts/world-info-state.js';
 import { ensurePanel, registerPanelHook } from './scripts/deferred-panels.js';
 import { getCharacterCardTagId } from './scripts/deferred-panel-replays.js';
 import { BulkEditOverlay } from './scripts/BulkEditOverlay.js';
@@ -439,7 +441,7 @@ const reactRuntimePort = createReactRuntimeProvider({
                 Number.isInteger(numericAnchorId) && numericAnchorId >= 0 ? numericAnchorId : null,
             );
         },
-        saveSettings: (settings, baseline, revision) => {
+        saveSettings: (settings, baseline, revision, editedPaths) => runtimeSettingsPersistence.publishForm(settings, revision, editedPaths, canApply => {
             // A response already in flight may arrive after a runtime conflict.
             // Do not let it replace any of the still-unreconciled local values.
             if (runtimeSettingsConflict.hasConflict()) return;
@@ -475,12 +477,13 @@ const reactRuntimePort = createReactRuntimeProvider({
                         const otherSettings = { ...savedSettings };
                         delete otherSettings.external_media_allowed_overrides;
                         delete otherSettings.external_media_forbidden_overrides;
+                        delete otherSettings.external_media_authorization_canonical_ids;
                         for (const [key, value] of Object.entries(otherSettings)) {
-                            if (!baseline || JSON.stringify(runtimeSettings[key]) === JSON.stringify(baseline[settingsKey]?.[key])) runtimeSettings[key] = value;
+                            if (canApply([settingsKey, key]) && (!baseline || JSON.stringify(runtimeSettings[key]) === JSON.stringify(baseline[settingsKey]?.[key]))) runtimeSettings[key] = value;
                         }
                     } else {
                         for (const [key, value] of Object.entries(savedSettings)) {
-                            if (!baseline || JSON.stringify(runtimeSettings[key]) === JSON.stringify(baseline[settingsKey]?.[key])) runtimeSettings[key] = value;
+                            if (canApply([settingsKey, key]) && (!baseline || JSON.stringify(runtimeSettings[key]) === JSON.stringify(baseline[settingsKey]?.[key]))) runtimeSettings[key] = value;
                         }
                     }
                     if (runtimeKey === 'chatCompletionSettings'
@@ -493,15 +496,13 @@ const reactRuntimePort = createReactRuntimeProvider({
                     }
                 }
             }
-            if (Number.isSafeInteger(revision) && revision > 0) {
-                settingsDocumentRevision = Math.max(settingsDocumentRevision ?? 0, revision);
-            }
             refreshOpenAIPresetService();
-        },
+        }),
         hasSettingsConflict: () => runtimeSettingsConflict.hasConflict(),
+        getSettingsConflictRows: () => runtimeSettingsPersistence.conflictRows(),
+        resolveSettingsConflict: choices => runtimeSettingsPersistence.resolveConflict(choices),
         downloadSettingsRecovery: () => {
-            const snapshot = buildRuntimeSettingsPayload();
-            delete snapshot.settings_revision;
+            const snapshot = runtimeSettingsPersistence.recoveryDocument();
             download(JSON.stringify(snapshot, null, 2), 'emberdesk-unsaved-settings.json', 'application/json');
         },
         connectProvider: input => connectProviderConnection(input),
@@ -7489,14 +7490,17 @@ function reloadLoop() {
 
 //MARK: getSettings()
 ///////////////////////////////////////////
-async function fetchStartupSettings() {
-    const response = await fetch('/api/settings/get', {
+function requestSettings() {
+    return fetch('/api/settings/get', {
         method: 'POST',
         headers: getRequestHeaders(),
         body: JSON.stringify({}),
         cache: 'no-cache',
     });
+}
 
+async function fetchStartupSettings() {
+    const response = await requestSettings();
     if (!response.ok) {
         reloadLoop();
         toastr.error(t`Settings could not be loaded after multiple attempts. Please try again later.`);
@@ -7508,6 +7512,7 @@ async function fetchStartupSettings() {
 
 async function applyStartupSettingsCore(data, _initLoaderHandle = null) {
     const settingsPlan = resolveStartupSettingsPlan({ data });
+    const canonical = structuredClone(settingsPlan.settings ?? {});
 
     if (settingsPlan.hasSettings && settingsPlan.settings) {
         settings = settingsPlan.settings;
@@ -7578,6 +7583,7 @@ async function applyStartupSettingsCore(data, _initLoaderHandle = null) {
 
     configureDeferredStartupTasks();
     await validateDisabledSamplers();
+    runtimeSettingsPersistence.initialize(canonical, settingsDocumentRevision);
     settingsReady = true;
     await eventSource.emit(event_types.SETTINGS_LOADED);
 
@@ -7589,6 +7595,36 @@ export async function getSettings(initLoaderHandle = null) {
         const data = await measureStartupStage('getSettings.fetch', () => fetchStartupSettings());
         return measureStartupStage('getSettings.applyCore', () => applyStartupSettingsCore(data, initLoaderHandle));
     });
+}
+
+function applyResolvedRuntimeSettings(changes) {
+    const document = {
+        oai_settings, power_user, feature_settings,
+        accountStorage: accountStorage.getState(), world_info_settings: getWorldInfoSettings(),
+        background: structuredClone(background_settings), tags, tag_map: structuredClone(tag_map),
+        amount_gen, max_context,
+    };
+    const previousModel = oai_settings.openai_model;
+    const previousTokenizer = power_user.tokenizer;
+    const sections = new Set();
+    for (const { path, value } of changes) {
+        sections.add(path[0]);
+        setSettingsValue(document, path, value);
+    }
+    if (sections.has('accountStorage')) accountStorage.replaceState(document.accountStorage);
+    if (sections.has('tags') || sections.has('tag_map')) loadTagsSettings(document);
+    if (sections.has('background')) loadBackgroundSettings(document);
+    if (sections.has('world_info_settings')) {
+        setSelectedWorldInfo([]);
+        setWorldInfoSettings(document.world_info_settings, { world_names });
+    }
+    if (sections.has('amount_gen') || sections.has('max_context')) {
+        setGenerationParamsFromPreset({ genamt: document.amount_gen, max_length: document.max_context });
+    }
+    if (sections.has('power_user')) applyPowerUserSettings();
+    if (oai_settings.openai_model !== previousModel) void eventSource.emit(event_types.CHATCOMPLETION_MODEL_CHANGED, oai_settings.openai_model);
+    if (power_user.tokenizer !== previousTokenizer) forceCharacterEditorTokenize();
+    if (sections.has('oai_settings')) refreshOpenAIPresetService();
 }
 
 //MARK: saveSettings()
@@ -7614,10 +7650,27 @@ const runtimeSettingsPersistence = createRuntimeSettingsPersistence({
     compress: compressRequest,
     headers: getRequestHeaders,
     post: request => fetch('/api/settings/save', request),
-    onConflict: () => {
-        window.dispatchEvent(new Event('emberdesk:runtime-settings-conflict'));
-        toastr.warning(t`Settings were updated elsewhere. Open Settings and download your unsaved runtime settings before reloading.`, t`Settings conflict`, { timeOut: 0, extendedTimeOut: 0, closeButton: true });
+    fetchLatest: async () => {
+        const response = await requestSettings();
+        if (!response.ok) throw new Error('Failed to load current settings');
+        const data = await response.json();
+        const { settings: document } = resolveStartupSettingsPlan({ data });
+        if (!document || !Number.isSafeInteger(data.settings_revision)) throw new Error('Current settings response is missing its revision');
+        return { document, revision: data.settings_revision };
     },
+    applyResolution: changes => applyResolvedRuntimeSettings(changes),
+    onConflict: (() => {
+        let toast;
+        return notify => {
+            window.dispatchEvent(new Event('emberdesk:runtime-settings-conflict'));
+            if (notify) {
+                toast = toastr.warning(t`Open Settings to choose which values to keep.`, t`Settings conflict`, { timeOut: 0, extendedTimeOut: 0, closeButton: true });
+            } else if (!runtimeSettingsConflict.hasConflict() && toast) {
+                toastr.clear(toast, { force: true });
+                toast = undefined;
+            }
+        };
+    })(),
     onError: () => toastr.error(t`Check the server connection and reload the page to prevent data loss.`, t`Settings could not be saved`),
     emitUpdated: () => eventSource.emit(event_types.SETTINGS_UPDATED),
 });

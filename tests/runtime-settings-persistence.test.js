@@ -5,29 +5,38 @@ import { createSettingsWriteOwner } from '../public/scripts/settings-write-owner
 
 function fixture() {
     const calls = [];
+    const live = { amount: 80, model: 'original' };
     let revision = 2;
     let document;
     const conflict = createSettingsWriteOwner();
     const ports = {
         conflict, isReady: () => true, schedule: value => calls.push(['schedule', value]),
         isResponseCustomized: () => false, restoreResponse: () => {}, version: () => '1', ensureVersion: async () => {},
-        persistedCurrentVersion: () => '1', accountStorage: () => ({}), activeCharacter: () => '', amountGen: () => 80,
+        persistedCurrentVersion: () => '1', accountStorage: () => ({}), activeCharacter: () => '', amountGen: () => live.amount,
         maxContext: () => 2048, mainApi: () => 'openai', worldInfoSettings: () => ({}), powerUser: () => ({}),
-        featureSettings: () => ({}), tags: () => [], tagMap: () => ({}), oaiSettings: () => ({}), background: () => ({}),
+        featureSettings: () => ({}), tags: () => [], tagMap: () => ({}), oaiSettings: () => ({ openai_model: live.model }), background: () => ({}),
         getRevision: () => revision,
         setRevision: value => { revision = value; }, setDocument: value => { document = value; },
         beginSnapshot: value => { calls.push(['begin', value]); return 'token'; },
         finishSnapshot: (token, value) => calls.push(['finish', token, value]),
         compress: async request => request, headers: () => ({}),
         post: async () => ({ ok: true, json: async () => ({ result: 'ok', settings_revision: 3 }) }),
+        applyResolution: changes => { for (const { path, value } of changes) if (path[1] === 'openai_model') live.model = value; },
         onConflict: () => {}, onError: () => {}, emitUpdated: async () => calls.push('emit'),
     };
-    return { ports, calls, getDocument: () => document, getRevision: () => revision };
+    const initialize = () => {
+        const service = createRuntimeSettingsPersistence(ports);
+        const { settings_revision, ...document } = service.buildRuntimeSettingsPayload();
+        service.initialize(document, settings_revision);
+        return service;
+    };
+    return { ports, calls, live, initialize, getDocument: () => document, getRevision: () => revision };
 }
 
 test('saves revision and emits after committing document without protocol field', async () => {
     const f = fixture();
-    const service = createRuntimeSettingsPersistence(f.ports);
+    const service = f.initialize();
+    f.live.amount = 100;
     await service.saveSettings();
     expect(f.getRevision()).toBe(3);
     expect(f.getDocument()).toMatchObject({ main_api: 'openai', currentVersion: '1' });
@@ -47,7 +56,7 @@ test('overlapping runtime saves use the revision committed by the previous save'
     const f = fixture();
     let releaseFirst;
     const firstResponse = new Promise(resolve => { releaseFirst = resolve; });
-    let rules = ['alpha'];
+    let rules = [];
     f.ports.featureSettings = () => ({ regex: [...rules] });
     const requests = [];
     f.ports.post = jest.fn(async request => {
@@ -55,7 +64,8 @@ test('overlapping runtime saves use the revision committed by the previous save'
         if (requests.length === 1) await firstResponse;
         return { ok: true, json: async () => ({ result: 'ok', settings_revision: requests.length + 2 }) };
     });
-    const service = createRuntimeSettingsPersistence(f.ports);
+    const service = f.initialize();
+    rules = ['alpha'];
     const first = service.saveSettings(0, { strict: true });
     await Promise.resolve();
     rules = [];
@@ -70,7 +80,7 @@ test('overlapping runtime saves use the revision committed by the previous save'
     expect(f.getRevision()).toBe(4);
 });
 
-test('a real revision conflict blocks queued strict saves without retrying or posting them', async () => {
+test('a true overlap blocks queued strict saves and keeps an optimistic draft after rollback', async () => {
     const f = fixture();
 
     let release;
@@ -79,23 +89,52 @@ test('a real revision conflict blocks queued strict saves without retrying or po
         await wait;
         return { status: 409 };
     });
-    const errorLog = jest.spyOn(console, 'error').mockImplementation(() => {});
-    try {
-        const service = createRuntimeSettingsPersistence(f.ports);
-        const first = service.saveSettings(0, { strict: true });
-        const second = service.saveSettings(0, { strict: true });
-        const results = Promise.allSettled([first, second]);
-        release();
-        const [a, b] = await results;
-        expect(a.status).toBe('rejected');
-        expect(a.reason.message).toBe('Failed to save settings: revision conflict');
-        expect(b.status).toBe('rejected');
-        expect(b.reason.message).toBe('Unresolved runtime settings conflict');
-        expect(f.ports.post).toHaveBeenCalledTimes(1);
-        expect(f.getRevision()).toBe(2);
-    } finally {
-        errorLog.mockRestore();
-    }
+    f.ports.fetchLatest = async () => ({ document: { oai_settings: { openai_model: 'remote' } }, revision: 3 });
+    const service = f.initialize();
+    f.live.model = 'local';
+    const first = withStrictSettingsSaveFailureHandler(() => { f.live.model = 'original'; }, () => service.saveSettings(0, { strict: true }));
+    const second = service.saveSettings(0, { strict: true });
+    const results = Promise.allSettled([first, second]);
+    release();
+    const [a, b] = await results;
+    expect(a.status).toBe('rejected');
+    expect(a.reason.message).toBe('Failed to save settings: revision conflict');
+    expect(b.status).toBe('rejected');
+    expect(b.reason.message).toBe('Unresolved runtime settings conflict');
+    expect(f.ports.post).toHaveBeenCalledTimes(1);
+    expect(f.getRevision()).toBe(2);
+    expect(f.live.model).toBe('original');
+    expect(service.recoveryDocument().oai_settings.openai_model).toBe('local');
+    const [row] = service.conflictRows();
+    expect(row).toMatchObject({ mine: 'local', saved: 'remote' });
+    await service.resolveConflict([{ ...row, use: 'saved' }]);
+    expect(f.live.model).toBe('remote');
+    expect(f.ports.conflict.hasConflict()).toBe(false);
+    expect(f.ports.post).toHaveBeenCalledTimes(1);
+});
+
+test('a no-change runtime save does not POST or emit a settings update', async () => {
+    const f = fixture();
+    f.ports.post = jest.fn();
+    await f.initialize().saveSettings(0, { strict: true });
+    expect(f.ports.post).not.toHaveBeenCalled();
+    expect(f.calls).toEqual([['begin', 2], ['finish', 'token', 2]]);
+});
+
+test('rebasing one field does not mark an unseen remote field as reviewed', async () => {
+    const f = fixture();
+    f.ports.post = jest.fn()
+        .mockResolvedValueOnce({ status: 409 })
+        .mockResolvedValueOnce({ ok: true, json: async () => ({ result: 'ok', settings_revision: 4 }) });
+    f.ports.fetchLatest = async () => ({ document: { amount_gen: 80, oai_settings: { openai_model: 'remote' } }, revision: 3 });
+    const service = f.initialize();
+    f.live.amount = 100;
+    await service.saveSettings(0, { strict: true });
+    expect(f.getDocument()).toMatchObject({ amount_gen: 100, oai_settings: { openai_model: 'remote' } });
+    f.live.model = 'local';
+    await expect(service.saveSettings(0, { strict: true })).rejects.toThrow('revision conflict');
+    expect(service.conflictRows()).toEqual([expect.objectContaining({ mine: 'local', saved: 'remote' })]);
+    expect(f.ports.post).toHaveBeenCalledTimes(2);
 });
 
 test('a settings-updated subscriber may await another save without deadlocking', async () => {
@@ -103,10 +142,14 @@ test('a settings-updated subscriber may await another save without deadlocking',
     let service;
     let notifications = 0;
     f.ports.emitUpdated = async () => {
-        if (++notifications === 1) await service.saveSettings(0, { strict: true });
+        if (++notifications === 1) {
+            f.live.amount = 120;
+            await service.saveSettings(0, { strict: true });
+        }
     };
     f.ports.post = jest.fn(f.ports.post);
-    service = createRuntimeSettingsPersistence(f.ports);
+    service = f.initialize();
+    f.live.amount = 100;
     await service.saveSettings(0, { strict: true });
     expect(f.ports.post).toHaveBeenCalledTimes(2);
     expect(notifications).toBe(2);
@@ -118,7 +161,8 @@ test('strict rollback handler belongs only to its synchronous save invocation', 
     const errorLog = jest.spyOn(console, 'error').mockImplementation(() => {});
     f.ports.post = jest.fn(async () => ({ ok: false, status: 500, statusText: 'offline' }));
     try {
-        const service = createRuntimeSettingsPersistence(f.ports);
+        const service = f.initialize();
+        f.live.amount = 100;
         const first = withStrictSettingsSaveFailureHandler(rollback, () => service.saveSettings(0, { strict: true }));
         const second = service.saveSettings(0, { strict: true });
         const results = await Promise.allSettled([first, second]);
