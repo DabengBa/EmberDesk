@@ -39,7 +39,7 @@ Let users reliably read opened chat history and finalized generated messages as 
 - Returning to a previously read chat in the same page session may restore the expanded history window and reading region when safe; if not safe, EmberDesk falls back to the normal open result.
 - Recoverable visible generation failure must not remove the user message or duplicate assistant rows; final success or final failed state remains on one stable assistant row.
 - There is no fallback list renderer. Rollback is deployment of a previous application version.
-- Eligible finalized message code blocks containing complete HTML can render in sandboxed `srcdoc` iframes inside `.mes_text`. Scripts run inside an opaque origin, with no parent DOM or host API access. Card buttons can copy plain text on a user click. Tall cards scroll inside the iframe. A “View HTML source” disclosure shows the original code as text. Streaming, editing, error, and over-depth rows do not execute cards. Disabling frames or making a row ineligible restores the original code block. Ordinary code collapse remains a separate setting.
+- Eligible finalized message code blocks containing complete HTML can render in sandboxed `srcdoc` iframes inside `.mes_text`. Scripts run inside an opaque origin, with no parent DOM or host API access. Card buttons can copy plain text on a user click. Tall cards scroll inside the iframe. Streaming, editing, error, and over-depth rows do not execute cards. Disabling frames or making a row ineligible restores the original code block. Ordinary code collapse remains a separate setting.
 
 ## Ownership Direction
 
@@ -53,7 +53,7 @@ The React Runtime Boundary is part of this feature's implementation contract: me
 - `feature.chat_message_rendering.stored_chat`: stored messages displayed in the main chat region.
 - `feature.chat_message_rendering.message_dom`: stable message row identity and compatibility surfaces.
 - `feature.chat_message_rendering.long_chat_window`: the initial visible window for long chats, load-more affordance, and row preservation after older messages load.
-- `feature.chat_message_rendering.frontend_frames`: isolated HTML cards in eligible finalized rows, with a source disclosure.
+- `feature.chat_message_rendering.frontend_frames`: isolated HTML cards in eligible finalized rows.
 - `feature.chat_message_rendering.message_media_policy`: message-CSS resource admission for one rendered row — external `url()`/`image-set()` targets and SVG presentation resources are denied unless the active character's authorization is on — plus per-message style and animation scoping.
 
 ## Acceptance Workflows

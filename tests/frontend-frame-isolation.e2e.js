@@ -72,11 +72,7 @@ for (const useBlobUrl of [false, true]) {
         await page.mouse.wheel(0, 2000);
         await expect(tail).toBeInViewport();
 
-        const sourceBlock = page.locator('.ed-frontend-frame pre');
-        await expect(sourceBlock).toBeHidden();
-        await page.locator('.ed-frontend-frame summary').click();
-        await expect(sourceBlock).toBeVisible();
-        expect(await sourceBlock.textContent()).toBe(source);
+        await expect(page.locator('.mes_text').locator('details, summary, pre')).toHaveCount(0);
 
         await page.evaluate(() => {
             const { frameModule, root } = window.frameTest;
