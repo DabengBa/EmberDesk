@@ -239,6 +239,52 @@ test.describe('prompt inspector (request preview)', () => {
         await expect(overlay).toHaveCount(0);
     });
 
+    test('previews a conditional pipeline fallback without sending it', async ({ page }) => {
+        await testSetup.awaitST({ page });
+        await selectCharacterInSeededChat(page);
+        await enableOpenAiBackend(page);
+        await installGenerateStub(page);
+        await page.evaluate(async () => {
+            const { feature_settings } = await import('/scripts/feature-settings.js');
+            feature_settings.tool_bindings = [{ name: 'submit_story', enabled: true }];
+            const settings = window.SillyTavern.getContext().chatCompletionSettings;
+            settings.reply_pipeline = { enabled: true, steps: [{ tool: 'submit_story' }] };
+            const { reloadUserToolBindings } = await import('/scripts/tool-bindings.js');
+            reloadUserToolBindings();
+        });
+        await page.locator('#send_textarea').fill(PROBE_TEXT);
+        await page.locator('[data-react-workspace-shell-chrome] nav button').filter({ hasText: '提示词' }).first().click();
+        const open = page.getByRole('button', { name: '查看 Prompt' });
+        const overlay = page.getByRole('dialog', { name: 'Prompt 预览' });
+        const rounds = overlay.getByRole('combobox', { name: '管线轮次' });
+        const first = '轮次 1/1 · submit_story';
+        const fallback = '兜底请求（仅当末步无可用回复时）';
+
+        await open.click();
+        await expect(rounds.locator('option:checked')).toHaveText(first, { timeout: 15_000 });
+        await rounds.selectOption({ label: fallback });
+        await expect(overlay.locator('.prompt-inspector-pipeline-note')).toContainText('不发送工具');
+        await expect(overlay.getByText('预览（未发送）', { exact: true })).toBeVisible();
+        // Compare against native intrinsic sizing, including the dropdown arrow.
+        const { actual, intrinsic } = await rounds.evaluate(select => {
+            const probe = select.cloneNode(true);
+            Object.assign(probe.style, { position: 'absolute', visibility: 'hidden', maxWidth: 'none', width: 'max-content' });
+            select.parentElement.append(probe);
+            try {
+                return { actual: select.offsetWidth, intrinsic: probe.offsetWidth };
+            } finally {
+                probe.remove();
+            }
+        });
+        expect(actual).toBeGreaterThanOrEqual(intrinsic);
+
+        await page.keyboard.press('Escape');
+        await expect(overlay).toHaveCount(0);
+        await open.click();
+        await expect(rounds.locator('option:checked')).toHaveText(first, { timeout: 15_000 });
+        expect(await page.evaluate(() => window.__promptInspectorRequests.length)).toBe(0);
+    });
+
     test('closing and reopening during a delayed preview ignores the old result', async ({ page }) => {
         await testSetup.awaitST({ page });
         await selectCharacterInSeededChat(page);

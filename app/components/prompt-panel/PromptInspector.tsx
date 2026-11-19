@@ -334,9 +334,12 @@ export function PromptInspector({ bridge }: { bridge: PromptInspectorBridge }) {
         }
         const options = pipeline.rounds.map(entry => ({
             value: entry.index,
-            label: translate('Round ${0} · ${1}').replace('${0}', String(entry.index + 1)).replace('${1}', entry.tool),
+            label: translate('Round ${0}/${1} · ${2}')
+                .replace('${0}', String(entry.index + 1))
+                .replace('${1}', String(pipeline.total))
+                .replace('${2}', entry.tool),
         }));
-        options.push({ value: pipeline.total, label: translate('Final round (no tools)') });
+        options.push({ value: pipeline.total, label: translate('Fallback (if no usable final reply)') });
         return options;
     }, [pipeline]);
 
@@ -426,7 +429,7 @@ export function PromptInspector({ bridge }: { bridge: PromptInspectorBridge }) {
                         {pipeline ? (
                             <div className="prompt-inspector-pipeline-note">
                                 {pipeline.fallback
-                                    ? translate('Final round: pipeline steps are complete, so no tools are sent this round.')
+                                    ? translate('The fallback request is sent without tools.')
                                     : translate(pipelineMessage(pipeline, result))}
                             </div>
                         ) : null}
