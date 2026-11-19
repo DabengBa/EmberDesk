@@ -188,7 +188,7 @@ export function preparePipelineRound(invocations) {
     }
     if (runState.pendingAssistant && runState.messages) {
         runState.messages.push(runState.pendingAssistant, ...(runState.pendingText ? [] : invocations.map(invocation => ({
-            role: 'tool', tool_call_id: invocation.id, content: '已收到。',
+            role: 'tool', tool_call_id: invocation.id, content: 'OK',
         }))));
         runState.pendingAssistant = null;
         runState.pendingText = false;

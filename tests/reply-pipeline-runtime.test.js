@@ -25,7 +25,7 @@ describe('live pipeline wire state', () => {
         expect(runtime.getPipelineTriggerTag('normal')).toBe('pipeline:reply');
         const second = request('drift');
         runtime.applyPipelineRequestShaping(second);
-        expect(second.messages).toContainEqual({ role: 'tool', tool_call_id: 'one', content: '已收到。' });
+        expect(second.messages).toContainEqual({ role: 'tool', tool_call_id: 'one', content: 'OK' });
         core.validatePipelineToolCalls([call('reply', 'two')]);
         const two = [{ name: 'submit_story', id: 'two', result: 'second', parameters: '{"content":"second"}' }];
         expect(runtime.preparePipelineRound(two)).toMatchObject({ action: 'final', text: 'second' });
@@ -66,7 +66,7 @@ describe('live pipeline wire state', () => {
         const next = request('drifted WI macro must not be used');
         runtime.applyPipelineRequestShaping(next);
         expect(next.messages.slice(0, prefix.length)).toEqual(prefix);
-        expect(next.messages.slice(prefix.length, -1)).toEqual([assistant, { role: 'tool', tool_call_id: 'original-id', content: '已收到。' }]);
+        expect(next.messages.slice(prefix.length, -1)).toEqual([assistant, { role: 'tool', tool_call_id: 'original-id', content: 'OK' }]);
         expect(next.tools[0].function.name).toBe('reply');
         const secondPrefix = structuredClone(next.messages);
         runtime.applyPipelineRequestShaping(next);

@@ -61,7 +61,7 @@ async function installGenerateStub(page, { story = false } = {}) {
             const pipeline = story;
             return new Response(JSON.stringify({
                 choices: [{ index: 0, finish_reason: pipeline ? 'tool_calls' : 'stop', message: pipeline
-                    ? { role: 'assistant', content: null, tool_calls: [{ id: 'call_preview_live', type: 'function', function: { name: 'submit_story', arguments: JSON.stringify({ content: 'stub reply' }) } }] }
+                    ? { role: 'assistant', content: null, tool_calls: [{ id: 'call_preview_live', type: 'function', function: { name: body.tool_choice.function.name, arguments: JSON.stringify({ content: 'stub reply' }) } }] }
                     : { content: 'stub reply' } }],
             }), {
                 status: 200,
@@ -373,9 +373,11 @@ test.describe('prompt inspector (request preview)', () => {
         const submittedTexts = submissions.map(call => JSON.parse(call.function.arguments).content.trim());
         expect(submittedTexts.filter(text => text === 'PIPELINE_REPLY_TEXT')).toHaveLength(1);
         expect(submittedTexts.filter(text => text === 'OLD_USER_TEXT')).toHaveLength(1);
+        const receiptIndexes = [];
         for (const call of submissions) {
-            const index = messages.findIndex(message => message.tool_calls?.some(item => item.id === call.id));
-            expect(messages[index + 1]).toEqual({ role: 'tool', content: '已收到。', tool_call_id: call.id });
+            const index = messages.findIndex(message => message.tool_calls?.some(item => item.id === call.id)) + 1;
+            expect(messages[index]).toEqual({ role: 'tool', content: 'OK', tool_call_id: call.id });
+            receiptIndexes.push(index);
         }
         expect(messages.some(message => message.role === 'user' && message.content.includes('CURRENT_USER_TEXT'))).toBe(true);
         expect(wire.match(/PIPELINE_REPLY_TEXT/g)).toHaveLength(1);
@@ -383,8 +385,32 @@ test.describe('prompt inspector (request preview)', () => {
         expect(wire).not.toContain('BARE_ANALYSIS_TEXT');
 
         // Non-pipeline tool cards keep the structured replay.
-        expect(messages.some(m => m.role === 'tool' && m.tool_call_id === 'call_np1')).toBe(true);
+        expect(messages.find(m => m.role === 'tool' && m.tool_call_id === 'call_np1')?.content).toBe('{"temp":20}');
         expect(assistantToolCalls.map(call => call?.function?.name)).toEqual(expect.arrayContaining(['get_weather']));
+
+        await page.locator('[data-react-workspace-shell-chrome] nav button').filter({ hasText: '提示词' }).first().click();
+        const open = page.locator('button', { hasText: '查看 Prompt' }).first();
+        const overlay = page.locator('.prompt-inspector-overlay');
+        const rows = overlay.locator('.prompt-inspector-item');
+        await open.click();
+        await expect(rows.first()).toBeVisible();
+        await page.keyboard.press('Escape');
+        await expect(overlay).toHaveCount(0);
+
+        // The fixture seeds browser-only history; use its real browser preview.
+        await page.evaluate(async () => {
+            const { previewNextGenerationRequest } = await import('/scripts/generation-service.js');
+            window.__emberDeskPromptInspectorBridge.preview = (round = 0) => previewNextGenerationRequest({ round });
+        });
+        await open.click();
+        await expect(rows).toHaveCount(messages.length);
+        for (const index of receiptIndexes) {
+            const content = rows.nth(index).locator('.prompt-inspector-item-preview');
+            await expect(content).toBeVisible();
+            await expect(content).toHaveText('OK');
+        }
+        await page.keyboard.press('Escape');
+        await expect(overlay).toHaveCount(0);
 
         expect(await page.evaluate(() => window.__promptInspectorRequests.length)).toBe(0);
         expect(await page.evaluate(() => window.SillyTavern.getContext().chat)).toEqual(before);
@@ -396,7 +422,7 @@ test.describe('prompt inspector (request preview)', () => {
         expect(await budgetSettings()).toEqual(settingsBeforePreview);
         expect(await page.evaluate(() => window.__promptInspectorRequests.length)).toBe(1);
         const [live] = await page.evaluate(() => window.__promptInspectorRequests);
-        expect(live.tools.map(tool => tool.function.name)).toEqual(['submit_story']);
+        expect(live.tools.map(tool => tool.function.name)).toEqual(['get_weather']);
         // Compare what actually travels over JSON: undefined object fields are omitted.
         expect(live.messages).toEqual(JSON.parse(JSON.stringify(messages)));
     });

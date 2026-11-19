@@ -54,7 +54,7 @@ export function createStoryProjection(usedIds: Set<string>) {
             usedIds.add(id);
             ids.set(key, id);
         }
-        return { id, messages: replay([{ id, type: 'function', function: { name: tool, arguments: JSON.stringify({ kind, content, ...(name ? { name } : {}) }) } }], ['已收到。']) };
+        return { id, messages: replay([{ id, type: 'function', function: { name: tool, arguments: JSON.stringify({ kind, content, ...(name ? { name } : {}) }) } }], ['OK']) };
     };
 }
 

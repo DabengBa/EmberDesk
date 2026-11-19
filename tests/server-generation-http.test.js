@@ -611,13 +611,15 @@ test('default pipeline completes without a browser; custom step resumes once fro
         const current = firstWire.messages.flatMap(message => message.tool_calls ?? [])
             .find(call => JSON.parse(call.function.arguments).content === 'Pipeline input');
         expect(current.function.name).toBe('submit_story');
+        const currentIndex = firstWire.messages.findIndex(message => message.tool_calls?.some(call => call.id === current.id));
+        expect(firstWire.messages[currentIndex + 1]).toEqual({ role: 'tool', tool_call_id: current.id, content: 'OK' });
         expect(firstWire.messages.at(-1).content).toContain(current.id);
         expect(firstWire.tools.map(tool => tool.function.name)).toEqual(['first', 'last']);
         expect(secondWire.tools).toEqual(firstWire.tools);
         expect(secondWire.messages.slice(0, firstWire.messages.length)).toEqual(firstWire.messages);
         const [actualCall, actualReceipt, nextStep] = secondWire.messages.slice(firstWire.messages.length);
         expect(actualCall.tool_calls[0].function.name).toBe('first');
-        expect(actualReceipt.tool_call_id).toBe(actualCall.tool_calls[0].id);
+        expect(actualReceipt).toEqual({ role: 'tool', tool_call_id: actualCall.tool_calls[0].id, content: 'OK' });
         expect(nextStep.content).toContain(current.id);
         expect(preview.previewPipeline).toMatchObject({ round: 0, total: 2, step: { tool: 'first' } });
         const secondPreview = await (await call('/generation/preview', { ...target, action: 'send', round: 1 })).json();
@@ -626,7 +628,7 @@ test('default pipeline completes without a browser; custom step resumes once fro
         const closingPreview = await (await call('/generation/preview', { ...target, action: 'send', round: 2 })).json();
         expect(closingPreview.previewPipeline).toMatchObject({ round: 2, fallback: true, step: null });
         expect(closingPreview.toolChoice).toBe('none');
-        expect(calls[offset + 1].messages).toContainEqual(expect.objectContaining({ role: 'tool', content: '已收到。' }));
+
         expect((await (await call('/get', target)).json()).at(-1).extra.tool_invocations).toHaveLength(2);
 
         const roleRegenerate = await (await call('/generation/preview', { ...target, action: 'regenerate' })).json();
@@ -661,7 +663,10 @@ test('default pipeline completes without a browser; custom step resumes once fro
         expect((await call(`/generation/${run.id}/step`, result)).status).toBe(409);
         await second.cancel();
         expect(await (await call(`/generation/${run.id}/events`)).text()).toContain('"status":"completed"');
-        expect(calls.at(-1).messages).toContainEqual(expect.objectContaining({ role: 'tool', content: 'BROWSER RESULT' }));
+        const customWire = calls.at(-1).messages;
+        const customIndex = customWire.findIndex(message => message.tool_calls?.some(call => call.function.name === 'custom'));
+        expect(customIndex).toBeGreaterThanOrEqual(0);
+        expect(customWire[customIndex + 1]).toEqual({ role: 'tool', tool_call_id: customWire[customIndex].tool_calls[0].id, content: 'BROWSER RESULT' });
         expect((await (await call('/get', custom.target)).json()).slice(1)).toHaveLength(2);
 
         setPipeline(['custom'], [{ name: 'custom', enabled: true, actionBody: 'return {};' }]);
