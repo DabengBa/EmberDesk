@@ -32,6 +32,7 @@ export interface MainChatMessageRecord {
     readonly rootClassNames: readonly string[];
     readonly state: MainChatMessageState;
     readonly regenerationStatus: string | null;
+    readonly replyRetryAvailable: boolean;
     readonly recoveryStatus: string | null;
     readonly recoveryStage: MainChatRecoveryStage | null;
     readonly failureNoticeVisible: boolean;
@@ -327,6 +328,7 @@ function messageRecordsShallowEqual(a: MainChatMessageRecord, b: MainChatMessage
         && a.rootClassNames.every((name, index) => name === b.rootClassNames[index])
         && a.state === b.state
         && a.regenerationStatus === b.regenerationStatus
+        && a.replyRetryAvailable === b.replyRetryAvailable
         && a.recoveryStatus === b.recoveryStatus
         && a.recoveryStage === b.recoveryStage
         && a.failureNoticeVisible === b.failureNoticeVisible
@@ -390,6 +392,7 @@ function normalizeMessages(value: unknown, previous?: Readonly<Record<string, Ma
             rootClassNames: normalizeStringList(message.rootClassNames),
             state: normalizeMessageState(message.state),
             regenerationStatus: normalizeNullableString(message.regenerationStatus),
+            replyRetryAvailable: message.replyRetryAvailable === true,
             recoveryStatus: normalizeNullableString(message.recoveryStatus),
             recoveryStage: message.recoveryStage === 'fallback' ? 'fallback' : message.recoveryStage === 'primary' ? 'primary' : null,
             failureNoticeVisible: message.failureNoticeVisible === true,

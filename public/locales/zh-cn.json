@@ -212,6 +212,8 @@
     "Reasoning block contents. When 'Only Format Prompt' is checked, it will also affect the reasoning contents added to the prompt.": "推理块内容。勾选“仅格式化提示词”时，也会影响加入提示词的推理内容。",
     "Regenerate": "重新生成",
     "Regenerating…": "重新生成中…",
+    "Waiting for reply…": "等待回复…",
+    "Reply failed.": "回复失败。",
     "Regeneration failed. Please try again.": "重新生成失败，请重试。",
     "Regeneration failed — the previous reply could not be restored.": "重新生成失败——之前的回复无法恢复。",
     "Regeneration failed — the previous reply was restored.": "重新生成失败——已恢复之前的回复。",

@@ -132,6 +132,7 @@ export function buildMainChatMessageRecord(message, {
         reasoningState,
         reasoningType: normalizeString(message?.extra?.reasoning_type) || null,
         regenerationStatus: normalizeString(messageUi.regenerationStatus).trim() || null,
+        replyRetryAvailable: messageUi.replyRetryAvailable === true,
         recoveryStatus: normalizeString(messageUi.recoveryStatus).trim() || null,
         recoveryStage: messageUi.recoveryStage === 'fallback'
             ? 'fallback'

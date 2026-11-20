@@ -662,6 +662,14 @@ export const MainChatMessageRow = memo(function MainChatMessageRow({
                         <span>{message.regenerationStatus}</span>
                     </output>
                 ) : null}
+                {message.replyRetryAvailable ? (
+                    <div className="generation_reply_retry">
+                        <output>{translate('Reply failed.')}</output>
+                        <button type="button" className="menu_button" onClick={() => { void commands?.triggerVisibleGeneration({ kind: 'retryReply' }); }}>
+                            {translate('Retry')}
+                        </button>
+                    </div>
+                ) : null}
                 {message.editing ? (
                     <DraftTextarea
                         id="curEditTextarea"

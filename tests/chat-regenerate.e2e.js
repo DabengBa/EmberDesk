@@ -27,6 +27,7 @@ const test = base.extend({
                     for await (const chunk of req) body += chunk;
                     const step = responses[requests.length];
                     requests.push(JSON.parse(body));
+                    if (step?.wait) await step.wait;
                     if (!step || step.status) {
                         res.writeHead(step?.status ?? 500, { 'Content-Type': 'application/json' });
                         res.end(JSON.stringify({ error: { message: 'provider boom' } }));
@@ -154,8 +155,88 @@ async function sendCharacterMessage(page, text, reply) {
         await page.locator('#send_but').click();
     });
     await expectRunStatus(page, id, 'completed');
-    await expect.poll(() => lastMessageText(page)).toBe(reply);
+    await expect.poll(async () => (await lastMessageText(page)).trim()).toBe(reply);
 }
+
+test('non-stream feedback follows explicit send and regenerate, but not a reader scrolling back', async ({ page, characterModel }) => {
+    const send = Promise.withResolvers();
+    const regenerate = Promise.withResolvers();
+    await characterModel([
+        { content: 'history line\n\n'.repeat(80) },
+        { content: 'complete reply', wait: send.promise },
+        { content: 'replacement reply', wait: regenerate.promise },
+    ]);
+    await sendCharacterMessage(page, 'history', 'history line\n\n'.repeat(80).trim());
+    const chat = page.locator('#chat');
+    const scrollUp = () => chat.evaluate(el => { el.scrollTop = 0; });
+    const bottomGap = () => chat.evaluate(el => el.scrollHeight - el.clientHeight - el.scrollTop);
+    try {
+        await scrollUp();
+        expect(await bottomGap()).toBeGreaterThan(100);
+        await page.locator('#send_textarea').fill('new question');
+        await page.locator('#send_but').click();
+        await expect(chat.getByText('new question', { exact: true })).toBeVisible();
+        await expect(page.locator('#mes_stop')).toBeVisible();
+        await expect.poll(bottomGap).toBeLessThan(5);
+        await expect(chat.getByRole('status')).toHaveText('等待回复…');
+        await scrollUp();
+        send.resolve();
+        await expect(chat.getByText('complete reply', { exact: true })).toBeAttached();
+        await expect(chat.getByRole('status')).toHaveCount(0);
+        await expect.poll(bottomGap).toBeGreaterThan(100);
+        await chooseRegenerate(page);
+        await expect(chat.getByRole('status')).toHaveText('重新生成中…');
+        await expect.poll(bottomGap).toBeLessThan(5);
+        regenerate.resolve();
+        await expect(chat.getByText('replacement reply', { exact: true })).toBeVisible();
+    } finally {
+        send.resolve();
+        regenerate.resolve();
+    }
+});
+
+test('non-stream feedback retries a failed reply without duplicating the submitted message', async ({ page, characterModel }) => {
+    const requests = await characterModel([{ status: 500 }, { content: 'reply after retry' }]);
+    await page.locator('#send_textarea').fill('retry this question');
+    await page.locator('#send_but').click();
+    const chat = page.locator('#chat');
+    await expect(page.locator('#toast-container .toast-error')).toContainText('generation_failed');
+    await chat.getByRole('button', { name: '重试', exact: true }).click();
+    await expect(page.locator('#toast-container .toast-error')).toHaveCount(0, { timeout: 1500 });
+    await expect(chat.getByText('reply after retry', { exact: true })).toBeVisible();
+    await expect(chat.getByText('retry this question', { exact: true })).toHaveCount(1);
+    expect(requests).toHaveLength(2);
+});
+
+test('non-stream feedback can stop attachment preparation without losing the draft', async ({ page, characterModel }) => {
+    const requests = await characterModel([]);
+    const uploading = Promise.withResolvers();
+    const releaseUpload = Promise.withResolvers();
+    await page.route('**/api/files/upload', async route => {
+        uploading.resolve();
+        await releaseUpload.promise;
+        await route.continue();
+    });
+    const input = page.locator('#file_form_input');
+    const draft = page.locator('#send_textarea');
+    await input.setInputFiles({ name: 'keep.txt', mimeType: 'text/plain', buffer: Buffer.from('keep this attachment') });
+    await draft.fill('keep this draft');
+    try {
+        await page.locator('#send_but').click();
+        await uploading.promise;
+        await expect(page.locator('#chat').getByText('keep this draft', { exact: true })).toBeVisible();
+        const uploaded = page.waitForResponse('**/api/files/upload');
+        await page.locator('#mes_stop').click();
+        releaseUpload.resolve();
+        expect((await uploaded).ok()).toBe(true);
+        await expect(page.locator('#chat').getByText('keep this draft', { exact: true })).toHaveCount(0);
+        await expect(draft).toHaveValue('keep this draft');
+        expect(await input.evaluate(el => [...el.files].map(file => file.name))).toEqual(['keep.txt']);
+        expect(requests).toHaveLength(0);
+    } finally {
+        releaseUpload.resolve();
+    }
+});
 
 /**
  * Waits for an in-flight generation to fully settle — every end path
