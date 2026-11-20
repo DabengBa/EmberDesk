@@ -1,6 +1,42 @@
 import { expect, test } from '@jest/globals';
 import { createWorkspaceGeneration } from '../public/scripts/server-generation-workspace.js';
 
+test('stopping a prepared replacement releases the view before create', async () => {
+    const requests = [];
+    const workspace = createWorkspaceGeneration({
+        request: route => requests.push(route), subscribe() {}, changed() {}, finished() {},
+    });
+    const view = workspace.prepareRegenerate({ file_name: 'one' }, 'request-one');
+    expect(workspace.canStop()).toBe(true);
+    expect(workspace.display().kind).toBe('regenerate');
+    await workspace.cancel();
+    expect(workspace.busy()).toBe(false);
+    expect(workspace.display()).toBeNull();
+    expect(await workspace.create(view.target, { action: 'regenerate', requestId: 'request-one' }, view)).toBeUndefined();
+    expect(requests).toEqual([]);
+});
+
+test.each(['resolve', 'reject'])('releases the streamed replacement when reconciliation can %s', async settle => {
+    const reload = Promise.withResolvers();
+    const run = { id: 'replacement', status: 'running', kind: 'regenerate' };
+    let deliver;
+    const workspace = createWorkspaceGeneration({
+        async request() { return run; },
+        subscribe(_id, listener) { deliver = listener; return () => {}; },
+        changed() {}, finished: () => reload.promise,
+    });
+    await workspace.create({ file_name: 'one' }, { action: 'regenerate', requestId: 'request-one' });
+    deliver({ type: 'delta', text: 'new reply' });
+    deliver({ type: 'terminal', run: { ...run, status: 'completed' } });
+    expect(workspace.canStop()).toBe(false);
+    expect(workspace.busy()).toBe(true);
+    expect(workspace.display().text).toBe('new reply');
+    reload[settle](false);
+    await new Promise(setImmediate);
+    expect(workspace.display()).toBeNull();
+    expect(workspace.busy()).toBe(false);
+});
+
 test('switching chats detaches without cancelling and resumes from the server snapshot', async () => {
     const listeners = [];
     const requests = [];

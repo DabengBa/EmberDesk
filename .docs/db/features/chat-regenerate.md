@@ -21,12 +21,12 @@ Let users re-roll the current turn — the reply the AI produced after the last 
 
 - The chat-options menu (the button opening 开始新聊天 / 关闭聊天 / 管理聊天文件 / 删除消息) exposes a `重新生成` entry between 管理聊天文件 and the destructive 删除消息 section.
 - The entry stays mounted at all times; it is disabled while a generation is in flight, while a message is being edited, when no provider is connected, and when there is no active chat or the chat is empty. Availability is re-evaluated every time the menu opens, and the handler re-validates on click.
-- For a server-generated OpenAI-compatible turn, clicking 重新生成 generates a replacement without including the previous reply in the request. The saved reply stays in history until the replacement succeeds.
+- For a server-generated OpenAI-compatible turn, clicking 重新生成 immediately hides the previous generated output, shows `重新生成中…` in its place, and makes Stop available. The replacement streams in the same part of the conversation without sending the old reply to the model. On success, only the new reply remains; there is no version history.
 - Regeneration never creates a duplicate user message, never reads or clears the composer draft, never fires `send_if_empty`, and never attaches pending composer files.
 - When the chat's last message is a user message, the action is still available and fills in the missing assistant reply without deleting anything.
 - Manually inserted rows stop the cleanup: historical narrator notes, manually inserted assistant messages, and plain system notices are never removed; if such a row sits at the end, regenerate appends a new reply after it instead.
 - A generation-only greeting can be re-rolled the same way — the old first message is replaced.
-- On the server-generated path, a stopped or failed replacement leaves the previous saved reply unchanged and does not save partial replacement text. Switching chats or refreshing does not stop the replacement; reopening the chat shows its current progress or saved result.
+- Stopping or failing before a replacement is saved restores the previous reply, if there was one, and discards partial output. A failed server run shows a localized notice that invites the user to retry. For a saved chat, switching chats or refreshing does not stop an active replacement; reopening the chat shows its current progress or saved result.
 
 
 ## Generation Boundary
@@ -44,7 +44,7 @@ The menu starts regeneration of the current turn without submitting the composer
 
 - As a user unhappy with the last reply, open the chat-options menu, pick 重新生成, and wait for the new reply; EmberDesk must replace the old turn with exactly one new reply, send no second user message, and leave the composer draft untouched — failure is a duplicated user row, a cleared draft, or the old reply's content reaching the new request.
 - As a user whose last send got no reply, open the menu and pick 重新生成; EmberDesk must generate the missing assistant reply while keeping the user message — failure is a deleted or re-sent user row.
-- As a user regenerating a server-generated reply, stop midway or let the attempt fail, then reopen the chat. The original reply must still be there exactly once, with no partial replacement saved.
+- As a user regenerating a server-generated reply, see the inline status and Stop before the model responds. Stop during preparation, stop midway, or let the attempt fail: the original reply must reappear exactly once, with no partial replacement saved.
 - As a user mid-edit or mid-generation, open the menu; EmberDesk must show 重新生成 disabled rather than allowing a conflicting run — failure is starting a second generation or deleting the message being edited.
 
 ## Feature-Specific Evidence
@@ -52,7 +52,7 @@ The menu starts regeneration of the current turn without submitting the composer
 - The `option_regenerate` item ID, its enabled/disabled state on menu open, and its position relative to other items are primary evidence.
 - Request bodies captured at the transport boundary must not contain the removed turn's text or tool invocations.
 - Chat state after success must contain exactly one replacement tail; after total failure it must equal the pre-regenerate snapshot.
-- `tests/chat-regenerate.test.js` covers tail identification and snapshot integrity; `tests/chat-regenerate.e2e.js` covers reopening a running server-generated replacement and stopping it without overwriting the saved reply.
+- `tests/chat-regenerate.test.js` covers tail identification and snapshot integrity; `tests/chat-regenerate.e2e.js` exercises immediate feedback, stopping, and the transition from streamed replacement to saved reply, including reopening a saved chat.
 
 ## Failure Signals
 

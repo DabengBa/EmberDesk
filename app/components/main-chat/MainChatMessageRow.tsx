@@ -656,6 +656,12 @@ export const MainChatMessageRow = memo(function MainChatMessageRow({
                         />
                     )}
                 </details>
+                {message.regenerationStatus ? (
+                    <output className="generation_regeneration_status" aria-live="polite">
+                        <i className="fa-solid fa-circle-notch" aria-hidden="true" />
+                        <span>{message.regenerationStatus}</span>
+                    </output>
+                ) : null}
                 {message.editing ? (
                     <DraftTextarea
                         id="curEditTextarea"

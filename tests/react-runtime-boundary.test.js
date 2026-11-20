@@ -67,7 +67,8 @@ describe('React runtime boundary', () => {
             'utf8',
         );
 
-        expect(scriptSource).toContain('messageUiById: getMainChatMessageUiStateById()');
+        expect(scriptSource).toContain('const messageUiById = getMainChatMessageUiStateById()');
+        expect(scriptSource).toMatch(/buildMainChatSnapshotFromLegacyChat\(\{[\s\S]*?\bmessageUiById,/);
         expect(scriptSource).toContain('function setMainChatMessageUiState(');
         expect(scriptSource).toContain('if (isReactMainChatOwner()) {');
         expect(scriptSource).toContain('mainChatMessageUiState');

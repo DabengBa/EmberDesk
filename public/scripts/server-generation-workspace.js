@@ -60,13 +60,32 @@ export function createWorkspaceGeneration({ request, subscribe, changed, finishe
         if (!leaveTemporary()) detach();
     };
 
+    const current = () => selection?.run?.status === 'running' ? selection : null;
+    const pendingRegenerate = () => selection?.kind === 'regenerate' && (selection.preparing || selection.creating) && !selection.run;
+
+    function settle(view, discovery) {
+        results.delete(view.stepId);
+        view.detach?.();
+        view.detach = undefined;
+        const reconcile = finished(view.run, discovery);
+        if (!discovery && view.kind === 'regenerate' && !view.run.temporary && view.run.status === 'completed' && reconcile) {
+            view.reconciling = true;
+            const release = () => { if (selection === view) detach(); };
+            void reconcile.then(release, release);
+        } else if (view.kind === 'regenerate' && view.run.status !== 'interrupted' && selection === view) {
+            selection = undefined;
+        }
+        changed();
+    }
+
     function attach(view, run, discovery) {
         view.run = run;
-        changed();
+        view.kind = run.kind ?? view.kind;
         if (run.status !== 'running') {
-            finished(run, discovery);
+            settle(view, discovery);
             return;
         }
+        changed();
         view.detach = subscribe(run.id, event => {
             if (selection !== view) return;
             if (event.type === 'snapshot') {
@@ -83,11 +102,8 @@ export function createWorkspaceGeneration({ request, subscribe, changed, finishe
                 view.run = { ...view.run, status: 'interrupted' };
             }
             if (view.run.status !== 'running') {
-                results.delete(view.stepId);
-                view.detach?.();
-                view.text = '';
-                view.pendingText = '';
-                finished(view.run);
+                settle(view);
+                return;
             }
             if (view.run.status === 'running' && (event.type === 'step' || event.type === 'snapshot')) {
                 // A reconnect repeats the pending step but never an accepted result.
@@ -97,11 +113,37 @@ export function createWorkspaceGeneration({ request, subscribe, changed, finishe
         });
     }
 
+    function begin(target, { action, text = '', requestId }) {
+        close();
+        const view = { target, kind: action, text: '', pendingText: text, requestId };
+        selection = view;
+        return view;
+    }
+
+    function cancelRun(view, run) {
+        if (run.status !== 'running') return run;
+        return view.cancellation ??= request(`/${run.id}/cancel`, {}).catch(error => {
+            view.cancellation = undefined;
+            throw error;
+        });
+    }
+
     return {
-        current: () => selection?.run?.status === 'running' ? selection : null,
-        busy: () => Boolean(selection?.creating || selection?.run?.status === 'running'),
+        current,
+        display: () => current() ?? (pendingRegenerate() || selection?.reconciling ? selection : null),
+        canStop: () => Boolean(current() || pendingRegenerate()),
+        busy: () => Boolean(selection?.preparing || selection?.creating || selection?.reconciling || current()),
         close,
         leaveTemporary,
+        prepareRegenerate(target, requestId) {
+            const view = begin(target, { action: 'regenerate', requestId });
+            view.preparing = true;
+            changed();
+            return view;
+        },
+        releasePreparation(view) {
+            if (view && selection === view && view.preparing) detach();
+        },
         async select(target, reconciledChatVersion) {
             close();
             if (!target) return;
@@ -110,13 +152,23 @@ export function createWorkspaceGeneration({ request, subscribe, changed, finishe
             const run = await request('/find', target);
             if (selection === view && run) attach(view, run, { discovered: true, reconciledChatVersion });
         },
-        async create(target, command) {
-            close();
-            const view = { target, text: '', pendingText: command.text, creating: true, requestId: command.requestId };
-            selection = view;
+        async create(target, command, prepared) {
+            if (prepared && selection !== prepared) return;
+            const view = prepared ?? begin(target, command);
+            view.preparing = false;
+            view.creating = true;
             changed();
             try {
-                const run = await request('/create', { ...target, ...command });
+                let run = await request('/create', { ...target, ...command });
+                if (view.stopRequested) {
+                    try {
+                        run = await cancelRun(view, run);
+                    } catch (error) {
+                        if (selection === view) attach(view, run);
+                        throw error;
+                    }
+                }
+                view.creating = false;
                 if (selection === view) attach(view, run);
                 else if (target.temporary) return;
                 return run;
@@ -124,12 +176,34 @@ export function createWorkspaceGeneration({ request, subscribe, changed, finishe
                 if (selection === view || !target.temporary) throw error;
             } finally {
                 view.creating = false;
-                if (selection === view) changed();
+                if (selection === view && !view.run) detach();
             }
         },
         async cancel() {
             const view = selection;
-            if (view?.run?.status === 'running') await request(`/${view.run.id}/cancel`, {});
+            if (current()) {
+                await cancelRun(view, view.run);
+            } else if (pendingRegenerate()) {
+                if (view.preparing) return detach();
+                if (view.stopRequested) return;
+                view.stopRequested = true;
+                try {
+                    if (view.target.temporary) {
+                        await request('/cancel', { temporary: true, requestId: view.requestId });
+                        return;
+                    }
+                    const run = await request('/find', view.target);
+                    if (run?.requestId !== view.requestId) return;
+                    const terminal = await cancelRun(view, run);
+                    if (selection === view && !view.run) {
+                        view.creating = false;
+                        attach(view, terminal);
+                    }
+                } catch (error) {
+                    if (selection === view && !view.run) view.stopRequested = false;
+                    throw error;
+                }
+            }
         },
     };
 }
