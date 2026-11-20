@@ -17,7 +17,6 @@ import cookieSession from 'cookie-session';
 import multer from 'multer';
 import responseTime from 'response-time';
 import helmet from 'helmet';
-import bodyParser from 'body-parser';
 
 // local library imports
 import './fetch-patch.js';
@@ -130,8 +129,13 @@ async function registerMiddleware(app: Express, cli: CommandLineArguments): Prom
     app.use(compression());
     app.use(responseTime());
 
-    app.use(bodyParser.json({ limit: '500mb' }));
-    app.use(bodyParser.urlencoded({ extended: true, limit: '500mb' }));
+    app.use(express.json({ limit: '500mb' }));
+    app.use(express.urlencoded({ extended: true, limit: '500mb' }));
+    app.use((request, _response, next) => {
+        // Existing handlers expect an empty object when neither parser handles the request.
+        request.body ??= {};
+        next();
+    });
 
     // CORS Settings //
     const corsEnabled = getConfigValue('cors.enabled', true, 'boolean');

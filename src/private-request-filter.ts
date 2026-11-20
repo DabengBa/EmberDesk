@@ -4,7 +4,6 @@ import http from 'node:http';
 import https from 'node:https';
 import dns from 'node:dns';
 import ipMatch from 'ip-matching';
-import ipRegex from 'ip-regex';
 import { Agent } from 'agent-base';
 import type { AgentConnectOpts } from 'agent-base';
 import { color } from './util.js';
@@ -193,7 +192,8 @@ export class PrivateRequestAgent extends Agent {
             return raiseError('No host specified in request options', true);
         }
 
-        const isIp = ipRegex.v4({ exact: true }).test(host) || ipRegex.v6({ exact: true }).test(host);
+        // Preserve the previous literal check's alphanumeric IPv6 zone identifiers.
+        const isIp = net.isIP(host) !== 0 && (!host.includes('%') || /%[a-z0-9]+$/i.test(host));
 
         if (isIp) {
             return validateIpAddress(host);

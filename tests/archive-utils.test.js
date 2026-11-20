@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 
 import {
     extractFileFromZipBuffer,
@@ -76,6 +77,23 @@ async function createZipFile(entries, fileName = 'archive.zip') {
 }
 
 describe('archive utils', () => {
+    test.each(['character.json', 'cards/character.json'])('BYAF resolves an image relative to %s', async characterPath => {
+        const { ByafParser } = await import('../src/byaf.js');
+        const archiveBuffer = await createZipBuffer([
+            { name: path.posix.join(path.posix.dirname(characterPath), 'images/avatar.png'), data: pngBuffer },
+        ]);
+        const previousCwd = process.cwd();
+        try {
+            process.chdir(fileURLToPath(new URL('..', import.meta.url)));
+            const images = await new ByafParser(archiveBuffer).getCharacterImages({
+                images: [{ path: 'images/avatar.png', label: 'Portrait' }],
+            }, characterPath);
+            expect(images).toEqual([{ filename: 'avatar.png', image: pngBuffer, label: 'Portrait' }]);
+        } finally {
+            process.chdir(previousCwd);
+        }
+    });
+
     test('native Node resolves the format TypeScript and real caller graph without a loader', () => {
         const root = fs.mkdtempSync(path.join(os.tmpdir(), 'emberdesk-format-native-'));
         tmpRoots.push(root);

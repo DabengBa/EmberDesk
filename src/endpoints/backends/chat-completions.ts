@@ -3,7 +3,6 @@ import express from 'express';
 import type { Request } from 'express';
 import fetch from 'node-fetch';
 import type { RequestInit } from 'node-fetch';
-import urlJoin from 'url-join';
 import path from 'node:path';
 import { STATUS_CODES } from 'node:http';
 
@@ -129,7 +128,9 @@ router.post<Record<string, string>, unknown, ChatBody>('/status', async function
             return statusResponse.status(400).send({ error: true });
         }
 
-        const modelsUrl = new URL(urlJoin(apiUrl, '/models'));
+        // Keep the status URL's legacy normalization for custom bases with query strings or fragments.
+        const modelEndpoint = `${apiUrl.replace(/\/+$/, '')}/models`.replace(/\/(\?|&|#[^!])/g, '$1');
+        const modelsUrl = new URL(modelEndpoint.replace(/\?([\s\S]*)$/, (_, query) => `?${query.replaceAll('?', '&')}`));
         Object.keys(queryParams).forEach(key => {
             modelsUrl.searchParams.append(key, queryParams[key]);
         });
