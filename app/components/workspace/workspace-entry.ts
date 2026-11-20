@@ -1,7 +1,7 @@
 import { useLayoutEffect } from 'react';
 
 const stylesheetGroups = [
-    ['/style.css', ['/css/brands.min.css', '/css/bright.min.css', '/css/cropper.min.css', '/css/toastr.min.css']],
+    ['/style.css', ['/css/brands.min.css', '/css/bright.min.css', '/css/toastr.min.css']],
     ['/css/user.css', ['/css/toggle-dependent.css', '/css/world-info.css', '/scripts/extensions/regex/style.css', '/css/mobile-styles.css', '/css/macros.css']],
 ] as const;
 
@@ -53,9 +53,7 @@ export function startWorkspace(revealWorkspace: () => void): Promise<void> {
         const { prepareWorkspacePanels } = await import('../../compat/workspace-panels-entry');
         await prepareWorkspacePanels();
 
-        for (const path of ['/lib/polyfill.js', '/lib/cropper.min.js', '/lib/toolcool-color-picker.js']) {
-            await loadClassicScript(path);
-        }
+        await loadClassicScript('/lib/polyfill.js');
         // Use original URLs so dependencies and the browser entry share module state.
         // Preserve the original graph root: importing /script.js first breaks its i18n/power-user cycle.
         for (const path of ['/lib/structured-clone/monkey-patch.js', '/lib/eventemitter.js', '/scripts/i18n.js']) {

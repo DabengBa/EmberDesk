@@ -1690,9 +1690,10 @@ export function convertTextToBase64(text) {
  *
  * @param {string} url - The URL of the file to be loaded.
  * @param {string} type - The type of file to load: "css" or "js".
+ * @param {Element|null} [before] - Optional stylesheet insertion point in the document head.
  * @returns {Promise} - Resolves when the file has loaded, rejects if there's an error or invalid type.
  */
-export function loadFileToDocument(url, type) {
+export function loadFileToDocument(url, type, before = null) {
     return new Promise((resolve, reject) => {
         let element;
 
@@ -1709,10 +1710,13 @@ export function loadFileToDocument(url, type) {
         }
 
         element.onload = resolve;
-        element.onerror = reject;
+        element.onerror = () => {
+            element.remove();
+            reject(new Error(`Unable to load ${url}`));
+        };
 
         if (type === 'css') {
-            document.head.appendChild(element);
+            document.head.insertBefore(element, before);
         } else {
             document.body.appendChild(element);
         }

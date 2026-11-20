@@ -1,13 +1,9 @@
-LXGW WenKai Mono 霞鹜文楷等宽
-Version 1.522 (March 17, 2026)
-Upstream: https://github.com/lxgw/LxgwWenKai
-
-Copyright 2021-2026 LXGW (https://github.com/lxgw/LxgwWenKai)
-Copyright 2020 The Klee Project Authors (https://github.com/fontworks-fonts/Klee)
+Copyright 2022 The Noto Project Authors (https://github.com/notofonts/devanagari)
 
 This Font Software is licensed under the SIL Open Font License, Version 1.1.
 This license is copied below, and is also available with a FAQ at:
-https://openfontlicense.org
+https://scripts.sil.org/OFL
+
 
 -----------------------------------------------------------
 SIL OPEN FONT LICENSE Version 1.1 - 26 February 2007

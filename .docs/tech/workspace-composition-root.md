@@ -125,7 +125,7 @@ modal, action loader and lifecycle integration.
 | Resource | Disposition and consumer evidence |
 | --- | --- |
 | jQuery cookie and pagination | Removed: no first-party calls remained |
-| dialog-polyfill and jquery-cropper wrapper | Removed: React uses native dialog and the existing native Cropper constructor |
+| dialog-polyfill and jquery-cropper wrapper | Removed: React uses native dialog and loads the native Cropper script and stylesheet when the crop dialog is requested |
 | touch-punch | Removed: no jQuery UI mouse-widget consumers remain; workspace dragging uses its existing separate implementation |
 | izoomify | Removed with its unused data attributes: no initialization call remained |
 | jQuery, transit and jQuery UI | Removed from the workspace shell and vendored assets; first-party callers use native DOM and browser APIs. Frontend-frame compatibility is described in [First-Party Internal Compatibility Contracts](third-party-extension-compatibility.md). |

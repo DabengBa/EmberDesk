@@ -519,9 +519,9 @@ describe('Express 5 route compatibility', () => {
                     ['/lib.js', 'text/javascript'],
                     ['/script.js', 'text/javascript'],
                     ['/style.css', 'text/css'],
-                    ['/index.html', 'text/html'],
+                    ['/perf-harness.html', 'text/html'],
                     ['/img/times-circle.svg', 'image/svg+xml'],
-                    ['/webfonts/NotoSans/NotoSans-Regular.woff2', 'font/woff2'],
+                    ['/webfonts/NotoSans/NotoSans-Variable.woff2', 'font/woff2'],
                     ['/css/user.css', 'text/css'],
                 ];
 

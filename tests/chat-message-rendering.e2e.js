@@ -26,6 +26,36 @@ const mobileViewports = [
     { name: 'wide mobile', width: 768, height: 1024 },
 ];
 
+test('chat emphasis inherits the default text font and bundled fonts render', async ({ page }) => {
+    await testSetup.awaitST({ page });
+    const typography = await page.evaluate(async () => {
+        const fixture = document.createElement('div');
+        fixture.innerHTML = '<div class="mes_text">正文 <em>中文强调</em></div><div class="mes_reasoning">推理 <em>中文强调</em></div>';
+        document.body.append(fixture);
+        try {
+            const emphasis = [...fixture.querySelectorAll('em')].map(node => ({
+                inherits: getComputedStyle(node).fontFamily === getComputedStyle(node.parentElement).fontFamily,
+                style: getComputedStyle(node).fontStyle,
+            }));
+            const faces = await Promise.all([
+                document.fonts.load('700 16px "Noto Sans"', 'Text'),
+                document.fonts.load('italic 400 16px "Noto Sans"', 'Text'),
+                document.fonts.load('600 16px "Noto Sans"', 'नमस्ते'),
+                document.fonts.load('600 16px "Noto Sans Mono"', 'Code'),
+                document.fonts.load('900 16px "Font Awesome 6 Free"', '\uf007'),
+                document.fonts.load('400 16px "Font Awesome 6 Brands"', '\uf09b'),
+            ]);
+            return { emphasis, fontsLoaded: faces.every(matches => matches.some(face => face.status === 'loaded')) };
+        } finally {
+            fixture.remove();
+        }
+    });
+    expect(typography).toEqual({
+        emphasis: [{ inherits: true, style: 'italic' }, { inherits: true, style: 'italic' }],
+        fontsLoaded: true,
+    });
+});
+
 function normalizeMessageText(value) {
     // Rendered text drops emphasis markers (*...* -> <em>) while seeded raw
     // text still contains them. Strip pairs on both sides so the comparison

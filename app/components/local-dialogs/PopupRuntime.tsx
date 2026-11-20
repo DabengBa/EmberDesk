@@ -12,6 +12,7 @@ type CropperConstructor = new (image: HTMLImageElement, options: { aspectRatio: 
 type Services = {
     translate(text: string): string;
     shouldSendOnEnter(): boolean;
+    loadCropAssets(): Promise<unknown>;
     afterAnimation(element: HTMLElement, callback: () => void): void;
     fixToast(): void;
     recordResult(): void;
@@ -207,6 +208,7 @@ export const createPopupRuntime: PopupRuntimeFactory = request => {
     const refs = {} as PopupRefs;
     let phase: Phase = 'created';
     let pending = false, disposed = false, forceConfirm = false, lastEscape = 0;
+    let opening = false;
     let opener: HTMLElement | null = null;
     let cropper: CropperInstance | undefined;
     let resolve!: (value: PopupValue) => void;
@@ -284,11 +286,22 @@ export const createPopupRuntime: PopupRuntimeFactory = request => {
     return {
         refs, complete, setAutoFocus,
         show: () => {
-            if (phase === 'created' && !disposed) {
+            if (phase === 'created' && !disposed && !opening) {
+                opening = true;
                 opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-                document.body.append(host);
-                phase = 'open';
-                try { render(); } catch (error) { fail(error); }
+                const open = () => {
+                    if (disposed || phase !== 'created') return;
+                    try {
+                        document.body.append(host);
+                        phase = 'open';
+                        render();
+                    } catch (error) { fail(error); }
+                };
+                if (popup.type === CROP) void services.loadCropAssets().then(open, error => {
+                    fail(error);
+                    services.reportError(error);
+                });
+                else open();
             }
             return result;
         },

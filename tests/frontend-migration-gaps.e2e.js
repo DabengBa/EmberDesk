@@ -132,7 +132,14 @@ test('Popup bridge keeps async confirm, nested cancel and focus', async ({ page 
 });
 
 test('Popup crop keeps image selection and confirmed result', async ({ page }) => {
+    const cropAssets = [];
+    page.on('response', response => {
+        const path = new URL(response.url()).pathname;
+        if (path === '/lib/cropper.min.js' || path === '/css/cropper.min.css') cropAssets.push(path);
+    });
+
     await testSetup.awaitST({ page });
+    expect(cropAssets).toEqual([]);
     await page.evaluate(async () => {
         const canvas = document.createElement('canvas');
         canvas.width = 240; canvas.height = 240;
@@ -144,6 +151,7 @@ test('Popup crop keeps image selection and confirmed result', async ({ page }) =
     });
     const dialog = page.locator('dialog[data-react-popup]');
     await expect(dialog.locator('.cropper-container')).toBeVisible();
+    expect(cropAssets.sort()).toEqual(['/css/cropper.min.css', '/lib/cropper.min.js']);
     await expect(dialog.locator('.popup-button-ok')).toBeEnabled();
     const before = await page.evaluate(() => ({ ...window.cropPopup.cropData }));
     await dialog.getByRole('button', { name: /^(Shrink crop|缩小裁剪框)$/ }).click();
@@ -164,4 +172,18 @@ test('Popup crop keeps image selection and confirmed result', async ({ page }) =
     await page.keyboard.press('Escape');
     await page.evaluate(() => window.lorebookPopup);
     await expect(page.locator('[data-react-popup-host]')).toHaveCount(0);
+});
+
+test('Popup crop reports an asset load failure and can be reopened', async ({ page }) => {
+    await page.route('**/lib/cropper.min.js', route => route.abort(), { times: 1 });
+    await testSetup.awaitST({ page });
+    const openCrop = () => page.evaluate(async () => {
+        const { Popup, POPUP_TYPE } = await import('/scripts/popup.js');
+        const cropImage = document.createElement('canvas').toDataURL();
+        void new Popup('Crop retry', POPUP_TYPE.CROP, '', { cropImage }).show().catch(() => {});
+    });
+    await openCrop();
+    await expect(page.getByText('Unable to load /lib/cropper.min.js')).toBeVisible();
+    await openCrop();
+    await expect(page.locator('dialog[data-react-popup] .cropper-container')).toBeVisible();
 });
