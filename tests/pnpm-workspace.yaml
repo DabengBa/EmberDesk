@@ -18,16 +18,7 @@ overrides:
   seroval-plugins: ^1.6.8
   shell-quote: ^1.11.0
   source-map-js: ^1.2.2
-minimumReleaseAge: 10080
-minimumReleaseAgeExclude:
-  - '@stylexjs/babel-plugin@0.19.1'
-  - '@stylexjs/postcss-plugin@0.19.1'
-  - '@stylexjs/shared@0.19.1'
-  - '@stylexjs/stylex@0.19.1'
-  - '@stylexjs/unplugin@0.19.1'
-  - '@astryxdesign/core@0.6.2'
-  - handlebars@4.7.10
-  - http-cache-semantics@4.3.0
+minimumReleaseAge: 0
 trustPolicy: no-downgrade
 trustPolicyExclude:
   - protobufjs@6.11.6

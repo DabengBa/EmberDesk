@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from '@jest/globals';
-import archiver from 'archiver';
+import { ZipArchive } from 'archiver';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -31,7 +31,7 @@ afterEach(() => {
 
 async function createZipBuffer(entries) {
     return await new Promise((resolve, reject) => {
-        const archive = archiver('zip');
+        const archive = new ZipArchive();
         const chunks = [];
 
         archive.on('warning', reject);
@@ -57,7 +57,7 @@ async function createZipFile(entries, fileName = 'archive.zip') {
 
     const archivePath = path.join(root, fileName);
     const output = fs.createWriteStream(archivePath);
-    const archive = archiver('zip');
+    const archive = new ZipArchive();
 
     await new Promise((resolve, reject) => {
         output.on('close', resolve);

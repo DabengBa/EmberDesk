@@ -2811,7 +2811,7 @@ select option[disabled]:not(:checked) {
 }
 
 .menu_button.toggleable::before {
-    font-family: "Font Awesome 6 Free";
+    font-family: "Font Awesome 7 Free";
     margin-left: 10px;
     position: absolute;
     left: 0;
@@ -3203,7 +3203,7 @@ body:not(.hide-char-version) #rm_print_characters_block .character_version {
     border-radius: 50%;
     background-color: var(--SmartThemeQuoteColor);
     color: var(--SmartThemeBlurTintColor);
-    font-family: "Font Awesome 6 Free";
+    font-family: "Font Awesome 7 Free";
     font-size: calc(var(--mainFontSize) * 0.7);
     font-weight: 900;
 }
@@ -3807,15 +3807,15 @@ button.menu_button {
 /* font: inherit above strips the icon font from FA classes applied directly to
    <button>; restore it on the ::before that carries the glyph. */
 button.fa-solid::before {
-    font-family: "Font Awesome 6 Free";
+    font-family: "Font Awesome 7 Free";
     font-weight: 900;
 }
 button.fa-regular::before {
-    font-family: "Font Awesome 6 Free";
+    font-family: "Font Awesome 7 Free";
     font-weight: 400;
 }
 button.fa-brands::before {
-    font-family: "Font Awesome 6 Brands";
+    font-family: "Font Awesome 7 Brands";
     font-weight: 400;
 }
 
@@ -7342,7 +7342,7 @@ body:has(#emberdesk-react-workspace-shell-chrome-host) {
 
 .paginationjs-pages ul li a {
     padding: 0.25em;
-    font-family: 'Font Awesome 6 Free';
+    font-family: 'Font Awesome 7 Free';
     text-decoration: none;
     color: var(--SmartThemeBodyColor);
     border: 1px solid var(--SmartThemeBorderColor);

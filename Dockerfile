@@ -1,4 +1,4 @@
-FROM node:26.12.1-alpine3.23
+FROM node:26.13.1-alpine3.24
 
 # Arguments
 ARG APP_HOME=/home/node/app
@@ -6,7 +6,7 @@ ARG APP_HOME=/home/node/app
 # Install system dependencies
 RUN apk add --no-cache tini git su-exec shadow
 
-RUN npm install --global --allow-scripts=pnpm pnpm@12.0.0-rc.5
+RUN npm install --global --allow-scripts=pnpm pnpm@12.21.0
 
 # Create app directory and set ownership
 WORKDIR ${APP_HOME}

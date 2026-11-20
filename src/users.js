@@ -44,7 +44,7 @@ import os from 'node:os';
 // Express and other dependencies
 import storage from 'node-persist';
 import express from 'express';
-import archiver from 'archiver';
+import { ZipArchive } from 'archiver';
 
 import { DEFAULT_USER } from './constants.js';
 import { getConfigValue, color, generateTimestamp, isPathUnderParent, invalidateFirefoxCache } from './util.js';
@@ -508,7 +508,7 @@ export async function createBackupArchive(handle, response) {
     }
 
     console.info('Backup requested for', handle);
-    const archive = archiver('zip');
+    const archive = new ZipArchive();
 
     response.once('close', () => {
         archive.abort();

@@ -42,7 +42,7 @@ handler is TypeScript:
   have become compatibility re-exports of strictly checked TypeScript handlers.
   Other JS route files still contain actual handlers.
 
-Node.js `>=26.12.1 <27` executes erasable TypeScript directly, with actual
+Node.js `>=26.13.1 <27` executes erasable TypeScript directly, with actual
 relative file extensions and no server emit or production loader.
 `tsconfig.server.json` is strict for TypeScript, but uses `allowJs: true` and
 `checkJs: false`; it does **not** strictly type-check the retained JavaScript.

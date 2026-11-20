@@ -10,8 +10,8 @@ EmberDesk is a self-hosted browser LLM workspace forked from SillyTavern. The pr
 
 | Area | Contract |
 |---|---|
-| Runtime | Node.js 26.12.1 Current (`>=26.12.1 <27`) |
-| Package manager / scripts | pnpm 12.0.0-rc.5 (`packageManager`) |
+| Runtime | Node.js 26.13.1 LTS (`>=26.13.1 <27`) |
+| Package manager / scripts | pnpm 12.21.0 (`packageManager`) |
 | Language | JavaScript ES modules with incremental native TypeScript (server `src/`) + TypeScript (frontend `app/`) |
 | Server | Express 5 |
 | Frontend | One Vite-built React 19 app with TanStack Router/Query/Form, Zustand and Zod; `public/` retains first-party controllers, styles and compatibility assets |
@@ -61,7 +61,7 @@ pnpm run typecheck
 pnpm run lint
 ```
 
-Use Node.js 26.12.1 for server release proof by default. pnpm is the package manager and script runner.
+Use Node.js 26.13.1 for server release proof by default. pnpm is the package manager and script runner.
 
 For focused E2E runs, pass arguments directly: `pnpm --dir tests run test:e2e world-info-workbench.e2e.js --grep "UI hardening"`. An extra `--` reaches Playwright and stops option parsing, potentially running the whole suite. Keep the default isolated data root/server; do not reuse a user's running server for mutating tests.
 

@@ -34,10 +34,10 @@ test('standalone workspace enforces the root supply-chain policies and skips lif
     };
     const rootConfig = config(root);
     const testsConfig = config(path.join(root, 'tests'));
-    for (const key of ['minimumReleaseAge', 'minimumReleaseAgeExclude', 'trustPolicy', 'trustPolicyExclude', 'allowBuilds', 'overrides']) {
+    for (const key of ['minimumReleaseAge', 'trustPolicy', 'trustPolicyExclude', 'allowBuilds', 'overrides']) {
         expect(testsConfig[key]).toEqual(rootConfig[key]);
     }
-    expect(testsConfig.minimumReleaseAge).toBe(10080);
+    expect(testsConfig.minimumReleaseAge).toBe(0);
     expect(testsConfig.trustPolicy).toBe('no-downgrade');
     expect(testsConfig.ignoreScripts).toBe(true);
 

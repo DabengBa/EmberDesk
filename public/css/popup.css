@@ -192,9 +192,14 @@ body.no-blur .popup[open]::backdrop {
     max-width: 100%;
 }
 
-.popup-crop-wrap img {
-    max-width: 100%;
-    /* This rule is very important, please do not ignore this! */
+.popup-crop-wrap cropper-canvas {
+    margin-inline: auto;
+    min-width: 0;
+    min-height: 0;
+}
+
+.popup-crop-image {
+    display: none;
 }
 
 .popup-inputs {

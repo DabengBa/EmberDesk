@@ -142,23 +142,50 @@ test('Popup crop keeps image selection and confirmed result', async ({ page }) =
     expect(cropAssets).toEqual([]);
     await page.evaluate(async () => {
         const canvas = document.createElement('canvas');
-        canvas.width = 240; canvas.height = 240;
+        canvas.width = 1200; canvas.height = 600;
         const context = canvas.getContext('2d');
-        context.fillStyle = '#ef782f'; context.fillRect(0, 0, 240, 240);
+        context.fillStyle = '#ef782f'; context.fillRect(0, 0, 600, 600);
+        context.fillStyle = '#1261e8'; context.fillRect(600, 0, 600, 600);
         const { Popup, POPUP_TYPE } = await import('/scripts/popup.js');
         window.cropPopup = new Popup('<h3>Crop image</h3>', POPUP_TYPE.CROP, '', { cropImage: canvas.toDataURL(), cropAspect: 1 });
         window.cropPopupResult = window.cropPopup.show();
     });
     const dialog = page.locator('dialog[data-react-popup]');
-    await expect(dialog.locator('.cropper-container')).toBeVisible();
-    expect(cropAssets.sort()).toEqual(['/css/cropper.min.css', '/lib/cropper.min.js']);
     await expect(dialog.locator('.popup-button-ok')).toBeEnabled();
+    expect(cropAssets).toEqual(['/lib/cropper.min.js']);
     const before = await page.evaluate(() => ({ ...window.cropPopup.cropData }));
+    expect(before).toMatchObject({ x: 300, y: 0, width: 600, height: 600, want_resize: true });
     await dialog.getByRole('button', { name: /^(Shrink crop|缩小裁剪框)$/ }).click();
     await expect.poll(() => page.evaluate(() => window.cropPopup.cropData.width)).toBeLessThan(before.width);
+    await dialog.getByRole('button', { name: /^(Reset crop|重置裁剪框)$/ }).click();
+    await expect.poll(() => page.evaluate(() => window.cropPopup.cropData)).toEqual(before);
+    const selection = dialog.locator('cropper-selection');
+    const box = await selection.boundingBox();
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(box.x + box.width * .65, box.y + box.height / 2, { steps: 4 });
+    await page.mouse.up();
+    await expect.poll(() => page.evaluate(() => window.cropPopup.cropData.x)).toBeGreaterThan(before.x);
+    const moved = await page.evaluate(() => window.cropPopup.cropData);
+    await page.setViewportSize({ width: 480, height: 820 });
+    await expect.poll(async () => (await selection.boundingBox()).width).toBeLessThan(box.width);
+    expect(await page.evaluate(() => window.cropPopup.cropData)).toEqual(moved);
     await dialog.locator('.popup-button-ok').click();
-    expect(await page.evaluate(() => window.cropPopupResult)).toMatch(/^data:image\/jpeg;base64,/);
-    expect(await page.evaluate(() => window.cropPopup.cropData.want_resize)).toBe(true);
+    const preview = await page.evaluate(async () => {
+        const url = await window.cropPopupResult;
+        const image = new Image();
+        image.src = url;
+        await image.decode();
+        const canvas = document.createElement('canvas');
+        canvas.width = image.naturalWidth; canvas.height = image.naturalHeight;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(image, 0, 0);
+        return { jpeg: url.startsWith('data:image/jpeg;base64,'), width: canvas.width, height: canvas.height,
+            left: ctx.getImageData(25, 300, 1, 1).data[0], right: ctx.getImageData(575, 300, 1, 1).data[2] };
+    });
+    expect(preview).toMatchObject({ jpeg: true, width: 600, height: 600 });
+    expect(preview.left).toBeGreaterThan(200);
+    expect(preview.right).toBeGreaterThan(200);
     await expect(page.locator('[data-react-popup-host]')).toHaveCount(0);
     // Character lore bindings now use React controls in the same popup runtime.
     await selectCharacter(page, 'Dev Character 044');
@@ -185,5 +212,5 @@ test('Popup crop reports an asset load failure and can be reopened', async ({ pa
     await openCrop();
     await expect(page.getByText('Unable to load /lib/cropper.min.js')).toBeVisible();
     await openCrop();
-    await expect(page.locator('dialog[data-react-popup] .cropper-container')).toBeVisible();
+    await expect(page.locator('dialog[data-react-popup] .popup-button-ok')).toBeEnabled();
 });

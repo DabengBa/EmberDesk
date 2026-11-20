@@ -26,8 +26,8 @@ It is not optimized for users who want a managed cloud product or a minimal one-
 
 ## Architecture And Boundaries
 
-- Runtime: Node.js 26.12.1 Current (`>=26.12.1 <27`)
-- Package manager and task runner: pnpm 12.0.0-rc.5
+- Runtime: Node.js 26.13.1 LTS (`>=26.13.1 <27`)
+- Package manager and task runner: pnpm 12.21.0
 - Server: Express-based API and startup pipeline
 - Frontend: one React 19 / TypeScript SPA for the workspace, login, setup, and settings. Existing first-party controllers are reused behind the React workspace host.
 - Build: pnpm-managed Vite builds for the shared browser library and the React SPA.

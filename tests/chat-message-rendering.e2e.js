@@ -30,7 +30,7 @@ test('chat emphasis inherits the default text font and bundled fonts render', as
     await testSetup.awaitST({ page });
     const typography = await page.evaluate(async () => {
         const fixture = document.createElement('div');
-        fixture.innerHTML = '<div class="mes_text">正文 <em>中文强调</em></div><div class="mes_reasoning">推理 <em>中文强调</em></div>';
+        fixture.innerHTML = '<div class="mes_text">正文 <em>中文强调</em></div><div class="mes_reasoning">推理 <em>中文强调</em></div><button class="fa-solid fa-user"></button><button class="fa-brands fa-github"></button>';
         document.body.append(fixture);
         try {
             const emphasis = [...fixture.querySelectorAll('em')].map(node => ({
@@ -42,8 +42,10 @@ test('chat emphasis inherits the default text font and bundled fonts render', as
                 document.fonts.load('italic 400 16px "Noto Sans"', 'Text'),
                 document.fonts.load('600 16px "Noto Sans"', 'नमस्ते'),
                 document.fonts.load('600 16px "Noto Sans Mono"', 'Code'),
-                document.fonts.load('900 16px "Font Awesome 6 Free"', '\uf007'),
-                document.fonts.load('400 16px "Font Awesome 6 Brands"', '\uf09b'),
+                ...Array.from(fixture.querySelectorAll('button'), (button, index) => {
+                    const { fontFamily, fontWeight } = getComputedStyle(button, '::before');
+                    return document.fonts.load(`${fontWeight} 16px ${fontFamily}`, ['\uf007', '\uf09b'][index]);
+                }),
             ]);
             return { emphasis, fontsLoaded: faces.every(matches => matches.some(face => face.status === 'loaded')) };
         } finally {

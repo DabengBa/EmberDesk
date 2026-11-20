@@ -4,7 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { runInNewContext } from 'node:vm';
 
-import archiver from 'archiver';
+import { ZipArchive } from 'archiver';
 import express from 'express';
 import { zipSync } from 'fflate';
 import multer from 'multer';
@@ -156,7 +156,7 @@ function makeDirectories() {
 async function writeByafArchive(filePath, entries) {
     await new Promise((resolve, reject) => {
         const output = fs.createWriteStream(filePath);
-        const archive = archiver('zip');
+        const archive = new ZipArchive();
         output.on('close', resolve);
         output.on('error', reject);
         archive.on('warning', reject);
