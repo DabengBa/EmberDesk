@@ -1,4 +1,5 @@
 import notificationOwner from './notifications.js';
+import { setImportedWorldInfoPositions } from './world-info-import-placement.js';
 import { world_names } from './world-info-state.js';
 
 const toastr = notificationOwner.native ?? notificationOwner;
@@ -82,6 +83,7 @@ export function createWorldInfoReferenceUi({ characters, accountStorage, callGen
         }
 
         const convertedBook = convertCharacterBook(characters[chid].data.character_book);
+        setImportedWorldInfoPositions(convertedBook.entries);
 
         await saveWorldInfo(bookName, convertedBook, true);
         await updateWorldInfoList();
