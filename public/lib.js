@@ -18,17 +18,10 @@ import moment from 'moment';
 import seedrandom from 'seedrandom';
 import * as Popper from '@popperjs/core';
 import droll from 'droll';
-import morphdom from 'morphdom';
-import * as slideTogglePackage from 'slidetoggle';
 import chalk from 'chalk';
 import yaml from 'yaml';
 import * as chevrotain from 'chevrotain';
 import { gzipSync, gzip } from 'fflate';
-
-const slideToggle = slideTogglePackage.toggle
-    ?? Reflect.get(slideTogglePackage, 'default')?.toggle
-    ?? Reflect.get(slideTogglePackage, 'slidetoggle')?.toggle
-    ?? Reflect.get(slideTogglePackage, 'module.exports')?.toggle;
 
 /**
  * Expose the libraries to the 'window' object.
@@ -107,8 +100,6 @@ export default {
     seedrandom,
     Popper,
     droll,
-    morphdom,
-    slideToggle,
     chalk,
     yaml,
     chevrotain,
@@ -134,8 +125,6 @@ export {
     seedrandom,
     Popper,
     droll,
-    morphdom,
-    slideToggle,
     chalk,
     yaml,
     chevrotain,

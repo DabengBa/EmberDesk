@@ -24,8 +24,6 @@ const expectedExportNames = [
     'seedrandom',
     'Popper',
     'droll',
-    'morphdom',
-    'slideToggle',
     'chalk',
     'yaml',
     'chevrotain',
@@ -103,11 +101,11 @@ describe('frontend shared library boundary', () => {
 
         expect(lib).not.toHaveProperty('sha256');
         expect(Object.keys(lib.default).sort()).toEqual(expectedExportNames.toSorted());
+        expect(Object.keys(lib).sort()).toEqual([...expectedExportNames, 'default', 'initLibraryShims'].sort());
         for (const exportName of expectedExportNames) {
             expect(lib).toHaveProperty(exportName);
             expect(lib.default[exportName]).toBe(lib[exportName]);
         }
-        expect(lib.slideToggle).toEqual(expect.any(Function));
     });
 
     test('installs documented legacy globals without clobbering existing values', async () => {
@@ -134,6 +132,7 @@ describe('frontend shared library boundary', () => {
         expect(builtLib).toHaveProperty('initLibraryShims');
         expect(builtLib).not.toHaveProperty('sha256');
         expect(Object.keys(builtLib.default).sort()).toEqual(expectedExportNames.toSorted());
+        expect(Object.keys(builtLib).sort()).toEqual([...expectedExportNames, 'default', 'initLibraryShims'].sort());
     });
 
 });
