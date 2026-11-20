@@ -1091,7 +1091,11 @@ export const characterLibraryStyles = stylex.create({
     },
     toolbarAction: {
         margin: 0,
-        minHeight: 'calc(var(--mainFontSize) * 1.85)',
+        minHeight: 'calc(var(--mainFontSize) * 1.9)',
+        whiteSpace: 'nowrap',
+        '@media (pointer: coarse)': {
+            minHeight: 'max(44px, calc(var(--mainFontSize) * 1.9))',
+        },
         touchAction: 'manipulation',
         borderColor: 'color-mix(in srgb, var(--SmartThemeBorderColor) 72%, transparent)',
         backgroundColor: 'color-mix(in srgb, var(--SmartThemeBlurTintColor) 72%, transparent)',
@@ -1102,18 +1106,14 @@ export const characterLibraryStyles = stylex.create({
     toolbarActionCompact: {
         width: 'calc(var(--mainFontSize) * 1.9)',
         minWidth: 'calc(var(--mainFontSize) * 1.9)',
-        minHeight: 'calc(var(--mainFontSize) * 1.9)',
         padding: '3px',
-        touchAction: 'manipulation',
         '@media (pointer: coarse)': {
             minWidth: 'max(44px, calc(var(--mainFontSize) * 1.9))',
-            minHeight: 'max(44px, calc(var(--mainFontSize) * 1.9))',
         },
     },
     toolbarActionFull: {
         gap: '5px',
         paddingInline: '8px',
-        whiteSpace: 'nowrap',
     },
     toolbarActions: {
         display: 'flex',
@@ -1125,18 +1125,9 @@ export const characterLibraryStyles = stylex.create({
     toolbarActionsInner: {
         display: 'flex',
         minWidth: 0,
-        flexShrink: 0,
-        flexWrap: 'nowrap',
-        gap: '8px',
+        flexWrap: 'wrap',
+        gap: '6px',
         alignItems: 'center',
-    },
-    toolbarActionsInnerNoWrap: {
-        display: 'flex',
-        flexWrap: 'nowrap',
-        flexShrink: 0,
-        gap: '8px',
-        alignItems: 'center',
-        minWidth: 0,
     },
     toolbarFields: {
         display: 'flex',

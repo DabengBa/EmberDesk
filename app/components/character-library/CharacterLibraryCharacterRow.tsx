@@ -121,10 +121,10 @@ export function CharacterLibraryCharacterRow({
                             : null}
                     </div>
                     <input className="ch_fav" value={String(model.isFav)} hidden readOnly />
-                    <div className="ch_description" style={model.description ? undefined : { display: 'none' }}>
+                    <div className="ch_description" title={model.description || undefined}>
                         {model.description || ''}
                     </div>
-                    <div className="tags tags_inline">
+                    <div className="tags tags_inline" title={visible.map(tag => tag.name).join('、') || undefined}>
                         {visible.map(tag => (
                             <span className="tag" id={tag.id} key={tag.id}>
                                 <span className="tag_name">{tag.name}</span>
