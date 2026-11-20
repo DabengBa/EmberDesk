@@ -12,7 +12,6 @@
 Goals:
 
 - Document the current rules that turn dependency namespace objects into the documented `/lib.js` export surface.
-- Make the `slideToggle` fallback order reproducible without importing production code.
 - Record the boundary between module exports and legacy global shims.
 
 Non-goals:
@@ -25,56 +24,15 @@ Non-goals:
 
 The boundary receives dependency values from ES module imports in `public/lib.js`.
 
-For most dependencies, the imported value is exported directly. `slidetoggle` is special because direct Node source imports and browser bundler builds can expose different namespace shapes:
-
-1. Vite ESM resolution can expose `toggle` at the namespace top level.
-2. Node CommonJS interop can expose an object under `default`.
-3. Some CommonJS namespace forms may expose `slidetoggle` or `module.exports`.
-
-The current `slideToggle` resolver checks those shapes in this order:
-
-1. `namespace.toggle`
-2. `Reflect.get(namespace, 'default')?.toggle`
-3. `Reflect.get(namespace, 'slidetoggle')?.toggle`
-4. `Reflect.get(namespace, 'module.exports')?.toggle`
-
-Runtime reflection is intentional for fallback keys because direct property access to non-primary namespace shapes can make bundled-output validation treat those fallback names as required static exports.
-
 ## Outputs
 
-The processing output is the `slideToggle` function value included in both:
-
-- the default export object from `public/lib.js`
-- the named `slideToggle` export from `public/lib.js`
-
-The default export and named export must refer to the same value.
+Each shared library value is exported under the same key as a named export and in the default export object. Both forms refer to the same value. `initLibraryShims()` is a separate named export.
 
 ## Staged Processing Flow
 
-1. Import the `slidetoggle` namespace.
-2. Read the bundled-output-preferred top-level `toggle` property.
-3. If missing, read known CommonJS fallback containers through `Reflect.get`.
-4. Select the first fallback container whose `.toggle` value exists.
-5. Export that selected value as `slideToggle`.
-6. Include the same selected value in the default export object.
-
-## Key Rules
-
-- The resolver must not return `undefined` for the installed `slidetoggle@4.x` package.
-- The resolver is first-match-wins.
-- Direct named-property reads are safe for `toggle` because it is the primary browser-bundler ESM export.
-- Fallback containers are read through `Reflect.get` to preserve bundled-output validation.
-- Legacy globals are installed only by `initLibraryShims()` and only when the target global is absent.
-
-## Output Schema
-
-```json
-{
-  "slideToggle": "Function",
-  "default.slideToggle": "same Function reference",
-  "legacyGlobals": "selected window keys installed only when absent"
-}
-```
+1. Import the shared library values in `public/lib.js`.
+2. Expose the same values in the named and default exports, both from source and in Vite's built `/lib.js`.
+3. When called, `initLibraryShims()` assigns selected library values to missing `window` keys only.
 
 ## Sandbox Verification
 
@@ -84,10 +42,9 @@ Run:
 uv run python .docs/logic-description/frontend_shared_library_boundary_sandbox_proof.py
 ```
 
-The proof script embeds fake namespace objects for browser-bundler top-level, Node CommonJS default, legacy `slidetoggle`, and `module.exports` shapes. It also verifies first-match precedence and the non-clobbering legacy-global rule.
+The proof script models installing a missing legacy global and preserving an existing value. The focused Jest test checks the actual source and the Vite bundle.
 
 ## Boundaries And Failure Modes
 
-- If all known namespace shapes are missing, `slideToggle` resolves to `None` in the proof model and `undefined` in JavaScript; the boundary test must fail because the documented export is not a function.
-- If a fallback shape exists but `.toggle` is not callable, the focused Jest test still catches the production boundary through `expect.any(Function)`.
+- If named and default exports diverge in source or the bundle exposes the wrong keys, the focused Jest test fails.
 - If a legacy global already exists, `initLibraryShims()` must leave it unchanged.

@@ -32,7 +32,7 @@ Browser ES modules do not automatically leak imported names to `window`. Any glo
 The same source file is also imported directly by Node/Jest tests. Dependency export interop therefore has to work in multiple environments:
 
 - Vite's browser module build (ES module output)
-- Node's direct source import path, where a CommonJS package can appear under `default`, `slidetoggle`, or `module.exports`.
+- Node's direct source import path.
 
 This dual boundary is intentional: `/lib.js` must preserve both source imports and bundled output.
 
@@ -57,8 +57,6 @@ The default export object and named exports are expected to expose the same keys
 - `seedrandom`
 - `Popper`
 - `droll`
-- `morphdom`
-- `slideToggle`
 - `chalk`
 - `yaml`
 - `chevrotain`
@@ -73,17 +71,6 @@ import { DOMPurify, Fuse, gzip } from '../lib.js';
 ```
 
 Use absolute `/lib.js` imports only where the existing module location already follows that style or where relative paths would be brittle.
-
-### `slideToggle` interop rule
-
-`slideToggle` is exported as a named value and as `default.slideToggle`. It currently resolves from the imported `slidetoggle` namespace in this order:
-
-1. `toggle`
-2. `default.toggle`
-3. `slidetoggle.toggle`
-4. `module.exports.toggle`
-
-Fallback containers are read with `Reflect.get()` so browser bundled-output validation does not treat Node-only CommonJS fallback names as required static exports. The documented boundary is that source imports and Vite-built `/lib.js` expose a callable `slideToggle` function.
 
 ## Legacy Global Shim Contract
 
@@ -157,7 +144,6 @@ Stability-sensitive binding points:
 - `initLibraryShims()` call during `public/script.js` startup
 - `installPublicBrowserApi()` call during `public/script.js` module composition
 - `public/scripts/events.js` and `public/scripts/request-context.js` as separate extracted contract owners
-- `slideToggle` resolver in `public/lib.js`
 - Vite library config in `vite.config.ts`
 - `getViteLibServeMiddleware()` in `src/middleware/vite-lib-serve.js`
 

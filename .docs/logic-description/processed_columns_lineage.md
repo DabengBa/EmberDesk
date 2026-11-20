@@ -22,8 +22,6 @@ Current owning flow:
 
 | Output field | Source input | Transformation | Failure / degradation behavior |
 |---|---|---|---|
-| `slideToggle` | `slidetoggle` namespace object | First available value from `toggle`, `default.toggle`, `slidetoggle.toggle`, `module.exports.toggle` | Missing or non-callable value fails the boundary proof and focused Jest test |
-| `default.slideToggle` | selected `slideToggle` value | Same object reference is inserted into the default export map | Reference mismatch fails the focused Jest test |
 | legacy global value | existing `window` object plus selected library values | Install only when the named global is absent | Existing global remains unchanged; missing globals are populated |
 | `resolvedAvatars` | current `characters` array plus numeric UI ids | Keep non-empty string `avatar` values at requested indexes | Missing, empty, non-string, or out-of-range ids are ignored |
 | `deleteCandidates` | current `characters` array plus requested avatar keys | Keep valid avatar keys and attach current local row/index when present | Absent local rows are preserved as `{ character: null, index: -1 }` so delete remains keyed by avatar |
