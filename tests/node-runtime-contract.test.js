@@ -4,9 +4,9 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const expectedNodeVersion = '26.12.1';
+const expectedNodeVersion = '26.13.1';
 
-test('pins the application runtime to Node 26.12.1', () => {
+test('pins the application runtime to Node 26.13.1', () => {
     const packageJson = JSON.parse(fs.readFileSync(path.join(repoRoot, 'package.json'), 'utf8'));
     const dockerfile = fs.readFileSync(path.join(repoRoot, 'Dockerfile'), 'utf8');
     const agents = fs.readFileSync(path.join(repoRoot, 'AGENTS.md'), 'utf8');
@@ -15,7 +15,7 @@ test('pins the application runtime to Node 26.12.1', () => {
     const pnpmWorkflow = fs.readFileSync(path.join(repoRoot, '.docs', 'tech', 'pnpm-workflow.md'), 'utf8');
 
     expect(packageJson.engines.node).toBe(`>=${expectedNodeVersion} <27`);
-    expect(dockerfile).toContain(`FROM node:${expectedNodeVersion}-alpine3.23`);
+    expect(dockerfile).toContain(`FROM node:${expectedNodeVersion}-alpine3.24`);
     expect(agents).toContain(`Node.js ${expectedNodeVersion}`);
     expect(readme).toContain(`Node.js ${expectedNodeVersion}`);
     expect(overview).toContain(`Node.js ${expectedNodeVersion}`);

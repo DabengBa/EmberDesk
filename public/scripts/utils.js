@@ -2382,10 +2382,29 @@ export async function fetchFaFile(name) {
     document.head.append(style);
     const sheet = style.sheet;
     style.remove();
-    return [...sheet.cssRules]
-        .filter(rule => (rule instanceof CSSStyleRule && rule.style?.content))
-        .map(rule => rule['selectorText'].split(/,\s*/).map(selector => selector.split('::').shift().slice(1)))
-    ;
+    const icons = [];
+    const glyphs = new Map();
+    for (const rule of sheet.cssRules) {
+        if (!(rule instanceof CSSStyleRule)) continue;
+        const names = rule.selectorText.split(/,\s*/)
+            .map(selector => /^\.(fa-[\w-]+)(?:::?before)?$/.exec(selector)?.[1])
+            .filter(Boolean);
+        if (!names.length) continue;
+
+        // Font Awesome 7 defines each alias separately, with the same --fa glyph.
+        const glyph = rule.style.getPropertyValue('--fa');
+        if (glyph) {
+            const aliases = glyphs.get(glyph);
+            if (aliases) aliases.push(...names);
+            else {
+                glyphs.set(glyph, names);
+                icons.push(names);
+            }
+        } else if (rule.style.content) {
+            icons.push(names);
+        }
+    }
+    return icons;
 }
 
 export async function fetchFa() {

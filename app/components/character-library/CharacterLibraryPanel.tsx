@@ -322,7 +322,6 @@ function CharacterLibraryVirtualRows({
             scrollElement.scrollTop = rememberedOffset;
             if (Math.abs(scrollElement.scrollTop - rememberedOffset) > 1) {
                 virtualizer.scrollOffset = scrollElement.scrollTop;
-                virtualizer.scrollAdjustments = 0;
                 virtualizer.measure();
             }
         };

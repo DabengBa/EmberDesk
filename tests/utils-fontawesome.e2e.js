@@ -2,6 +2,25 @@ import { test, expect } from '@playwright/test';
 
 import { testSetup } from './frontend/frontent-test-utils.js';
 
+test('the shipped Font Awesome stylesheet lists searchable icon aliases and renders glyphs', async ({ page }) => {
+    await testSetup.awaitST({ page });
+    const result = await page.evaluate(async () => {
+        const { fetchFa } = await import('/scripts/utils.js');
+        const icons = await fetchFa();
+        const icon = document.createElement('i');
+        icon.className = 'fa-solid fa-pencil';
+        document.body.append(icon);
+        const font = getComputedStyle(icon).fontFamily;
+        const content = getComputedStyle(icon, '::before').content;
+        const loadedFonts = await document.fonts.load(`900 16px ${font}`, '\uf303');
+        icon.remove();
+        return { names: icons.find(names => names.includes('fa-pencil')), content, loaded: loadedFonts.length > 0 };
+    });
+    expect(result.names).toEqual(expect.arrayContaining(['fa-pencil', 'fa-pencil-alt']));
+    expect(result.content).toContain('\uf303');
+    expect(result.loaded).toBe(true);
+});
+
 test('Font Awesome CSS is parsed without an HTML sink under Trusted Types enforcement', async ({ page }) => {
     await testSetup.awaitST({ page });
     const css = '.fa-alpha::before, .fa-beta::before { content: "\\f001"; }\n'

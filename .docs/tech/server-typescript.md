@@ -34,7 +34,7 @@ existing formats and product behavior.
 
 ## Runtime and module boundary
 
-The supported runtime is Node.js 26.12.1 (`>=26.12.1 <27`). The server uses
+The supported runtime is Node.js 26.13.1 (`>=26.13.1 <27`). The server uses
 Node native type stripping for `.ts` modules. `pnpm start` still runs
 `node server.js`; no server emit, runtime loader, or frontend build is needed
 to execute a migrated module. The entry point still parses configuration,

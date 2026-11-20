@@ -4,13 +4,11 @@ import { translate } from './i18n.js';
 import { toastPositionClasses } from './power-user.js';
 import { loadFileToDocument, removeFromArray, runAfterAnimation, uuidv4 } from './utils.js';
 
-let cropScript, cropStyles;
+let cropScript;
 
 function loadCropAssets() {
     cropScript ??= loadFileToDocument('/lib/cropper.min.js', 'js').catch(error => { cropScript = undefined; throw error; });
-    cropStyles ??= loadFileToDocument('/css/cropper.min.css', 'css', document.head.querySelector('link[rel="stylesheet"][href="/style.css"]'))
-        .catch(error => { cropStyles = undefined; throw error; });
-    return Promise.all([cropScript, cropStyles]);
+    return cropScript;
 }
 
 /** @readonly */

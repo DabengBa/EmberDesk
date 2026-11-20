@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import type { DatabaseSync } from 'node:sqlite';
 import { PassThrough } from 'node:stream';
-import archiver from 'archiver';
+import { ZipArchive } from 'archiver';
 import yauzl from 'yauzl';
 import { extractFilesFromZipBuffer } from '../archive-utils.ts';
 import { ensureCanonicalSliceBackend } from '../canonical-backend.js';
@@ -86,7 +86,7 @@ export async function exportChatExchange(db: DatabaseSync, directories: UserDire
     const manifest = JSON.stringify({ version: 1, attachments: entries.map(entry => entry.attachment) });
     if (size + Buffer.byteLength(manifest) > MAX_CHAT_EXCHANGE_BYTES) throw new Error('chat_exchange_too_large');
 
-    const archive = archiver('zip');
+    const archive = new ZipArchive();
     const output = new PassThrough();
     archive.on('error', error => output.destroy(error));
     archive.pipe(output);

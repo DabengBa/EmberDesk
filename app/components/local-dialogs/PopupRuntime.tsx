@@ -6,9 +6,24 @@ import type { Popup, PopupOptions, CustomPopupButton, CustomPopupInput } from '.
 
 type PopupValue = string | number | boolean | null | undefined;
 type PopupRefs = Pick<Popup, 'dlg' | 'body' | 'content' | 'mainInput' | 'inputControls' | 'buttonControls' | 'okButton' | 'cancelButton' | 'closeButton' | 'cropWrap' | 'cropImage'>;
-type CropData = { x: number; y: number; width: number; height: number; [key: string]: unknown };
-type CropperInstance = { getData(): CropData; setData(data: CropData): void; reset(): void; destroy(): void; getCroppedCanvas(): HTMLCanvasElement };
-type CropperConstructor = new (image: HTMLImageElement, options: { aspectRatio: number; autoCropArea: number; viewMode: number; rotatable: boolean; ready(): void; crop(event: CustomEvent<CropData>): void }) => CropperInstance;
+type CropRect = { x: number; y: number; width: number; height: number };
+type CropperImage = HTMLElement & {
+    rotatable: boolean; scalable: boolean; skewable: boolean; translatable: boolean;
+    $ready(): Promise<HTMLImageElement>;
+    $setTransform(a: number, b: number, c: number, d: number, e: number, f: number): void;
+};
+type CropperSelection = HTMLElement & CropRect & {
+    aspectRatio: number; initialCoverage: number; precise: boolean;
+    $change(x: number, y: number, width: number, height: number, aspectRatio: number): void;
+    $toCanvas(options: { width: number }): Promise<HTMLCanvasElement>;
+};
+type CropperConstructor = new (image: HTMLImageElement) => {
+    getCropperCanvas(): HTMLElement | null;
+    getCropperImage(): CropperImage | null;
+    getCropperSelection(): CropperSelection | null;
+    destroy(): void;
+};
+type CropControls = { adjust(x: number, y: number, factor: number): void; preview(): Promise<string> };
 type Services = {
     translate(text: string): string;
     shouldSendOnEnter(): boolean;
@@ -32,6 +47,91 @@ type Phase = 'created' | 'open' | 'closing';
 
 const TEXT = 1, CONFIRM = 2, INPUT = 3, DISPLAY = 4, CROP = 5;
 
+function mountCropper(refs: PopupRefs, { popup, options, services }: Request, ready: (controls: CropControls) => void) {
+    const Cropper = (globalThis as typeof globalThis & { Cropper?: { Cropper: CropperConstructor } }).Cropper?.Cropper;
+    if (!Cropper) throw new Error('Image cropper is unavailable');
+    const cropper = new Cropper(refs.cropImage);
+    const canvas = cropper.getCropperCanvas();
+    const image = cropper.getCropperImage();
+    const selection = cropper.getCropperSelection();
+    if (!canvas || !image || !selection) {
+        cropper.destroy();
+        throw new Error('Image cropper did not initialize');
+    }
+    const aspectRatio = options.cropAspect ?? 2 / 3;
+    image.rotatable = image.scalable = image.skewable = image.translatable = false;
+    selection.initialCoverage = NaN; // Initialize after the displayed image bounds are known.
+    selection.aspectRatio = aspectRatio;
+    selection.precise = true;
+    let scale = 0, width = 0, height = 0;
+    let observer: ResizeObserver | undefined;
+    let disposed = false;
+
+    const place = (x: number, y: number, w: number, h: number) => {
+        // Buttons and layout already preserve the aspect ratio; gestures use the selection's ratio.
+        selection.$change(Math.max(0, Math.min(x, width - w)), Math.max(0, Math.min(y, height - h)), w, h, NaN);
+    };
+    const reset = () => {
+        const w = Math.min(width, height * aspectRatio);
+        const h = w / aspectRatio;
+        place((width - w) / 2, (height - h) / 2, w, h);
+    };
+    selection.addEventListener('change', event => {
+        const rect = (event as CustomEvent<CropRect>).detail;
+        // Cropper reports display pixels. Constrain gestures to the image, then
+        // round source-pixel edges so the server's extract stays inside the image.
+        const epsilon = 1e-6;
+        if (!scale || rect.x < -epsilon || rect.y < -epsilon || rect.x + rect.width > width + epsilon || rect.y + rect.height > height + epsilon || Math.min(rect.width, rect.height) < scale - epsilon) {
+            event.preventDefault();
+            return;
+        }
+        const x = Math.round(rect.x / scale), y = Math.round(rect.y / scale);
+        popup.cropData = { x, y, width: Math.round((rect.x + rect.width) / scale) - x, height: Math.round((rect.y + rect.height) / scale) - y, want_resize: true };
+    });
+    const controls: CropControls = {
+        adjust(x, y, factor) {
+            if (!factor) { reset(); return; }
+            const { width: w, height: h } = selection;
+            const step = Math.max(scale, Math.min(w, h) * .05);
+            const zoom = Math.min(factor, width / w, height / h);
+            place(selection.x + x * step + w * (1 - zoom) / 2, selection.y + y * step + h * (1 - zoom) / 2, w * zoom, h * zoom);
+        },
+        async preview() {
+            const output = await selection.$toCanvas({ width: Math.round(selection.width / scale) });
+            return output.toDataURL('image/jpeg');
+        },
+    };
+    const layoutImage = (naturalWidth: number, naturalHeight: number) => {
+        const nextScale = Math.min(refs.cropWrap.clientWidth / naturalWidth, refs.cropWrap.clientHeight / naturalHeight);
+        if (!nextScale || nextScale === scale) return;
+        const oldScale = scale;
+        scale = nextScale;
+        width = naturalWidth * scale;
+        height = naturalHeight * scale;
+        canvas.style.width = `${width}px`;
+        canvas.style.height = `${height}px`;
+        // Cropper transforms about the image center. Allow scaling only for this fit.
+        image.scalable = true;
+        image.$setTransform(scale, 0, 0, scale, (width - naturalWidth) / 2, (height - naturalHeight) / 2);
+        image.scalable = false;
+        if (oldScale) {
+            const ratio = scale / oldScale;
+            place(selection.x * ratio, selection.y * ratio, selection.width * ratio, selection.height * ratio);
+        } else {
+            reset();
+            ready(controls);
+        }
+    };
+    void image.$ready().then(({ naturalWidth, naturalHeight }) => {
+        if (disposed) return;
+        const layout = () => layoutImage(naturalWidth, naturalHeight);
+        layout();
+        observer = new ResizeObserver(layout);
+        observer.observe(refs.cropWrap);
+    }).catch(error => { if (!disposed) services.reportError(error); });
+    return () => { disposed = true; observer?.disconnect(); cropper.destroy(); };
+}
+
 function CustomInput({ input, translate }: { input: CustomPopupInput; translate: Services['translate'] }) {
     const checkbox = !input.type || input.type === 'checkbox';
     const field = { id: input.id, disabled: Boolean(input.disabled), title: input.tooltip ?? undefined };
@@ -50,12 +150,12 @@ type DialogProps = {
     complete(result: number | null): Promise<PopupValue>;
     cancel(): void; opened(): void; close(): void;
     setAutoFocus(options?: { applyAutoFocus?: boolean }): void;
-    setCropper(cropper: CropperInstance | undefined): void;
+    setCropper(cropper: CropControls | undefined): void;
 };
 
 function PopupDialog({ request, refs, phase, complete, cancel, opened, close, setAutoFocus, setCropper }: DialogProps) {
     const { popup, content, inputValue, options, services } = request;
-    const cropperRef = useRef<CropperInstance | undefined>(undefined);
+    const cropperRef = useRef<CropControls | undefined>(undefined);
     const [cropReady, setCropReady] = useState(false);
     const customActionPending = useRef(false);
     const { translate } = services;
@@ -98,18 +198,13 @@ function PopupDialog({ request, refs, phase, complete, cancel, opened, close, se
     }, [phase]);
     useLayoutEffect(() => {
         if (phase !== 'open' || popup.type !== CROP) return;
-        const Cropper = (globalThis as typeof globalThis & { Cropper: CropperConstructor }).Cropper;
-        if (!Cropper) throw new Error('Image cropper is unavailable');
-        setCropReady(false);
-        const cropper = new Cropper(refs.cropImage, {
-            aspectRatio: options.cropAspect ?? 2 / 3, autoCropArea: 1, viewMode: 2, rotatable: false,
-            ready: () => { setCropReady(true); },
-            crop: event => { popup.cropData = { ...event.detail, want_resize: true }; },
+        const destroy = mountCropper(refs, request, controls => {
+            cropperRef.current = controls;
+            setCropper(controls);
+            setCropReady(true);
         });
-        cropperRef.current = cropper;
-        setCropper(cropper);
-        return () => { cropper.destroy(); cropperRef.current = undefined; setCropper(undefined); };
-    }, [phase]);
+        return () => { destroy(); cropperRef.current = undefined; setCropper(undefined); };
+    }, [phase, popup.type, refs, request, setCropper]);
 
     const keyDown = (event: KeyboardEvent<HTMLDialogElement>) => {
         if (event.key !== 'Enter' || event.nativeEvent.isComposing || event.altKey || event.shiftKey) return;
@@ -172,12 +267,7 @@ function PopupDialog({ request, refs, phase, complete, cancel, opened, close, se
             </div>
             {popup.type === CROP ? <div className="popup-crop-controls" role="group" aria-label={translate('Adjust crop selection')}>
                 {cropActions.map(([label, icon, x, y, scale]) => <button key={label} type="button" className="menu_button" title={translate(label)} aria-label={translate(label)} disabled={!cropReady} onClick={() => {
-                    const cropper = cropperRef.current;
-                    if (!cropper) return;
-                    if (scale === 0) { cropper.reset(); return; }
-                    const data = cropper.getData();
-                    const step = Math.max(1, Math.min(data.width, data.height) * .05);
-                    cropper.setData({ ...data, x: data.x + x * step + data.width * (1 - scale) / 2, y: data.y + y * step + data.height * (1 - scale) / 2, width: data.width * scale, height: data.height * scale });
+                    cropperRef.current?.adjust(x, y, scale);
                 }}><i className={`fa-solid ${icon}`} aria-hidden="true" /></button>)}
             </div> : null}
             <textarea ref={element => { if (element) refs.mainInput = element; }} className="popup-input text_pole result-control auto-select" rows={options.rows ?? 1}
@@ -210,7 +300,7 @@ export const createPopupRuntime: PopupRuntimeFactory = request => {
     let pending = false, disposed = false, forceConfirm = false, lastEscape = 0;
     let opening = false;
     let opener: HTMLElement | null = null;
-    let cropper: CropperInstance | undefined;
+    let cropper: CropControls | undefined;
     let resolve!: (value: PopupValue) => void;
     let reject!: (error: unknown) => void;
     const result = new Promise<PopupValue>((yes, no) => { resolve = yes; reject = no; });
@@ -245,8 +335,11 @@ export const createPopupRuntime: PopupRuntimeFactory = request => {
             let value: PopupValue = selected;
             if (popup.type === INPUT) value = selected !== null && selected >= 1 ? refs.mainInput.value : selected === null ? null : false;
             if (popup.type === CROP) {
-                if (selected !== null && selected >= 1 && !cropper) throw new Error('Crop image is not ready');
-                value = selected !== null && selected >= 1 ? cropper!.getCroppedCanvas().toDataURL('image/jpeg') : null;
+                value = null;
+                if (selected !== null && selected >= 1) {
+                    if (!cropper) throw new Error('Crop image is not ready');
+                    value = await cropper.preview();
+                }
             }
             popup.result = selected;
             popup.value = value;
@@ -281,7 +374,8 @@ export const createPopupRuntime: PopupRuntimeFactory = request => {
         if (phase !== 'open' || disposed) return;
         void Promise.resolve().then(() => popup.onOpen?.(popup)).catch(fail);
     };
-    const render = () => portal.render(<Theme theme={emberDeskTheme} mode="dark"><PopupDialog request={request} refs={refs} phase={phase} complete={complete} cancel={cancel} opened={opened} close={() => { void close(); }} setAutoFocus={setAutoFocus} setCropper={value => { cropper = value; }} /></Theme>, true);
+    const setCropper = (value: CropControls | undefined) => { cropper = value; };
+    const render = () => portal.render(<Theme theme={emberDeskTheme} mode="dark"><PopupDialog request={request} refs={refs} phase={phase} complete={complete} cancel={cancel} opened={opened} close={() => { void close(); }} setAutoFocus={setAutoFocus} setCropper={setCropper} /></Theme>, true);
     try { render(); } catch (error) { cleanup(); throw error; }
     return {
         refs, complete, setAutoFocus,

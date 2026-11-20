@@ -16,7 +16,7 @@ import { searchCanonicalChatPayload, readCanonicalRecentChatPayload } from '../s
 import { writeCanonicalChatPayload } from '../src/endpoints/canonical-chat-write-service.ts';
 import { createCanonicalChatBackup } from '../src/endpoints/canonical-chat-backup-restore-service.ts';
 
-const EXPECTED_NODE_VERSION = 'v26.12.1';
+const EXPECTED_NODE_VERSION = 'v26.13.1';
 const FIXTURE = Object.freeze({
     characterCount: 12,
     chatsPerCharacter: 3,

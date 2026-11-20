@@ -75,7 +75,12 @@ async function withDocumentLanguage(language, callback) {
     const originals = new Map(keys.map(key => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
     try {
         globalThis.Document = class Document {};
-        globalThis.document = Object.assign(new globalThis.Document(), { documentElement: { lang: language }, dispatchEvent() {} });
+        globalThis.document = Object.assign(new globalThis.Document(), {
+            documentElement: { lang: language },
+            dispatchEvent() {},
+            getElementsByTagName: () => [],
+            querySelectorAll: () => [],
+        });
         globalThis.MutationObserver = class { observe() {} };
         globalThis.CustomEvent = class {};
         globalThis.localStorage = { getItem: key => key === 'language' ? language : null };

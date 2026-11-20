@@ -58,6 +58,7 @@ describe('frontend shared library boundary', () => {
     beforeEach(() => {
         const documentStub = {
             addEventListener: () => {},
+            getElementsByTagName: () => [],
             createElement: () => ({
                 setAttribute: () => {},
                 addEventListener: () => {},
