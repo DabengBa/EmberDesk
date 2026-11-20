@@ -104,7 +104,6 @@ export default [
             globals: {
                 ...globals.node,
                 globalThis: 'readonly',
-                Deno: 'readonly',
             },
         },
     },
