@@ -131,6 +131,7 @@ export function buildMainChatMessageRecord(message, {
         inlineMediaText: hasMedia && message?.extra?.inline_image === false,
         reasoningState,
         reasoningType: normalizeString(message?.extra?.reasoning_type) || null,
+        regenerationStatus: normalizeString(messageUi.regenerationStatus).trim() || null,
         recoveryStatus: normalizeString(messageUi.recoveryStatus).trim() || null,
         recoveryStage: messageUi.recoveryStage === 'fallback'
             ? 'fallback'

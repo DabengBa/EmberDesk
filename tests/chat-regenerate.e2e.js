@@ -10,6 +10,7 @@ const test = base.extend({
     characterModel: async ({ page }, use) => {
         const requests = [];
         let model;
+
         try {
             await use(async (responses, { streamOpenAi = false, temporary = false } = {}) => {
                 model = createServer(async (req, res) => {
@@ -34,9 +35,10 @@ const test = base.extend({
                         res.writeHead(200, { 'Content-Type': 'text/event-stream' });
                         const tool_calls = [{ index: 0, id: `call-${requests.length}`, function: { name: step.tool, arguments: JSON.stringify({ content: step.content }) } }];
                         res.end(`data: ${JSON.stringify({ choices: [{ delta: { tool_calls } }] })}\n\ndata: [DONE]\n\n`);
-                    } else if (step.holdOpen || step.stream) {
+                    } else if (step.holdOpen || step.stream || step.finish) {
                         res.writeHead(200, { 'Content-Type': 'text/event-stream' });
                         res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: step.content } }] })}\n\n`);
+                        if (step.finish) await step.finish;
                         if (!step.holdOpen) res.end('data: [DONE]\n\n');
                     } else {
                         res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -429,6 +431,120 @@ test.describe('chat regenerate', () => {
         expect(wire).toContain('FIRST_REPLY');
     });
 
+    test('can stop while preparing a replacement without sending create', async ({ page, characterModel }) => {
+        const requests = await characterModel([{ content: 'EARLY_STOP_ORIGINAL' }]);
+        await sendCharacterMessage(page, 'first question', 'EARLY_STOP_ORIGINAL');
+        await page.evaluate(() => {
+            const settings = window.SillyTavern.getContext().chatCompletionSettings;
+            settings.temperature = settings.temperature === 0.25 ? 0.5 : 0.25;
+        });
+        const gate = Promise.withResolvers();
+        const settingsStarted = Promise.withResolvers();
+        const settingsSaved = page.waitForResponse('**/api/settings/save');
+        let creates = 0;
+        page.on('request', request => {
+            if (request.url().endsWith('/generation/create')) creates++;
+        });
+        await page.route('**/api/settings/save', async route => {
+            settingsStarted.resolve();
+            await gate.promise;
+            await route.continue();
+        });
+        try {
+            await chooseRegenerate(page);
+            await settingsStarted.promise;
+            const status = page.locator('#chat').getByRole('status');
+            await expect(status).toHaveText('重新生成中…', { timeout: 2_000 });
+            await expect(status).toHaveCSS('animation-name', 'chat-generation-status-enter');
+            const initialOpacity = await status.evaluate(element => {
+                const [entrance] = element.getAnimations();
+                entrance.pause();
+                entrance.currentTime = 0;
+                return getComputedStyle(element).opacity;
+            });
+            expect(initialOpacity).toBe('1');
+            await expect(page.locator('#chat').getByText('EARLY_STOP_ORIGINAL', { exact: true })).toHaveCount(0);
+            await page.locator('#mes_stop').click();
+            await expect(page.locator('#chat').getByText('EARLY_STOP_ORIGINAL', { exact: true })).toBeVisible();
+            await expect(page.locator('#mes_stop')).toBeHidden();
+        } finally {
+            gate.resolve();
+        }
+        await settingsSaved;
+        await page.unrouteAll({ behavior: 'wait' });
+        await waitForRegenerateSettled(page);
+        expect(creates).toBe(0);
+        expect(requests).toHaveLength(1);
+    });
+
+    test('can stop a persisted replacement while create is delayed', async ({ page, characterModel }) => {
+        await characterModel([{ content: 'DELAYED_CREATE_ORIGINAL' }, { content: 'UNWANTED_PARTIAL', holdOpen: true }], { streamOpenAi: true });
+        await sendCharacterMessage(page, 'first question', 'DELAYED_CREATE_ORIGINAL');
+        const release = Promise.withResolvers();
+        const serverCreated = Promise.withResolvers();
+        await page.route('**/generation/create', async route => {
+            const response = await route.fetch();
+            serverCreated.resolve((await response.json()).id);
+            await release.promise;
+            await route.fulfill({ response });
+        });
+        try {
+            await chooseRegenerate(page);
+            const id = await serverCreated.promise;
+            await expect(page.locator('#chat').getByRole('status')).toHaveText('重新生成中…', { timeout: 2_000 });
+            await expect(page.locator('#mes_stop')).toBeVisible();
+            await page.locator('#mes_stop').click();
+            await expectRunStatus(page, id, 'cancelled');
+        } finally {
+            release.resolve();
+        }
+        await expect(page.locator('#chat').getByText('DELAYED_CREATE_ORIGINAL', { exact: true })).toBeVisible();
+        await expect(page.locator('#chat').getByText('UNWANTED_PARTIAL', { exact: true })).toHaveCount(0);
+    });
+
+    test('keeps the streamed replacement on screen while the saved reply reloads', async ({ page, characterModel }) => {
+        const finish = Promise.withResolvers();
+        await characterModel([{ content: 'HANDOFF_ORIGINAL' }, { content: 'HANDOFF_REPLACEMENT', finish: finish.promise }], { streamOpenAi: true });
+        await sendCharacterMessage(page, 'first question', 'HANDOFF_ORIGINAL');
+        const originalSlot = await page.locator('#chat .mes').filter({ hasText: 'HANDOFF_ORIGINAL' }).getAttribute('mesid');
+        const name = await page.evaluate(() => window.SillyTavern.getContext().getCurrentChatId());
+        const releaseReload = Promise.withResolvers();
+        const reloadStarted = Promise.withResolvers();
+        try {
+            const id = await regenerateCharacter(page);
+            const reply = page.locator(`#chat .mes[mesid="${originalSlot}"]`);
+            await expect(reply.getByText('HANDOFF_REPLACEMENT', { exact: true })).toBeVisible();
+            await expect(reply.getByRole('status')).toHaveText('重新生成中…');
+            await expect(page.locator('#chat').getByText('HANDOFF_ORIGINAL', { exact: true })).toHaveCount(0);
+            await page.route('**/api/chats/get', async route => {
+                reloadStarted.resolve();
+                await releaseReload.promise;
+                await route.continue();
+            });
+            finish.resolve();
+            await expectRunStatus(page, id, 'completed');
+            await reloadStarted.promise;
+            await expect(reply.getByText('HANDOFF_REPLACEMENT', { exact: true })).toBeVisible();
+            await expect(reply.getByRole('status')).toHaveCount(0);
+            await expect(page.locator('#mes_stop')).toBeHidden();
+            await expect(page.locator('#chat').getByText('HANDOFF_ORIGINAL', { exact: true })).toHaveCount(0);
+        } finally {
+            finish.resolve();
+            releaseReload.resolve();
+        }
+        await expect.poll(() => lastMessageText(page)).toBe('HANDOFF_REPLACEMENT');
+        await page.unrouteAll({ behavior: 'wait' });
+        await page.reload();
+        await testSetup.awaitST({ page });
+        await page.evaluate(async ({ character, chat }) => {
+            const context = window.SillyTavern.getContext();
+            await context.selectCharacterById(context.characters.findIndex(card => card.name === character));
+            await context.openCharacterChat(chat);
+        }, { character: characterName, chat: name });
+        await expect(page.locator('#chat').getByText('HANDOFF_REPLACEMENT', { exact: true })).toHaveCount(1);
+        await expect(page.locator('#chat').getByText('HANDOFF_ORIGINAL', { exact: true })).toHaveCount(0);
+    });
+
     test('preserves the previous reply when server regeneration fails outright', async ({ page, characterModel }) => {
         const requests = await characterModel([{ content: 'KEEP_ME_REPLY' }, { status: 500 }]);
 
@@ -437,7 +553,8 @@ test.describe('chat regenerate', () => {
         expect(snapshotBefore.at(-1).mes).toContain('KEEP_ME_REPLY');
 
         await expectRunStatus(page, await regenerateCharacter(page), 'failed');
-        await expect(page.getByText('generation_failed', { exact: true })).toBeVisible();
+        await expect(page.getByText('重新生成失败，请重试。', { exact: true })).toBeVisible();
+        await expect(page.locator('#chat').getByText('KEEP_ME_REPLY', { exact: true })).toBeVisible();
 
         // A failed server run never commits its replacement turn.
         const snapshotAfter = await chatSnapshot(page);
@@ -521,6 +638,7 @@ test.describe('chat regenerate', () => {
                 .toEqual([expect.objectContaining({ name: 'read-me.txt' })]);
             await page.evaluate(async () => (await import('/script.js')).regenerateLastReply());
             await expect(page.getByText('PARTIAL_NEW_', { exact: true })).toBeVisible();
+            await expect(page.locator('#chat').getByText('OLD_REPLY', { exact: true })).toHaveCount(0);
             await expect(page.locator('#mes_stop')).toBeVisible();
             await expect(page.locator('#send_but')).toBeHidden();
             const openChat = name => page.evaluate(chat => window.SillyTavern.getContext().openCharacterChat(chat), name);
@@ -528,6 +646,7 @@ test.describe('chat regenerate', () => {
             await expect(page.getByText('PARTIAL_NEW_', { exact: true })).toHaveCount(0);
             await openChat(chatName);
             await expect(page.getByText('PARTIAL_NEW_', { exact: true })).toBeVisible();
+            await expect(page.locator('#chat').getByText('OLD_REPLY', { exact: true })).toHaveCount(0);
             await page.reload();
             await testSetup.awaitST({ page });
             await page.evaluate(async ({ name, chat }) => {

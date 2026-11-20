@@ -365,8 +365,8 @@ async function installRecoveryStatusRecorder(page) {
         const recordStatuses = () => {
             for (const element of document.querySelectorAll('.generation_auto_recovery_status')) {
                 const text = String(element.textContent ?? '').trim();
-                if (text && !window.__emberdeskStreamingRecoveryStatuses.includes(text)) {
-                    window.__emberdeskStreamingRecoveryStatuses.push(text);
+                if (text && !window.__emberdeskStreamingRecoveryStatuses.some(status => status.text === text)) {
+                    window.__emberdeskStreamingRecoveryStatuses.push({ text, entrance: getComputedStyle(element).animationName });
                 }
             }
         };
@@ -1471,8 +1471,10 @@ test.describe('chat message streaming', () => {
             expectFallback: true,
         });
         const statusHistory = await page.evaluate(() => window.__emberdeskStreamingRecoveryStatuses);
-        expect(statusHistory).toContain('正在重试');
-        expect(statusHistory).toContain('正在使用备用服务商');
+        expect(statusHistory).toEqual(expect.arrayContaining([
+            { text: '正在重试', entrance: 'chat-generation-status-enter' },
+            { text: '正在使用备用服务商', entrance: 'chat-generation-status-enter' },
+        ]));
 
         const userRows = page.locator('#chat .mes[is_user="true"]').filter({ hasText: 'Start a deterministic fallback recovery proof.' });
         await expect(userRows).toHaveCount(1);

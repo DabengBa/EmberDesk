@@ -1884,9 +1884,12 @@ function getMainChatComposerBridgeState() {
 }
 
 function getMainChatGenerationControlBridgeState() {
-    if (workspaceGeneration.busy()) return getStreamingControlState({
+    const runView = workspaceGeneration.display();
+    if (workspaceGeneration.busy() && !runView?.reconciling) return getStreamingControlState({
         isGenerating: true, hasStreamingProcessor: true,
-        activeMessageId: chat.length + Number(Boolean(workspaceGeneration.current()?.pendingText)),
+        activeMessageId: runView?.kind === 'regenerate'
+            ? findRegenerateTurnStart(chat) + Number(Boolean(runView.invocations?.length))
+            : chat.length + Number(Boolean(runView?.pendingText)),
     });
     const reactOwner = isReactMainChatOwner();
     const recoveryUi = reactOwner ? getMainChatRecoveryUiState() : null;
@@ -3156,13 +3159,23 @@ function getMainChatMessageListReactBridgeState() {
     const generationControl = getMainChatGenerationControlBridgeState();
     const composer = getMainChatComposerBridgeState();
     const streamingTransport = getMainChatStreamingTransportBridgeState();
-    const runView = workspaceGeneration.current();
+    const runView = workspaceGeneration.display();
+    const regenerating = runView?.kind === 'regenerate';
+    const keptMessages = regenerating ? chat.slice(0, findRegenerateTurnStart(chat)) : chat;
     const projectedChat = reactMainChatProjectionCleared ? [] : runView ? [
-        ...chat,
+        ...keptMessages,
         ...(runView.pendingText ? [{ name: name1, mes: runView.pendingText, is_user: true, extra: {} }] : []),
         ...(runView.invocations?.length ? [ToolManager.createToolInvocationMessage(runView.invocations)] : []),
         { name: name2, mes: runView.text, is_user: false, extra: {} },
     ] : chat;
+    const messageUiById = getMainChatMessageUiStateById();
+    if (regenerating) {
+        // The synthetic rows reuse the old tail's numeric positions, not its UI state.
+        for (let i = keptMessages.length; i < projectedChat.length; i++) messageUiById[i] = {};
+        if ((!runView.reconciling || !runView.text) && projectedChat.length > keptMessages.length) {
+            messageUiById[projectedChat.length - 1].regenerationStatus = t`Regenerating…`;
+        }
+    }
     const visibleWindow = getMainChatReactVisibleWindow(projectedChat);
     const visibleMessageIds = visibleWindow.visibleMessageIds;
     syncMainChatRuntimeDiagnostics(chatContainer, {
@@ -3204,6 +3217,7 @@ function getMainChatMessageListReactBridgeState() {
         ),
         mediaDisplayForMessage: message => getMediaDisplay(message),
         hasItemizedPromptForMessage: (message, messageId) => Array.isArray(itemizedPrompts)
+            && (!regenerating || messageId < keptMessages.length)
             && itemizedPrompts.some(prompt => Number(prompt?.mesId) === Number(messageId)),
         visibleMessageIds,
         composer: {
@@ -3225,7 +3239,7 @@ function getMainChatMessageListReactBridgeState() {
                 : String(streamingTransport.activeMessageId),
             observedTokenCount: streamingTransport.observedTokenCount,
         },
-        messageUiById: getMainChatMessageUiStateById(),
+        messageUiById,
         window: {
             visibleMessageIds,
             anchorMessageId: visibleMessageIds[0] ?? null,
@@ -6319,10 +6333,11 @@ const workspaceGeneration = createWorkspaceGeneration({
         return () => source.close();
     },
     changed() {
-        document.body.toggleAttribute('data-workspace-generation-running', Boolean(workspaceGeneration.current()));
+        document.body.toggleAttribute('data-workspace-generation-running', workspaceGeneration.canStop());
         scheduleMainChatMessageListPanelRefresh();
         if (document.getElementById('options_button')?.getAttribute('aria-expanded') === 'true') {
             syncOptionsMenuContinueAvailability();
+            setOptionsMenuRegenerateAvailability(canRegenerateLastReply());
         }
     },
     lockStep: (id, run) => navigator.locks?.request(`emberdesk-generation-step:${id}`, run) ?? run(),
@@ -6334,6 +6349,14 @@ const workspaceGeneration = createWorkspaceGeneration({
         toastr.error(error.message);
     },
     finished(run, { discovered = false, reconciledChatVersion } = {}) {
+        const showFailure = () => {
+            if (run.kind === 'regenerate') {
+                console.warn('Regeneration failed:', run.error ?? run.status);
+                toastr.error(t`Regeneration failed. Please try again.`);
+            } else {
+                toastr.error(run.error ?? run.status);
+            }
+        };
         if (run.temporary) {
             if (run.user) chat.push(run.user);
             if (run.assistant) {
@@ -6341,18 +6364,18 @@ const workspaceGeneration = createWorkspaceGeneration({
                     : run.kind === 'continue' ? chat.length - 1 : chat.length;
                 chat.splice(start, chat.length - start, run.assistant);
             }
-            if (run.status === 'failed' || run.status === 'interrupted') toastr.error(run.error ?? run.status);
+            if (run.status === 'failed' || run.status === 'interrupted') showFailure();
             return;
         }
         const current = getCurrentChatGenerationTarget();
         // A historical run version does not describe the current chat returned by /find.
         const version = discovered ? run.chatVersion : run.version;
         // Do not retry the same version if the reconciliation read also came back stale.
-        if (current && typeof version === 'string' && current.version !== version && version !== reconciledChatVersion) {
-            void getChat({ strictReload: true, reconciledChatVersion: version }).catch(error => toastr.error(error.message));
-        }
         if ((!discovered && run.status === 'failed') || (run.status === 'interrupted' && reconciledChatVersion === undefined)) {
-            toastr.error(run.error ?? run.status);
+            showFailure();
+        }
+        if (current && typeof version === 'string' && current.version !== version && version !== reconciledChatVersion) {
+            return getChat({ strictReload: true, reconciledChatVersion: version }).catch(error => toastr.error(error.message));
         }
     },
 });
@@ -6398,6 +6421,8 @@ async function startWorkspaceGeneration(action, text) {
     const activations = [...WorldInfoBuffer.externalActivations.entries()];
     const composer = getComposerSnapshot();
     const isCurrent = () => ownsWorkspaceComposer(composer);
+    const requestId = crypto.randomUUID();
+    const prepared = action === 'regenerate' ? workspaceGeneration.prepareRegenerate(target, requestId) : undefined;
     try {
         let attachments;
         let clearFiles;
@@ -6418,9 +6443,9 @@ async function startWorkspaceGeneration(action, text) {
         const worldRuntime = await captureWorkspaceWorldRuntime(activations);
         if (!isCurrent()) return false;
         await flushWorkspaceGenerationSettings();
-        if (!isCurrent() || workspaceGeneration.busy()) return false;
-        const run = await workspaceGeneration.create(target, { action, text, attachments, ...worldRuntime, requestId: crypto.randomUUID(), locale: readStoredUiLocale() });
-        if (target.temporary && !run) return false;
+        if (!isCurrent() || (!prepared && workspaceGeneration.busy())) return false;
+        const run = await workspaceGeneration.create(target, { action, text, attachments, ...worldRuntime, requestId, locale: readStoredUiLocale() }, prepared);
+        if (!run) return false;
         clearFiles?.();
         for (const [key, entry] of activations) {
             if (WorldInfoBuffer.externalActivations.get(key) === entry) WorldInfoBuffer.externalActivations.delete(key);
@@ -6429,6 +6454,8 @@ async function startWorkspaceGeneration(action, text) {
     } catch (error) {
         toastr.error(error.message);
         return false;
+    } finally {
+        workspaceGeneration.releasePreparation(prepared);
     }
 }
 
@@ -6612,7 +6639,7 @@ function syncOptionsMenuContinueAvailability() {
  * Stops the generation and any streaming if it is currently running.
  */
 export function stopGeneration() {
-    if (workspaceGeneration.current()) return workspaceGeneration.cancel().catch(error => toastr.error(error.message));
+    if (workspaceGeneration.canStop()) return workspaceGeneration.cancel().catch(error => toastr.error(error.message));
     return generationCaller.stopGeneration(...arguments);
 }
 
