@@ -47,23 +47,21 @@ function ToolbarActionButton({
     onClick,
     title,
     icon,
-    compact = false,
     disabled = false,
     labelKey,
     titleKey,
 }: {
-    label: string;
+    label?: string;
     onClick: () => void;
     title: string;
     icon: string;
-    compact?: boolean;
     disabled?: boolean;
     labelKey?: string;
     titleKey?: string;
 }) {
     useTranslated('');
     const resolvedTitle = translate(title, titleKey ?? null);
-    const resolvedLabel = translate(label, labelKey ?? null);
+    const compact = !label;
     return (
         <button
             type="button"
@@ -77,7 +75,7 @@ function ToolbarActionButton({
             aria-disabled={disabled}
         >
             <i className={`fa-solid ${icon} ${stylex.props(characterLibraryStyles.toolbarActionIcon).className ?? ''}`} aria-hidden="true" />
-            <span className={compact ? 'sr-only' : 'character-list-action-label'} data-i18n={labelKey ?? label}>{resolvedLabel}</span>
+            {label && <span className="character-list-action-label" data-i18n={labelKey ?? label}>{translate(label, labelKey ?? null)}</span>}
         </button>
     );
 }
@@ -438,44 +436,36 @@ export function CharacterLibraryToolbar({
         <div className={`emberdesk-react-character-library-toolbar ${stylex.props(characterLibraryStyles.toolbar).className ?? ''}`}>
             <div {...stylex.props(characterLibraryStyles.toolbarActions)}>
                 <div {...stylex.props(characterLibraryStyles.toolbarActionsInner)}>
-                    <ToolbarActionButton label="新" labelKey="Character Toolbar New" icon="fa-plus" compact title="Create New Character" onClick={() => bridge.clickLegacyAction('rm_button_create')} />
-                    <ToolbarActionButton label="导" labelKey="Character Toolbar File" icon="fa-file-arrow-up" compact title="Import Character from File" onClick={() => bridge.clickLegacyAction('character_import_button')} />
-                    <ToolbarActionButton label="URL" labelKey="Character Toolbar URL" icon="fa-link" compact title="Import content from external URL" onClick={() => bridge.clickLegacyAction('external_import_button')} />
+                    <ToolbarActionButton label="New" labelKey="Character Toolbar New" icon="fa-plus" title="Create New Character" onClick={() => bridge.clickLegacyAction('rm_button_create')} />
+                    <ToolbarActionButton icon="fa-file-arrow-up" title="Import Character from File" onClick={() => bridge.clickLegacyAction('character_import_button')} />
+                    <ToolbarActionButton icon="fa-link" title="Import content from external URL" onClick={() => bridge.clickLegacyAction('external_import_button')} />
+                    <ToolbarActionButton icon="fa-list-check" title="Bulk edit characters" titleKey="Bulk_edit_characters" onClick={() => bridge.toggleBulkEdit()} />
                     <HostedDomSlot factory={extensionButtonsFactory} />
                 </div>
-                <div {...stylex.props(characterLibraryStyles.toolbarActionsInnerNoWrap)}>
-                    {state.isBulkEdit ? (
-                        <>
-                            <output
-                                className={`character-library-bulk-selected-count paginationjs-nav ${stylex.props(characterLibraryStyles.bulkSelectedCount).className ?? ''}`}
-                                title={bulkSelectedLabel}
-                                aria-label={bulkSelectedLabel}
-                            >
-                                {bulkSelectedShortText}
-                            </output>
-                            <ToolbarActionButton label="全" labelKey="Character Toolbar All" icon="fa-check-double" compact title="Bulk select all characters" onClick={() => bridge.selectAllInBulkMode()} />
-                            <ToolbarActionButton
-                                label="签"
-                                labelKey="Character Toolbar Tags"
-                                icon="fa-tags"
-                                compact
-                                title="Bulk edit tags"
-                                onClick={() => bridge.editTagsInBulkMode()}
-                                disabled={state.bulkSelectedCount === 0}
-                            />
-                            <ToolbarActionButton
-                                label="删"
-                                labelKey="Character Toolbar Delete"
-                                icon="fa-trash"
-                                compact
-                                title="Bulk delete characters"
-                                onClick={() => bridge.deleteSelectedInBulkMode()}
-                                disabled={state.bulkSelectedCount === 0}
-                            />
-                        </>
-                    ) : null}
-                    <ToolbarActionButton label="批" labelKey="Character Toolbar Bulk" icon="fa-list-check" compact title="Bulk edit characters" titleKey="Bulk_edit_characters" onClick={() => bridge.toggleBulkEdit()} />
-                </div>
+                {state.isBulkEdit ? (
+                    <div {...stylex.props(characterLibraryStyles.toolbarActionsInner)}>
+                        <output
+                            className={`character-library-bulk-selected-count paginationjs-nav ${stylex.props(characterLibraryStyles.bulkSelectedCount).className ?? ''}`}
+                            title={bulkSelectedLabel}
+                            aria-label={bulkSelectedLabel}
+                        >
+                            {bulkSelectedShortText}
+                        </output>
+                        <ToolbarActionButton icon="fa-check-double" title="Bulk select all characters" onClick={() => bridge.selectAllInBulkMode()} />
+                        <ToolbarActionButton
+                            icon="fa-tags"
+                            title="Bulk edit tags"
+                            onClick={() => bridge.editTagsInBulkMode()}
+                            disabled={state.bulkSelectedCount === 0}
+                        />
+                        <ToolbarActionButton
+                            icon="fa-trash"
+                            title="Bulk delete characters"
+                            onClick={() => bridge.deleteSelectedInBulkMode()}
+                            disabled={state.bulkSelectedCount === 0}
+                        />
+                    </div>
+                ) : null}
                 <HostedDomSlot
                     className={`character-library-toolbar-filters ${stylex.props(characterLibraryStyles.toolbarFilters).className ?? ''}`}
                     factory={tagControlsFactory}

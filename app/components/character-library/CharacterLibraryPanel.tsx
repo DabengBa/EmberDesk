@@ -143,42 +143,44 @@ function CharacterLibraryPagination({
     return createPortal(
         <div className="paginationjs" data-react-pagination-owner="react">
             <div className="paginationjs-nav J-paginationjs-nav">{pagination.label}</div>
-            <div className="paginationjs-pages">
-                <ul>
-                    <PaginationNavItem
-                        className={`paginationjs-first${isFirstPage ? ' disabled' : ' J-paginationjs-first'}`}
-                        disabled={isFirstPage}
-                        page={1}
-                        title="First page"
-                        glyph={'\u00AB'}
-                        onNavigate={goToPage}
-                    />
-                    <PaginationNavItem
-                        className={`paginationjs-prev${isFirstPage ? ' disabled' : ' J-paginationjs-previous'}`}
-                        disabled={isFirstPage}
-                        page={currentPage - 1}
-                        title="Previous page"
-                        glyph={'<'}
-                        onNavigate={goToPage}
-                    />
-                    <PaginationNavItem
-                        className={`paginationjs-next${isLastPage ? ' disabled' : ' J-paginationjs-next'}`}
-                        disabled={isLastPage}
-                        page={currentPage + 1}
-                        title="Next page"
-                        glyph={'>'}
-                        onNavigate={goToPage}
-                    />
-                    <PaginationNavItem
-                        className={`paginationjs-last${isLastPage ? ' disabled' : ' J-paginationjs-last'}`}
-                        disabled={isLastPage}
-                        page={totalPages}
-                        title="Last page"
-                        glyph={'\u00BB'}
-                        onNavigate={goToPage}
-                    />
-                </ul>
-            </div>
+            {totalPages > 1 && (
+                <div className="paginationjs-pages">
+                    <ul>
+                        <PaginationNavItem
+                            className={`paginationjs-first${isFirstPage ? ' disabled' : ' J-paginationjs-first'}`}
+                            disabled={isFirstPage}
+                            page={1}
+                            title="First page"
+                            glyph={'\u00AB'}
+                            onNavigate={goToPage}
+                        />
+                        <PaginationNavItem
+                            className={`paginationjs-prev${isFirstPage ? ' disabled' : ' J-paginationjs-previous'}`}
+                            disabled={isFirstPage}
+                            page={currentPage - 1}
+                            title="Previous page"
+                            glyph={'<'}
+                            onNavigate={goToPage}
+                        />
+                        <PaginationNavItem
+                            className={`paginationjs-next${isLastPage ? ' disabled' : ' J-paginationjs-next'}`}
+                            disabled={isLastPage}
+                            page={currentPage + 1}
+                            title="Next page"
+                            glyph={'>'}
+                            onNavigate={goToPage}
+                        />
+                        <PaginationNavItem
+                            className={`paginationjs-last${isLastPage ? ' disabled' : ' J-paginationjs-last'}`}
+                            disabled={isLastPage}
+                            page={totalPages}
+                            title="Last page"
+                            glyph={'\u00BB'}
+                            onNavigate={goToPage}
+                        />
+                    </ul>
+                </div>
+            )}
             <div className="paginationjs-size-changer">
                 <select
                     className="J-paginationjs-size-select"
