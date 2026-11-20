@@ -5,7 +5,7 @@ const mockTlsConnect = jest.fn(() => ({ type: 'tls-socket' }));
 const mockLookup = jest.fn();
 
 jest.unstable_mockModule('node:net', () => ({
-    default: { connect: mockNetConnect },
+    default: { connect: mockNetConnect, isIP: jest.requireActual('node:net').isIP },
 }));
 
 jest.unstable_mockModule('node:tls', () => ({

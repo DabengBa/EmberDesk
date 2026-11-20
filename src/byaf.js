@@ -1,6 +1,6 @@
 import { promises as fsPromises } from 'node:fs';
 import path from 'node:path';
-import urlJoin from 'url-join';
+
 import { DEFAULT_AVATAR_PATH } from './constants.js';
 import { extractFileFromZipBuffer } from './util.js';
 
@@ -221,14 +221,14 @@ export class ByafParser {
                 continue;
             }
 
-            const fullImagePath = urlJoin(path.dirname(characterPath), imagePath);
+            const fullImagePath = path.posix.join(path.posix.dirname(characterPath), imagePath);
             const imageBuffer = await extractFileFromZipBuffer(this.#data, fullImagePath);
             if (!imageBuffer) {
                 console.warn('Warning: failed to extract BYAF character image');
                 continue;
             }
 
-            imageBuffers.push({ filename: path.basename(imagePath), image: imageBuffer, label: image?.label || '' });
+            imageBuffers.push({ filename: path.posix.basename(imagePath), image: imageBuffer, label: image?.label || '' });
         }
         if (imageBuffers.length === 0) {
             console.warn('Warning: BYAF character has no valid images');

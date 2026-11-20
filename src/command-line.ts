@@ -1,8 +1,8 @@
 import fs from 'node:fs';
+import { isIPv4, isIPv6 } from 'node:net';
 import path from 'node:path';
 import yargs from 'yargs/yargs';
 import { hideBin } from 'yargs/helpers';
-import ipRegex from 'ip-regex';
 import envPaths from 'env-paths';
 import { color, getConfigValue, stringToBool } from './util.js';
 import { initConfig } from './config-init.ts';
@@ -306,7 +306,7 @@ export function resolveConfig(argv: ParsedArgv, defaultConfig: CommandLineArgume
         requestProxyUrl: argv.requestProxyUrl ?? getConfigValue('requestProxy.url', defaultConfig.requestProxyUrl),
         requestProxyBypass: argv.requestProxyBypass ?? getConfigValue('requestProxy.bypass', defaultConfig.requestProxyBypass),
         getIPv4ListenUrl: function () {
-            const isValid = ipRegex.v4({ exact: true }).test(this.listenAddressIPv4);
+            const isValid = isIPv4(this.listenAddressIPv4);
             return new URL(
                 (this.ssl ? 'https://' : 'http://') +
                 (this.listen ? (isValid ? this.listenAddressIPv4 : '0.0.0.0') : '127.0.0.1') +
@@ -314,7 +314,8 @@ export function resolveConfig(argv: ParsedArgv, defaultConfig: CommandLineArgume
             );
         },
         getIPv6ListenUrl: function () {
-            const isValid = ipRegex.v6({ exact: true }).test(this.listenAddressIPv6);
+            const address = this.listenAddressIPv6;
+            const isValid = isIPv6(address) && (!address.includes('%') || /%[a-z0-9]+$/i.test(address));
             return new URL(
                 (this.ssl ? 'https://' : 'http://') +
                 (this.listen ? (isValid ? this.listenAddressIPv6 : '[::]') : '[::1]') +

@@ -48,7 +48,8 @@ Constraints:
 
 - `ServerStartup` owns IP auto-detection, HTTP/HTTPS server creation, and listen failure handling independently.
 - Express remains the accepted runtime owner for this host chain; narrow route-island experiments do not authorize host replacement.
-- Middleware order is preserved: helmet -> compression -> responseTime -> bodyParser -> CORS -> auth -> whitelist -> host whitelist -> access log -> sessions -> user data -> CSRF -> public/static routes -> auth wall -> CORS proxy -> upload parsing -> deprecated redirects -> domain routes -> error handler -> 404.
+- Middleware order is preserved: helmet -> compression -> responseTime -> Express JSON and URL-encoded parsers -> CORS -> auth -> whitelist -> host whitelist -> access log -> sessions -> user data -> CSRF -> public/static routes -> auth wall -> CORS proxy -> Multer upload parsing -> deprecated redirects -> domain routes -> error handler -> 404.
+- Both Express parsers use a `500mb` limit. The URL-encoded parser uses `extended: true`. If neither parser sets a body, downstream middleware receives an empty object.
 - Cleanup order: characterLibraryChangeObserver.dispose -> cleanupPlugins (if present) -> diskCache.dispose -> setWindowTitle -> process.exit.
 - Express 5 compatibility routes are treated as production contracts, not migration experiments:
   - OAuth callbacks use `/callback{/:source}` and preserve sourced provider callback parameters inside the nested `query` wrapper consumed by the browser OpenRouter flow.

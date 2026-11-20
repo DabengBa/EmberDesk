@@ -20,7 +20,7 @@ function createApp(router) {
     const app = express();
     app.use(express.json());
     app.use((request, _response, next) => {
-        request.user = { directories: { root: 'unused' } };
+        request.user = { directories: { root: process.env.DATA_ROOT } };
         next();
     });
     app.use('/api/backends/chat-completions', router);
@@ -115,8 +115,8 @@ describe('single-endpoint OpenAI-compatible chat completions backend', () => {
         });
 
         expect(readSecretMock).toHaveBeenCalledTimes(2);
-        expect(readSecretMock).toHaveBeenNthCalledWith(1, { root: 'unused' }, 'api_key_openai', undefined);
-        expect(readSecretMock).toHaveBeenNthCalledWith(2, { root: 'unused' }, 'api_key_openai', undefined);
+        expect(readSecretMock).toHaveBeenNthCalledWith(1, { root: process.env.DATA_ROOT }, 'api_key_openai', undefined);
+        expect(readSecretMock).toHaveBeenNthCalledWith(2, { root: process.env.DATA_ROOT }, 'api_key_openai', undefined);
         expect(fetchMock.mock.calls[0][0]).toBe('https://endpoint.example/v1/chat/completions');
         expect(fetchMock.mock.calls[1][0]).toBe('https://endpoint.example/v1/chat/completions');
         expect(fetchMock.mock.calls[0][1].headers.Authorization).toBe('Bearer shared-key');
@@ -145,7 +145,7 @@ describe('single-endpoint OpenAI-compatible chat completions backend', () => {
         });
 
         // The retired marker/keys never reroute the endpoint or the credential.
-        expect(readSecretMock).toHaveBeenCalledWith({ root: 'unused' }, 'api_key_openai', undefined);
+        expect(readSecretMock).toHaveBeenCalledWith({ root: process.env.DATA_ROOT }, 'api_key_openai', undefined);
         expect(fetchMock.mock.calls[0][0]).toBe('https://endpoint.example/v1/chat/completions');
         expect(fetchMock.mock.calls[0][1].headers.Authorization).toBe('Bearer shared-key');
     });
@@ -174,13 +174,17 @@ describe('single-endpoint OpenAI-compatible chat completions backend', () => {
         expect(fetchMock).toHaveBeenCalledTimes(1);
     });
 
-    test('status forwards models and rejects unsupported providers without an upstream request', async () => {
+    test.each([
+        ['https://endpoint.example/v1', 'https://endpoint.example/v1/models'],
+        ['https://endpoint.example/v1/', 'https://endpoint.example/v1/models'],
+        ['https://endpoint.example/v1/?foo=bar?enabled=1', 'https://endpoint.example/v1?foo=bar&enabled=1/models'],
+    ])('status forwards models for %s and rejects unsupported providers', async (customUrl, expectedUrl) => {
         readSecretMock.mockReturnValue('shared-key');
         fetchMock.mockResolvedValue(createOpenAIResponse({ data: [{ id: 'model-a' }] }));
         await withServer(createApp(router), async url => {
             const status = await fetch(`${url}/api/backends/chat-completions/status`, {
                 method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ chat_completion_source: 'openai', custom_url: 'https://endpoint.example/v1' }),
+                body: JSON.stringify({ chat_completion_source: 'openai', custom_url: customUrl }),
             });
             expect(await status.json()).toEqual({ data: [{ id: 'model-a' }] });
             const unsupported = await fetch(`${url}/api/backends/chat-completions/status`, {
@@ -190,7 +194,7 @@ describe('single-endpoint OpenAI-compatible chat completions backend', () => {
             expect(unsupported.status).toBe(400);
         });
         expect(fetchMock).toHaveBeenCalledTimes(1);
-        expect(String(fetchMock.mock.calls[0][0])).toBe('https://endpoint.example/v1/models');
+        expect(String(fetchMock.mock.calls[0][0])).toBe(expectedUrl);
         expect(fetchMock.mock.calls[0][1].headers.Authorization).toBe('Bearer shared-key');
     });
 

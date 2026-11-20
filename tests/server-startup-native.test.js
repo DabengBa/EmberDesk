@@ -123,9 +123,17 @@ test('real authenticated multipart uploads stage separately and startup clears s
             const getCookie = res => res.headers.getSetCookie().map(value => value.split(';')[0]).join('; ');
             let cookie = getCookie(response);
             if (handle) {
+                const emptyLogin = await fetch(`${base}/api/users/login`, {
+                    method: 'POST', headers: { cookie, 'x-csrf-token': token },
+                });
+                expect(emptyLogin.status).toBe(400);
+                expect(await emptyLogin.json()).toEqual({ error: 'Missing required fields' });
+
                 const login = await fetch(`${base}/api/users/login`, {
-                    method: 'POST', headers: { cookie, 'x-csrf-token': token, 'content-type': 'application/json' },
-                    body: JSON.stringify({ handle, password: 'fixture-password' }),
+                    method: 'POST', headers: { cookie, 'x-csrf-token': token },
+                    body: handle === 'alice'
+                        ? new URLSearchParams({ handle, password: 'fixture-password' })
+                        : new Blob([JSON.stringify({ handle, password: 'fixture-password' })], { type: 'application/json' }),
                 });
                 expect(await login.json()).toEqual({ handle });
                 cookie = getCookie(login);
