@@ -1,5 +1,5 @@
 import sharp from 'sharp';
-import extract from 'png-chunks-extract';
+import extract from '../../src/png/extract.ts';
 import encode from '../../src/png/encode.ts';
 
 export async function makeAnimatedImages() {

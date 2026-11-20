@@ -24,7 +24,6 @@ import chalk from 'chalk';
 import yaml from 'yaml';
 import * as chevrotain from 'chevrotain';
 import { gzipSync, gzip } from 'fflate';
-import { sha256 } from 'js-sha256';
 
 const slideToggle = slideTogglePackage.toggle
     ?? Reflect.get(slideTogglePackage, 'default')?.toggle
@@ -115,7 +114,6 @@ export default {
     chevrotain,
     gzipSync,
     gzip,
-    sha256,
 };
 
 export {
@@ -143,5 +141,4 @@ export {
     chevrotain,
     gzipSync,
     gzip,
-    sha256,
 };

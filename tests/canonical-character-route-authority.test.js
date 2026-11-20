@@ -8,7 +8,7 @@ import archiver from 'archiver';
 import express from 'express';
 import { zipSync } from 'fflate';
 import multer from 'multer';
-import extractPngChunks from 'png-chunks-extract';
+import extractPngChunks from '../src/png/extract.ts';
 import { afterEach, describe, expect, jest, test } from '@jest/globals';
 
 import { humanizedDateTime, setConfigFilePath } from '../src/util.js';

@@ -4,7 +4,7 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { expect, test } from '@jest/globals';
-import extractPngChunks from 'png-chunks-extract';
+import extractPngChunks from '../src/png/extract.ts';
 
 const repo = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 

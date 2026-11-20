@@ -10,7 +10,6 @@ import crypto from 'node:crypto';
 import readline from 'node:readline';
 
 import yaml from 'yaml';
-import { sync as commandExistsSync } from 'command-exists';
 import _ from 'lodash';
 import mime from 'mime-types';
 import { simpleGit } from 'simple-git';
@@ -151,19 +150,16 @@ export async function getVersion() {
         const require = createRequire(import.meta.url);
         const pkgJson = require(path.join(serverDirectory, './package.json'));
         pkgVersion = pkgJson.version;
-        if (commandExistsSync('git')) {
-            const git = simpleGit({ baseDir: serverDirectory });
-            gitRevision = await git.revparse(['--short', 'HEAD']);
-            gitBranch = await git.revparse(['--abbrev-ref', 'HEAD']);
-            commitDate = await git.show(['-s', '--format=%ci', gitRevision]);
+        const git = simpleGit({ baseDir: serverDirectory });
+        gitRevision = await git.revparse(['--short', 'HEAD']);
+        gitBranch = await git.revparse(['--abbrev-ref', 'HEAD']);
+        commitDate = await git.show(['-s', '--format=%ci', gitRevision]);
 
-            const trackingBranch = await git.revparse(['--abbrev-ref', '@{u}']);
+        const trackingBranch = await git.revparse(['--abbrev-ref', '@{u}']);
 
-            // Might fail, but exception is caught. Just don't run anything relevant after in this block...
-            const localLatest = await git.revparse(['HEAD']);
-            const remoteLatest = await git.revparse([trackingBranch]);
-            isLatest = localLatest === remoteLatest;
-        }
+        const localLatest = await git.revparse(['HEAD']);
+        const remoteLatest = await git.revparse([trackingBranch]);
+        isLatest = localLatest === remoteLatest;
     } catch {
         // suppress exception
     }
