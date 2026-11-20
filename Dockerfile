@@ -4,13 +4,9 @@ FROM node:26.12.1-alpine3.23
 ARG APP_HOME=/home/node/app
 
 # Install system dependencies
-# "Don't rely on the base image for tools; if you call it, you install it." ;)
-RUN apk add --no-cache curl gcompat tini git git-lfs su-exec shadow dos2unix
+RUN apk add --no-cache tini git su-exec shadow
 
-ENV PNPM_HOME=/root/.local/share/pnpm
-ENV PATH=${PNPM_HOME}/bin:${PNPM_HOME}:${PATH}
-RUN touch /root/.profile && \
-  curl -fsSL https://get.pnpm.io/install.sh | env SHELL=/bin/sh ENV=/root/.profile PNPM_VERSION=12.0.0-rc.5 sh -
+RUN npm install --global --allow-scripts=pnpm pnpm@12.0.0-rc.5
 
 # Create app directory and set ownership
 WORKDIR ${APP_HOME}
@@ -56,7 +52,7 @@ RUN \
   echo "*** Make docker-entrypoint.sh executable ***" && \
   chmod +x "./docker-entrypoint.sh" && \
   echo "*** Convert line endings to Unix format ***" && \
-  dos2unix "./docker-entrypoint.sh" && \
+  busybox dos2unix "./docker-entrypoint.sh" && \
   rm -rf "./docker"
 
 # Fix extension repos permissions
