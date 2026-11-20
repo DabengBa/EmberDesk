@@ -4536,6 +4536,18 @@ input[type="range"]::-webkit-slider-thumb {
     animation: chat-generation-status-enter var(--animation-duration-2x) ease-out both;
 }
 
+.generation_reply_retry {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.generation_reply_retry .menu_button {
+    width: auto;
+    white-space: nowrap;
+}
+
 @keyframes chat-generation-status-enter {
     from { transform: translateY(3px); }
     to { transform: translateY(0); }

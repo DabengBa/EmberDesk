@@ -29,7 +29,7 @@ export interface WorkspaceShellCommands {
     setWorkspaceShellSlotPinned(slotKey: WorkspaceShellSlotKey, pinned: boolean): CommandResult;
 }
 
-export type MainChatGenerationKind = 'submitComposer' | 'regenerate';
+export type MainChatGenerationKind = 'submitComposer' | 'regenerate' | 'retryReply';
 
 export interface MainChatGenerationCommand {
     kind: MainChatGenerationKind;

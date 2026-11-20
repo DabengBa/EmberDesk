@@ -3159,22 +3159,34 @@ function getMainChatMessageListReactBridgeState() {
     const generationControl = getMainChatGenerationControlBridgeState();
     const composer = getMainChatComposerBridgeState();
     const streamingTransport = getMainChatStreamingTransportBridgeState();
-    const runView = workspaceGeneration.display();
+    let runView = workspaceGeneration.display();
+    // Once reconciliation has installed the saved turn, do not append its optimistic copy.
+    if (runView?.kind === 'send' && runView.reconciling && getCurrentChatGenerationTarget()?.version === runView.run.version) {
+        runView = null;
+    }
     const regenerating = runView?.kind === 'regenerate';
     const keptMessages = regenerating ? chat.slice(0, findRegenerateTurnStart(chat)) : chat;
+    const failedReply = !runView && getFailedWorkspaceReply();
+    const waiting = runView?.waiting && !runView.text;
+    const showAssistant = regenerating || waiting || runView?.text || runView?.kind === 'continue';
+    const assistant = runView && showAssistant ? (runView.assistantRow ??= { name: name2, mes: '', is_user: false, extra: {} }) : null;
+    if (assistant) assistant.mes = runView.text;
     const projectedChat = reactMainChatProjectionCleared ? [] : runView ? [
         ...keptMessages,
-        ...(runView.pendingText ? [{ name: name1, mes: runView.pendingText, is_user: true, extra: {} }] : []),
+        ...(runView.kind === 'send' && !runView.discovered ? [runView.userRow ??= { name: name1, mes: runView.pendingText, is_user: true, extra: {} }] : []),
         ...(runView.invocations?.length ? [ToolManager.createToolInvocationMessage(runView.invocations)] : []),
-        { name: name2, mes: runView.text, is_user: false, extra: {} },
-    ] : chat;
+        ...(assistant ? [assistant] : []),
+    ] : failedReply ? [...chat, { name: name2, mes: '', is_user: false, extra: {} }] : chat;
     const messageUiById = getMainChatMessageUiStateById();
-    if (regenerating) {
+    if (runView || failedReply) {
         // The synthetic rows reuse the old tail's numeric positions, not its UI state.
         for (let i = keptMessages.length; i < projectedChat.length; i++) messageUiById[i] = {};
-        if ((!runView.reconciling || !runView.text) && projectedChat.length > keptMessages.length) {
-            messageUiById[projectedChat.length - 1].regenerationStatus = t`Regenerating…`;
+        const last = messageUiById[projectedChat.length - 1];
+        if (assistant && last) {
+            if (regenerating && (!runView.reconciling || !runView.text)) last.regenerationStatus = t`Regenerating…`;
+            else if (waiting) last.regenerationStatus = t`Waiting for reply…`;
         }
+        if (failedReply && last) last.replyRetryAvailable = true;
     }
     const visibleWindow = getMainChatReactVisibleWindow(projectedChat);
     const visibleMessageIds = visibleWindow.visibleMessageIds;
@@ -3274,7 +3286,7 @@ function getMainChatMessageListReactBridgeState() {
             return {
                 options,
                 selectedIndex,
-                canSelect: this_chid !== undefined && options.length > 1 && editable && !chat_metadata.tainted,
+                canSelect: runView?.kind !== 'send' && this_chid !== undefined && options.length > 1 && editable && !chat_metadata.tainted,
                 characterId: this_chid === undefined ? null : String(this_chid),
                 chatId: getCurrentChatId(),
             };
@@ -3358,9 +3370,17 @@ function getMainChatMessageListReactCommands() {
                 if (kind === 'submitComposer') {
                     return sendTextareaMessage(command.composerSubmission ?? getComposerSnapshot());
                 }
+                if (kind === 'retryReply') {
+                    const failedReply = getFailedWorkspaceReply();
+                    if (!failedReply) return false;
+                    if (failedReply.id === workspaceSendFailureToast?.id) {
+                        toastr.clear(workspaceSendFailureToast.toast, { force: true });
+                        workspaceSendFailureToast = null;
+                    }
+                }
 
                 return executeMainChatVisibleGenerationAction({
-                    kind,
+                    kind: kind === 'retryReply' ? 'regenerate' : kind,
                     messageId: Number.isInteger(command?.messageId) && command.messageId >= 0 ? command.messageId : undefined,
                 });
             },
@@ -3402,6 +3422,13 @@ async function mountReactMainChatMessageListPanel() {
     });
     if (result?.mounted) {
         scheduleMainChatMessageListScrollRestore();
+        const scroll = workspaceGenerationScroll;
+        workspaceGenerationScroll = null;
+        if (scroll) requestAnimationFrame(() => {
+            if (scroll.contextKey !== getComposerSnapshot().contextKey || hasMainChatMessageListScrollRestore()) return;
+            const container = document.getElementById('chat');
+            if (container && (scroll.explicit || container.scrollTop >= scroll.top - 2)) scrollChatToBottom();
+        });
     } else if (
         result?.reason === WORKSPACE_PANEL_MOUNT_FALLBACK_REASONS.BUNDLE_LOAD_FAILED
         || result?.reason === WORKSPACE_PANEL_MOUNT_FALLBACK_REASONS.MOUNT_FAILED
@@ -6322,6 +6349,22 @@ async function workspaceGenerationRequest(route, body, { keepalive = false } = {
     return result;
 }
 
+let workspaceGenerationScroll = null;
+let workspaceSendFailureToast = null;
+
+function queueWorkspaceGenerationScroll(explicit = false) {
+    const container = document.getElementById('chat');
+    if (!container || (!explicit && (workspaceGenerationScroll || getMainChatDistanceFromEnd(container) > MAIN_CHAT_SCROLL_RESTORE_THRESHOLD_PX))) return;
+    workspaceGenerationScroll = { explicit, top: container.scrollTop, contextKey: getComposerSnapshot().contextKey };
+}
+
+function getFailedWorkspaceReply() {
+    const run = workspaceGeneration.failedReply();
+    if (!run || run.kind === 'continue' || !usesWorkspaceGeneration() || chat.at(-1)?.is_user !== true) return;
+    const target = getWorkspaceGenerationTarget();
+    if (target && (run.temporary ? target.temporary : target.version === run.version)) return run;
+}
+
 const workspaceGeneration = createWorkspaceGeneration({
     request: workspaceGenerationRequest,
     subscribe(id, listener) {
@@ -6334,6 +6377,7 @@ const workspaceGeneration = createWorkspaceGeneration({
     },
     changed() {
         document.body.toggleAttribute('data-workspace-generation-running', workspaceGeneration.canStop());
+        if (workspaceGeneration.display() || getFailedWorkspaceReply()) queueWorkspaceGenerationScroll();
         scheduleMainChatMessageListPanelRefresh();
         if (document.getElementById('options_button')?.getAttribute('aria-expanded') === 'true') {
             syncOptionsMenuContinueAvailability();
@@ -6354,7 +6398,8 @@ const workspaceGeneration = createWorkspaceGeneration({
                 console.warn('Regeneration failed:', run.error ?? run.status);
                 toastr.error(t`Regeneration failed. Please try again.`);
             } else {
-                toastr.error(run.error ?? run.status);
+                const toast = toastr.error(run.error ?? run.status);
+                if (toast && run.kind === 'send' && run.status === 'failed') workspaceSendFailureToast = { id: run.id, toast };
             }
         };
         if (run.temporary) {
@@ -6364,14 +6409,14 @@ const workspaceGeneration = createWorkspaceGeneration({
                     : run.kind === 'continue' ? chat.length - 1 : chat.length;
                 chat.splice(start, chat.length - start, run.assistant);
             }
-            if (run.status === 'failed' || run.status === 'interrupted') showFailure();
+            if (run.status === 'interrupted' || (run.status === 'failed' && (run.kind === 'send' || !getFailedWorkspaceReply()))) showFailure();
             return;
         }
         const current = getCurrentChatGenerationTarget();
         // A historical run version does not describe the current chat returned by /find.
         const version = discovered ? run.chatVersion : run.version;
         // Do not retry the same version if the reconciliation read also came back stale.
-        if ((!discovered && run.status === 'failed') || (run.status === 'interrupted' && reconciledChatVersion === undefined)) {
+        if ((!discovered && run.status === 'failed' && (run.kind === 'send' || chat.at(-1)?.is_user !== true)) || (run.status === 'interrupted' && reconciledChatVersion === undefined)) {
             showFailure();
         }
         if (current && typeof version === 'string' && current.version !== version && version !== reconciledChatVersion) {
@@ -6380,7 +6425,10 @@ const workspaceGeneration = createWorkspaceGeneration({
     },
 });
 
-eventSource.on(event_types.CHAT_CHANGED, () => workspaceGeneration.close());
+eventSource.on(event_types.CHAT_CHANGED, () => {
+    workspaceGenerationScroll = null;
+    workspaceGeneration.close();
+});
 window.addEventListener('pagehide', () => workspaceGeneration.leaveTemporary());
 eventSource.on(event_types.CHAT_LOADED, event => {
     if (usesWorkspaceGeneration()) {
@@ -6422,7 +6470,10 @@ async function startWorkspaceGeneration(action, text) {
     const composer = getComposerSnapshot();
     const isCurrent = () => ownsWorkspaceComposer(composer);
     const requestId = crypto.randomUUID();
-    const prepared = action === 'regenerate' ? workspaceGeneration.prepareRegenerate(target, requestId) : undefined;
+    const prepared = action === 'continue' ? undefined : workspaceGeneration.prepare(target, { action, text, requestId });
+    const ownsPreparation = () => isCurrent() && (!prepared || workspaceGeneration.ownsPreparation(prepared));
+    if (prepared) queueWorkspaceGenerationScroll(true);
+    let creating = false;
     try {
         let attachments;
         let clearFiles;
@@ -6430,8 +6481,8 @@ async function startWorkspaceGeneration(action, text) {
             const input = document.getElementById('file_form_input');
             const selected = Array.from(input.files);
             const message = { extra: {} };
-            await populateFileAttachment(message, 'file_form_input', { isCurrent, reset: false });
-            if (!isCurrent()) return false;
+            await populateFileAttachment(message, 'file_form_input', { isCurrent: ownsPreparation, reset: false });
+            if (!ownsPreparation()) return false;
             attachments = message.extra;
             if ((attachments.files?.length ?? 0) + (attachments.media?.length ?? 0) !== selected.length) return false;
             clearFiles = () => {
@@ -6441,9 +6492,10 @@ async function startWorkspaceGeneration(action, text) {
             };
         }
         const worldRuntime = await captureWorkspaceWorldRuntime(activations);
-        if (!isCurrent()) return false;
+        if (!ownsPreparation()) return false;
         await flushWorkspaceGenerationSettings();
-        if (!isCurrent() || (!prepared && workspaceGeneration.busy())) return false;
+        if (!ownsPreparation() || (!prepared && workspaceGeneration.busy())) return false;
+        creating = true;
         const run = await workspaceGeneration.create(target, { action, text, attachments, ...worldRuntime, requestId, locale: readStoredUiLocale() }, prepared);
         if (!run) return false;
         clearFiles?.();
@@ -6452,7 +6504,7 @@ async function startWorkspaceGeneration(action, text) {
         }
         return true;
     } catch (error) {
-        toastr.error(error.message);
+        if (ownsPreparation() || (creating && isCurrent())) toastr.error(error.message);
         return false;
     } finally {
         workspaceGeneration.releasePreparation(prepared);

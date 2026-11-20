@@ -24,7 +24,7 @@ describe('React runtime boundary', () => {
         );
 
         expect(commandsSource).toContain(
-            "export type MainChatGenerationKind = 'submitComposer' | 'regenerate';",
+            "export type MainChatGenerationKind = 'submitComposer' | 'regenerate' | 'retryReply';",
         );
         expect(commandsSource).toContain('kind: MainChatGenerationKind;');
         expect(commandsSource).not.toContain('export interface MainChatGenerationCommand {\n    kind: string;');

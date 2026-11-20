@@ -851,6 +851,7 @@ export async function getChat({ strictReload = false, reconciledChatVersion = un
         if (!version && (Array.isArray(data) || !data || typeof data !== 'object' || Object.keys(data).length)) {
             throw new Error('Chat response is missing its version');
         }
+        if (reconciledChatVersion !== undefined) persistMainChatMessageListScrollSnapshotBeforeClear(load.chat);
         chatVersions.set(chatSaveKey(load.avatar, load.chat), { version: version || null, pending: null, conflicted: false, session: load.session, chatReference: load.chatReference });
         if (Array.isArray(data) && data.length > 0) {
             /** @type {ChatHeader} */

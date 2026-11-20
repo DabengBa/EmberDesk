@@ -41,6 +41,7 @@ export function createWorkspaceGeneration({ request, subscribe, changed, finishe
         const view = selection;
         selection = undefined;
         view?.detach?.();
+        clearTimeout(view?.waitTimer);
 
         changed();
     }
@@ -61,18 +62,29 @@ export function createWorkspaceGeneration({ request, subscribe, changed, finishe
     };
 
     const current = () => selection?.run?.status === 'running' ? selection : null;
-    const pendingRegenerate = () => selection?.kind === 'regenerate' && (selection.preparing || selection.creating) && !selection.run;
+    const pending = () => selection && selection.kind !== 'continue' && (selection.preparing || selection.creating) && !selection.run;
+
+    function startWaiting(view) {
+        if (view.kind !== 'send' || view.waitTimer !== undefined || view.waiting) return;
+        view.waitTimer = setTimeout(() => {
+            if (selection !== view || view.text) return;
+            view.waiting = true;
+            changed();
+        }, 250);
+    }
 
     function settle(view, discovery) {
         results.delete(view.stepId);
         view.detach?.();
         view.detach = undefined;
+        clearTimeout(view.waitTimer);
+        view.waiting = false;
         const reconcile = finished(view.run, discovery);
-        if (!discovery && view.kind === 'regenerate' && !view.run.temporary && view.run.status === 'completed' && reconcile) {
+        if (!discovery && !view.run.temporary && reconcile && (view.kind === 'send' || (view.kind === 'regenerate' && view.run.status === 'completed'))) {
             view.reconciling = true;
             const release = () => { if (selection === view) detach(); };
             void reconcile.then(release, release);
-        } else if (view.kind === 'regenerate' && view.run.status !== 'interrupted' && selection === view) {
+        } else if (view.kind === 'regenerate' && !['failed', 'interrupted'].includes(view.run.status) && selection === view) {
             selection = undefined;
         }
         changed();
@@ -81,10 +93,12 @@ export function createWorkspaceGeneration({ request, subscribe, changed, finishe
     function attach(view, run, discovery) {
         view.run = run;
         view.kind = run.kind ?? view.kind;
+        view.discovered = Boolean(discovery);
         if (run.status !== 'running') {
             settle(view, discovery);
             return;
         }
+        startWaiting(view);
         changed();
         view.detach = subscribe(run.id, event => {
             if (selection !== view) return;
@@ -105,6 +119,7 @@ export function createWorkspaceGeneration({ request, subscribe, changed, finishe
                 settle(view);
                 return;
             }
+            if (view.text) clearTimeout(view.waitTimer);
             if (view.run.status === 'running' && (event.type === 'step' || event.type === 'snapshot')) {
                 // A reconnect repeats the pending step but never an accepted result.
                 void handleStep(view, event.step).catch(() => {});
@@ -130,17 +145,20 @@ export function createWorkspaceGeneration({ request, subscribe, changed, finishe
 
     return {
         current,
-        display: () => current() ?? (pendingRegenerate() || selection?.reconciling ? selection : null),
-        canStop: () => Boolean(current() || pendingRegenerate()),
+        display: () => current() ?? (pending() || selection?.reconciling ? selection : null),
+        failedReply: () => selection?.run?.status === 'failed' ? selection.run : undefined,
+        canStop: () => Boolean(current() || pending()),
         busy: () => Boolean(selection?.preparing || selection?.creating || selection?.reconciling || current()),
         close,
         leaveTemporary,
-        prepareRegenerate(target, requestId) {
-            const view = begin(target, { action: 'regenerate', requestId });
+        prepare(target, command) {
+            const view = begin(target, command);
             view.preparing = true;
+            startWaiting(view);
             changed();
             return view;
         },
+        ownsPreparation: view => selection === view && view.preparing,
         releasePreparation(view) {
             if (view && selection === view && view.preparing) detach();
         },
@@ -183,7 +201,7 @@ export function createWorkspaceGeneration({ request, subscribe, changed, finishe
             const view = selection;
             if (current()) {
                 await cancelRun(view, view.run);
-            } else if (pendingRegenerate()) {
+            } else if (pending()) {
                 if (view.preparing) return detach();
                 if (view.stopRequested) return;
                 view.stopRequested = true;

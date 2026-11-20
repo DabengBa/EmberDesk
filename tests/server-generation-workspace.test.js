@@ -1,12 +1,49 @@
-import { expect, test } from '@jest/globals';
+import { expect, jest, test } from '@jest/globals';
 import { createWorkspaceGeneration } from '../public/scripts/server-generation-workspace.js';
+
+test.each(['fast', 'slow', 'stop'])('a prepared send only shows waiting after the delay (%s)', async outcome => {
+    jest.useFakeTimers();
+    try {
+        const run = { id: 'send', status: 'running', kind: 'send' };
+        let deliver;
+        const workspace = createWorkspaceGeneration({
+            async request() { return run; },
+            subscribe(_id, listener) { deliver = listener; return () => {}; },
+            changed() {}, finished() {},
+        });
+        const target = { file_name: 'one' };
+        const command = { action: 'send', text: 'question', requestId: 'request-one' };
+        const view = workspace.prepare(target, command);
+        expect(workspace.display().pendingText).toBe('question');
+        expect(workspace.canStop()).toBe(true);
+        expect(workspace.display().waiting).toBeFalsy();
+        if (outcome === 'stop') {
+            await workspace.cancel();
+            expect(await workspace.create(target, command, view)).toBeUndefined();
+        } else {
+            await workspace.create(target, command, view);
+            jest.advanceTimersByTime(249);
+            expect(workspace.display().waiting).toBeFalsy();
+            if (outcome === 'slow') {
+                jest.advanceTimersByTime(1);
+                expect(workspace.display().waiting).toBe(true);
+            }
+            deliver({ type: 'terminal', run: { ...run, status: 'completed' } });
+        }
+        jest.advanceTimersByTime(250);
+        expect(workspace.display()).toBeNull();
+        expect(jest.getTimerCount()).toBe(0);
+    } finally {
+        jest.useRealTimers();
+    }
+});
 
 test('stopping a prepared replacement releases the view before create', async () => {
     const requests = [];
     const workspace = createWorkspaceGeneration({
         request: route => requests.push(route), subscribe() {}, changed() {}, finished() {},
     });
-    const view = workspace.prepareRegenerate({ file_name: 'one' }, 'request-one');
+    const view = workspace.prepare({ file_name: 'one' }, { action: 'regenerate', requestId: 'request-one' });
     expect(workspace.canStop()).toBe(true);
     expect(workspace.display().kind).toBe('regenerate');
     await workspace.cancel();
