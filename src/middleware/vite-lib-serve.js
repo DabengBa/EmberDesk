@@ -21,6 +21,12 @@ export default function getViteLibServeMiddleware() {
             }
             return next();
         }
+        // Serve only generated JS chunks, never arbitrary paths under dist/lib.
+        const chunk = /^\/highlight-chunks\/([A-Za-z0-9_-]+\.js)$/.exec(req.path);
+        if (req.method === 'GET' && chunk) {
+            const chunkPath = path.resolve(process.cwd(), 'dist/lib/highlight-chunks', chunk[1]);
+            if (fs.existsSync(chunkPath)) return res.sendFile(chunkPath);
+        }
         next();
     }
 

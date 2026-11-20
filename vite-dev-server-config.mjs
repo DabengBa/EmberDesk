@@ -5,6 +5,7 @@ const DEFAULT_DEV_PORT = 3001;
 const backendPaths = [
     '/api',
     '/lib.js',
+    '/highlight-chunks/',
     '/csrf-token',
     '/react/login',
     '/style.css',

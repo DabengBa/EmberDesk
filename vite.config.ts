@@ -24,6 +24,7 @@ export default defineConfig(({ mode }) => {
                 emptyOutDir: true,
                 rollupOptions: {
                     external: [],
+                    output: { chunkFileNames: 'highlight-chunks/[name]-[hash].js' },
                 },
             },
             resolve: {

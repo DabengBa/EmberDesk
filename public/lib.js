@@ -5,7 +5,16 @@
 import lodash from 'lodash';
 import Fuse from 'fuse.js';
 import DOMPurify from 'dompurify';
-import hljs from 'highlight.js';
+import highlightCore from 'highlight.js/lib/core';
+import bash from 'highlight.js/lib/languages/bash';
+import cssLanguage from 'highlight.js/lib/languages/css';
+import graphql from 'highlight.js/lib/languages/graphql';
+import handlebars from 'highlight.js/lib/languages/handlebars';
+import javascript from 'highlight.js/lib/languages/javascript';
+import json from 'highlight.js/lib/languages/json';
+import python from 'highlight.js/lib/languages/python';
+import typescript from 'highlight.js/lib/languages/typescript';
+import xml from 'highlight.js/lib/languages/xml';
 import localforage from 'localforage';
 import Handlebars from 'handlebars';
 import css from '@adobe/css-tools';
@@ -22,6 +31,28 @@ import chalk from 'chalk';
 import yaml from 'yaml';
 import * as chevrotain from 'chevrotain';
 import { gzipSync, gzip } from 'fflate';
+
+
+// Use a separate instance: importing the full registry later must not mutate it
+// until its languages can be installed in the original autodetection order.
+const hljs = highlightCore.newInstance();
+for (const [name, grammar] of Object.entries({ bash, css: cssLanguage, graphql, handlebars, javascript, json, python, typescript, xml })) {
+    hljs.registerLanguage(name, grammar);
+}
+let fullLanguages;
+hljs.loadAllLanguages = () => fullLanguages ??= import('highlight.js').then(({ default: full }) => {
+    const existing = new Map(hljs.listLanguages().map(name => [name, hljs.getLanguage(name).rawDefinition]));
+    for (const name of existing.keys()) hljs.unregisterLanguage(name);
+    for (const name of full.listLanguages()) {
+        hljs.registerLanguage(name, existing.get(name) ?? full.getLanguage(name).rawDefinition);
+        existing.delete(name);
+    }
+    for (const [name, grammar] of existing) hljs.registerLanguage(name, grammar);
+}).catch(error => {
+    fullLanguages = undefined;
+    throw error;
+});
+
 
 /**
  * Expose the libraries to the 'window' object.

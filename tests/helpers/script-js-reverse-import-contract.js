@@ -28,7 +28,7 @@ export const FIRST_PARTY_SCRIPT_JS_IMPORT_CONTRACT = Object.freeze([
 
     contractEntry('import-confirm-dialog.js', '../script.js', ['characters', 'converter', 'substituteParams']),
 
-    contractEntry('macros.js', '../script.js', ['chat', 'chat_metadata', 'getMaxPromptTokens', 'getMaxContextTokens', 'getMaxResponseTokens', 'getCurrentChatId', 'substituteParams', 'extension_prompts']),
+    contractEntry('macros.js', '../script.js', ['chat', 'substituteParams']),
     contractEntry('macros/definitions/chat-macros.js', '../../../script.js', ['chat', 'chat_metadata']),
     contractEntry('macros/definitions/core-macros.js', '../../../script.js', ['chat_metadata', 'getMaxPromptTokens', 'getMaxContextTokens', 'getMaxResponseTokens', 'extension_prompts', 'getCurrentChatId']),
     contractEntry('macros/definitions/env-macros.js', '../../../script.js', ['parseMesExamples']),

@@ -108,6 +108,7 @@ try {
 
     for (const requestPath of [
         '/lib.js',
+        '/highlight-chunks/example-Abc_123.js',
         '/style.css',
         '/css/user.css',
         '/scripts/example.js',

@@ -20,6 +20,7 @@ describe('Vite development proxy', () => {
             target: 'http://127.0.0.1:8000',
             changeOrigin: true,
         });
+        expect(defaults.proxy['/highlight-chunks/'].target).toBe('http://127.0.0.1:8000');
         expect(defaults.proxy['/User%20Avatars']).toMatchObject({
             target: 'http://127.0.0.1:8000',
             changeOrigin: true,

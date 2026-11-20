@@ -125,6 +125,7 @@ test('native message preview adds copy action without requiring jQuery', async (
     const code = { textContent: 'const value = 1;', closest: () => ({ textContent: 'const value = 1;' }), appendChild: jest.fn() };
     const root = { querySelectorAll: jest.fn(() => [code]) };
     const copyText = jest.fn(async () => {});
+
     state.hljs = { highlightElement: jest.fn() };
     registerMessageShellContext({ state, copyText, t: strings => strings[0] });
     globalThis.$ = () => { throw new Error('jQuery must not be used for a native preview'); };
@@ -144,6 +145,48 @@ test('native message preview adds copy action without requiring jQuery', async (
     } finally {
         delete globalThis.document;
     }
+});
+
+test('revisiting a code block does not add a second copy button', () => {
+    let added;
+    const button = { classList: { add: jest.fn() }, addEventListener: jest.fn() };
+    const code = { textContent: 'code', closest: () => ({ textContent: 'code' }),
+        querySelector: selector => selector === '.code-copy' ? added : null,
+        appendChild: child => { added = child; } };
+    state.hljs = { highlightElement: jest.fn() };
+    globalThis.document = { createElement: jest.fn(() => button) };
+    try {
+        const root = { querySelectorAll: () => [code] };
+        addCopyToCodeBlocks(root);
+        addCopyToCodeBlocks(root);
+        expect(globalThis.document.createElement).toHaveBeenCalledTimes(1);
+        expect(state.hljs.highlightElement).toHaveBeenCalledTimes(1);
+    } finally { delete globalThis.document; }
+});
+
+test('copy remains usable while lazy highlighting is pending and after load failure', async () => {
+    let reject;
+    const pending = new Promise((resolve, fail) => { reject = fail; });
+    const listeners = {};
+    const button = { classList: { add: jest.fn() }, addEventListener: (type, listener) => { listeners[type] = listener; } };
+    const code = { className: 'language-rust', parentNode: { className: '' }, dataset: {}, textContent: 'fn main() {}',
+        closest: () => ({ textContent: 'fn main() {}' }), appendChild: jest.fn() };
+    const copyText = jest.fn(async () => {});
+    state.hljs = { getLanguage: () => false, highlightElement: jest.fn(), loadAllLanguages: () => pending };
+    registerMessageShellContext({ state, copyText, t: strings => strings[0] });
+    globalThis.document = { createElement: () => button };
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+        addCopyToCodeBlocks({ querySelectorAll: () => [code] });
+        await listeners.pointerup();
+        expect(copyText).toHaveBeenCalledWith('fn main() {}');
+        reject(Error('offline'));
+        await Promise.resolve();
+        await Promise.resolve();
+        await listeners.pointerup();
+        expect(copyText).toHaveBeenCalledTimes(2);
+        expect(warn).toHaveBeenCalled();
+    } finally { warn.mockRestore(); delete globalThis.document; }
 });
 
 test('native message row highlights code blocks once in document order without jQuery traversal', () => {
