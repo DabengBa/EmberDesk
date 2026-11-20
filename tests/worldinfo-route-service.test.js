@@ -540,7 +540,7 @@ describe('world info canonical route service', () => {
     });
 
 
-    test('imports and deletes world info through canonical writes while preserving route responses', async () => {
+    test.each(['native upload', 'converted data'])('imports %s with World Info positions through canonical writes and preserves delete responses', async (source) => {
         const root = makeRoot();
         const directories = createDirectories(root);
         seedCanonicalWorldInfo(directories, {
@@ -550,14 +550,20 @@ describe('world info canonical route service', () => {
         setCanonicalEnv({ enabled: true, shadowImport: true, reads: true, writes: true, projection: 'sync' });
         const uploadDirectory = path.join(root, 'uploads');
         fs.mkdirSync(uploadDirectory, { recursive: true });
-        fs.writeFileSync(path.join(uploadDirectory, 'upload.json'), JSON.stringify({
+        const importedBook = {
             name: 'Imported Lore',
             extensions: { source: 'upload' },
-            entries: { one: { content: 'imported' } },
-        }));
+            entries: {
+                one: { content: 'imported', position: 4, depth: 2, role: 1 },
+                two: { content: 'outlet lore', position: 7, outletName: 'example' },
+                three: { content: 'no position' },
+            },
+        };
+        const upload = JSON.stringify(importedBook);
+        fs.writeFileSync(path.join(uploadDirectory, 'upload.json'), upload);
 
         const importResponse = await invokeRouteWithRequest('/import', {
-            body: {},
+            body: source === 'converted data' ? { convertedData: upload } : {},
             file: {
                 originalname: 'Imported.json',
                 destination: uploadDirectory,
@@ -580,9 +586,12 @@ describe('world info canonical route service', () => {
         expect(importResponse.body).toEqual({ name: 'Imported' });
         expect(fs.existsSync(path.join(directories.worlds, 'Imported.json'))).toBe(false);
         expect(JSON.parse(db.prepare('SELECT payload_json FROM world_books WHERE name = ?').get('Imported').payload_json)).toEqual({
-            name: 'Imported Lore',
-            extensions: { source: 'upload' },
-            entries: { one: { content: 'imported' } },
+            ...importedBook,
+            entries: {
+                one: { ...importedBook.entries.one, position: 0 },
+                two: { ...importedBook.entries.two, position: 0 },
+                three: { ...importedBook.entries.three, position: 0 },
+            },
         });
         expect(deleteResponse.statusCode).toBe(200);
         expect(db.prepare('SELECT deleted_at_ms FROM world_books WHERE name = ?').get('Existing').deleted_at_ms).not.toBeNull();
@@ -599,13 +608,13 @@ describe('world info canonical route service', () => {
 
         const response = await invokeRoute('/edit', {
             name: 'Lorebook',
-            data: { name: 'Edited Lore', entries: { one: { content: 'edited' } } },
+            data: { name: 'Edited Lore', entries: { one: { content: 'edited', position: 4, depth: 2 } } },
         }, directories);
 
         expect(response.statusCode).toBe(200);
         expect(JSON.parse(db.prepare('SELECT payload_json FROM world_books WHERE name = ?').get('Lorebook').payload_json)).toEqual({
             name: 'Edited Lore',
-            entries: { one: { content: 'edited' } },
+            entries: { one: { content: 'edited', position: 4, depth: 2 } },
         });
         expect(fs.existsSync(path.join(directories.worlds, 'Lorebook.json'))).toBe(false);
     });

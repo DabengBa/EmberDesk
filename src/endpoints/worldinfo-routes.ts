@@ -8,6 +8,7 @@ import type { DatabaseSync } from 'node:sqlite';
 import type { UserDirectoryList } from '../users.js';
 import sanitize from 'sanitize-filename';
 import { sync as writeFileAtomicSync } from 'write-file-atomic';
+import { setImportedWorldInfoPositions } from '../../public/scripts/world-info-import-placement.js';
 import { invalidateDirectory } from './settings-cache.js';
 import { canonicalSqliteManager, withCanonicalTransaction } from '../canonical-sqlite.ts';
 import { runCanonicalMigrations } from '../canonical-sqlite-migrations.ts';
@@ -299,9 +300,10 @@ router.post('/import', async (request, response) => {
         fs.unlinkSync(pathToUpload);
     }
 
+    let payload;
     try {
-        const worldContent = JSON.parse(fileContents);
-        if (!('entries' in worldContent)) {
+        payload = JSON.parse(fileContents);
+        if (!('entries' in payload)) {
             throw new Error('File must contain a world info entries list');
         }
     } catch {
@@ -317,7 +319,7 @@ router.post('/import', async (request, response) => {
 
     const canonicalWriteState = await getCanonicalWorldInfoWriteState(request);
     if (canonicalWriteState.ok) {
-        const payload = JSON.parse(fileContents);
+        setImportedWorldInfoPositions(payload.entries);
         const mode = getCanonicalStorageSlice('world_info').getProjectionMode();
         const repairKey = withCanonicalTransaction(canonicalWriteState.db, txn => {
             upsertCanonicalWorldInfoBookInTransaction(txn, { name: worldName, payload });

@@ -1,8 +1,11 @@
 import { afterEach, expect, jest, test } from '@jest/globals';
 
 const characters = [
-    { avatar: 'a.png', name: 'A', data: { character_book: { name: 'A book' } } },
-    { avatar: 'b.png', name: 'B', data: { character_book: { name: 'B book' } } },
+    { avatar: 'a.png', name: 'A', data: { character_book: { name: 'A book', entries: [] } } },
+    { avatar: 'b.png', name: 'B', data: { character_book: { name: 'B book', entries: [
+        { id: 0, keys: ['lore'], content: 'depth lore', enabled: true, extensions: { position: 4, depth: 2, role: 1 } },
+        { id: 1, keys: ['lore'], content: 'outlet lore', enabled: true, extensions: { position: 7 } },
+    ] } } },
 ];
 let reference;
 const storage = { getItem: jest.fn(() => 'true'), setItem: jest.fn() };
@@ -14,9 +17,10 @@ jest.unstable_mockModule('../public/scripts/extensions/regex/engine.js', () => (
 jest.unstable_mockModule('../public/scripts/world-info.js', () => ({ importEmbeddedWorldInfo: (...args) => reference.importEmbeddedWorldInfo(...args), world_names: [] }));
 jest.unstable_mockModule('../public/scripts/world-info-state.js', () => ({ world_names: [] }));
 jest.unstable_mockModule('../public/scripts/notifications.js', () => ({ default: { info: jest.fn(), success: jest.fn() } }));
-jest.unstable_mockModule('../public/scripts/i18n.js', () => ({ t: (s, ...v) => s.reduce((a, x, i) => a + x + (v[i] ?? ''), '') }));
+jest.unstable_mockModule('../public/scripts/i18n.js', () => ({ translate: x => x, t: (s, ...v) => s.reduce((a, x, i) => a + x + (v[i] ?? ''), '') }));
 const { createWorldInfoReferenceUi } = await import('../public/scripts/world-info-reference-ui.js');
 const { applyImportChoices } = await import('../public/scripts/import-confirm-dialog.js');
+const { convertCharacterBook } = await import('../public/scripts/world-info-converters.js');
 const previousDocument = globalThis.document, previousDollar = globalThis.$;
 afterEach(() => { globalThis.document = previousDocument; globalThis.$ = previousDollar; });
 
@@ -27,7 +31,7 @@ function fixture(control) {
     const saved = new Promise(resolve => { release = resolve; });
     const save = jest.fn(() => saved);
     reference = createWorldInfoReferenceUi({ characters, accountStorage: storage, saveWorldInfo: save,
-        convertCharacterBook: book => book, updateWorldInfoList: jest.fn(),
+        convertCharacterBook, updateWorldInfoList: jest.fn(),
         t: (s, ...v) => s.reduce((a, x, i) => a + x + (v[i] ?? ''), '') });
     return { save, release, change };
 }
@@ -41,7 +45,13 @@ test('unified import uses real embedded consumer, keeps captured character throu
     // Exercise an existing numeric draft sentinel as the previous identity.
     control.worldInfoChid = -1;
     const pending = applyImportChoices(characters[1], { importWorldBook: true });
-    expect(save).toHaveBeenCalledWith('B book', characters[1].data.character_book, true);
+    expect(save).toHaveBeenCalledWith('B book', expect.objectContaining({
+        entries: {
+            0: expect.objectContaining({ content: 'depth lore', position: 0, depth: 2, role: 1 }),
+            1: expect.objectContaining({ content: 'outlet lore', position: 0 }),
+        },
+    }), true);
+    expect(characters[1].data.character_book.entries.map(entry => entry.extensions.position)).toEqual([4, 7]);
     expect(control.worldInfoChid).toBe(1);
     reference.checkEmbeddedWorld(0);
     release();
