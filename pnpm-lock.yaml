@@ -182,9 +182,6 @@ importers:
       chevrotain:
         specifier: ^11.2.0
         version: 11.2.0
-      command-exists:
-        specifier: ^1.2.9
-        version: 1.2.9
       compression:
         specifier: ^1.8.2
         version: 1.8.2(supports-color@10.2.2)
@@ -194,9 +191,6 @@ importers:
       cors:
         specifier: ^2.8.5
         version: 2.8.6
-      crc:
-        specifier: ^4.3.2
-        version: 4.3.2(buffer@6.0.3)
       csrf-sync:
         specifier: ^4.2.1
         version: 4.2.1
@@ -248,9 +242,6 @@ importers:
       is-docker:
         specifier: ^3.0.0
         version: 3.0.0
-      js-sha256:
-        specifier: ^0.11.1
-        version: 0.11.1
       localforage:
         specifier: ^1.10.0
         version: 1.10.0
@@ -278,12 +269,6 @@ importers:
       open:
         specifier: ^10.2.0
         version: 10.2.0
-      png-chunk-text:
-        specifier: ^1.0.0
-        version: 1.0.0
-      png-chunks-extract:
-        specifier: ^1.0.0
-        version: 1.0.0
       proxy-agent:
         specifier: ^6.5.0
         version: 6.5.0(supports-color@10.2.2)
@@ -363,9 +348,6 @@ importers:
       '@types/bytes':
         specifier: ^3.1.5
         version: 3.1.5
-      '@types/command-exists':
-        specifier: ^1.2.3
-        version: 1.2.3
       '@types/compression':
         specifier: ^1.8.1
         version: 1.8.1
@@ -393,12 +375,6 @@ importers:
       '@types/node-persist':
         specifier: ^3.1.8
         version: 3.1.8
-      '@types/png-chunk-text':
-        specifier: ^1.0.3
-        version: 1.0.3
-      '@types/png-chunks-extract':
-        specifier: ^1.0.2
-        version: 1.0.2
       '@types/react':
         specifier: 19.0.6
         version: 19.0.6
@@ -1313,9 +1289,6 @@ packages:
   '@types/bytes@3.1.5':
     resolution: {integrity: sha512-VgZkrJckypj85YxEsEavcMmmSOIzkUHqWmM4CCyia5dc54YwsXzJ5uT4fYxBQNEXx+oF1krlhgCbvfubXqZYsQ==}
 
-  '@types/command-exists@1.2.3':
-    resolution: {integrity: sha512-PpbaE2XWLaWYboXD6k70TcXO/OdOyyRFq5TVpmlUELNxdkkmXU9fkImNosmXU1DtsNrqdUgWd/nJQYXgwmtdXQ==}
-
   '@types/compression@1.8.1':
     resolution: {integrity: sha512-kCFuWS0ebDbmxs0AXYn6e2r2nrGAb5KwQhknjSPSPgJcGd8+HVSILlUyFhGqML2gk39HcG7D1ydW9/qpYkN00Q==}
 
@@ -1363,12 +1336,6 @@ packages:
 
   '@types/node@26.1.2':
     resolution: {integrity: sha512-Vu4a5UFA9rIIFJ7rB/Vaafh9lrCQszopTCx6KjFboXTGQbPNasehVR5TEiithSDGyd1DEiUByggTZsg8jukeIg==}
-
-  '@types/png-chunk-text@1.0.3':
-    resolution: {integrity: sha512-7keEFz73uNJ9Ar1XMCNnHEXT9pICJnouMQCCYgBEmHMgdkXaQzSTmSvr6tUDSqgdEgmlRAxZd97wprgliyZoCg==}
-
-  '@types/png-chunks-extract@1.0.2':
-    resolution: {integrity: sha512-z6djfFIbrrddtunoMJBOPlyZrnmeuG1kkvHUNi2QfpOb+JMMLuLliHHTmMyRi7k7LiTAut0HbdGCF6ibDtQAHQ==}
 
   '@types/qs@6.15.1':
     resolution: {integrity: sha512-GZHUBZR9hckSUhrxmp1nG6NwdpM9fCunJwyThLW1X3AyHgd9IlHb6VANpQQqDr2o/qQp6McZ3y/IA2rVzKzSbw==}
@@ -1768,9 +1735,6 @@ packages:
   color-name@1.1.4:
     resolution: {integrity: sha512-dOy+3AuW3a2wNbZHIuMZpTcgjGuLU/uBL/ubcZF9OXbDo8ff4O8yVp5Bf0efS8uEoYo5q4Fx7dY9OgQGXgAsQA==}
 
-  command-exists@1.2.9:
-    resolution: {integrity: sha512-LTQ/SGc+s0Xc0Fu5WaKnR0YiygZkm9eKFvyS+fRsU7/ZWFF8ykFM6Pc9aCVf1+xasOOZpO3BAVgVrKvsqKHV7w==}
-
   commander@9.5.0:
     resolution: {integrity: sha512-KRs7WVDKg86PWiuAqhDrAQnTXZKraVcCc6vFdL14qrZ/DcWwuRo7VoiYXalXO7S5GKpqYiVEwCbgFDfxNHKJBQ==}
     engines: {node: ^12.20.0 || >=14}
@@ -1841,10 +1805,6 @@ packages:
     resolution: {integrity: sha512-tJtZBBHA6vjIAaF6EnIaq6laBBP9aq/Y3ouVJjEfoHbRBcHBAHYcMh/w8LDrk2PvIMMq8gmopa5D4V8RmbrxGw==}
     engines: {node: '>= 0.10'}
 
-  crc-32@0.3.0:
-    resolution: {integrity: sha512-kucVIjOmMc1f0tv53BJ/5WIX+MGLcKuoBhnGqQrgKJNqLByb/sVMWfW/Aw6hw0jgcqjJ2pi9E5y32zOIpaUlsA==}
-    engines: {node: '>=0.8'}
-
   crc-32@1.2.2:
     resolution: {integrity: sha512-ROmzCKrTnOwybPcJApAA6WBWij23HVfGVNKqqrZpuyZOHqK2CwHSvpGuyt/UNNvaIjEd8X5IFGp4Mh+Ie1IHJQ==}
     engines: {node: '>=0.8'}
@@ -1853,15 +1813,6 @@ packages:
   crc32-stream@6.0.0:
     resolution: {integrity: sha512-piICUB6ei4IlTv1+653yq5+KoqfBYmj9bw6LqXoOneTMDXk5nM1qt12mFW1caG3LlJXEKW1Bp0WggEmIfQB34g==}
     engines: {node: '>= 14'}
-
-  crc@4.3.2:
-    resolution: {integrity: sha512-uGDHf4KLLh2zsHa8D8hIQ1H/HtFQhyHrc0uhHBcoKGol/Xnb+MPYfUMw7cvON6ze/GUESTudKayDcJC5HnJv1A==}
-    engines: {node: '>=12'}
-    peerDependencies:
-      buffer: '>=6.0.3'
-    peerDependenciesMeta:
-      buffer:
-        optional: true
 
   cross-spawn@7.0.6:
     resolution: {integrity: sha512-uV2QOWP2nWzsy2aMp8aRibhi9dlzF5Hgh5SHaB9OiTGEyDTiJJyx0uy51QXdyWbtAHNua4XJzUKca3OzKUd3vA==}
@@ -2349,9 +2300,6 @@ packages:
     resolution: {integrity: sha512-AC/7JofJvZGrrneWNaEnJeOLUx+JlGt7tNa0wZiRPT4MY1wmfKjt2+6O2p2uz2+skll8OZZmJMNqeke7kKbNgQ==}
     hasBin: true
 
-  js-sha256@0.11.1:
-    resolution: {integrity: sha512-o6WSo/LUvY2uC4j7mO50a2ms7E/EAdbP0swigLV+nzHKTTaYnaLIWJ02VdXrsJX0vGedDESQnLsOekr94ryfjg==}
-
   js-tokens@4.0.0:
     resolution: {integrity: sha512-RdJUflcE3cUzKiMqQgsCu06FPu9UdIJO0beYbPhHN4k6apgJtifcoCtT9bcxOpYBtpD2kCM6Sbzg4CausW/PKQ==}
 
@@ -2710,12 +2658,6 @@ packages:
   picomatch@4.0.5:
     resolution: {integrity: sha512-RvwwcruNjI1ncT5xRakeyS9Lf8lcItv34KD+aif+VH9kduAyfYBipGh12274xtenIPZ119/R9BdTBa8gAwSh0A==}
     engines: {node: '>=12'}
-
-  png-chunk-text@1.0.0:
-    resolution: {integrity: sha512-DEROKU3SkkLGWNMzru3xPVgxyd48UGuMSZvioErCure6yhOc/pRH2ZV+SEn7nmaf7WNf3NdIpH+UTrRdKyq9Lw==}
-
-  png-chunks-extract@1.0.0:
-    resolution: {integrity: sha512-ZiVwF5EJ0DNZyzAqld8BP1qyJBaGOFaq9zl579qfbkcmOwWLLO4I9L8i2O4j3HkI6/35i0nKG2n+dZplxiT89Q==}
 
   postcss-value-parser@4.2.0:
     resolution: {integrity: sha512-1NNCs6uurfkVbeXG4S8JFT9t19m45ICnif8zWLd5oPSZ50QnwMfK+H3jv408d4jw/7Bttv5axS5IiHoLaVNHeQ==}
@@ -4021,8 +3963,6 @@ snapshots:
 
   '@types/bytes@3.1.5': {}
 
-  '@types/command-exists@1.2.3': {}
-
   '@types/compression@1.8.1':
     dependencies:
       '@types/express': 5.0.6
@@ -4079,10 +4019,6 @@ snapshots:
   '@types/node@26.1.2':
     dependencies:
       undici-types: 8.3.0
-
-  '@types/png-chunk-text@1.0.3': {}
-
-  '@types/png-chunks-extract@1.0.2': {}
 
   '@types/qs@6.15.1': {}
 
@@ -4433,8 +4369,6 @@ snapshots:
 
   color-name@1.1.4: {}
 
-  command-exists@1.2.9: {}
-
   commander@9.5.0: {}
 
   comment-parser@1.4.6: {}
@@ -4510,18 +4444,12 @@ snapshots:
       object-assign: 4.1.1
       vary: 1.1.2
 
-  crc-32@0.3.0: {}
-
   crc-32@1.2.2: {}
 
   crc32-stream@6.0.0:
     dependencies:
       crc-32: 1.2.2
       readable-stream: 4.7.0
-
-  crc@4.3.2(buffer@6.0.3):
-    optionalDependencies:
-      buffer: 6.0.3
 
   cross-spawn@7.0.6:
     dependencies:
@@ -5006,8 +4934,6 @@ snapshots:
 
   jiti@2.7.0: {}
 
-  js-sha256@0.11.1: {}
-
   js-tokens@4.0.0: {}
 
   jsdoc-type-pratt-parser@7.2.0: {}
@@ -5306,12 +5232,6 @@ snapshots:
   picocolors@1.1.1: {}
 
   picomatch@4.0.5: {}
-
-  png-chunk-text@1.0.0: {}
-
-  png-chunks-extract@1.0.0:
-    dependencies:
-      crc-32: 0.3.0
 
   postcss-value-parser@4.2.0: {}
 

@@ -64,7 +64,6 @@ The default export object and named exports are expected to expose the same keys
 - `chevrotain`
 - `gzipSync`
 - `gzip`
-- `sha256`
 
 First-party modules should prefer explicit imports:
 

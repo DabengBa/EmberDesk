@@ -1,7 +1,4 @@
-import { crc32 } from 'crc';
-
-// crc's runtime passes Uint8Array to Buffer.from, although its declaration omits it.
-const crc32Bytes = crc32 as typeof crc32 & ((data: Uint8Array, previous?: number) => number);
+import { crc32 } from 'node:zlib';
 
 /**
  * Encodes PNG chunks into a PNG file format buffer.
@@ -58,7 +55,7 @@ export default function encode(chunks: Array<{ name: string; data: Uint8Array }>
             output[idx++] = data[j++];
         }
 
-        const crc = crc32Bytes(data, crc32Bytes(new Uint8Array(nameChars)));
+        const crc = crc32(data, crc32(new Uint8Array(nameChars)));
 
         int32[0] = crc;
         output[idx++] = uint8[3];

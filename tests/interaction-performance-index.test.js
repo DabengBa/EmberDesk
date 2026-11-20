@@ -5,8 +5,8 @@ import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 
 import { afterAll, afterEach, beforeAll, describe, expect, jest, test } from '@jest/globals';
-import extract from 'png-chunks-extract';
-import PNGtext from 'png-chunk-text';
+import extract from '../src/png/extract.ts';
+import * as PNGtext from '../src/png/text.ts';
 import sanitize from 'sanitize-filename';
 
 import {
@@ -137,7 +137,7 @@ function writeLegacyCharacterCardFile(directories, avatar, name, world, talkativ
         world,
     });
     const pngBuffer = writeCharacterCardPngData(DEFAULT_AVATAR_BUFFER, payload);
-    const chunks = extract(new Uint8Array(pngBuffer));
+    const chunks = extract(pngBuffer);
     const v1Chunks = chunks.filter((chunk) => {
         if (chunk.name !== 'tEXt') {
             return true;

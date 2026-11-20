@@ -31,7 +31,6 @@ const expectedExportNames = [
     'chevrotain',
     'gzipSync',
     'gzip',
-    'sha256',
 ];
 
 const legacyGlobalNames = [
@@ -57,7 +56,6 @@ describe('frontend shared library boundary', () => {
     const originalDataRoot = globalThis.DATA_ROOT;
     const originalWindow = globalThis.window;
     const originalDocument = globalThis.document;
-    const originalSha256NoNodeJs = globalThis.JS_SHA256_NO_NODE_JS;
 
     beforeEach(() => {
         const documentStub = {
@@ -75,13 +73,11 @@ describe('frontend shared library boundary', () => {
         };
         const windowStub = Object.assign(Object.create(globalThis), {
             document: documentStub,
-            JS_SHA256_NO_NODE_JS: true,
         });
         windowStub.window = windowStub;
         windowStub.self = windowStub;
         globalThis.window = windowStub;
         globalThis.document = documentStub;
-        globalThis.JS_SHA256_NO_NODE_JS = true;
     });
 
     afterEach(() => {
@@ -100,16 +96,12 @@ describe('frontend shared library boundary', () => {
         } else {
             globalThis.DATA_ROOT = originalDataRoot;
         }
-        if (originalSha256NoNodeJs === undefined) {
-            delete globalThis.JS_SHA256_NO_NODE_JS;
-        } else {
-            globalThis.JS_SHA256_NO_NODE_JS = originalSha256NoNodeJs;
-        }
     });
 
     test('exports the documented default keys and named module values', async () => {
         const lib = await importFreshLib();
 
+        expect(lib).not.toHaveProperty('sha256');
         expect(Object.keys(lib.default).sort()).toEqual(expectedExportNames.toSorted());
         for (const exportName of expectedExportNames) {
             expect(lib).toHaveProperty(exportName);
@@ -140,6 +132,7 @@ describe('frontend shared library boundary', () => {
 
         const builtLib = await import(`${pathToFileURL(viteOutputFile).href}?cacheBust=${Date.now()}`);
         expect(builtLib).toHaveProperty('initLibraryShims');
+        expect(builtLib).not.toHaveProperty('sha256');
         expect(Object.keys(builtLib.default).sort()).toEqual(expectedExportNames.toSorted());
     });
 

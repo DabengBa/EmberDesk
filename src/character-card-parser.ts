@@ -2,21 +2,21 @@ import fs from 'node:fs';
 import { Buffer } from 'node:buffer';
 
 import encode from './png/encode.ts';
-import extract from 'png-chunks-extract';
-import PNGtext from 'png-chunk-text';
+import extract from './png/extract.ts';
+import * as PNGtext from './png/text.ts';
 
 /**
  * Writes Character metadata to a PNG image buffer.
- * Writes only 'chara', 'ccv3' is not supported and removed not to create a mismatch.
+ * Replaces existing 'chara' and 'ccv3' text chunks.
  * @param {Buffer} image PNG image buffer
  * @param {string} data Character data to write
  * @returns {Buffer} PNG image buffer with metadata
  */
 export const write = (image: Buffer, data: string): Buffer => {
-    const chunks = extract(new Uint8Array(image));
+    const chunks = extract(image);
     const tEXtChunks = chunks.filter(chunk => chunk.name === 'tEXt');
 
-    // Remove existing tEXt chunks
+    // Remove existing character metadata and preserve other text chunks.
     for (const tEXtChunk of tEXtChunks) {
         const data = PNGtext.decode(tEXtChunk.data);
         if (data.keyword.toLowerCase() === 'chara' || data.keyword.toLowerCase() === 'ccv3') {
@@ -54,7 +54,7 @@ export const write = (image: Buffer, data: string): Buffer => {
  * @returns {Buffer} PNG image buffer without textual chunks
  */
 export const extractImageData = (image: Buffer): Buffer => {
-    const chunks = extract(new Uint8Array(image));
+    const chunks = extract(image);
     const imageChunks = chunks.filter(chunk => !['tEXt', 'zTXt', 'iTXt'].includes(chunk.name));
     return Buffer.from(encode(imageChunks));
 };
@@ -66,7 +66,7 @@ export const extractImageData = (image: Buffer): Buffer => {
  * @returns {string} Character data
  */
 export const read = (image: Buffer): string => {
-    const chunks = extract(new Uint8Array(image));
+    const chunks = extract(image);
 
     const textChunks = chunks.filter((chunk) => chunk.name === 'tEXt').map((chunk) => PNGtext.decode(chunk.data));
 

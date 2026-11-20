@@ -1,7 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { simpleGit as git, CheckRepoActions } from 'simple-git';
-import { sync as commandExistsSync } from 'command-exists';
 import { getConfigValue, color } from './util.js';
 
 /**
@@ -26,7 +25,9 @@ export async function updatePlugins(pluginsPath, options) {
 
     console.log(color.blue('Auto-updating server plugins... Set'), color.yellow('enableServerPluginsAutoUpdate: false'), color.blue('in config.yaml to disable this feature.'));
 
-    if (!commandExistsSync('git')) {
+    // If Git is present but fails to run, keep error handling per plugin.
+    const { installed } = await git().version().catch(() => ({ installed: true }));
+    if (!installed) {
         console.error(color.red('Git is not installed. Please install Git to enable auto-updating of server plugins.'));
         return;
     }

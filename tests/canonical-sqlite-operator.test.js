@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import sharp from 'sharp';
-import extract from 'png-chunks-extract';
+import extract from '../src/png/extract.ts';
 import { makeAnimatedImages, makeBmp } from './helpers/animated-image-fixtures.js';
 import { read as readCharacterCard } from '../src/character-card-parser.ts';
 import { AVATAR_HEIGHT, AVATAR_WIDTH } from '../src/constants.js';

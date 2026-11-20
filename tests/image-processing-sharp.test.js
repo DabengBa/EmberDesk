@@ -1,12 +1,12 @@
 import { describe, expect, test } from '@jest/globals';
 import sharp from 'sharp';
-import extract from 'png-chunks-extract';
+import extract from '../src/png/extract.ts';
 import encode from '../src/png/encode.ts';
 import { read, write } from '../src/character-card-parser.ts';
 import { AVATAR_HEIGHT, AVATAR_WIDTH } from '../src/constants.js';
 import { avatarToPng, avatarToPngSized, imageToPng, thumbnailImage } from '../src/image-processing.js';
 import { makeAnimatedImages } from './helpers/animated-image-fixtures.js';
-import PNGtext from 'png-chunk-text';
+import * as PNGtext from '../src/png/text.ts';
 
 // A bottom-up 24-bit BMP, red on the left and blue on the right.
 function bmpFixture() {
