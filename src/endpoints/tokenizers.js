@@ -9,7 +9,6 @@ import fetch from 'node-fetch';
 import { sync as writeFileAtomicSync } from 'write-file-atomic';
 
 import { Tokenizer } from '@agnai/web-tokenizers';
-import { SentencePieceProcessor } from '@agnai/sentencepiece-js';
 import { encoding_for_model } from 'tiktoken';
 
 import { convertClaudePrompt } from '../prompt-converters.js';
@@ -124,11 +123,81 @@ async function getPathToTokenizer(model, fallbackModel) {
 }
 
 /**
- * Sentencepiece tokenizer for tokenizing text.
+ * Iterates a protobuf message's length-delimited fields without decoding unrelated fields.
+ * @param {Buffer} bytes
+ * @returns {Generator<[number, Buffer]>}
  */
+function* readProtobufBytes(bytes) {
+    let offset = 0;
+    function readVarint() {
+        let value = 0;
+        for (let shift = 0; shift < 70; shift += 7) {
+            if (offset >= bytes.length) throw new Error('Truncated SentencePiece model varint');
+            const byte = bytes[offset++];
+            value += (byte & 0x7f) * 2 ** shift;
+            if (byte < 0x80) return value;
+        }
+        throw new Error('Invalid SentencePiece model varint');
+    }
+
+    while (offset < bytes.length) {
+        const tag = readVarint();
+        switch (tag & 7) {
+            case 0: readVarint(); break;
+            case 1: offset += 8; break;
+            case 2: {
+                const length = readVarint();
+                const start = offset;
+                offset += length;
+                if (offset > bytes.length) throw new Error('Truncated SentencePiece model field');
+                yield [tag >>> 3, bytes.subarray(start, offset)];
+                break;
+            }
+            case 5: offset += 4; break;
+            default: throw new Error('Unsupported SentencePiece model wire type');
+        }
+    }
+    if (offset > bytes.length) throw new Error('Truncated SentencePiece model field');
+}
+
+/**
+ * @typedef {{encodeIds: (text: string) => number[], encodePieces: (text: string) => string[], decodeIds: (ids: number[]) => string}} SentencePieceInstance
+ */
+
+/**
+ * The raw pieces are stored in ID order in ModelProto.pieces (field 1).
+ * Each SentencePiece stores its string in field 1. Decoding IDs would lose
+ * markers like U+2581 and byte fallback pieces like <0xF0>.
+ * @param {Buffer} model
+ * @returns {Promise<SentencePieceInstance>}
+ */
+async function loadSentencePiece(model) {
+    const pieces = [];
+    for (const [field, entry] of readProtobufBytes(model)) {
+        if (field !== 1) continue;
+        let piece = '';
+        for (const [pieceField, bytes] of readProtobufBytes(entry)) {
+            if (pieceField === 1) piece = bytes.toString('utf8');
+        }
+        pieces.push(piece);
+    }
+    const tokenizer = await Tokenizer.fromSentencePiece(model);
+    return {
+        encodeIds: text => Array.from(tokenizer.encode(text)),
+        encodePieces: text => Array.from(tokenizer.encode(text), id => pieces[id]),
+        // The legacy WASM integer conversion maps non-finite and out-of-range
+        // inputs to an invalid ID; Int32Array alone would wrap them to ID 0.
+        decodeIds: ids => tokenizer.decode(Int32Array.from(ids, id => {
+            const number = Number(id);
+            const integer = Math.trunc(number);
+            return Number.isFinite(integer) && integer >= -2147483648 && integer <= 2147483647 ? integer : -1;
+        })),
+    };
+}
+
 class SentencePieceTokenizer {
     /**
-     * @type {import('@agnai/sentencepiece-js').SentencePieceProcessor} Sentencepiece tokenizer instance
+     * @type {SentencePieceInstance} Sentencepiece tokenizer instance
      */
     #instance;
     /**
@@ -152,7 +221,7 @@ class SentencePieceTokenizer {
 
     /**
      * Gets the Sentencepiece tokenizer instance.
-     * @returns {Promise<import('@agnai/sentencepiece-js').SentencePieceProcessor|null>} Sentencepiece tokenizer instance
+     * @returns {Promise<SentencePieceInstance|null>} Sentencepiece tokenizer instance
      */
     async get() {
         if (this.#instance) {
@@ -161,8 +230,7 @@ class SentencePieceTokenizer {
 
         try {
             const pathToModel = await getPathToTokenizer(this.#model, this.#fallbackModel);
-            this.#instance = new SentencePieceProcessor();
-            await this.#instance.load(pathToModel);
+            this.#instance = await loadSentencePiece(await fs.promises.readFile(pathToModel));
             console.info('Instantiated the tokenizer for', path.parse(pathToModel).name);
             return this.#instance;
         } catch (error) {

@@ -29,6 +29,22 @@ Browser ES modules do not automatically leak imported names to `window`. Any glo
 
 **Build Tool:** Vite 8 builds the ES module output at `dist/lib/lib.js`.
 
+The shared `hljs` instance initially registers common Markdown languages and
+their embedded-language dependencies. Message code blocks with other explicit
+languages or requiring autodetection load the full highlight.js registry on
+demand; its original registration order is restored for autodetection. The copy
+control is available while loading, remains available on failure, and is not
+duplicated on a repeated visit. The named export, default export and installed
+legacy global retain the same instance. See `public/lib.js`,
+`public/scripts/highlight-code-block.js` and `public/scripts/message-service.js`.
+
+Vite emits its library chunks under `/highlight-chunks/`. The existing library
+middleware serves only flat JavaScript filenames from that dedicated directory;
+the development proxy forwards the same namespace to the backend. Other
+`dist/lib` paths are not exposed by this middleware. Startup size comparisons
+include `/lib.js` and its transitive static imports, excluding dynamic imports.
+With Playwright Chromium installed, `pnpm run build:lib && node tests/highlight-built.integration.runner.mjs` checks the real build in a browser.
+
 The same source file is also imported directly by Node/Jest tests. Dependency export interop therefore has to work in multiple environments:
 
 - Vite's browser module build (ES module output)

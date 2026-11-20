@@ -6,6 +6,7 @@ import { eventSource, event_types } from './events.js';
 import { isFrontendContent } from './frontend-frame.js';
 import { isCharacterExternalMediaAllowed } from './external-media-policy.js';
 import { filterMessageInlineStyles } from './message-css-policy.js';
+import { highlightCodeBlock } from './highlight-code-block.js';
 import { requireMessageShellContext } from './message-shell-context.js';
 import { uuidv4 } from './utils.js';
 
@@ -751,10 +752,11 @@ export function addCopyToCodeBlocks(messageElement) {
         if (skipFrontend && isFrontendContent(codeElement.closest('pre')?.textContent)) {
             continue;
         }
-        state.hljs.highlightElement(codeElement);
+        if (codeElement.querySelector?.('.code-copy')) continue;
         const copyButton = document.createElement('i');
         copyButton.classList.add('fa-solid', 'fa-copy', 'code-copy', 'interactable');
         copyButton.title = 'Copy code';
+        highlightCodeBlock(state.hljs, codeElement, copyButton);
         codeElement.appendChild(copyButton);
         copyButton.addEventListener('click', function (e) {
             e.stopPropagation();
