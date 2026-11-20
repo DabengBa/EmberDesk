@@ -5,7 +5,7 @@ import { requireCharacterTagsShellContext } from './character-tags-shell-context
 import { eventSource, event_types } from './events.js';
 import { FILTER_TYPES, FILTER_STATES, DEFAULT_FILTER_STATE, isFilterState, FilterHelper } from './filters.js';
 
-import { download, parseJsonFile, uuidv4, equalsIgnoreCaseAndAccents, removeFromArray, getFreeName, findChar, escapeHtml } from './utils.js';
+import { download, parseJsonFile, uuidv4, equalsIgnoreCaseAndAccents, removeFromArray, getFreeName, findChar, escapeHtml, loadFileToDocument } from './utils.js';
 import { power_user } from './power-user.js';
 
 import { POPUP_RESULT, POPUP_TYPE, Popup, callGenericPopup } from './popup.js';
@@ -1563,7 +1563,18 @@ export function applyTagsOnCharacterSelect(_chid = null) {
     // The legacy authoring form is hidden; React owns the visible editor.
 }
 
+let colorPickerScript;
+
 async function onViewTagsListClick() {
+    colorPickerScript ??= loadFileToDocument('/lib/toolcool-color-picker.js', 'js')
+        .catch(error => { colorPickerScript = undefined; throw error; });
+    try {
+        await colorPickerScript;
+    } catch (error) {
+        console.error('Tag color picker failed to load', error);
+        toastr.error(error.message);
+        return;
+    }
     const html = document.createElement('div');
     html.id = 'tag_view_list';
     const tagManagementHost = document.createElement('div');

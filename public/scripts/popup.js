@@ -2,7 +2,16 @@ import toastr from './notifications.js';
 import { shouldSendOnEnter } from './RossAscends-mods.js';
 import { translate } from './i18n.js';
 import { toastPositionClasses } from './power-user.js';
-import { removeFromArray, runAfterAnimation, uuidv4 } from './utils.js';
+import { loadFileToDocument, removeFromArray, runAfterAnimation, uuidv4 } from './utils.js';
+
+let cropScript, cropStyles;
+
+function loadCropAssets() {
+    cropScript ??= loadFileToDocument('/lib/cropper.min.js', 'js').catch(error => { cropScript = undefined; throw error; });
+    cropStyles ??= loadFileToDocument('/css/cropper.min.css', 'css', document.head.querySelector('link[rel="stylesheet"][href="/style.css"]'))
+        .catch(error => { cropStyles = undefined; throw error; });
+    return Promise.all([cropScript, cropStyles]);
+}
 
 /** @readonly */
 /** @enum {Number} */
@@ -197,7 +206,7 @@ export class Popup {
         this.#runtime = popupRuntimeFactory({
             popup: this, content, inputValue, options,
             services: {
-                translate, shouldSendOnEnter,
+                translate, shouldSendOnEnter, loadCropAssets,
                 afterAnimation: runAfterAnimation,
                 fixToast: fixToastrForDialogs,
                 recordResult: () => { Popup.util.lastResult = { value: this.value, result: this.result, inputResults: this.inputResults }; },

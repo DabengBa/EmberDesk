@@ -42,12 +42,18 @@ async function persistedTags(page) {
 }
 
 test('manages global tags, assigns them to characters, filters and persists a merge', async ({ page }, testInfo) => {
+    const pickerAssets = [];
+    page.on('request', request => {
+        if (new URL(request.url()).pathname === '/lib/toolcool-color-picker.js') pickerAssets.push(request);
+    });
     const suffix = crypto.randomUUID().slice(0, 8);
     const sourceName = `Source ${suffix}`;
     const targetName = `Target ${suffix}`;
     await testSetup.awaitST({ page });
     await openLibrary(page);
+    expect(pickerAssets).toHaveLength(0);
     await openManager(page);
+    expect(pickerAssets).toHaveLength(1);
 
     const sourceId = await createTag(page, sourceName);
     const targetId = await createTag(page, targetName);
