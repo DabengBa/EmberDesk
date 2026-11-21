@@ -603,8 +603,9 @@ test('default pipeline completes without a browser; custom step resumes once fro
         setPipeline(['first', 'last'], []);
         const history = [{ user_name: 'Rin', chat_metadata: { chat_memory: { keepTurns: 1, wrap: 'Recap: {{summary}}', summaries: [
             { id: 's1', turnKey: 'u1', messageIds: ['u1', 'a1'], manual: true, text: 'earlier voyage' },
+            { id: 's2', turnKey: 'u2', messageIds: ['u2', 'a2'], manual: true, text: 'reached port' },
         ] } } }];
-        for (let n = 1; n <= 3; n++) history.push(
+        for (let n = 1; n <= 4; n++) history.push(
             { is_user: true, mes: `voyage question ${n}`, extra: { id: `u${n}` } },
             { mes: `voyage answer ${n}`, extra: { id: `a${n}` } },
         );
@@ -617,16 +618,21 @@ test('default pipeline completes without a browser; custom step resumes once fro
         const [firstWire, secondWire] = calls.slice(offset, offset + 2);
         expect(firstWire.messages[0]).toMatchObject({ role: 'assistant', tool_calls: expect.any(Array) });
         expect(firstWire.messages.some(message => message.role === 'user')).toBe(false);
-        const wireCalls = firstWire.messages.flatMap(message => message.tool_calls ?? []);
-        const [recap, current] = wireCalls.filter(call => ['story_history', 'story_continuation_input'].includes(call.function.name));
-        expect(wireCalls.filter(call => ['story_history', 'story_continuation_input', 'submit_story'].includes(call.function.name)).map(call => call.function.name))
-            .toEqual(['story_history', 'story_continuation_input']);
-        expect(JSON.parse(recap.function.arguments)).toEqual({ content: 'Recap: earlier voyage\n\nvoyage question 2\n\nvoyage answer 2\n\nvoyage question 3\n\nvoyage answer 3' });
-        const recapIndex = firstWire.messages.findIndex(message => message.tool_calls?.includes(recap));
-        expect(firstWire.messages[recapIndex + 1]).toEqual({ role: 'tool', tool_call_id: recap.id, content: 'OK' });
-        expect(JSON.parse(current.function.arguments)).toEqual({ kind: 'user', content: 'Pipeline input' });
-        const currentIndex = firstWire.messages.findIndex(message => message.tool_calls?.some(call => call.id === current.id));
-        expect(firstWire.messages[currentIndex + 1]).toEqual({ role: 'tool', tool_call_id: current.id, content: 'OK' });
+        const wireCalls = firstWire.messages.flatMap(message => message.tool_calls ?? [])
+            .filter(call => ['story_history', 'story_continuation_input', 'submit_story'].includes(call.function.name));
+        expect(wireCalls.map(({ function: fn }) => [fn.name, JSON.parse(fn.arguments)])).toEqual([
+            ['story_history', { content: 'Recap: earlier voyage\n\nRecap: reached port' }],
+            ['submit_story', { kind: 'user', content: 'voyage question 3' }],
+            ['submit_story', { kind: 'assistant', content: 'voyage answer 3' }],
+            ['submit_story', { kind: 'user', content: 'voyage question 4' }],
+            ['submit_story', { kind: 'assistant', content: 'voyage answer 4' }],
+            ['story_continuation_input', { kind: 'user', content: 'Pipeline input' }],
+        ]);
+        for (const synthetic of wireCalls) {
+            const index = firstWire.messages.findIndex(message => message.tool_calls?.includes(synthetic));
+            expect(firstWire.messages[index + 1]).toEqual({ role: 'tool', tool_call_id: synthetic.id, content: 'OK' });
+        }
+        const current = wireCalls.at(-1);
         expect(firstWire.messages.at(-1).content).toContain(current.id);
         expect(firstWire.tools.map(tool => tool.function.name)).toEqual(['first', 'last']);
         expect(secondWire.tools).toEqual(firstWire.tools);

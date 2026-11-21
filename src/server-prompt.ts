@@ -210,7 +210,7 @@ function buildPipelineTail(runtime: ServerPromptRuntime, manager: ReturnType<typ
     }
     const input = pipeline.currentInput === undefined ? currentInput : pipeline.currentInput;
     const transcriptGuide = pipelineHistory ? ' Synthetic calls and their receipts provide context; do not repeat those calls.' : '';
-    const historyGuide = pipelineHistory ? ' The story_history call, when present, contains earlier conversation and memory as chronological text without speaker labels.' : undefined;
+    const historyGuide = pipelineHistory ? ' The story_history call, when present, contains saved memory summaries in chronological order without speaker labels. Earlier unsummarized messages appear as individual submit_story calls.' : undefined;
     const inputGuide = !pipelineHistory ? '' : input
         ? ` The current user input is the story_continuation_input call with ID ${input}.`
         : input === null ? ' The latest native user message is the current input.' : '';
@@ -317,9 +317,13 @@ export async function assembleServerPrompt(snapshot: ServerPromptSnapshot, comma
         const name = string(row.name);
         const displayName = role !== 'system' && name && (settings.names_behavior === 2 || (settings.names_behavior ?? 0) === 0 && row.force_avatar && name !== name1);
         const summary = record(extra.chatMemorySummary);
-        return { row, role, text: displayName ? `${name}: ${text}` : text, prose: text, name: settings.names_behavior === 1 ? name.replace(/[^a-zA-Z0-9_]/g, '_').slice(0, 64) : undefined,
+        const summaryTurns = pipelineHistory ? array(summary.turns).map(record) : [];
+        const summaryText = pipelineHistory && extra.chatMemorySummary
+            ? (summaryTurns.length ? summaryTurns.map(turn => prepareText(string(turn.text))) : [text]).filter(chunk => chunk.trim()).join('\n\n')
+            : undefined;
+        return { row, role, text: displayName ? `${name}: ${text}` : text, name: settings.names_behavior === 1 ? name.replace(/[^a-zA-Z0-9_]/g, '_').slice(0, 64) : undefined,
             sourceKey: sourceKeys.get(row) ?? (string(summary.turnKey ?? summary.summaryId) || `projected:${index}`),
-            summaryTurns: pipelineHistory ? array(summary.turns).map(record).map(turn => prepareText(string(turn.text))) : [],
+            summaryText,
         };
     });
     const world = scanWorldInfo(snapshot, prepared.map(message => message.text).reverse(), substitute, regex, runtime);
@@ -374,11 +378,11 @@ export async function assembleServerPrompt(snapshot: ServerPromptSnapshot, comma
             selected.splice(index, 0, { messages: messages.flatMap(({ message, key, tool }) => pack(key, tool, message)) });
         }
         const historyMessages = [...newChatMessages];
-        const historyText = pipelineHistory ? selected.flatMap(group => group.prose || []).join('\n\n') : '';
+        const historyText = selected.flatMap(group => group.summaryText || []).join('\n\n');
         let historyPending = Boolean(historyText);
         for (const group of selected) {
             historyMessages.push(...group.messages);
-            if (historyPending && group.prose) {
+            if (historyPending && group.summaryText) {
                 historyMessages.push(...project('history', 'story_history', historyText).messages);
                 historyPending = false;
             }

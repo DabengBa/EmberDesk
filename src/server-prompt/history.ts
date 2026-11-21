@@ -11,8 +11,8 @@ export type ServerPromptMessage = { role: Role; content: string | ({ type: 'text
     | { role: 'assistant'; tool_calls: ToolCall[] }
     | { role: 'tool'; content: string; tool_call_id: string };
 export type MediaResolver = (attachment: { url: string; type: 'image' | 'audio' }, detail: string) => Promise<{ dataUrl: string; tokens?: number } | null>;
-type HistoryRow = { row: RecordView; role: Role; text: string; prose: string; name?: string; sourceKey: string; summaryTurns: string[] };
-type HistoryGroup = { messages: ServerPromptMessage[]; prose?: string };
+type HistoryRow = { row: RecordView; role: Role; text: string; name?: string; sourceKey: string; summaryText?: string };
+type HistoryGroup = { messages: ServerPromptMessage[]; summaryText?: string };
 
 export function stripPipelineMarkup(content: string, invocations: RecordView[]) {
     if (!invocations.length) return content;
@@ -77,7 +77,8 @@ export async function projectHistory(history: HistoryRow[], options: {
     for (const [index, { role, row }] of history.entries()) {
         if (role === 'user' && !row.is_system && !record(row.extra).chatMemorySummary) currentUser = index;
     }
-    const groups = await Promise.all(history.map(async ({ row, role, text, prose, name, sourceKey, summaryTurns }, index): Promise<HistoryGroup> => {
+    const groups = await Promise.all(history.map(async ({ row, role, text, name, sourceKey, summaryText }, index): Promise<HistoryGroup> => {
+        if (pipelineHistory && summaryText !== undefined) return { messages: [], summaryText };
         const extra = record(row.extra);
         const calls = invocations[index];
         const purePipeline = calls.length > 0 && calls.every(call => call.pipeline);
@@ -85,10 +86,6 @@ export async function projectHistory(history: HistoryRow[], options: {
         if (settled && (!text.trim() || pipelineHistory && row.is_system)) return { messages: [] };
         const message = { role, content: text, ...(name ? { name } : {}) };
         const story = (messages: ServerPromptMessage[] = []): HistoryGroup => {
-            if (currentUser < 0 || index < currentUser) {
-                const chunks = summaryTurns.length ? summaryTurns : [prose];
-                return { messages, prose: chunks.filter(chunk => chunk.trim()).join('\n\n') };
-            }
             const isInput = index === currentUser;
             const entry = project(`message:${sourceKey}`, isInput ? 'story_continuation_input' : 'submit_story', text, role, name);
             if (isInput) input.callId = entry.id;

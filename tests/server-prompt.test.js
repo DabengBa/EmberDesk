@@ -156,8 +156,11 @@ test('pipeline projects ordinary history and settled cards, replays active/mixed
     const result = await assembleServerPrompt(base, { action: 'send' }, runtime);
     expect(result.messages[0]).toMatchObject({ role: 'assistant', tool_calls: expect.any(Array) });
     expect(result.messages.some(message => message.role === 'user')).toBe(false);
-    expect(result.messages.flatMap(message => message.tool_calls ?? []).map(call => call.function.name)).toEqual(['story_history', 'story_continuation_input', 'analyze', 'lookup', 'submit_story', 'story_preset', 'story_preset']);
-    expect(JSON.parse(result.messages[0].tool_calls[0].function.arguments)).toEqual({ content: 'Where to?\n\nFinished prose' });
+    const calls = result.messages.flatMap(message => message.tool_calls ?? []);
+    expect(calls.map(call => call.function.name)).toEqual(['submit_story', 'submit_story', 'story_continuation_input', 'analyze', 'lookup', 'submit_story', 'story_preset', 'story_preset']);
+    expect(calls.slice(0, 2).map(call => JSON.parse(call.function.arguments))).toEqual([
+        { kind: 'assistant', content: 'Where to?' }, { kind: 'assistant', content: 'Finished prose' },
+    ]);
     expect(result.messages).toContainEqual({ role: 'tool', tool_call_id: 'active', content: 'active output' });
     expect(JSON.stringify(result.messages)).toContain('Mixed prose');
     expect(JSON.stringify(result.messages)).toContain('Finished prose');
@@ -227,7 +230,7 @@ test('scans request-local memory and projects setup, summary and depth lore in p
     expect(base.chat).toHaveLength(2);
 });
 
-test('merges applied memory and four prior text rows without speaker labels, separately from the latest input', async () => {
+test('merges only applied memory and submits named prior rows separately from the latest input', async () => {
     const base = snapshot({ books: [], chat: [{ user_name: 'Rin', chat_metadata: {} }] });
     base.settings.oai_settings.openai_max_context = 1500;
     base.settings.oai_settings.names_behavior = 2;
@@ -240,40 +243,56 @@ test('merges applied memory and four prior text rows without speaker labels, sep
         { name: 'Mira', mes: `answer ${n}`, extra: { id: `a${n}` } },
     );
     const runtime = { translateMemory: text => text, pipeline: { step: { tool: 'respond' }, index: 0, total: 1 } };
-    const send = () => assembleServerPrompt(base, { action: 'send', pendingUserText: 'four' }, runtime);
+    const send = () => assembleServerPrompt(base, { action: 'send', pendingUserText: 'next' }, runtime);
     const { messages, budget, pipeline } = await send();
     const pairs = name => messages.flatMap((message, i) => (message.tool_calls ?? []).filter(call => call.function.name === name)
         .map(call => [call, messages[i + 1]]));
-    const historyContent = 'Recap: first summary\n\nquestion 2\n\nanswer 2\n\nquestion 3\n\nanswer 3';
     const history = pairs('story_history');
     expect(history).toHaveLength(1);
     const [[historyCall, historyReceipt]] = history;
-    expect(JSON.parse(historyCall.function.arguments)).toEqual({ content: historyContent });
+    expect(JSON.parse(historyCall.function.arguments)).toEqual({ content: 'Recap: first summary' });
     expect(historyReceipt).toEqual({ role: 'tool', tool_call_id: historyCall.id, content: 'OK' });
+    const submissions = pairs('submit_story');
+    expect(submissions.map(([call]) => JSON.parse(call.function.arguments))).toEqual([
+        { kind: 'user', content: 'Rin: question 2' }, { kind: 'assistant', content: 'Mira: answer 2' },
+        { kind: 'user', content: 'Rin: question 3' }, { kind: 'assistant', content: 'Mira: answer 3' },
+    ]);
+    for (const [call, receipt] of submissions) {
+        expect(receipt).toEqual({ role: 'tool', tool_call_id: call.id, content: 'OK' });
+    }
     const input = pairs('story_continuation_input');
     expect(input).toHaveLength(1);
     const [[inputCall, inputReceipt]] = input;
-    expect(JSON.parse(inputCall.function.arguments)).toEqual({ kind: 'user', content: 'Rin: four' });
+    expect(JSON.parse(inputCall.function.arguments)).toEqual({ kind: 'user', content: 'Rin: next' });
     expect(inputReceipt).toEqual({ role: 'tool', tool_call_id: inputCall.id, content: 'OK' });
     expect(pipeline.currentInput).toBe(inputCall.id);
     expect(messages.at(-1).content).toContain(`story_continuation_input call with ID ${inputCall.id}`);
-    expect(messages.at(-1).content).not.toContain('Historical submit_story');
+    expect(messages.at(-1).content).toContain('saved memory summaries');
+    expect(messages.at(-1).content).toContain('submit_story');
 
     base.settings.oai_settings.openai_max_context = budget.promptTokens + budget.responseTokens - 1;
     const trimmed = await send();
     expect(trimmed.budget.omittedHistory).toBe(1);
     expect(trimmed.budget.promptTokens + trimmed.budget.responseTokens).toBeLessThanOrEqual(trimmed.budget.contextTokens);
     const trimmedCalls = trimmed.messages.flatMap(message => message.tool_calls ?? []);
-    expect(JSON.parse(trimmedCalls.find(call => call.function.name === 'story_history').function.arguments)).toEqual({ content: historyContent.split('\n\n').slice(1).join('\n\n') });
+    expect(trimmedCalls.some(call => call.function.name === 'story_history')).toBe(false);
+    expect(trimmedCalls.filter(call => call.function.name === 'submit_story')).toEqual(submissions.map(([call]) => call));
     expect(trimmedCalls).toContainEqual(inputCall);
 
     base.settings.oai_settings.openai_max_context = 1500;
-    memory.summaries.push({ id: 's2', turnKey: 'u2', messageIds: ['u2', 'a2'], manual: true, text: 'second summary' });
+    base.settings.oai_settings.names_behavior = 1;
+    base.chat.push({ name: 'Rin', is_user: true, mes: 'question 4', extra: { id: 'u4' } }, { name: 'Mira', mes: 'answer 4', extra: { id: 'a4' } });
+    memory.summaries.push({ id: 's3', turnKey: 'u3', messageIds: ['u3', 'a3'], manual: true, text: 'third summary' });
     const after = (await send()).messages.flatMap(message => message.tool_calls ?? []);
     expect(after.filter(call => call.function.name === 'story_history').map(call => JSON.parse(call.function.arguments))).toEqual([
-        { content: 'Recap: first summary\n\nRecap: second summary\n\nquestion 3\n\nanswer 3' },
+        { content: 'Recap: first summary\n\nRecap: third summary' },
     ]);
-    expect(after).toContainEqual(inputCall);
+    expect(after.filter(call => call.function.name === 'submit_story').map(call => JSON.parse(call.function.arguments))).toEqual([
+        { kind: 'user', content: 'question 2', name: 'Rin' }, { kind: 'assistant', content: 'answer 2', name: 'Mira' },
+        { kind: 'user', content: 'question 4', name: 'Rin' }, { kind: 'assistant', content: 'answer 4', name: 'Mira' },
+    ]);
+    expect(after.filter(call => ['story_history', 'submit_story', 'story_continuation_input'].includes(call.function.name)).map(call => call.function.name))
+        .toEqual(['story_history', 'submit_story', 'submit_story', 'submit_story', 'submit_story', 'story_continuation_input']);
 });
 
 test('projects saved memory using turn reconciliation, pinning and the recent window without mutating the snapshot', async () => {

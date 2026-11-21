@@ -1,6 +1,6 @@
-# Reply Pipeline（回复管线）设计（as-built）
+# Reply Pipeline（回复管线）设计
 
-本文区分服务端主聊天与旧浏览器路径。服务端线协议示例见 [跨轮历史投影讨论 §8](reply-pipeline-history-projection-discussion.md#8-全量工具投影完整首轮请求示例)；§1–7 保留早期方案讨论。
+本文区分服务端主聊天与旧浏览器路径。历史投影的新版协议见下方「服务端主聊天」设计稿；[跨轮历史投影讨论](reply-pipeline-history-projection-discussion.md)保留早期方案，不代表新版协议。
 
 ## 目标
 
@@ -94,11 +94,21 @@ round i: 请求组装后 (CHAT_COMPLETION_SETTINGS_READY) 注入:
 
 ## 历史输入与工具输出
 
-### 服务端主聊天
+### 服务端主聊天：历史投影
 
-预设、角色描述、世界书及注入保留组装顺序，用合成 call/receipt 对承载。摘要逐轮生成 `story_history` 对，在原文位置替换；过去和当前的用户文字均为 `submit_story({kind: "user", content})`，由末尾的步骤指令引用当前输入的调用 ID。纯文本首轮没有开头的 system 消息或 user 锚点；原生多模态输入仍保留 multipart 表示。已有真实工具记录仍按原调用和结果回放，完成的纯管线回复只投影其有效正文。合成记录不执行、不写回聊天。
+**只合并记忆摘要，不合并未被摘要替换的旧消息。** 合并后的摘要放在第一条保留摘要的位置。
 
-首步前缀固定，后续步只追加真实执行记录、步专属投影及末尾指令。组装与运行见 `src/server-prompt.ts`、`src/server-prompt/history.ts`、`src/server-generation-pipeline.ts`，真实线上请求形状由 `tests/server-generation-http.test.js` 的本地模拟上游覆盖。
+| 输入 | 发送形式 |
+| --- | --- |
+| 已替换旧轮次原文的记忆摘要 | 把选入上下文的摘要按时间顺序用空行连接，发送一次 `story_history({content})`。参数只有 `content`，不附加发言角色或名称；无摘要则不发该调用。 |
+| 未被摘要替换的旧消息 | 按原顺序逐条 `submit_story({kind, content, name?})`，保留原有角色和名称规则；不并入 `story_history`，也不重复发送已被摘要替换的原文。 |
+| 最新一条用户输入 | 保留单独的 `story_continuation_input({kind: "user", content})`，步骤指令引用这一调用的 ID。 |
+
+表中每个合成调用均为一条 `assistant.tool_calls`，紧跟一条同 ID 的 `role: tool` 回执 `OK`。合成记录不执行、不写回聊天。比如图中两段较早摘要、四条未摘要旧消息和一条新输入，发送顺序为 `1 × story_history → 4 × submit_story → 1 × story_continuation_input`。
+
+![回复管线：合并摘要、逐条提交旧消息、单独发送续写输入](diagrams/reply-pipeline-history-and-submit.svg)
+
+预设、角色描述、世界书及注入仍独立组装；真实工具记录按原调用和结果回放，媒体保留原生 multipart 表示，完成的纯管线回复只投影有效正文。历史预算按实际投影计费，调用与回执成对保留或裁掉。首步前缀固定，后续步只追加真实执行记录、步专属投影及末尾指令。管线关闭和旧浏览器路径不变。
 
 ### 旧浏览器路径
 
