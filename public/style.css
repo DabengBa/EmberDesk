@@ -6647,13 +6647,26 @@ body:has(#emberdesk-react-workspace-shell-chrome-host) {
 .prompt-inspector-overlay {
     position: fixed;
     inset: 0;
-    z-index: 4000;
+    width: 100%;
+    height: 100%;
+    max-width: none;
+    max-height: none;
+    margin: 0;
+    border: 0;
+    color: inherit;
     background: rgba(0, 0, 0, 0.6);
-    display: flex;
     align-items: center;
     justify-content: center;
     padding: 4vh 4vw;
     box-sizing: border-box;
+}
+
+.prompt-inspector-overlay[open] {
+    display: flex;
+}
+
+.prompt-inspector-overlay::backdrop {
+    background: transparent;
 }
 
 .prompt-inspector-panel {
@@ -6736,6 +6749,48 @@ body:has(#emberdesk-react-workspace-shell-chrome-host) {
     gap: 10px;
 }
 
+.prompt-inspector-toolbar,
+.prompt-inspector-views {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.prompt-inspector-toolbar {
+    justify-content: space-between;
+    flex-wrap: wrap;
+}
+
+.prompt-inspector-views .menu_button {
+    width: auto;
+    margin: 0;
+    white-space: nowrap;
+}
+
+.prompt-inspector-views .menu_button[aria-pressed="true"] {
+    border-color: var(--SmartThemeQuoteColor);
+    background: var(--black30a);
+}
+
+.prompt-inspector-search.text_pole {
+    flex: 0 1 15rem;
+    width: 100%;
+    min-width: 0;
+    margin: 0;
+}
+
+.prompt-inspector-raw {
+    margin: 0;
+    padding: 12px;
+    border: 1px solid var(--SmartThemeBorderColor);
+    border-radius: 5px;
+    background: var(--black30a);
+    font: calc(var(--mainFontSize) * 0.85) / 1.55 var(--monoFontFamily, monospace);
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    user-select: text;
+}
+
 .prompt-inspector-badge {
     font-size: calc(var(--mainFontSize) * 0.72);
     padding: 1px 7px;
@@ -6772,7 +6827,6 @@ body:has(#emberdesk-react-workspace-shell-chrome-host) {
     font-size: calc(var(--mainFontSize) * 0.85);
 }
 
-.prompt-inspector-budget,
 .prompt-inspector-pipeline-note {
     font-size: calc(var(--mainFontSize) * 0.85);
     opacity: 0.85;
@@ -6782,11 +6836,14 @@ body:has(#emberdesk-react-workspace-shell-chrome-host) {
 .prompt-inspector-messages {
     display: flex;
     flex-direction: column;
-    gap: 2px;
+    gap: 6px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
 }
 
 .prompt-inspector-item {
-    border: 1px solid transparent;
+    border: 1px solid var(--SmartThemeBorderColor);
     border-radius: 6px;
 }
 
@@ -6803,7 +6860,7 @@ body:has(#emberdesk-react-workspace-shell-chrome-host) {
     border: none;
     color: inherit;
     font: inherit;
-    padding: 5px 6px;
+    padding: 8px 10px;
     cursor: pointer;
     text-align: left;
 }
@@ -6811,6 +6868,11 @@ body:has(#emberdesk-react-workspace-shell-chrome-host) {
 .prompt-inspector-item-head:hover {
     background: var(--black30a);
     border-radius: 6px;
+}
+
+.prompt-inspector-item-head > i {
+    font-size: 0.7em;
+    opacity: 0.7;
 }
 
 .prompt-inspector-item-index {
@@ -6837,14 +6899,13 @@ body:has(#emberdesk-react-workspace-shell-chrome-host) {
     font-size: calc(var(--mainFontSize) * 0.8);
     opacity: 0.7;
     flex-shrink: 0;
-    min-width: 60px;
     text-align: right;
 }
 
 .prompt-inspector-item-preview {
-    font-size: calc(var(--mainFontSize) * 0.8);
-    opacity: 0.6;
-    padding: 0 6px 5px 38px;
+    font-size: calc(var(--mainFontSize) * 0.85);
+    opacity: 0.75;
+    padding: 0 10px 8px;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -6855,14 +6916,14 @@ body:has(#emberdesk-react-workspace-shell-chrome-host) {
 }
 
 .prompt-inspector-item-content {
-    margin: 4px 6px 8px 38px;
+    margin: 0 8px 8px;
     padding: 10px;
     background: var(--black30a);
     border-radius: 6px;
-    font-family: var(--monoFontFamily, monospace);
-    font-size: calc(var(--mainFontSize) * 0.82);
+    font: calc(var(--mainFontSize) * 0.9) / 1.6 var(--mainFontFamily, sans-serif);
     white-space: pre-wrap;
-    word-break: break-word;
+    overflow-wrap: anywhere;
+    user-select: text;
     max-height: 40vh;
     overflow-y: auto;
 }
@@ -6899,8 +6960,15 @@ body:has(#emberdesk-react-workspace-shell-chrome-host) {
 }
 
 .prompt-inspector-params {
-    border-top: 1px solid var(--SmartThemeBorderColor);
-    padding-top: 8px;
+    padding: 8px 10px;
+    border: 1px solid var(--SmartThemeBorderColor);
+    border-radius: 5px;
+    background: var(--black30a);
+}
+
+.prompt-inspector-params > summary {
+    cursor: pointer;
+    font-weight: 600;
 }
 
 .prompt-inspector-params-title {
@@ -6912,8 +6980,9 @@ body:has(#emberdesk-react-workspace-shell-chrome-host) {
 
 .prompt-inspector-params-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 240px), 1fr));
     gap: 4px 16px;
+    margin-top: 10px;
 }
 
 .prompt-inspector-param {
@@ -6931,9 +7000,8 @@ body:has(#emberdesk-react-workspace-shell-chrome-host) {
 
 .prompt-inspector-param-value {
     font-family: var(--monoFontFamily, monospace);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    overflow-wrap: anywhere;
+    text-align: right;
     min-width: 0;
     max-width: 60%;
 }
@@ -6963,7 +7031,13 @@ body:has(#emberdesk-react-workspace-shell-chrome-host) {
 .prompt-inspector-tool-name {
     font-family: var(--monoFontFamily, monospace);
     font-weight: bold;
-    flex-shrink: 0;
+    overflow-wrap: anywhere;
+}
+
+@media (max-width: 560px) {
+    .prompt-inspector-search.text_pole {
+        flex: 1 0 100%;
+    }
 }
 
 .prompt-inspector-tool-desc {

@@ -248,6 +248,8 @@ test.describe('prompt inspector (request preview)', () => {
             const { feature_settings } = await import('/scripts/feature-settings.js');
             feature_settings.tool_bindings = [{ name: 'submit_story', enabled: true }];
             const settings = window.SillyTavern.getContext().chatCompletionSettings;
+            settings.openai_max_context = 65536;
+            settings.openai_max_tokens = 1024;
             settings.reply_pipeline = { enabled: true, steps: [{ tool: 'submit_story' }] };
             const { reloadUserToolBindings } = await import('/scripts/tool-bindings.js');
             reloadUserToolBindings();
@@ -282,6 +284,88 @@ test.describe('prompt inspector (request preview)', () => {
         await expect(overlay).toHaveCount(0);
         await open.click();
         await expect(rounds.locator('option:checked')).toHaveText(first, { timeout: 15_000 });
+        expect(await page.evaluate(() => window.__promptInspectorRequests.length)).toBe(0);
+    });
+
+    test('reads the preview as a single column without changing the request', async ({ page, context }) => {
+        await testSetup.awaitST({ page });
+        await selectCharacterInSeededChat(page);
+        await installGenerateStub(page);
+        await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+        await page.locator('[data-react-workspace-shell-chrome] nav button').filter({ hasText: '提示词' }).first().click();
+        const open = page.getByRole('button', { name: '查看 Prompt' });
+        const dialog = page.getByRole('dialog', { name: 'Prompt 预览' });
+        await open.click();
+        await expect(dialog).toBeVisible();
+        await page.keyboard.press('Escape');
+        await expect(dialog).toHaveCount(0);
+        const call = id => ({ role: 'assistant', tool_calls: [{ id, type: 'function', function: { name: 'story_preset', arguments: JSON.stringify({ kind: 'system', content: 'First line\n\nHidden river', name: 'Lore' }) } }] });
+        const id = `story_${'a'.repeat(24)}`;
+        const request = {
+            model: 'rpg', max_tokens: 64000,
+            tools: [{ type: 'function', function: { name: 'submit_story', parameters: { type: 'object' } } }],
+            messages: [call(id), { role: 'tool', content: 'OK', tool_call_id: id },
+                call(`story_${'b'.repeat(24)}`), { role: 'tool', content: 'OK', tool_call_id: 'different-id' },
+                { role: 'system', content: '[Reply pipeline 1/1] Readable step. Year 2026.' }],
+        };
+        await page.evaluate(request => {
+            const rounds = [{ index: 0, id: 'story', tool: 'submit_story', display: 'summary' }];
+            let fallbackPreviews = 0;
+            window.__emberDeskPromptInspectorBridge.preview = async (round = 0) => ({
+                kind: 'prompt-preview', model: 'rpg',
+                pipeline: { round, total: 1, fallback: round === 1, step: round === 0 ? rounds[0] : null, rounds },
+                request: round === 0 ? request : { model: `fallback-probe-${++fallbackPreviews}`, messages: [] },
+                budget: { context: 200000, response: 64000, remaining: 132369, used: 3631 },
+                entries: [], dropped: [], summarized: [], warnings: [],
+            });
+        }, request);
+        await open.click();
+        await expect(dialog.locator('.prompt-inspector-item').first()).toBeVisible();
+        await expect(dialog.locator('.prompt-inspector-budget')).toHaveCount(0);
+        const details = dialog.getByText('请求详情', { exact: true });
+        const rows = dialog.locator('.prompt-inspector-item');
+        await expect(rows).toHaveCount(4);
+        await expect(rows.first()).toContainText('#0–#1');
+        await expect(rows.first()).toContainText('Lore');
+        await expect(rows.nth(1)).toContainText('#2');
+        await expect(rows.nth(2)).toContainText('#3');
+        await expect(rows.last().locator('.prompt-inspector-item-content')).toContainText('Readable step.');
+        for (const width of [1220, 390]) {
+            await page.setViewportSize({ width, height: 850 });
+            await expect(details).toBeVisible();
+            const summary = await details.boundingBox();
+            const firstRow = await rows.first().boundingBox();
+            expect(summary.y + summary.height).toBeLessThan(firstRow.y);
+            expect(await dialog.evaluate(node => node.scrollWidth)).toBeLessThanOrEqual(await dialog.evaluate(node => node.clientWidth));
+        }
+        const param = dialog.getByText('64000', { exact: true });
+        await expect(param).toBeHidden();
+        await details.click();
+        await expect(param).toBeVisible();
+        await expect(dialog.getByRole('button', { name: /submit_story/ })).toBeVisible();
+        await details.click();
+        const search = dialog.getByRole('searchbox', { name: '搜索消息' });
+        await search.fill('HIDDEN RIVER');
+        await expect(rows).toHaveCount(2); // The unmatched call remains searchable, but is not grouped.
+        await search.fill('story_preset');
+        await expect(rows).toHaveCount(2);
+        await search.fill('2026');
+        await expect(rows).toHaveCount(1);
+        await expect(rows.first()).toContainText('Year 2026.');
+        await search.fill('#1');
+        await expect(rows).toHaveCount(1);
+        await expect(rows.first().locator('.prompt-inspector-item-content')).toContainText('Hidden river');
+        await expect(rows.first().locator('.prompt-inspector-item-content')).not.toContainText('arguments');
+        await dialog.getByRole('button', { name: '原始 JSON' }).click();
+        const raw = dialog.locator('.prompt-inspector-raw');
+        const json = JSON.stringify(request, null, 2);
+        expect(await raw.textContent()).toBe(json);
+        await dialog.getByRole('button', { name: '复制 JSON' }).click();
+        await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe(json);
+        await dialog.getByRole('combobox', { name: '管线轮次' }).selectOption('1');
+        await expect(raw).toContainText('fallback-probe-1');
+        await dialog.getByRole('button', { name: '刷新' }).click();
+        await expect(raw).toContainText('fallback-probe-2');
         expect(await page.evaluate(() => window.__promptInspectorRequests.length)).toBe(0);
     });
 
