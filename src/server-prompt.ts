@@ -209,11 +209,12 @@ function buildPipelineTail(runtime: ServerPromptRuntime, manager: ReturnType<typ
             : [{ role: roleAt(role), content }]));
     }
     const input = pipeline.currentInput === undefined ? currentInput : pipeline.currentInput;
-    const transcriptGuide = pipelineHistory ? ' Synthetic call/receipt pairs carry preset, character, world, recap, and story content; treat each according to its kind and do not repeat those calls.' : '';
+    const transcriptGuide = pipelineHistory ? ' Synthetic calls and their receipts provide context; do not repeat those calls.' : '';
+    const historyGuide = pipelineHistory ? ' The story_history call, when present, contains earlier conversation and memory as chronological text without speaker labels.' : undefined;
     const inputGuide = !pipelineHistory ? '' : input
-        ? ` The current user input is the submit_story call with ID ${input}.`
+        ? ` The current user input is the story_continuation_input call with ID ${input}.`
         : input === null ? ' The latest native user message is the current input.' : '';
-    tail.push({ role: 'system', content: buildStepPrompt(pipeline.step, pipeline.index, pipeline.total) + transcriptGuide + inputGuide });
+    tail.push({ role: 'system', content: buildStepPrompt(pipeline.step, pipeline.index, pipeline.total, historyGuide) + transcriptGuide + inputGuide });
     return tail;
 }
 
@@ -316,9 +317,9 @@ export async function assembleServerPrompt(snapshot: ServerPromptSnapshot, comma
         const name = string(row.name);
         const displayName = role !== 'system' && name && (settings.names_behavior === 2 || (settings.names_behavior ?? 0) === 0 && row.force_avatar && name !== name1);
         const summary = record(extra.chatMemorySummary);
-        return { row, role, text: displayName ? `${name}: ${text}` : text, name: settings.names_behavior === 1 ? name.replace(/[^a-zA-Z0-9_]/g, '_').slice(0, 64) : undefined,
+        return { row, role, text: displayName ? `${name}: ${text}` : text, prose: text, name: settings.names_behavior === 1 ? name.replace(/[^a-zA-Z0-9_]/g, '_').slice(0, 64) : undefined,
             sourceKey: sourceKeys.get(row) ?? (string(summary.turnKey ?? summary.summaryId) || `projected:${index}`),
-            summaryTurns: array(summary.turns).map(record).map(turn => ({ key: string(turn.key), text: displayName ? `${name}: ${prepareText(string(turn.text))}` : prepareText(string(turn.text)) })),
+            summaryTurns: pipelineHistory ? array(summary.turns).map(record).map(turn => prepareText(string(turn.text))) : [],
         };
     });
     const world = scanWorldInfo(snapshot, prepared.map(message => message.text).reverse(), substitute, regex, runtime);
@@ -370,9 +371,18 @@ export async function assembleServerPrompt(snapshot: ServerPromptSnapshot, comma
     const assemble = (start: number): ServerPromptMessage[] => {
         const selected = groups.slice(start);
         for (const [index, messages] of groupInjections(injections, selected.length, worldInjections)) {
-            selected.splice(index, 0, messages.flatMap(({ message, key, tool }) => pack(key, tool, message)));
+            selected.splice(index, 0, { messages: messages.flatMap(({ message, key, tool }) => pack(key, tool, message)) });
         }
-        const historyMessages = [...newChatMessages, ...selected.flat()];
+        const historyMessages = [...newChatMessages];
+        const historyText = pipelineHistory ? selected.flatMap(group => group.prose || []).join('\n\n') : '';
+        let historyPending = Boolean(historyText);
+        for (const group of selected) {
+            historyMessages.push(...group.messages);
+            if (historyPending && group.prose) {
+                historyMessages.push(...project('history', 'story_history', historyText).messages);
+                historyPending = false;
+            }
+        }
         const messages = relativeMessages.flatMap(item => item === 'history' ? historyMessages : item);
         if (continueNudge) messages.push({ role: 'system', content: continueNudge });
         return settings.squash_system_messages ? squash(messages, newChat) : messages;
@@ -387,13 +397,28 @@ export async function assembleServerPrompt(snapshot: ServerPromptSnapshot, comma
     let messages = assemble(start);
     let promptTokens = measure(messages);
     if (promptTokens > limit) throw new ServerPromptError('budget_exceeded', 'Mandatory prompts exceed the context size');
-    while (start > 0) {
-        const previous = assemble(start - 1);
+    const retain = (candidate: number) => {
+        const previous = assemble(candidate);
         const tokens = measure(previous);
-        if (tokens > limit) break;
-        start--;
+        if (tokens > limit) return false;
+        start = candidate;
         messages = previous;
         promptTokens = tokens;
+        return true;
+    };
+    if (pipelineHistory) {
+        // The merged text must be retokenized for each probe. Bracket the
+        // budget boundary before bisecting, without recounting every suffix.
+        const mandatory = start;
+        let stride = 1;
+        while (start > 0 && retain(Math.max(0, mandatory - stride))) stride *= 2;
+        let tooOld = Math.max(0, mandatory - stride);
+        while (tooOld + 1 < start) {
+            const middle = Math.floor((tooOld + start) / 2);
+            if (!retain(middle)) tooOld = middle;
+        }
+    } else {
+        while (start > 0 && retain(start - 1)) { /* Keep fitting older groups. */ }
     }
     return {
         messages: [...messages, ...tail], connection,

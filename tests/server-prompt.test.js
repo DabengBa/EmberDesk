@@ -156,7 +156,8 @@ test('pipeline projects ordinary history and settled cards, replays active/mixed
     const result = await assembleServerPrompt(base, { action: 'send' }, runtime);
     expect(result.messages[0]).toMatchObject({ role: 'assistant', tool_calls: expect.any(Array) });
     expect(result.messages.some(message => message.role === 'user')).toBe(false);
-    expect(result.messages.flatMap(message => message.tool_calls ?? []).map(call => call.function.name)).toEqual(['submit_story', 'submit_story', 'submit_story', 'analyze', 'lookup', 'submit_story', 'story_preset', 'story_preset']);
+    expect(result.messages.flatMap(message => message.tool_calls ?? []).map(call => call.function.name)).toEqual(['story_history', 'story_continuation_input', 'analyze', 'lookup', 'submit_story', 'story_preset', 'story_preset']);
+    expect(JSON.parse(result.messages[0].tool_calls[0].function.arguments)).toEqual({ content: 'Where to?\n\nFinished prose' });
     expect(result.messages).toContainEqual({ role: 'tool', tool_call_id: 'active', content: 'active output' });
     expect(JSON.stringify(result.messages)).toContain('Mixed prose');
     expect(JSON.stringify(result.messages)).toContain('Finished prose');
@@ -217,7 +218,7 @@ test('scans request-local memory and projects setup, summary and depth lore in p
     const calls = messages.flatMap(message => message.tool_calls ?? []);
     expect(calls.map(call => [call.function.name, JSON.parse(call.function.arguments).content])).toEqual([
         ['story_preset', 'Speak to Rin.'], ['character_card', 'Mira the navigator'], ['world_info', 'Mira knows Orion.'],
-        ['story_history', 'Orion memory'], ['submit_story', 'Current user'], ['world_info', 'Depth lore.'],
+        ['story_history', 'Orion memory'], ['story_continuation_input', 'Current user'], ['world_info', 'Depth lore.'],
     ]);
     for (const call of calls) {
         expect(messages[messages.findIndex(message => message.tool_calls?.includes(call)) + 1]).toMatchObject({ role: 'tool', tool_call_id: call.id });
@@ -226,32 +227,53 @@ test('scans request-local memory and projects setup, summary and depth lore in p
     expect(base.chat).toHaveLength(2);
 });
 
-test('adding an adjacent summary keeps the earlier recap and unchanged source calls intact', async () => {
-    const base = snapshot({ books: [] });
+test('merges applied memory and four prior text rows without speaker labels, separately from the latest input', async () => {
+    const base = snapshot({ books: [], chat: [{ user_name: 'Rin', chat_metadata: {} }] });
     base.settings.oai_settings.openai_max_context = 1500;
+    base.settings.oai_settings.names_behavior = 2;
     const memory = { keepTurns: 1, wrap: 'Recap: {{summary}}', summaries: [
         { id: 's1', turnKey: '0cfc0457-8f93-41a5-9c69-4253545fd739', messageIds: ['u1', 'a1'], manual: true, text: 'first summary' },
     ] };
     base.chat[0].chat_metadata.chat_memory = memory;
     for (let n = 1; n <= 3; n++) base.chat.push(
-        { is_user: true, mes: `question ${n}`, extra: { id: `u${n}` } },
-        { mes: `answer ${n}`, extra: { id: `a${n}` } },
+        { name: 'Rin', is_user: true, mes: `question ${n}`, extra: { id: `u${n}` } },
+        { name: 'Mira', mes: `answer ${n}`, extra: { id: `a${n}` } },
     );
     const runtime = { translateMemory: text => text, pipeline: { step: { tool: 'respond' }, index: 0, total: 1 } };
-    const send = async text => (await assembleServerPrompt(base, { action: 'send', pendingUserText: text }, runtime)).messages.flatMap(m => m.tool_calls ?? []);
-    const before = await send('four');
+    const send = () => assembleServerPrompt(base, { action: 'send', pendingUserText: 'four' }, runtime);
+    const { messages, budget, pipeline } = await send();
+    const pairs = name => messages.flatMap((message, i) => (message.tool_calls ?? []).filter(call => call.function.name === name)
+        .map(call => [call, messages[i + 1]]));
+    const historyContent = 'Recap: first summary\n\nquestion 2\n\nanswer 2\n\nquestion 3\n\nanswer 3';
+    const history = pairs('story_history');
+    expect(history).toHaveLength(1);
+    const [[historyCall, historyReceipt]] = history;
+    expect(JSON.parse(historyCall.function.arguments)).toEqual({ content: historyContent });
+    expect(historyReceipt).toEqual({ role: 'tool', tool_call_id: historyCall.id, content: 'OK' });
+    const input = pairs('story_continuation_input');
+    expect(input).toHaveLength(1);
+    const [[inputCall, inputReceipt]] = input;
+    expect(JSON.parse(inputCall.function.arguments)).toEqual({ kind: 'user', content: 'Rin: four' });
+    expect(inputReceipt).toEqual({ role: 'tool', tool_call_id: inputCall.id, content: 'OK' });
+    expect(pipeline.currentInput).toBe(inputCall.id);
+    expect(messages.at(-1).content).toContain(`story_continuation_input call with ID ${inputCall.id}`);
+    expect(messages.at(-1).content).not.toContain('Historical submit_story');
+
+    base.settings.oai_settings.openai_max_context = budget.promptTokens + budget.responseTokens - 1;
+    const trimmed = await send();
+    expect(trimmed.budget.omittedHistory).toBe(1);
+    expect(trimmed.budget.promptTokens + trimmed.budget.responseTokens).toBeLessThanOrEqual(trimmed.budget.contextTokens);
+    const trimmedCalls = trimmed.messages.flatMap(message => message.tool_calls ?? []);
+    expect(JSON.parse(trimmedCalls.find(call => call.function.name === 'story_history').function.arguments)).toEqual({ content: historyContent.split('\n\n').slice(1).join('\n\n') });
+    expect(trimmedCalls).toContainEqual(inputCall);
+
+    base.settings.oai_settings.openai_max_context = 1500;
     memory.summaries.push({ id: 's2', turnKey: 'u2', messageIds: ['u2', 'a2'], manual: true, text: 'second summary' });
-    base.chat.push({ is_user: true, mes: 'four', extra: { id: 'memory-backfilled-id' } }, { mes: 'answer 4' });
-    const after = await send('five');
-    const summaries = after.filter(call => call.function.name === 'story_history');
-    expect(summaries.map(call => JSON.parse(call.function.arguments).content)).toEqual(['Recap: first summary', 'Recap: second summary']);
-    expect(summaries[0]).toEqual(before.find(call => call.function.name === 'story_history'));
-    expect(after.every(call => call.id.length <= 64)).toBe(true);
-    for (const content of ['question 3', 'four']) {
-        const call = before.find(call => JSON.parse(call.function.arguments).content === content);
-        expect(call).toBeDefined();
-        expect(after).toContainEqual(call);
-    }
+    const after = (await send()).messages.flatMap(message => message.tool_calls ?? []);
+    expect(after.filter(call => call.function.name === 'story_history').map(call => JSON.parse(call.function.arguments))).toEqual([
+        { content: 'Recap: first summary\n\nRecap: second summary\n\nquestion 3\n\nanswer 3' },
+    ]);
+    expect(after).toContainEqual(inputCall);
 });
 
 test('projects saved memory using turn reconciliation, pinning and the recent window without mutating the snapshot', async () => {

@@ -110,15 +110,13 @@ export function resolvePipelineSteps(pipeline, availableToolNames) {
  * @param {{tool: string, prompt?: string}} step Current step
  * @param {number} index Zero-based step index
  * @param {number} total Total runnable steps
+ * @param {string} [historyGuidance] First-round guidance for the transcript format
  * @returns {string} Instruction text
  */
-export function buildStepPrompt(step, index, total) {
+export function buildStepPrompt(step, index, total, historyGuidance = ' Historical submit_story calls and their receipts record prior conversation content, including past user messages. Do not repeat those historical calls; follow the current step instruction.') {
     const header = `[Reply pipeline ${index + 1}/${total}] This round you must call the ${step.tool} tool exactly once.`;
     const detail = typeof step?.prompt === 'string' && step.prompt.trim().length > 0 ? ` ${step.prompt.trim()}` : '';
-    const history = index === 0
-        ? ' Historical submit_story calls and their receipts record prior conversation content, including past user messages. Do not repeat those historical calls; follow the current step instruction.'
-        : '';
-    return header + detail + history;
+    return header + detail + (index === 0 ? historyGuidance : '');
 }
 
 /**
