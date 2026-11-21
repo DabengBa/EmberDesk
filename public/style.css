@@ -854,6 +854,27 @@ body .panelControlBar {
     scrollbar-gutter: stable;
 }
 
+#chat[data-reply-viewport-following] {
+    overflow-anchor: none;
+}
+
+#chat_reply_actions {
+    position: relative;
+    z-index: 31;
+}
+
+#chat_show_new_reply {
+    position: absolute;
+    inset-inline-start: 50%;
+    bottom: 8px;
+    transform: translateX(-50%);
+    gap: 0.5em;
+    white-space: nowrap;
+    min-height: 44px;
+    padding-inline: 12px;
+    background: var(--chat-workspace-bg);
+}
+
 #sheld > [inert],
 #top-settings-holder[inert],
 body:has(#workspace-startup) #emberdesk-react-workspace-shell-chrome-host {

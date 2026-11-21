@@ -1675,15 +1675,18 @@ function scheduleMainChatMessageListScrollRestore(chatId = getCurrentChatId()) {
             return;
         }
 
-        if (anchorRow) {
-            const chatRect = chatContainer.getBoundingClientRect();
-            const anchorViewportOffset = anchorRow.getBoundingClientRect().top - chatRect.top;
-            chatContainer.scrollTop = Math.max(
-                chatContainer.scrollTop + anchorViewportOffset - restore.anchorViewportOffset,
-                0,
-            );
-        } else {
-            chatContainer.scrollTop = restore.scrollTop;
+        // A followed send positions its own turn when the saved rows replace it.
+        if (!chatContainer.hasAttribute('data-reply-viewport-following')) {
+            if (anchorRow) {
+                const chatRect = chatContainer.getBoundingClientRect();
+                const anchorViewportOffset = anchorRow.getBoundingClientRect().top - chatRect.top;
+                chatContainer.scrollTop = Math.max(
+                    chatContainer.scrollTop + anchorViewportOffset - restore.anchorViewportOffset,
+                    0,
+                );
+            } else {
+                chatContainer.scrollTop = restore.scrollTop;
+            }
         }
 
         deleteMainChatMessageListScrollSnapshot(normalizedChatId);
@@ -3190,6 +3193,7 @@ function getMainChatMessageListReactBridgeState() {
     }
     const visibleWindow = getMainChatReactVisibleWindow(projectedChat);
     const visibleMessageIds = visibleWindow.visibleMessageIds;
+    const replyViewport = getWorkspaceSendReplyViewport(runView, assistant);
     syncMainChatRuntimeDiagnostics(chatContainer, {
         generationControl,
         composer,
@@ -3260,6 +3264,7 @@ function getMainChatMessageListReactBridgeState() {
             scrollHeight: chatContainer?.scrollHeight ?? 0,
             clientHeight: chatContainer?.clientHeight ?? 0,
             scrollRestore: getMainChatMessageListScrollRestoreSnapshot(),
+            replyViewport,
         },
         turnSummaries: getChatMemoryDisplayItems(),
         greetings: (() => {
@@ -3427,7 +3432,7 @@ async function mountReactMainChatMessageListPanel() {
         if (scroll) requestAnimationFrame(() => {
             if (scroll.contextKey !== getComposerSnapshot().contextKey || hasMainChatMessageListScrollRestore()) return;
             const container = document.getElementById('chat');
-            if (container && (scroll.explicit || container.scrollTop >= scroll.top - 2)) scrollChatToBottom();
+            if (container && !workspaceSendViewport && (scroll.explicit || container.scrollTop >= scroll.top - 2)) scrollChatToBottom();
         });
     } else if (
         result?.reason === WORKSPACE_PANEL_MOUNT_FALLBACK_REASONS.BUNDLE_LOAD_FAILED
@@ -6351,6 +6356,24 @@ async function workspaceGenerationRequest(route, body, { keepalive = false } = {
 
 let workspaceGenerationScroll = null;
 let workspaceSendFailureToast = null;
+let workspaceSendViewport = null;
+
+function getWorkspaceSendReplyViewport(view, assistant) {
+    const send = workspaceSendViewport;
+    if (!send || reactMainChatProjectionCleared || send.contextKey !== getComposerSnapshot().contextKey) return null;
+    const optimistic = view?.requestId === send.requestId;
+    const finished = !optimistic && send.completed
+        && (send.completed.temporary || getCurrentChatGenerationTarget()?.version === send.completed.version)
+        && chat[send.questionIndex]?.is_user === true && chat.length > send.questionIndex + 1;
+    if (!optimistic && !finished) return null;
+    return {
+        requestId: send.requestId,
+        questionId: String(send.questionIndex),
+        replyId: finished ? String(chat.length - 1) : assistant
+            ? String(send.questionIndex + 1 + Number(Boolean(view.invocations?.length))) : null,
+        finished: Boolean(finished),
+    };
+}
 
 function queueWorkspaceGenerationScroll(explicit = false) {
     const container = document.getElementById('chat');
@@ -6377,7 +6400,11 @@ const workspaceGeneration = createWorkspaceGeneration({
     },
     changed() {
         document.body.toggleAttribute('data-workspace-generation-running', workspaceGeneration.canStop());
-        if (workspaceGeneration.display() || getFailedWorkspaceReply()) queueWorkspaceGenerationScroll();
+        const view = workspaceGeneration.display();
+        if (workspaceSendViewport && (view || !workspaceSendViewport.completed) && view?.requestId !== workspaceSendViewport.requestId) {
+            workspaceSendViewport = null;
+        }
+        if ((view && !workspaceSendViewport) || getFailedWorkspaceReply()) queueWorkspaceGenerationScroll();
         scheduleMainChatMessageListPanelRefresh();
         if (document.getElementById('options_button')?.getAttribute('aria-expanded') === 'true') {
             syncOptionsMenuContinueAvailability();
@@ -6393,6 +6420,10 @@ const workspaceGeneration = createWorkspaceGeneration({
         toastr.error(error.message);
     },
     finished(run, { discovered = false, reconciledChatVersion } = {}) {
+        if (!discovered && workspaceSendViewport?.requestId === run.requestId) {
+            if (run.status === 'completed') workspaceSendViewport.completed = run;
+            else workspaceSendViewport = null;
+        }
         const showFailure = () => {
             if (run.kind === 'regenerate') {
                 console.warn('Regeneration failed:', run.error ?? run.status);
@@ -6425,8 +6456,11 @@ const workspaceGeneration = createWorkspaceGeneration({
     },
 });
 
-eventSource.on(event_types.CHAT_CHANGED, () => {
+eventSource.on(event_types.CHAT_CHANGED, (_chatId, reconciledChatVersion) => {
     workspaceGenerationScroll = null;
+    if (reconciledChatVersion === undefined || workspaceSendViewport?.completed?.version !== reconciledChatVersion) {
+        workspaceSendViewport = null;
+    }
     workspaceGeneration.close();
 });
 window.addEventListener('pagehide', () => workspaceGeneration.leaveTemporary());
@@ -6470,9 +6504,14 @@ async function startWorkspaceGeneration(action, text) {
     const composer = getComposerSnapshot();
     const isCurrent = () => ownsWorkspaceComposer(composer);
     const requestId = crypto.randomUUID();
+    workspaceSendViewport = null;
     const prepared = action === 'continue' ? undefined : workspaceGeneration.prepare(target, { action, text, requestId });
+    workspaceSendViewport = action === 'send'
+        ? { requestId, contextKey: composer.contextKey, questionIndex: chat.length, completed: null }
+        : null;
+    if (workspaceSendViewport) workspaceGenerationScroll = null;
     const ownsPreparation = () => isCurrent() && (!prepared || workspaceGeneration.ownsPreparation(prepared));
-    if (prepared) queueWorkspaceGenerationScroll(true);
+    if (prepared && action !== 'send') queueWorkspaceGenerationScroll(true);
     let creating = false;
     try {
         let attachments;
@@ -7427,7 +7466,7 @@ export async function unshallowCharacter(characterId) {
     await getOneCharacter(avatar);
 }
 
-async function getChatResult({ switchMenu = true } = {}) {
+async function getChatResult({ switchMenu = true, reconciledChatVersion } = {}) {
     name2 = characters[this_chid].name;
     let freshChat = false;
     if (chat.length === 0) {
@@ -7442,7 +7481,7 @@ async function getChatResult({ switchMenu = true } = {}) {
     await printMessages();
     select_selected_character(this_chid, { switchMenu });
 
-    await eventSource.emit(event_types.CHAT_CHANGED, (getCurrentChatId()));
+    await eventSource.emit(event_types.CHAT_CHANGED, getCurrentChatId(), reconciledChatVersion);
     if (freshChat) await eventSource.emit(event_types.CHAT_CREATED);
 
     if (chat.length === 1) {

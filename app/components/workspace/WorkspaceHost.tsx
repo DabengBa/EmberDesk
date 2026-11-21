@@ -594,6 +594,7 @@ export function WorkspaceHost() {
             <div id="sheld">
                 <div id="chat" inert={!ready}>
                 </div>
+                <div id="chat_reply_actions" inert={!ready} />
                 <div id="form_sheld" inert={!ready}>
                     <div id="dialogue_del_mes">
                     </div>
