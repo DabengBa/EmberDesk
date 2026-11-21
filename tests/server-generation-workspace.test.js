@@ -38,31 +38,31 @@ test.each(['fast', 'slow', 'stop'])('a prepared send only shows waiting after th
     }
 });
 
-test('stopping a prepared replacement releases the view before create', async () => {
+test.each(['regenerate', 'continue'])('stopping prepared %s releases the view before create', async action => {
     const requests = [];
     const workspace = createWorkspaceGeneration({
         request: route => requests.push(route), subscribe() {}, changed() {}, finished() {},
     });
-    const view = workspace.prepare({ file_name: 'one' }, { action: 'regenerate', requestId: 'request-one' });
+    const view = workspace.prepare({ file_name: 'one' }, { action, requestId: 'request-one' });
     expect(workspace.canStop()).toBe(true);
-    expect(workspace.display().kind).toBe('regenerate');
+    expect(workspace.display().kind).toBe(action);
     await workspace.cancel();
     expect(workspace.busy()).toBe(false);
     expect(workspace.display()).toBeNull();
-    expect(await workspace.create(view.target, { action: 'regenerate', requestId: 'request-one' }, view)).toBeUndefined();
+    expect(await workspace.create(view.target, { action, requestId: 'request-one' }, view)).toBeUndefined();
     expect(requests).toEqual([]);
 });
 
-test.each(['resolve', 'reject'])('releases the streamed replacement when reconciliation can %s', async settle => {
+test.each([['regenerate', 'resolve'], ['regenerate', 'reject'], ['continue', 'resolve']])('releases streamed %s when reconciliation can %s', async (kind, settle) => {
     const reload = Promise.withResolvers();
-    const run = { id: 'replacement', status: 'running', kind: 'regenerate' };
+    const run = { id: 'replacement', status: 'running', kind };
     let deliver;
     const workspace = createWorkspaceGeneration({
         async request() { return run; },
         subscribe(_id, listener) { deliver = listener; return () => {}; },
         changed() {}, finished: () => reload.promise,
     });
-    await workspace.create({ file_name: 'one' }, { action: 'regenerate', requestId: 'request-one' });
+    await workspace.create({ file_name: 'one' }, { action: kind, requestId: 'request-one' });
     deliver({ type: 'delta', text: 'new reply' });
     deliver({ type: 'terminal', run: { ...run, status: 'completed' } });
     expect(workspace.canStop()).toBe(false);

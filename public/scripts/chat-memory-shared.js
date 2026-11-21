@@ -1,3 +1,5 @@
+import { stripPipelineMarkup } from './reply-pipeline-core.js';
+
 /** Browser-independent chat memory rules; translations and ignore key are supplied by the caller. */
 export function createChatMemoryCore(translate, IGNORE_SYMBOL) {
 
@@ -160,30 +162,7 @@ function computeMemoryWindow(partition, keepTurns) {
  * @param {Array|undefined} invocations `extra.tool_invocations`
  * @returns {string}
  */
-function stripMarkupForSummary(content, invocations) {
-    let text = typeof content === 'string' ? content : '';
-    if (!Array.isArray(invocations)) {
-        return text;
-    }
-    invocations.forEach((invocation, index) => {
-        const name = String(invocation?.name ?? '');
-        if (!/^[a-zA-Z][a-zA-Z0-9_-]*$/.test(name)) {
-            return;
-        }
-        const isLast = index === invocations.length - 1;
-        text = isLast
-            ? text
-                .replace(new RegExp(`&lt;/?${name}&gt;`, 'g'), '')
-                .replace(new RegExp(`</?${name}>`, 'g'), '')
-            : text
-                .replace(new RegExp(`&lt;${name}&gt;[\\s\\S]*?&lt;/${name}&gt;`, 'g'), '')
-                .replace(new RegExp(`<${name}>[\\s\\S]*?</${name}>`, 'g'), '');
-    });
-    return text
-        .replace(/<div data-respond-options[^>]*>[\s\S]*?<\/div><\/div>/g, '')
-        .replace(/^\s*<section data-pipeline-card\b[\s\S]*?<\/section>\s*/, '')
-        .replace(/\s*<section data-pipeline-card\b[\s\S]*$/, '');
-}
+const stripMarkupForSummary = (content, invocations) => stripPipelineMarkup(typeof content === 'string' ? content : '', invocations);
 
 /**
  * Extracts the source text a summary is generated from: user and assistant

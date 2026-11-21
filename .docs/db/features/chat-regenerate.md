@@ -27,6 +27,7 @@ Let users re-roll the current turn — the reply the AI produced after the last 
 - Manually inserted rows stop the cleanup: historical narrator notes, manually inserted assistant messages, and plain system notices are never removed; if such a row sits at the end, regenerate appends a new reply after it instead.
 - A generation-only greeting can be re-rolled the same way — the old first message is replaced.
 - Stopping or failing before a replacement is saved restores the previous reply, if there was one, and discards partial output. A failed server run shows a localized notice that invites the user to retry. For a saved chat, switching chats or refreshing does not stop an active replacement; reopening the chat shows its current progress or saved result.
+- Temporary Assistant chats can regenerate an unanswered turn, just like saved chats. Continue is available only with an assistant reply to extend: it preserves that reply, adds only the new text, and leaves the composer draft alone. Stop discards the unfinished addition; Retry after a failed continuation continues the same reply rather than replacing it.
 
 
 ## Generation Boundary

@@ -16,6 +16,16 @@ type ModelStream = {
 };
 export type ModelToolCall = { id: string; type: 'function'; function: { name: string; arguments: string } };
 
+export class InvalidModelReply extends Error {}
+
+export class ModelResponseStatusError extends Error {
+    readonly status: number;
+    constructor(status: number) {
+        super(`Model got response status ${status}`);
+        this.status = status;
+    }
+}
+
 function buildRequest(input: ModelStream) {
     const { model, reasoningEffort } = input;
     const stream = input.stream ?? isChatCompletionStreaming({ chat_completion_source: CHAT_COMPLETION_SOURCES.OPENAI, stream_openai: true }, model, 'normal');
@@ -85,12 +95,15 @@ export async function streamServerModel(input: ModelStream): Promise<string> {
                 target = new URL(location, current);
                 continue;
             }
-            if (!response.ok || !response.body) throw new Error(`Model got response status ${response.status}`);
+            if (!response.ok || !response.body) {
+                (response.body as Readable | null)?.destroy();
+                throw new ModelResponseStatusError(response.status);
+            }
             const contentType = response.headers.get('content-type')?.split(';', 1)[0].trim().toLowerCase();
             if (!parameters.stream || contentType === 'application/json' || contentType?.endsWith('+json')) {
                 const completion = await response.json() as { choices?: { message?: { content?: unknown; tool_calls?: ModelToolCall[] } }[] } | null;
                 const message = completion?.choices?.[0]?.message;
-                if (!message || typeof message !== 'object') throw new Error('Invalid model completion');
+                if (!message || typeof message !== 'object') throw new InvalidModelReply('Invalid model completion');
                 const text = typeof message.content === 'string' ? message.content : '';
                 if (text) input.emit(text);
                 deliverTools(input, message.tool_calls ?? []);

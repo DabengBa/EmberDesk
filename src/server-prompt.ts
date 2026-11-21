@@ -2,19 +2,19 @@ import { randomUUID } from 'node:crypto';
 
 import { createPromptManagerDomain, type PromptData, type PromptSettings } from '../app/lib/prompt-manager.ts';
 import { createChatMemoryCore } from '../public/scripts/chat-memory-shared.js';
-import { PIPELINE_FALLBACK_PROMPT, buildStepPrompt, pipelineModelRemovesTools, pipelineStepTool, pipelineTriggerTag } from '../public/scripts/reply-pipeline-core.js';
-import { hasEnabledToolBindings } from '../public/scripts/tool-bindings-core.js';
+import { PIPELINE_FALLBACK_PROMPT, buildStepPrompt, pipelineModelRemovesTools, pipelineStepTool, pipelineTriggerTag, stripPipelineMarkup } from '../public/scripts/reply-pipeline-core.js';
 import { escapeRegex } from '../public/scripts/util/primitives.js';
 import { countWebTokenizerTokens, getSentencepiceTokenizer, getTiktokenTokenizer, getTokenizerModel, getWebTokenizer } from './endpoints/tokenizers.js';
 import { getRegenerateChatPrefix } from './server-generation-service.ts';
-import { createStoryProjection, projectHistory, stripPipelineMarkup, type MediaResolver, type ServerPromptMessage } from './server-prompt/history.ts';
+import { createStoryProjection, projectHistory, type MediaResolver, type ServerPromptMessage } from './server-prompt/history.ts';
 import { array, record, ServerPromptError, string, type RecordView, type ServerPromptSnapshot } from './server-prompt/snapshot.ts';
 import { roleAt, scanWorldInfo, type Injection, type Role, type WorldInfoActivation } from './server-prompt/world-info.ts';
 
 export { readServerPromptSnapshot, ServerPromptError, type ServerPromptSnapshot } from './server-prompt/snapshot.ts';
 
 export type ServerPromptCommand = { action: 'send' | 'regenerate' | 'continue'; temporary?: boolean; pendingUserText?: string; pendingUserExtra?: RecordView };
-export const isTemporaryRegenerate = (command?: ServerPromptCommand) => command?.temporary === true && command.action === 'regenerate';
+const generationTrigger = (command?: ServerPromptCommand) => !command || command.action === 'send' ? 'normal' : command.action;
+const continuationInstruction = '[Continue your last message without repeating its original content.]';
 export type { ServerPromptMessage } from './server-prompt/history.ts';
 type TextMessage = { role: Role; content: string; name?: string };
 type PipelineStep = { tool: string; prompt?: string; model?: string; maxTokens?: number | null };
@@ -196,7 +196,8 @@ function buildPipelineTail(runtime: ServerPromptRuntime, manager: ReturnType<typ
     pipelineHistory: boolean, currentInput: string | null | undefined, project: ReturnType<typeof createStoryProjection>) {
     const pipeline = runtime.pipeline;
     if (!pipeline) return [];
-    if (!('step' in pipeline)) return [{ role: 'system', content: PIPELINE_FALLBACK_PROMPT }] satisfies ServerPromptMessage[];
+    const suffix = generation === 'continue' ? ` ${continuationInstruction} Return only the new suffix as the final reply.` : '';
+    if (!('step' in pipeline)) return [{ role: 'system', content: PIPELINE_FALLBACK_PROMPT + suffix }] satisfies ServerPromptMessage[];
     const tail: ServerPromptMessage[] = [];
     const tag = pipelineTriggerTag(pipeline.step.tool);
     for (const entry of manager.getPromptOrderForCharacter(manager.activeCharacter)) {
@@ -214,7 +215,7 @@ function buildPipelineTail(runtime: ServerPromptRuntime, manager: ReturnType<typ
     const inputGuide = !pipelineHistory ? '' : input
         ? ` The current user input is the story_continuation_input call with ID ${input}.`
         : input === null ? ' The latest native user message is the current input.' : '';
-    tail.push({ role: 'system', content: buildStepPrompt(pipeline.step, pipeline.index, pipeline.total, historyGuide) + transcriptGuide + inputGuide });
+    tail.push({ role: 'system', content: buildStepPrompt(pipeline.step, pipeline.index, pipeline.total, historyGuide) + transcriptGuide + inputGuide + suffix });
     return tail;
 }
 
@@ -244,13 +245,13 @@ export async function assembleServerPipelineTail(snapshot: ServerPromptSnapshot,
     const step = runtime.pipeline && 'step' in runtime.pipeline ? runtime.pipeline.step : undefined;
     const connection = resolveConnection(snapshot.preset, step?.model ? { ...local, openai_model: step.model } : local);
     if (step && pipelineModelRemovesTools({ chat_completion_source: 'openai', model: connection.model })) invalid('Reply pipeline model does not support tools');
-    const regenerate = isTemporaryRegenerate(command);
+    const regenerate = command?.action === 'regenerate';
     const rows = (regenerate ? getRegenerateChatPrefix(snapshot.chat) : snapshot.chat).slice(1).map(record);
     const pendingUserText = command?.pendingUserText;
     if (pendingUserText !== undefined) rows.push(prepareGenerationUserMessage(snapshot, pendingUserText));
     const manager = makePromptManager({ ...snapshot.preset, ...local }, createSubstitute(snapshot, rows, connection.model));
     const tools = pipelineTools(runtime.pipeline);
-    const tail = buildPipelineTail(runtime, manager, regenerate ? 'regenerate' : 'normal', true, undefined, createStoryProjection(new Set(callIds)));
+    const tail = buildPipelineTail(runtime, manager, generationTrigger(command), true, undefined, createStoryProjection(new Set(callIds)));
     const messages = [...transcript, ...tail];
     const { fixed, measure } = await promptBudget(connection, tools);
     const promptTokens = fixed + measure(messages, mediaCosts);
@@ -267,7 +268,7 @@ export async function assembleServerPrompt(snapshot: ServerPromptSnapshot, comma
     const connection = resolveConnection(snapshot.preset, step?.step.model ? { ...local, openai_model: step.step.model } : local);
     const removesTools = pipelineModelRemovesTools({ chat_completion_source: 'openai', model: connection.model });
     if (step && removesTools) invalid('Reply pipeline model does not support tools');
-    const pipelineHistory = (command.action === 'send' || isTemporaryRegenerate(command)) && Boolean(runtime.pipeline) && !removesTools;
+    const pipelineHistory = Boolean(runtime.pipeline) && !removesTools;
     const settings = { ...snapshot.preset, ...local };
     const historyPayload = command.action === 'regenerate' ? getRegenerateChatPrefix(snapshot.chat) : snapshot.chat;
     const rows = structuredClone(historyPayload.slice(1).map(record));
@@ -333,7 +334,7 @@ export async function assembleServerPrompt(snapshot: ServerPromptSnapshot, comma
         ['worldInfo', format(world.text, settings.wi_format)],
         ['charDescription', format(string(snapshot.character.description ?? card.description).trim(), settings.description_format)],
     ]);
-    const generation = command.action === 'send' ? 'normal' : command.action === 'regenerate' ? 'regenerate' : 'continue';
+    const generation = generationTrigger(command);
     const manager = makePromptManager(settings, substitute);
     const prompts = manager.getPromptCollection(generation).collection;
     const injections: Injection[] = [];
@@ -357,12 +358,10 @@ export async function assembleServerPrompt(snapshot: ServerPromptSnapshot, comma
     if (!relative.includes('history') && prepared.length) invalid('Chat history is disabled in the selected preset');
     const newChat: TextMessage = { role: 'system', content: substitute(string(settings.new_chat_prompt ?? '[Start a new Chat]')) };
     const continueNudge = command.action === 'continue'
-        ? substitute(string(settings.continue_nudge_prompt ?? '[Continue your last message without repeating its original content.]')) : '';
+        ? substitute(string(settings.continue_nudge_prompt ?? continuationInstruction)) : '';
 
-    const feature = record(snapshot.settings.feature_settings ?? snapshot.settings.extension_settings);
-    const toolsEnabled = !removesTools && (Boolean(runtime.pipeline) || Boolean(record(settings.reply_pipeline).enabled) && hasEnabledToolBindings(feature.tool_bindings));
     const { groups, currentUser, currentInput, mediaCosts, project } = await projectHistory(prepared, {
-        settings, model: connection.model, tools: toolsEnabled, pipelineHistory, activeRunId: runtime.pipeline?.activeRunId, resolveMedia: runtime.resolveMedia,
+        settings, model: connection.model, tools: pipelineHistory, pipelineHistory, activeRunId: runtime.pipeline?.activeRunId, resolveMedia: runtime.resolveMedia,
     });
     const tools = pipelineTools(runtime.pipeline);
     const tail = buildPipelineTail(runtime, manager, generation, pipelineHistory, currentInput, project);
