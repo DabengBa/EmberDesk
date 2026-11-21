@@ -35,7 +35,7 @@ jest.unstable_mockModule('../src/util.js', () => ({
 }));
 
 const ensureCanonicalSettingsForUserMock = jest.fn(async () => ({ ok: true }));
-jest.unstable_mockModule('../src/endpoints/settings.js', () => ({
+jest.unstable_mockModule('../src/endpoints/settings-routes.ts', () => ({
     ensureCanonicalSettingsForUser: ensureCanonicalSettingsForUserMock,
 }));
 
@@ -56,7 +56,7 @@ jest.unstable_mockModule('../src/users.js', () => ({
     toKey: handle => `user:${handle}`,
 }));
 
-const { router } = await import('../src/endpoints/users-public.js');
+const { router } = await import('../src/endpoints/users-public-routes.ts');
 
 function createRequest(body, ip = '127.0.0.1') {
     return {

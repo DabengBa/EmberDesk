@@ -9,7 +9,7 @@
   - `src/endpoints/character-read-service.ts`
   - `src/canonical-sqlite-operator.ts`
   - `src/canonical-sqlite-shadow-import.ts`
-  - `tests/interaction-performance-index.test.js`
+  - `tests/character-runtime-routes.test.js`
 - Related tech docs:
   - [.docs/tech/canonical-sqlite-storage-roadmap.md](../tech/canonical-sqlite-storage-roadmap.md)
 - Related semantic docs:

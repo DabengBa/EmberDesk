@@ -6,7 +6,7 @@ import lodash from 'lodash';
 import { RateLimiterMemory, RateLimiterRes } from 'rate-limiter-flexible';
 import { getIpAddress, retryAfter } from '../express-common.ts';
 import { color, Cache, getConfigValue } from '../util.js';
-import { ensureCanonicalSettingsForUser } from './settings.js';
+import { ensureCanonicalSettingsForUser } from './settings-routes.ts';
 import {
     KEY_PREFIX, getUserAvatar, toKey, getPasswordHash, getPasswordSalt, getAccountVersion,
     needsSetup, ensurePublicDirectoriesExist, getUserDirectories, getAllUserHandles,

@@ -22,8 +22,7 @@ and settings API. `tests/wire-log-native.test.js` imports the actual module
 graph in Node without a loader. Product behavior is documented in
 `feature.wire_log`.
 
-`src/archive-utils.ts` owns archive helpers; `src/archive-utils.js` is a
-compatibility re-export, also used by `src/util.js`. The format chain includes
+`src/archive-utils.ts` owns archive helpers and is imported directly by `src/util.js`. The format chain includes
 `src/png/encode.ts`, `src/character-card-parser.ts`,
 `src/endpoints/character-card-v2.ts` and
 `src/validator/TavernCardValidator.ts`. Existing callers use actual `.ts`
@@ -267,8 +266,9 @@ registration and middleware, while `character-*-routes.ts` modules implement
 the read, write, edit, merge, import, transfer, delete-preflight and text-replace
 handlers. Existing service and canonical storage boundaries remain separate.
 
-The public, private and admin account JavaScript endpoints re-export routers
-from their matching `users-*-routes.ts` modules. `secrets.js` retains
+`src/server-main.ts` imports `src/endpoints/users-public-routes.ts` directly.
+`src/server-startup.ts` imports `src/endpoints/users-private-routes.ts` and
+`src/endpoints/users-admin-routes.ts` directly. `secrets.js` retains
 `SecretManager` and exports the router created by `secrets-routes.ts`;
 `content-manager.js` retains the downloader table and exports the router from
 `content-import-routes.ts`. These are internal ownership changes, not new

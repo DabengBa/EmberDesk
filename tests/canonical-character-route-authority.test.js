@@ -86,7 +86,7 @@ fs.writeFileSync(configPath, [
 setConfigFilePath(configPath);
 
 const { applyAvatarCropResize, router } = await import('../src/endpoints/characters.js');
-const { router: settingsRouter } = await import('../src/endpoints/settings.js');
+const { router: settingsRouter } = await import('../src/endpoints/settings-routes.ts');
 const { router: chatRouter } = await import('../src/endpoints/chats.js');
 const { router: worldRouter } = await import('../src/endpoints/worldinfo-routes.ts');
 

@@ -24,7 +24,7 @@ export {
     normalizeZipEntryPath,
     extractFilesFromZipBuffer,
     getImageBuffers,
-} from './archive-utils.js';
+} from './archive-utils.ts';
 
 /**
  * Parsed config object.

@@ -68,7 +68,7 @@ test('Node resolves the real character router, replacement and import graphs', (
             console.log('character-callers:native');
         `, moduleUrl('util.js'), config, root, moduleUrl('endpoints/characters.js'),
         moduleUrl('endpoints/character-text-replace-service.ts'), moduleUrl('endpoints/character-import-service.ts'),
-        moduleUrl('endpoints/character-store.ts'), moduleUrl('endpoints/worldinfo.js'),
+        moduleUrl('endpoints/character-store.ts'), moduleUrl('endpoints/worldinfo-routes.ts'),
         moduleUrl('canonical-sqlite-shadow-import.ts'), moduleUrl('canonical-sqlite-operator.ts'));
         expect({ status: result.status, stderr: result.status === 0 ? '' : result.stderr })
             .toEqual({ status: 0, stderr: '' });

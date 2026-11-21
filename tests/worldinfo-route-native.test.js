@@ -4,7 +4,7 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { expect, test } from '@jest/globals';
 
-test('Node loads the real World Info router through its existing entry without a loader', () => {
+test('Node loads the native TypeScript World Info router without a loader', () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'emberdesk-worldinfo-route-native-'));
     try {
         const config = path.join(root, 'config.yaml');
@@ -16,13 +16,13 @@ test('Node loads the real World Info router through its existing entry without a
             setConfigFilePath(process.argv[2]);
             globalThis.DATA_ROOT = process.argv[3];
             const entry = await import(process.argv[4]);
-            const implementation = await import(process.argv[5]);
+
             for (const name of ['router', 'getCanonicalWorldInfoReadState', 'getCanonicalWorldInfoWriteState', 'readWorldInfoFile', 'writeWorldInfoProjectionFile']) {
                 assert.equal(typeof entry[name], 'function');
-                assert.equal(entry[name], implementation[name]);
+
             }
             assert.ok(entry.router.stack.some(layer => layer.route?.path === '/edit' && layer.route.methods.post));
-        `, url('util.js'), config, root, url('endpoints/worldinfo.js'), url('endpoints/worldinfo-routes.ts')], {
+        `, url('util.js'), config, root, url('endpoints/worldinfo-routes.ts')], {
             encoding: 'utf8', timeout: 10_000,
         });
         expect({ status: result.status, stderr: result.status === 0 ? '' : result.stderr })

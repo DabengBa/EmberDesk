@@ -85,7 +85,7 @@ describe('single-endpoint OpenAI-compatible chat completions backend', () => {
             readSecret: readSecretMock,
         }));
 
-        ({ router } = await import('../src/endpoints/backends/chat-completions.js'));
+        ({ router } = await import('../src/endpoints/backends/chat-completions.ts'));
     });
 
     afterEach(() => {

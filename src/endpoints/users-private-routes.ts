@@ -7,7 +7,7 @@ import express from 'express';
 import { getUserAvatar, toKey, getPasswordHash, getPasswordSalt, createBackupArchive, ensurePublicDirectoriesExist, toAvatarKey, getAccountVersion } from '../users.js';
 import { checkForNewContent } from './content-manager.js';
 import { closeCanonicalDatabase } from '../canonical-sqlite.ts';
-import { ensureCanonicalSettingsForUser, resetCanonicalSettings } from './settings.js';
+import { ensureCanonicalSettingsForUser, resetCanonicalSettings } from './settings-routes.ts';
 import { color, Cache, getConfigValue } from '../util.js';
 
 // Cache.set stores arbitrary values; its legacy JSDoc incorrectly restricts them to objects.

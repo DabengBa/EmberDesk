@@ -34,9 +34,9 @@ test.each([false, true].flatMap(exposure => ['read', 'find', 'view'].map(probe =
                 });
                 fs.mkdirSync(users.getUserDirectories(handle).root, { recursive: true });
             }
-            const publicUsers = await import('./src/endpoints/users-public.js');
-            const privateUsers = await import('./src/endpoints/users-private.js');
-            const adminUsers = await import('./src/endpoints/users-admin.js');
+            const publicUsers = await import('./src/endpoints/users-public-routes.ts');
+            const privateUsers = await import('./src/endpoints/users-private-routes.ts');
+            const adminUsers = await import('./src/endpoints/users-admin-routes.ts');
             const secrets = await import('./src/endpoints/secrets.js');
             const content = await import('./src/endpoints/content-manager.js');
             const app = express();

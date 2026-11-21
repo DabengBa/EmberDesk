@@ -445,7 +445,7 @@ describe('canonical settings route integration', () => {
         const configPath = path.join(configRoot, 'config.yaml');
         fs.writeFileSync(configPath, 'port: 8000\n', 'utf8');
         setConfigFilePath(configPath);
-        const settingsModule = await import(`../src/endpoints/settings.js?settingsCanonical=${Date.now()}-${Math.random()}`);
+        const settingsModule = await import(`../src/endpoints/settings-routes.ts?settingsCanonical=${Date.now()}-${Math.random()}`);
         return settingsModule.router;
     }
 
@@ -972,7 +972,7 @@ describe('canonical settings snapshots and rollback', () => {
         const configPath = path.join(configRoot, 'config.yaml');
         fs.writeFileSync(configPath, 'port: 8000\n', 'utf8');
         setConfigFilePath(configPath);
-        const settingsModule = await import(`../src/endpoints/settings.js?settingsSnap=${Date.now()}-${Math.random()}`);
+        const settingsModule = await import(`../src/endpoints/settings-routes.ts?settingsSnap=${Date.now()}-${Math.random()}`);
         return settingsModule.router;
     }
 

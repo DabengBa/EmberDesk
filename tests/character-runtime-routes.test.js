@@ -9,16 +9,6 @@ import extract from '../src/png/extract.ts';
 import * as PNGtext from '../src/png/text.ts';
 import sanitize from 'sanitize-filename';
 
-import {
-    deleteCharacterIndexEntry,
-    disposeCharacterIndexDatabases,
-    getFreshIndexedCharacterFullPayload,
-    getCharacterIndexPath,
-    isCharacterIndexSupported,
-    listIndexedCharacterPayloads,
-    markCharacterChatStatsDirty,
-    resetCharacterIndexDatabase,
-} from '../src/endpoints/character-index.js';
 import { createCanonicalSqliteManager } from '../src/canonical-sqlite.ts';
 import { runCanonicalMigrations } from '../src/canonical-sqlite-migrations.ts';
 import {
@@ -226,106 +216,10 @@ async function prepareCanonicalChatWriteAudit({ db, directories, handle }) {
 }
 
 /**
- * @param {string} name
- * @returns {string}
+ * @param {{root: string}} directories
  */
-function toIsoDate(name) {
-    return `2026-05-09T00:00:00.000Z#${name}`;
-}
-
-/**
- * @param {string[]} buildLog
- * @param {{fullNamePrefix?: string, shallowNamePrefix?: string}} [options]
- * @returns {(avatar: string, directories: {characters: string}) => Promise<{avatar: string, fullPayload: object, shallowPayload: object, sourceMtimeMs: number, sourceSize: number}>}
- */
-function createBuildRow(buildLog, options = {}) {
-    const fullNamePrefix = options.fullNamePrefix ?? 'Full';
-    const shallowNamePrefix = options.shallowNamePrefix ?? 'Shallow';
-
-    return async (avatar, directories) => {
-        buildLog.push(avatar);
-
-        const filePath = path.join(directories.characters, avatar);
-        const stat = fs.statSync(filePath);
-        const baseName = path.parse(avatar).name;
-
-        const fullPayload = {
-            name: `${fullNamePrefix} ${baseName}`,
-            description: `Description ${baseName}`,
-            first_mes: `First ${baseName}`,
-            scenario: `Scenario ${baseName}`,
-            mes_example: `Example ${baseName}`,
-            creatorcomment: `Creator notes ${baseName}`,
-            talkativeness: 0.5,
-            avatar,
-            chat: `${baseName} - chat`,
-            fav: false,
-            tags: [],
-            json_data: `json:${baseName}`,
-            date_added: 1,
-            create_date: toIsoDate(baseName),
-            date_last_chat: stat.mtimeMs,
-            chat_size: stat.size,
-            data_size: stat.size,
-            data: {
-                name: `${fullNamePrefix} ${baseName}`,
-                character_version: '2.0',
-                creator: 'tester',
-                creator_notes: `Creator notes ${baseName}`,
-                tags: [],
-                extensions: {
-                    fav: false,
-                    world: '',
-                },
-            },
-        };
-
-        const shallowPayload = {
-            shallow: true,
-            name: `${shallowNamePrefix} ${baseName}`,
-            avatar,
-            chat: `${baseName} - chat`,
-            fav: false,
-            date_added: 1,
-            create_date: toIsoDate(baseName),
-            date_last_chat: stat.mtimeMs,
-            chat_size: stat.size,
-            data_size: stat.size,
-            tags: [],
-            data: {
-                name: `${shallowNamePrefix} ${baseName}`,
-                character_version: '2.0',
-                creator: 'tester',
-                creator_notes: `Creator notes ${baseName}`,
-                tags: [],
-                extensions: {
-                    fav: false,
-                    world: '',
-                },
-            },
-        };
-
-        return {
-            avatar,
-            fullPayload,
-            shallowPayload,
-            sourceMtimeMs: stat.mtimeMs,
-            sourceSize: stat.size,
-        };
-    };
-}
-
-/**
- * @param {string} userRoot
- * @returns {Promise<import('node:sqlite').DatabaseSync>}
- */
-async function openRawIndexDatabase(userRoot) {
-    const { DatabaseSync } = await import('node:sqlite');
-    return new DatabaseSync(getCharacterIndexPath(userRoot));
-}
-
 function expectNoCharacterIndexSidecar(directories) {
-    expect(fs.existsSync(getCharacterIndexPath(directories.root))).toBe(false);
+    expect(fs.existsSync(path.join(directories.root, '_cache', 'character-index.sqlite'))).toBe(false);
 }
 
 /**
@@ -887,7 +781,6 @@ beforeAll(async () => {
 });
 
 afterEach(() => {
-    disposeCharacterIndexDatabases();
     diskCache?.dispose();
     delete process.env.EMBERDESK_CHARACTER_INDEX_MODE;
     delete process.env.EMBERDESK_INTERACTION_PERF_MODE;
@@ -911,7 +804,7 @@ afterAll(() => {
     }
 });
 
-describe('character index', () => {
+describe('character and chat runtime routes', () => {
     test('normalizes legacy talkativeness while reading V2 character cards', async () => {
         const missingDirectories = makeDirectories('emberdesk-character-talkativeness-');
         const emptyDirectories = makeDirectories('emberdesk-character-talkativeness-');
@@ -1010,250 +903,6 @@ describe('character index', () => {
         expectNoCharacterIndexSidecar(directories);
     });
 
-    test('rebuilds a missing index and serves both full and shallow payload modes from the same rows', async () => {
-        const directories = makeDirectories('emberdesk-character-index-');
-        tempRoots.push(directories.root);
-        writeAvatarFile(directories, 'alpha.png', 'alpha');
-        writeAvatarFile(directories, 'beta.png', 'beta');
-
-        const buildLog = [];
-        const buildRow = createBuildRow(buildLog);
-        const avatarFiles = ['alpha.png', 'beta.png'];
-
-        const fullRows = await listIndexedCharacterPayloads({
-            userRoot: directories.root,
-            directories,
-            avatarFiles,
-            useShallowPayload: false,
-            buildRow,
-        });
-
-        expect(fs.existsSync(getCharacterIndexPath(directories.root))).toBe(true);
-        expect(buildLog).toEqual(['alpha.png', 'beta.png']);
-        expect(fullRows.map(row => row.avatar)).toEqual(avatarFiles);
-        expect(fullRows[0]).toEqual(expect.objectContaining({
-            avatar: 'alpha.png',
-            json_data: 'json:alpha',
-        }));
-        expect(fullRows[0].shallow).toBeUndefined();
-
-        const shallowRows = await listIndexedCharacterPayloads({
-            userRoot: directories.root,
-            directories,
-            avatarFiles,
-            useShallowPayload: true,
-            buildRow,
-        });
-
-        expect(buildLog).toEqual(['alpha.png', 'beta.png']);
-        expect(shallowRows[0]).toEqual(expect.objectContaining({
-            avatar: 'alpha.png',
-            shallow: true,
-            name: 'Shallow alpha',
-        }));
-    });
-
-    test('rebuilds only dirty rows on the next list read after chat-stat invalidation', async () => {
-        const directories = makeDirectories('emberdesk-character-index-');
-        tempRoots.push(directories.root);
-        writeAvatarFile(directories, 'alpha.png', 'alpha');
-        writeAvatarFile(directories, 'beta.png', 'beta');
-        writeChatFile(directories.root, 'alpha.png', 'alpha.jsonl', 'hello');
-        writeChatFile(directories.root, 'beta.png', 'beta.jsonl', 'hello');
-
-        const avatarFiles = ['alpha.png', 'beta.png'];
-        await listIndexedCharacterPayloads({
-            userRoot: directories.root,
-            directories,
-            avatarFiles,
-            useShallowPayload: false,
-            buildRow: createBuildRow([]),
-        });
-
-        markCharacterChatStatsDirty(directories.root, 'beta.png');
-
-        const refreshLog = [];
-        const refreshedRows = await listIndexedCharacterPayloads({
-            userRoot: directories.root,
-            directories,
-            avatarFiles,
-            useShallowPayload: false,
-            buildRow: createBuildRow(refreshLog, { fullNamePrefix: 'Refreshed', shallowNamePrefix: 'Refreshed' }),
-        });
-
-        expect(refreshLog).toEqual([]);
-        expect(refreshedRows.find(row => row.avatar === 'beta.png')).toEqual(expect.objectContaining({
-            name: 'Full beta',
-            chat_size: 5,
-        }));
-    });
-
-    test('skips a corrupt cached row instead of failing the whole character list', async () => {
-        const directories = makeDirectories('emberdesk-character-index-');
-        tempRoots.push(directories.root);
-        writeAvatarFile(directories, 'alpha.png', 'alpha');
-        writeAvatarFile(directories, 'beta.png', 'beta');
-
-        const avatarFiles = ['alpha.png', 'beta.png'];
-        await listIndexedCharacterPayloads({
-            userRoot: directories.root,
-            directories,
-            avatarFiles,
-            useShallowPayload: false,
-            buildRow: createBuildRow([]),
-        });
-
-        const database = await openRawIndexDatabase(directories.root);
-        try {
-            database.prepare('UPDATE characters SET full_json = ? WHERE avatar = ?').run('not-json', 'beta.png');
-        } finally {
-            database.close();
-        }
-
-        const rows = await listIndexedCharacterPayloads({
-            userRoot: directories.root,
-            directories,
-            avatarFiles,
-            useShallowPayload: false,
-            buildRow: createBuildRow([]),
-        });
-
-        expect(rows.map(row => row.avatar)).toEqual(['alpha.png']);
-
-        const verificationDb = await openRawIndexDatabase(directories.root);
-        try {
-            expect(verificationDb.prepare('SELECT avatar FROM characters WHERE avatar = ?').get('beta.png')).toBeUndefined();
-        } finally {
-            verificationDb.close();
-        }
-    });
-
-    test('drops an index row when the avatar disappears between directory scan and stat', async () => {
-        const directories = makeDirectories('emberdesk-character-index-');
-        tempRoots.push(directories.root);
-        writeAvatarFile(directories, 'alpha.png', 'alpha');
-        writeAvatarFile(directories, 'beta.png', 'beta');
-
-        await listIndexedCharacterPayloads({
-            userRoot: directories.root,
-            directories,
-            avatarFiles: ['alpha.png', 'beta.png'],
-            useShallowPayload: false,
-            buildRow: createBuildRow([]),
-        });
-
-        fs.unlinkSync(path.join(directories.characters, 'beta.png'));
-
-        const rows = await listIndexedCharacterPayloads({
-            userRoot: directories.root,
-            directories,
-            avatarFiles: ['alpha.png', 'beta.png'],
-            useShallowPayload: false,
-            buildRow: createBuildRow([]),
-        });
-
-        expect(rows.map(row => row.avatar)).toEqual(['alpha.png']);
-    });
-
-    test('resets a broken cached database so the next request can rebuild it', async () => {
-        const directories = makeDirectories('emberdesk-character-index-');
-        tempRoots.push(directories.root);
-        writeAvatarFile(directories, 'alpha.png', 'alpha');
-
-        await listIndexedCharacterPayloads({
-            userRoot: directories.root,
-            directories,
-            avatarFiles: ['alpha.png'],
-            useShallowPayload: false,
-            buildRow: createBuildRow([]),
-        });
-
-        const database = await openRawIndexDatabase(directories.root);
-        try {
-            database.exec('DROP TABLE characters;');
-        } finally {
-            database.close();
-        }
-
-        await expect(listIndexedCharacterPayloads({
-            userRoot: directories.root,
-            directories,
-            avatarFiles: ['alpha.png'],
-            useShallowPayload: false,
-            buildRow: createBuildRow([]),
-        })).rejects.toThrow();
-
-        const rows = await listIndexedCharacterPayloads({
-            userRoot: directories.root,
-            directories,
-            avatarFiles: ['alpha.png'],
-            useShallowPayload: false,
-            buildRow: createBuildRow([]),
-        });
-
-        expect(rows).toHaveLength(1);
-        expect(rows[0]).toEqual(expect.objectContaining({
-            avatar: 'alpha.png',
-        }));
-    });
-
-    test('refreshes a row when the source character file stat changes', async () => {
-        const directories = makeDirectories('emberdesk-character-index-');
-        tempRoots.push(directories.root);
-        writeAvatarFile(directories, 'alpha.png', 'alpha');
-
-        const avatarFiles = ['alpha.png'];
-        await listIndexedCharacterPayloads({
-            userRoot: directories.root,
-            directories,
-            avatarFiles,
-            useShallowPayload: false,
-            buildRow: createBuildRow([]),
-        });
-
-        writeAvatarFile(directories, 'alpha.png', 'alpha-changed');
-
-        const refreshLog = [];
-        const refreshedRows = await listIndexedCharacterPayloads({
-            userRoot: directories.root,
-            directories,
-            avatarFiles,
-            useShallowPayload: false,
-            buildRow: createBuildRow(refreshLog, { fullNamePrefix: 'Changed', shallowNamePrefix: 'Changed' }),
-        });
-
-        expect(refreshLog).toEqual(['alpha.png']);
-        expect(refreshedRows[0]).toEqual(expect.objectContaining({
-            name: 'Changed alpha',
-        }));
-    });
-
-    test('removes a deleted row from the index', async () => {
-        const directories = makeDirectories('emberdesk-character-index-');
-        tempRoots.push(directories.root);
-        writeAvatarFile(directories, 'alpha.png', 'alpha');
-
-        await listIndexedCharacterPayloads({
-            userRoot: directories.root,
-            directories,
-            avatarFiles: ['alpha.png'],
-            useShallowPayload: false,
-            buildRow: createBuildRow([]),
-        });
-
-        deleteCharacterIndexEntry(directories.root, 'alpha.png');
-
-        const rows = await listIndexedCharacterPayloads({
-            userRoot: directories.root,
-            directories,
-            avatarFiles: [],
-            useShallowPayload: false,
-            buildRow: createBuildRow([]),
-        });
-
-        expect(rows).toEqual([]);
-    });
-
     test('removes deleted character avatars locally without rebuilding the array', () => {
         const characters = [
             { avatar: 'alpha.png', name: 'Alpha' },
@@ -1298,32 +947,6 @@ describe('character index', () => {
         ]);
     });
 
-    test('throws instead of returning an empty list when the sidecar is circuit-disabled', async () => {
-        const directories = makeDirectories('emberdesk-character-index-');
-        tempRoots.push(directories.root);
-        writeAvatarFile(directories, 'alpha.png', 'alpha');
-
-        await listIndexedCharacterPayloads({
-            userRoot: directories.root,
-            directories,
-            avatarFiles: ['alpha.png'],
-            useShallowPayload: false,
-            buildRow: createBuildRow([]),
-        });
-
-        resetCharacterIndexDatabase(directories.root);
-        resetCharacterIndexDatabase(directories.root);
-        resetCharacterIndexDatabase(directories.root);
-
-        await expect(listIndexedCharacterPayloads({
-            userRoot: directories.root,
-            directories,
-            avatarFiles: ['alpha.png'],
-            useShallowPayload: false,
-            buildRow: createBuildRow([]),
-        })).rejects.toThrow('Derived SQLite sidecar character-index is disabled');
-    });
-
     test('does not refresh an edited character after it was removed locally', () => {
         const characters = [
             { avatar: 'alpha.png', name: 'Alpha' },
@@ -1334,29 +957,6 @@ describe('character index', () => {
 
         expect(shouldRefreshCharacterAfterEdit(characters, 'beta.png')).toBe(false);
         expect(shouldRefreshCharacterAfterEdit(characters, 'alpha.png')).toBe(true);
-    });
-
-    test('ignores an existing legacy sidecar row when serving /api/characters/get', async () => {
-        const directories = makeDirectories('emberdesk-character-index-route-');
-        tempRoots.push(directories.root);
-        writeCharacterCardFile(directories, 'alpha.png', 'Alpha Live');
-
-        await listIndexedCharacterPayloads({
-            userRoot: directories.root,
-            directories,
-            avatarFiles: ['alpha.png'],
-            useShallowPayload: false,
-            buildRow: createBuildRow([]),
-        });
-
-        const response = await invokeCharacterGet(directories, 'alpha.png');
-
-        expect(response.statusCode).toBe(200);
-        expect(response.body).toEqual(expect.objectContaining({
-            avatar: 'alpha.png',
-            name: 'Alpha Live',
-        }));
-        expectNoCharacterReadEnvelope(response.body);
     });
 
     test('ignores unimported JSONL for character stats despite legacy sync and does not write the sidecar', async () => {
@@ -1397,85 +997,6 @@ describe('character index', () => {
             date_last_chat: 0,
         }));
         expectNoCharacterIndexSidecar(directories);
-    });
-
-    test('does not refresh a stale legacy sidecar row during /api/characters/get', async () => {
-        const directories = makeDirectories('emberdesk-character-index-route-');
-        tempRoots.push(directories.root);
-        writeAvatarFile(directories, 'alpha.png', 'stale-row-seed');
-
-        await listIndexedCharacterPayloads({
-            userRoot: directories.root,
-            directories,
-            avatarFiles: ['alpha.png'],
-            useShallowPayload: false,
-            buildRow: createBuildRow([]),
-        });
-
-        writeCharacterCardFile(directories, 'alpha.png', 'Alpha Live');
-
-        const response = await invokeCharacterGet(directories, 'alpha.png');
-
-        expect(response.statusCode).toBe(200);
-        expect(response.body).toEqual(expect.objectContaining({
-            avatar: 'alpha.png',
-            name: 'Alpha Live',
-        }));
-        expect(response.body.json_data).toContain('"name":"Alpha Live"');
-
-        const database = await openRawIndexDatabase(directories.root);
-        try {
-            const row = database.prepare('SELECT full_json FROM characters WHERE avatar = ?').get('alpha.png');
-            expect(JSON.parse(row.full_json)).toEqual(expect.objectContaining({
-                avatar: 'alpha.png',
-                name: 'Full alpha',
-            }));
-        } finally {
-            database.close();
-        }
-    });
-
-    test('ignores a corrupt legacy sidecar payload during /api/characters/get', async () => {
-        const directories = makeDirectories('emberdesk-character-index-route-');
-        tempRoots.push(directories.root);
-        writeCharacterCardFile(directories, 'alpha.png', 'Alpha Live');
-
-        await listIndexedCharacterPayloads({
-            userRoot: directories.root,
-            directories,
-            avatarFiles: ['alpha.png'],
-            useShallowPayload: false,
-            buildRow: createBuildRow([]),
-        });
-
-        const database = await openRawIndexDatabase(directories.root);
-        try {
-            database.prepare('UPDATE characters SET full_json = ? WHERE avatar = ?').run('not-json', 'alpha.png');
-        } finally {
-            database.close();
-        }
-
-        const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
-
-        try {
-            const response = await invokeCharacterGet(directories, 'alpha.png');
-
-            expect(response.statusCode).toBe(200);
-            expect(response.body).toEqual(expect.objectContaining({
-                avatar: 'alpha.png',
-                name: 'Alpha Live',
-            }));
-
-            const verificationDb = await openRawIndexDatabase(directories.root);
-            try {
-                const row = verificationDb.prepare('SELECT full_json FROM characters WHERE avatar = ?').get('alpha.png');
-                expect(row.full_json).toBe('not-json');
-            } finally {
-                verificationDb.close();
-            }
-        } finally {
-            warnSpy.mockRestore();
-        }
     });
 
     test('refreshes canonical /api/characters/all full rows when the linked world book changes', async () => {
@@ -2703,46 +2224,6 @@ describe('character index', () => {
         }
     });
 
-    test('ignores a broken retired sidecar during /api/characters/get', async () => {
-        const directories = makeDirectories('emberdesk-character-index-route-');
-        tempRoots.push(directories.root);
-        writeCharacterCardFile(directories, 'alpha.png', 'Alpha Live');
-
-        const initialResponse = await invokeCharacterGet(directories, 'alpha.png');
-        expect(initialResponse.statusCode).toBe(200);
-        expect(initialResponse.body.name).toBe('Alpha Live');
-
-        await listIndexedCharacterPayloads({
-            userRoot: directories.root,
-            directories,
-            avatarFiles: ['alpha.png'],
-            useShallowPayload: false,
-            buildRow: createBuildRow([]),
-        });
-
-        const database = await openRawIndexDatabase(directories.root);
-        try {
-            database.exec('ALTER TABLE characters RENAME TO characters_broken;');
-        } finally {
-            database.close();
-        }
-
-        const sourceStat = fs.statSync(path.join(directories.characters, 'alpha.png'));
-        expect(() => getFreshIndexedCharacterFullPayload(
-            directories.root,
-            directories,
-            'alpha.png',
-            sourceStat,
-        )).toThrow();
-
-        const fallbackResponse = await invokeCharacterGet(directories, 'alpha.png');
-        expect(fallbackResponse.statusCode).toBe(200);
-        expect(fallbackResponse.body).toEqual(expect.objectContaining({
-            avatar: 'alpha.png',
-            name: 'Alpha Live',
-        }));
-    });
-
     test('reads the current file when /api/characters/get observes a file that changes mid-request', async () => {
         const directories = makeDirectories('emberdesk-character-index-route-');
         tempRoots.push(directories.root);
@@ -2776,35 +2257,23 @@ describe('character index', () => {
         expectNoCharacterIndexSidecar(directories);
     });
 
-    test('serves /api/characters/get from canonical storage even when a retired sidecar exists', async () => {
-        const directories = makeDirectories('emberdesk-character-index-route-');
+    test('ignores and preserves an existing legacy sidecar during canonical character reads', async () => {
+        const directories = makeDirectories('emberdesk-character-runtime-');
         tempRoots.push(directories.root);
-        // The retired index sidecar must not shadow the canonical authority.
-        process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_ENABLED = 'true';
+        process.env.EMBERDESK_INTERACTION_PERF_MODE = '1';
         writeCharacterCardFile(directories, 'alpha.png', 'Alpha Live');
 
-        await listIndexedCharacterPayloads({
-            userRoot: directories.root,
-            directories,
-            avatarFiles: ['alpha.png'],
-            useShallowPayload: false,
-            buildRow: createBuildRow([]),
-        });
-
-        expect(isCharacterIndexSupported()).toBe(true);
-
-        process.env.EMBERDESK_INTERACTION_PERF_MODE = '1';
+        const cachePath = path.join(directories.root, '_cache', 'character-index.sqlite');
+        const oldContents = 'unreadable retired sidecar';
+        fs.mkdirSync(path.dirname(cachePath), { recursive: true });
+        fs.writeFileSync(cachePath, oldContents);
 
         const response = await invokeCharacterGet(directories, 'alpha.png');
 
         expect(response.statusCode).toBe(200);
-        expect(response.body).toEqual(expect.objectContaining({
-            avatar: 'alpha.png',
-            name: 'Alpha Live',
-        }));
-        expectNoCharacterReadEnvelope(response.body);
-        expect(response.body.name).not.toBe('Full alpha');
+        expect(response.body).toEqual(expect.objectContaining({ avatar: 'alpha.png', name: 'Alpha Live' }));
         expect(response.headers['x-emberdesk-interaction-path']).toBe('characters_get:canonical');
+        expect(fs.readFileSync(cachePath, 'utf8')).toBe(oldContents);
     });
 
     test('does not create the legacy character-index sidecar after character create', async () => {

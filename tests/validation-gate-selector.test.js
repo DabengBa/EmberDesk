@@ -79,7 +79,6 @@ describe('validation gate selector', () => {
             'src/canonical-sqlite-operator.ts',
             'src/command-line.ts',
             'src/user-auth.ts',
-            'src/derived-cache-sqlite.js',
             'public/lib.js',
             '.docs/db/pages/chat-workspace.md',
             'public/scripts/workspace-panel-host-controller.js',
@@ -112,11 +111,6 @@ describe('validation gate selector', () => {
                 command: 'pnpm --dir tests run test:unit -- user-auth.test.js user-storage.test.js user-directories.test.js user-migrations.test.js --runInBand',
                 required: true,
                 sources: expect.arrayContaining(['.docs/tech/user-module-split.md']),
-            }),
-            expect.objectContaining({
-                command: 'pnpm --dir tests run test:unit -- derived-cache-sqlite.test.js interaction-performance-index.test.js --runInBand',
-                required: true,
-                sources: expect.arrayContaining(['.docs/tech/derived-cache-sqlite.md']),
             }),
             expect.objectContaining({
                 command: 'pnpm --dir tests run test:unit -- frontend-shared-library-boundary.test.js --runInBand',
@@ -192,14 +186,14 @@ describe('validation gate selector', () => {
             .toContain('canonical-storage-rollout');
     });
 
-    test('selects the derived-cache gate for owning tech docs and retirement wording', () => {
+    test('does not select the retired derived-cache helper gate for historical notes', () => {
         const commands = commandsFor([
             '.docs/tech/derived-cache-sqlite.md',
             '.docs/tech/interaction-performance-indexing.md',
             'derived index retirement',
         ]);
 
-        expect(commands).toContain('pnpm --dir tests run test:unit -- derived-cache-sqlite.test.js interaction-performance-index.test.js --runInBand');
+        expect(commands).toEqual([]);
     });
 
     test('formats an empty advisory result defensively', () => {

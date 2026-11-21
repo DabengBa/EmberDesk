@@ -51,11 +51,10 @@ export default {
                     'src/endpoints/images.js',
                     'src/endpoints/openai.js',
                     'src/endpoints/quick-replies.js',
-                    'src/endpoints/settings.js',
+
                     'src/endpoints/stable-diffusion.js',
                     'src/endpoints/themes.js',
-                    'src/endpoints/users-private.js',
-                    'src/endpoints/worldinfo.js',
+
                 ],
                 rules: [
                     'react-doctor/path-traversal-risk',
@@ -66,7 +65,7 @@ export default {
                 // and generation fields to external APIs after route-specific
                 // normalization, secret lookup, and endpoint selection.
                 files: [
-                    'src/endpoints/backends/chat-completions.js',
+
                     'src/endpoints/novelai.js',
                     'src/endpoints/openai.js',
                     'src/endpoints/stable-diffusion.js',

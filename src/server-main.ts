@@ -80,7 +80,7 @@ import { getUserUploadsPath } from './user-directories.ts';
 import { REACT_LOGIN_BASE_PATH } from './react-login-feature.js';
 
 // Routers
-import { router as usersPublicRouter } from './endpoints/users-public.js';
+import { router as usersPublicRouter } from './endpoints/users-public-routes.ts';
 
 import { checkForNewContent } from './endpoints/content-manager.js';
 import { redirectDeprecatedEndpoints, ServerStartup, setupPrivateEndpoints, setupPublicEndpoints } from './server-startup.ts';

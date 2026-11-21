@@ -72,7 +72,7 @@ The former deferred background catalog warmup and Background Library panel loadi
 - `getCachedPayload(dirPath, rebuild)` implements single-flight rebuild: concurrent callers for the same uncached directory await one shared rebuild promise instead of triggering duplicate work.
 - Cache freshness is driven by explicit invalidation from EmberDesk-controlled write paths, not by per-request directory stat polling.
 - Invalidated write paths include: presets save/delete, themes save/delete, quick-replies save/delete, world-info delete/import/edit, and content-manager seeding into user directories.
-- The route handler in `src/endpoints/settings-routes.ts` executes independent directory reads concurrently via `Promise.all`; `src/endpoints/settings.js` is its compatibility re-export.
+- The route handler in `src/endpoints/settings-routes.ts` executes independent directory reads concurrently via `Promise.all`.
 
 ### Deferred panels
 

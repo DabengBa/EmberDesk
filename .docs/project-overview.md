@@ -106,11 +106,10 @@ Current delivered storage scope is narrow; the accepted successor roadmap is com
 - canonical settings reads and writes preserve settings, monotonic revisions, and snapshots while keeping provider keys in the secrets store; see [Settings](db/pages/settings.md) for legacy import and export behavior
 - canonical secret reads and writes stay behind `SecretManager`, preserve labels and active rotation, project `secrets.json`, keep DB reads authoritative after projection failure, and expose only sanitized audit/repair/operator metadata; SQLite storage is not encryption at rest
 - `DiskCache` accelerates repeated PNG-to-JSON extraction.
-- `src/derived-cache-sqlite.js` owns shared SQLite derived-cache lifecycle for sidecars that remain rebuildable from canonical files (see [derived-cache-sqlite](tech/derived-cache-sqlite.md)).
 - `src/canonical-sqlite.ts` owns the separate durable-manager contract for future canonical slices and intentionally does not share reset/delete semantics with the derived helper
 - `_cache/character-index.sqlite` is retired from normal runtime: character list/get routes, character write/import routes, chat mutation routes, World Info delete-preflight/cascade, and server startup/shutdown no longer open, refresh, dirty-mark, delete, or report it.
 - deleting `_cache/character-index.sqlite` cannot lose user data; current character-library behavior is recovered from canonical SQLite when enabled and audit-clean, or from direct compatibility files when fallback is required.
-- `src/endpoints/character-index.js` remains only as a helper-level proof surface.
+- The retired character-index and derived-cache helpers have been removed. Existing sidecars are left untouched; see [derived-cache-sqlite](tech/derived-cache-sqlite.md) for history.
 - this derived slice remains separate from the canonical SQLite store and must not be promoted in place to authority
 - character metadata, chat stats, full World Info, settings, secrets, managed media, and chats are all default-on authority slices, including full-payload chat authority, canonical search/recent, write-time attachment validation, validated backup/restore journaling, and historical Node 26 release proof
 - there is no persona system; there are no persona records, avatars, or chat locks to migrate

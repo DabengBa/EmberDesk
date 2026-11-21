@@ -3,7 +3,7 @@ import { promises as fsPromises } from 'node:fs';
 import storage from 'node-persist';
 import express from 'express';
 import lodash from 'lodash';
-import { ensureCanonicalSettingsForUser } from './settings.js';
+import { ensureCanonicalSettingsForUser } from './settings-routes.ts';
 import {
     KEY_PREFIX,
     toKey,

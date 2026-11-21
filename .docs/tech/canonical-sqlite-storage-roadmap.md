@@ -20,8 +20,6 @@ Primary current files:
 - `src/endpoints/character-read-service.ts`
 - `src/endpoints/character-write-service.ts`
 - `src/endpoints/chats.js`
-- `src/endpoints/character-index.js` (retired helper; no normal runtime ownership)
-- `src/derived-cache-sqlite.js`
 - `src/users.js`
 - `src/user-directories.ts`
 
@@ -60,7 +58,7 @@ The canonical DB must be separate from derived caches:
 - retired derived sidecar: `DATA_ROOT/<handle>/_cache/character-index.sqlite`
 - disk extraction cache: `DiskCache`
 
-Do not place canonical data under `_cache`. Do not reuse `src/derived-cache-sqlite.js` as the canonical DB manager because its reset, corrupt-file removal, circuit-breaker, and fallback semantics are intentionally designed for rebuildable sidecars.
+Do not place canonical data under `_cache`. Canonical storage must not use rebuildable-cache recovery semantics such as deleting corrupt files.
 
 Compatibility remains a hard boundary:
 
@@ -125,7 +123,7 @@ Goal: create canonical infrastructure and audit current data without changing ru
 
 Deliverables:
 
-- Canonical SQLite manager outside `src/derived-cache-sqlite.js`.
+- Canonical SQLite manager in `src/canonical-sqlite.ts`.
 - SQL migration runner with `schema_migrations`.
 - Initial schema for `characters` and `character_chat_stats`.
 - Import path from existing PNG character cards and chat directories into the DB.
@@ -149,7 +147,7 @@ Current delivered foundation:
 - `src/storage-feature-flags.js` now exposes the current storage flag snapshot for this slice.
 - `USER_DIRECTORY_TEMPLATE` and `getUserDirectories(handle)` now include per-user `storage`.
 - `default/config.yaml` now declares `features.storage.canonicalSqlite.*` with default `false`.
-- Focused proof currently lives in `tests/canonical-sqlite-shadow-import.test.js`, `tests/canonical-sqlite-migrations.test.js`, `tests/canonical-sqlite.test.js`, `tests/user-directories.test.js`, `tests/derived-cache-sqlite.test.js`, `tests/character-read-service.test.js`, and `tests/interaction-performance-index.test.js`.
+- Focused proof currently lives in `tests/canonical-sqlite-shadow-import.test.js`, `tests/canonical-sqlite-migrations.test.js`, `tests/canonical-sqlite.test.js`, `tests/user-directories.test.js`, `tests/character-read-service.test.js`, and `tests/character-runtime-routes.test.js`.
 - Runtime authority is still file-backed because migration/import/read/write cutover has not landed yet, but the schema journal plus phase-one table bootstrap contract is now in place.
 - Shadow import now preserves stable canonical character IDs across repeat imports, keeps source files untouched, and fails audit closed with explicit schema-readiness reasons before any read cutover.
 
@@ -183,7 +181,7 @@ Current delivered foundation:
 - `src/canonical-sqlite-migrations.ts` phase-one schema now includes `canonical_audit_state` for the persisted audit gate contract.
 - `src/canonical-sqlite-shadow-import.ts` now persists clean vs blocked audit summaries after successful audit runs, and `getPersistedCanonicalAuditStatus()` now fails closed as `audit_not_run` until that summary exists.
 - `src/endpoints/characters.js` and `src/endpoints/chats.js` now invalidate the persisted canonical audit state after successful file-backed character or chat mutations so DB-first reads cannot continue serving stale canonical rows after normal runtime writes.
-- Route-level proof currently lives in `tests/character-read-service.test.js` and `tests/interaction-performance-index.test.js`, including canonical `/all` and `/get` reads, `audit_not_run` fallback, strict-mode failure, and stale-audit invalidation after file-backed character edits.
+- Route-level proof currently lives in `tests/character-read-service.test.js` and `tests/character-runtime-routes.test.js`, including canonical `/all` and `/get` reads, `audit_not_run` fallback, strict-mode failure, and stale-audit invalidation after file-backed character edits.
 
 ### Phase 3: DB-First Writes And Projection
 
@@ -210,7 +208,7 @@ Current delivered foundation:
 - `src/endpoints/character-store.ts` now normalizes canonical row writes so shadow import, DB-first reads, and DB-first writes persist the same route-compatible payload shape.
 - `src/canonical-sqlite-rollout-contract.js` now centralizes legal flag combinations, unresolved repair visibility, and rollback-blocker derivation for the current slice instead of scattering those checks across route code.
 - `src/canonical-sqlite-migrations.ts` now carries a dedicated `canonical_audit_state` migration so pre-existing Phase 1 databases can upgrade cleanly before persisted audit gating or write cutover runs.
-- Write-path proof currently lives in `tests/character-write-service.test.js`, `tests/canonical-sqlite-rollout-contract.test.js`, `tests/canonical-sqlite-shadow-import.test.js`, `tests/interaction-performance-index.test.js`, `tests/worldinfo-delete-cascade.test.js`, and `tests/third-party-extension-compatibility.test.js`, including explicit projection-failure repair intent, strict write-blocking, rollback blocker derivation, delete/world preflight preservation, and compatibility-surface coverage.
+- Write-path proof currently lives in `tests/character-write-service.test.js`, `tests/canonical-sqlite-rollout-contract.test.js`, `tests/canonical-sqlite-shadow-import.test.js`, `tests/character-runtime-routes.test.js`, `tests/worldinfo-delete-cascade.test.js`, and `tests/third-party-extension-compatibility.test.js`, including explicit projection-failure repair intent, strict write-blocking, rollback blocker derivation, delete/world preflight preservation, and compatibility-surface coverage.
 
 ### Phase 4: Chat Stats Authority
 
@@ -234,7 +232,7 @@ Current delivered foundation:
 - With chat file projection `off`, `src/endpoints/canonical-chat-write-service.js` updates the existing active character's `character_chat_stats` inside the same transaction as each ordinary canonical chat save, import, rename, delete, or text replacement. A stats write failure rolls back that session change; multi-chat imports commit each item separately. Stats derive count, total `source_size_bytes`, and maximum `source_mtime_ms` from canonical sessions; unchanged saves and renames do not invent a newer last-chat time. Shadow import, backup restoration, historical backfill, and character lifecycle operations are outside this guarantee. With projection `sync`, the existing file-statistics path remains in use.
 - `src/endpoints/character-store.ts` and `src/endpoints/character-read-service.ts` now treat canonical chat stats as a separate runtime boundary: canonical reads only inject `chat_size` / `date_last_chat` when `features.storage.canonicalSqlite.chatStats=true`.
 - `src/canonical-sqlite-operator.ts` and `scripts/canonical-sqlite-repair.mjs` now provide an explicit `rebuild-chat-stats` operator path for the current slice.
-- Focused proof includes `tests/canonical-chat-stats-atomicity.test.js`, `tests/canonical-chat-route-authority.test.js`, `tests/interaction-performance-index.test.js`, `tests/character-read-service.test.js`, `tests/canonical-sqlite-operator.test.js`, `tests/canonical-sqlite-cli.test.js`, and `tests/chat-route-service.test.js`.
+- Focused proof includes `tests/canonical-chat-stats-atomicity.test.js`, `tests/canonical-chat-route-authority.test.js`, `tests/character-runtime-routes.test.js`, `tests/character-read-service.test.js`, `tests/canonical-sqlite-operator.test.js`, `tests/canonical-sqlite-cli.test.js`, and `tests/chat-route-service.test.js`.
 
 ### Phase 5: Derived Index Retirement Or Reclassification
 
@@ -259,8 +257,7 @@ Current delivered foundation:
 - `src/endpoints/character-read-service.ts` now skips `_cache/character-index.sqlite` in canonical DB-first mode and in compatibility fallback mode, so `/api/characters/all`, `/list`, and `/get` never take a normal indexed path.
 - Character create/edit/import/delete, chat save/rename/delete/import, and World Info delete-preflight/cascade no longer refresh, delete, dirty-mark, or query `_cache/character-index.sqlite`.
 - `src/server-main.ts` no longer logs or disposes character-index sidecar state during normal startup/shutdown.
-- `src/endpoints/character-index.js` remains only as a retired helper for historical tests and interaction-performance report compatibility until a later cleanup deletes or archives it.
-- Validation and docs now treat `derived-cache-sqlite.test.js` plus `interaction-performance-index.test.js` as helper/historical proof, not as a required sidecar availability gate.
+- The old helper modules and their dedicated validation were removed; the live route tests verify that old sidecar files are left untouched.
 
 ## Delivered Follow-On Slice: Full World Info
 
@@ -271,7 +268,7 @@ Current delivered foundation:
 - `src/canonical-sqlite-migrations.ts` now includes the `world_info_authority` migration with `world_books`, `world_book_entries`, and `world_info_projection_repairs`.
 - `src/endpoints/world-info-store.ts` owns canonical World Info row normalization to projection-safe file ids, route-compatible list/get payload reconstruction, DB-first write helpers, and open projection-repair listing.
 - `src/canonical-world-info-shadow-import.ts` imports existing `worlds/*.json` files idempotently, audits DB/file projection drift, and persists `canonical_audit_state` scope `world_info` as the fail-closed read/write gate.
-- `src/endpoints/worldinfo.js` serves `/api/worldinfo/list` and `/get` from canonical SQLite; init-frozen or blocked slices return structured 503 `canonical_storage_unavailable` responses, and explicit operator file actions invalidate `world_info` audit state.
+- `src/endpoints/worldinfo-routes.ts` serves `/api/worldinfo/list` and `/get` from canonical SQLite; init-frozen or blocked slices return structured 503 `canonical_storage_unavailable` responses, and explicit operator file actions invalidate `world_info` audit state.
 - `/api/worldinfo/import`, `/edit`, and `/delete` can commit canonical SQLite first behind canonical write flags, then project compatibility JSON files; projection failure records `world_info_projection_repairs` rather than restoring JSON files as truth.
 - `src/canonical-sqlite-operator.ts` can replay World Info projection repairs, resolve delete repairs without requiring a live canonical row, include `world_info_projection_repairs` in write rollback blockers, and resolve the repair row after the JSON projection state is restored.
 - `scripts/canonical-sqlite-audit.mjs --scope world_info` and `scripts/canonical-sqlite-repair.mjs audit-world-info|list-world-info-repairs|repair-world-info-projection` expose the World Info audit and repair paths to operators.
@@ -411,7 +408,7 @@ asset subdirectories (sprites, live2d) stay file-backed media, and only root-lev
 12. `full World Info canonical migration`
     - Depends on legacy-mode accelerator retirement.
     - Moves full World Info entries into canonical SQLite with compatibility-safe prompt, regex, import/export, and delete-cascade behavior.
-    - Current status: delivered via `src/endpoints/world-info-store.ts`, `src/canonical-world-info-shadow-import.ts`, `src/endpoints/worldinfo.js`, World Info projection repair support in `src/canonical-sqlite-operator.ts`, and World Info audit/repair commands in the canonical SQLite scripts.
+    - Current status: delivered via `src/endpoints/world-info-store.ts`, `src/canonical-world-info-shadow-import.ts`, `src/endpoints/worldinfo-routes.ts`, World Info projection repair support in `src/canonical-sqlite-operator.ts`, and World Info audit/repair commands in the canonical SQLite scripts.
 
 13. `canonical storage control-plane generalization`
     - Depends on the delivered character and World Info patterns.
@@ -675,7 +672,6 @@ Code binding points:
 - `canonical-backend.js` owns lazy per-user slice activation (open/migrate/import/audit decision) shared by all slice gates.
 - `src/endpoints/character-card-v2.ts` owns the shared character-card V2 normalization chain so runtime routes and operator/CLI tooling produce byte-equivalent canonical snapshots; canonical rows store the card's native payload while linked World Info `character_book` content is re-injected from the canonical World Info store on canonical reads.
 - `chats.js` owns chat save/rename/delete/import route side effects.
-- `character-index.js` is retired from normal runtime and remains only as a historical/helper-level proof surface.
 - `settings.js`, `secrets.js`, `assets.js`, and `extensions.js` remain their HTTP/facade owners while domain stores move behind them.
 
 Historical binding point for the retired Background Library (superseded):
@@ -702,10 +698,10 @@ Operator tooling and rollout-contract proof:
 pnpm --dir tests run test:unit -- canonical-sqlite-cli.test.js canonical-sqlite-operator.test.js validation-gate-selector.test.js --runInBand
 ```
 
-Derived-cache helper and retired sidecar proof:
+Character runtime and retired sidecar isolation proof:
 
 ```bash
-pnpm --dir tests run test:unit -- derived-cache-sqlite.test.js interaction-performance-index.test.js --runInBand
+pnpm --dir tests run test:unit -- character-runtime-routes.test.js --runInBand
 ```
 
 Compatibility-sensitive checks when World Info binding or extension-visible character surfaces are touched:
