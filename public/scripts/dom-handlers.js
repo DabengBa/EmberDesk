@@ -483,7 +483,7 @@ export async function bindLegacyShellHandlers() {
                 deleteChats: dialogResult.deleteChats,
                 temporaryChatAcknowledged: inTempChat,
                 deleteWorlds: dialogResult.deleteWorlds,
-                clearWorldReferences: dialogResult.clearWorldReferences,
+
             });
         } else {
             let deleteChats = false;
@@ -499,7 +499,7 @@ export async function bindLegacyShellHandlers() {
                 deleteChats,
                 temporaryChatAcknowledged: inTempChat,
                 deleteWorlds: [],
-                clearWorldReferences: false,
+
             });
         }
     });

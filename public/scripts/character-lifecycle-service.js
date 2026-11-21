@@ -209,7 +209,7 @@ let legacyFormVersion = { avatar: '', version: undefined };
 
 // Rebase only from an acknowledged write based on this form's own snapshot.
 // A roster refresh is not an acknowledgement and must not clear a conflict.
-export function acknowledgeLegacyCharacterWrite(avatar, previousVersion, nextVersion, { favorite, chat } = {}) {
+export function acknowledgeLegacyCharacterWrite(avatar, previousVersion, nextVersion, { favorite, chat, world } = {}) {
     if (!avatar || legacyFormVersion.avatar !== avatar || legacyFormVersion.version !== previousVersion
         || typeof previousVersion !== 'string' || !previousVersion || typeof nextVersion !== 'string' || !nextVersion
         || document.getElementById('form_create')?.getAttribute('actiontype') !== 'editcharacter') {
@@ -228,6 +228,11 @@ export function acknowledgeLegacyCharacterWrite(avatar, previousVersion, nextVer
         jsonField.value = typeof card?.json_data === 'string' ? card.json_data : nextVersion;
     }
     if (typeof favorite === 'boolean') updateFavButtonState(favorite);
+    if (typeof world === 'string') {
+        const worldField = document.getElementById('character_world');
+        const previous = parseCanonicalCardVersion(previousVersion);
+        if (worldField && worldField.value === String(previous?.data?.extensions?.world ?? previous?.world ?? '')) worldField.value = world;
+    }
     if (typeof chat === 'string') {
         const chatField = document.getElementById('selected_chat_pole');
         // A new-chat or rename action can draft a different selection while the merge is in flight.
@@ -1147,11 +1152,10 @@ export async function createOrEditCharacter(e) {
  * @param {Object} [options] - Optional parameters for the deletion
  * @param {boolean} [options.deleteChats=true] - Whether to delete associated chats or not
  * @param {string[]} [options.deleteWorlds] - World info names to delete (from caller's preflight)
- * @param {boolean} [options.clearWorldReferences] - Whether to clear world references in remaining characters
  * @param {boolean} [options.temporaryChatAcknowledged=false] - Whether the caller already confirmed the temporary-chat data loss warning
- * @return {Promise<boolean>} - A promise that resolves when the character is successfully deleted
+ * @return {Promise<number|false>} The number deleted, or false if canceled.
  */
-export async function deleteCharacter(characterKey, { deleteChats = true, deleteWorlds, clearWorldReferences, temporaryChatAcknowledged = false, deleteContext = null } = {}) {
+export async function deleteCharacter(characterKey, { deleteChats = true, deleteWorlds, temporaryChatAcknowledged = false, deleteContext = null } = {}) {
     const deleteFlowStartedAt = performance.now();
     if (!Array.isArray(characterKey)) {
         characterKey = [characterKey];
@@ -1181,7 +1185,7 @@ export async function deleteCharacter(characterKey, { deleteChats = true, delete
 
         // World info cascade preflight — only when caller did not provide choices
         let resolvedDeleteWorlds = deleteWorlds ?? [];
-        let resolvedClearRefs = clearWorldReferences ?? false;
+
         if (deleteWorlds === undefined) {
             try {
                 const preflightResponse = await fetch('/api/characters/delete-preflight', {
@@ -1198,7 +1202,6 @@ export async function deleteCharacter(characterKey, { deleteChats = true, delete
                             return false;
                         }
                         resolvedDeleteWorlds = cascadeResult.deleteWorlds;
-                        resolvedClearRefs = cascadeResult.clearWorldReferences;
                     }
                 }
             } catch {
@@ -1206,15 +1209,16 @@ export async function deleteCharacter(characterKey, { deleteChats = true, delete
             }
         }
 
-        let deleted = false;
         const deletedAvatars = [];
+        const deletedWorlds = new Set();
+        let worldCleanupWarning = false;
 
         for (const { avatar, character, index: chid } of deleteCandidates) {
             const chatLookupStartedAt = performance.now();
-            const pastChats = character ? await getPastCharacterChats(chid) : [];
+            const pastChats = character ? await getPastCharacterChats(chid).catch(() => []) : [];
             markPerfInteractionMetric('preDeleteChatLookupMs', performance.now() - chatLookupStartedAt);
 
-            const msg = { avatar_url: avatar, delete_chats: deleteChats };
+            const msg = { avatar_url: avatar, delete_chats: deleteChats, delete_worlds: resolvedDeleteWorlds };
 
             const deleteRequestStartedAt = performance.now();
             const response = await fetch('/api/characters/delete', {
@@ -1222,65 +1226,65 @@ export async function deleteCharacter(characterKey, { deleteChats = true, delete
                 headers: getRequestHeaders(),
                 body: JSON.stringify(msg),
                 cache: 'no-cache',
+            }).catch(error => {
+                console.warn('Character deletion could not be confirmed:', error);
+                return null;
             });
             markPerfInteractionMetric('deleteRequestMs', performance.now() - deleteRequestStartedAt);
 
-            if (!response.ok) {
-                toastr.error(`${response.status} ${response.statusText}`, t`Failed to delete character`);
+            if (!response?.ok) {
+                toastr.error(response ? `${response.status} ${response.statusText}` : avatar, t`Failed to delete character`);
                 continue;
             }
 
-            state.accountStorage.removeItem(`AlertWI_${avatar}`);
-            state.accountStorage.removeItem(`AlertRegex_${avatar}`);
-            state.accountStorage.removeItem(`mediaWarningShown:${avatar}`);
-            // Retire in-flight authorization requests before dropping the local
-            // grant so a late failure cannot resurrect a deleted avatar's key.
-            invalidateCharacterExternalMediaAuthorization(state.power_user, avatar);
-            for (const key of ['external_media_allowed_overrides', 'external_media_forbidden_overrides']) {
-                const overrides = state.power_user?.[key];
-                if (Array.isArray(overrides) && overrides.includes(avatar)) {
-                    state.power_user[key] = overrides.filter(id => id !== avatar);
-                }
-            }
-
-            deleteTagKey(avatar);
-            select_rm_info('char_delete', character?.name ?? avatar);
-
-            if (deleteChats) {
-                for (const chat of pastChats) {
-                    const name = chat.file_name.replace('.jsonl', '');
-                    await eventSource.emit(event_types.CHAT_DELETED, name);
-                }
-            }
-
-            await eventSource.emit(event_types.CHARACTER_DELETED, { id: chid, character: character ?? { avatar } });
             deletedAvatars.push(avatar);
-            deleted = true;
-        }
-
-        // World info cascade: delete world files and clear references after all characters are deleted
-        if (deleted && resolvedDeleteWorlds.length > 0) {
+            const outcome = await response.json().catch(() => null);
+            for (const name of outcome?.deletedWorlds ?? []) deletedWorlds.add(name);
+            worldCleanupWarning ||= outcome?.worldCleanupWarning || (!outcome && resolvedDeleteWorlds.length > 0);
+            if (outcome?.projectionWarning) toastr.warning(t`Deleted '${avatar}', but cleanup of its files is incomplete.`);
             try {
-                const cascadeResp = await fetch('/api/worldinfo/delete-cascade', {
-                    method: 'POST',
-                    headers: getRequestHeaders(),
-                    body: JSON.stringify({
-                        worlds: resolvedDeleteWorlds,
-                        clear_references: resolvedClearRefs,
-                    }),
-                    cache: 'no-cache',
-                });
-                if (cascadeResp.ok) {
-                    await flushDeletedWorldsFromUI(resolvedDeleteWorlds);
+                state.accountStorage.removeItem(`AlertWI_${avatar}`);
+                state.accountStorage.removeItem(`AlertRegex_${avatar}`);
+                state.accountStorage.removeItem(`mediaWarningShown:${avatar}`);
+                // Retire in-flight authorization requests before dropping the local
+                // grant so a late failure cannot resurrect a deleted avatar's key.
+                invalidateCharacterExternalMediaAuthorization(state.power_user, avatar);
+                for (const key of ['external_media_allowed_overrides', 'external_media_forbidden_overrides']) {
+                    const overrides = state.power_user?.[key];
+                    if (Array.isArray(overrides) && overrides.includes(avatar)) {
+                        state.power_user[key] = overrides.filter(id => id !== avatar);
+                    }
                 }
-            } catch {
-                // Cascade failure should not block the UI cleanup
+
+                deleteTagKey(avatar);
+                select_rm_info('char_delete', character?.name ?? avatar);
+
+                if (deleteChats) {
+                    for (const chat of pastChats) {
+                        const name = chat.file_name.replace('.jsonl', '');
+                        await eventSource.emit(event_types.CHAT_DELETED, name);
+                    }
+                }
+
+                await eventSource.emit(event_types.CHARACTER_DELETED, { id: chid, character: character ?? { avatar } });
+            } catch (error) {
+                console.warn('Character delete UI callback failed:', error);
             }
         }
 
+        if (worldCleanupWarning) toastr.warning(t`World book cleanup did not finish.`);
+        const keptWorlds = resolvedDeleteWorlds.filter(name => !deletedWorlds.has(name));
+        if (keptWorlds.length && deletedAvatars.length) toastr.info(t`World books not deleted: ${keptWorlds.join(', ')}`);
+        if (deletedWorlds.size) {
+            try {
+                await flushDeletedWorldsFromUI([...deletedWorlds]);
+            } catch (error) {
+                console.warn('Could not refresh deleted world books:', error);
+            }
+        }
         await removeCharacterFromUI(deletedAvatars, { deleteContext });
         markPerfInteractionMetric('deleteFlowMs', performance.now() - deleteFlowStartedAt);
-        return deleted;
+        return deletedAvatars.length;
     } finally {
         for (const avatar of characterKey) deletingCharacters.delete(avatar);
         state.isCharacterDeleteReconcileInProgress = false;

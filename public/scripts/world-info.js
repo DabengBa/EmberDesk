@@ -450,7 +450,7 @@ export async function showWorldEditor(name) {
     await selectWorldInfoEditorName(name);
 }
 
-const { setWorldInfoButtonClass, checkEmbeddedWorld, importEmbeddedWorldInfo, onWorldInfoChange } = createWorldInfoReferenceUi({ characters, accountStorage, callGenericPopup, POPUP_TYPE, Popup, t, convertCharacterBook, saveWorldInfo, updateWorldInfoList: (...args) => updateWorldInfoList(...args), getWorldInfoShell, selectWorldInfoEditorName, setWorldInfoGlobalActiveNames });
+const { setWorldInfoButtonClass, checkEmbeddedWorld, importEmbeddedWorldInfo, onWorldInfoChange } = createWorldInfoReferenceUi({ characters, accountStorage, callGenericPopup, POPUP_TYPE, Popup, t, convertCharacterBook, getSanitizedFilename, saveWorldInfo, updateWorldInfoList: (...args) => updateWorldInfoList(...args), persistEmbeddedWorldLink: (...args) => getWorldInfoShell().persistEmbeddedWorldLink(...args), getWorldInfoShell, selectWorldInfoEditorName, setWorldInfoGlobalActiveNames });
 export { setWorldInfoButtonClass, checkEmbeddedWorld, importEmbeddedWorldInfo, onWorldInfoChange };
 const { updateWorldInfoList, flushDeletedWorldsFromUI } = createWorldInfoBookSync({ getRequestHeaders, getSelectedWorldInfoEditorName, getWorldInfoWorkbenchSession, hideWorldEditor, setWorldInfoButtonClass, getCurrentShellMenuType, saveCharacterDebounced, saveSettingsDebounced });
 export { updateWorldInfoList, flushDeletedWorldsFromUI };

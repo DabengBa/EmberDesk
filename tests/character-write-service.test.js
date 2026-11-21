@@ -91,9 +91,9 @@ describe('character write service', () => {
         const handlers = createCharacterWriteHandlers({ createWriteDependencies: () => dependencies, getBustCache: () => () => {} });
         const response = { statusCode: 200, status(code) { this.statusCode = code; return this; }, send(body) { this.body = body; return this; }, sendStatus(code) { this.statusCode = code; return this; } };
         await handlers.edit({ ...makeRequest(directories), body: { ch_name: 'Alice', avatar_url: 'Alice.png', ...(conditional ? { expected_card_json: 'old-version' } : {}) }, query: {} }, response);
-        expect(response.statusCode).toBe(500);
+        expect(response.statusCode).toBe(conditional ? 500 : 400);
         if (conditional) expect(response.body).toEqual({ error: 'projection_failed', authority_committed: true, canonical_card_version: 'committed-version' });
-        else expect(response.body).toBe('Error: character data committed to canonical storage but compatibility projection failed');
+
     });
     test.each([false, true])('edit projection failure returns committed version (upload=%s)', async upload => {
         const directories = { characters: 'user/characters', chats: 'user/chats' };

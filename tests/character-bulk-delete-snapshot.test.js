@@ -159,7 +159,7 @@ test('preflight failure degrades gracefully and passes chat and world options to
     await overlay.handleContextMenuDelete();
     expect(popupCalls[0].html).toContain('Alpha');
     expect(deleteCharacter).toHaveBeenCalledWith(['a.png'], {
-        deleteChats: false, deleteWorlds: ['Lore'], clearWorldReferences: true,
+        deleteChats: false, deleteWorlds: ['Lore'],
         temporaryChatAcknowledged: true, deleteContext: { source: 'bulk', selectedCount: 1 },
     });
     expect(hideLoader).toHaveBeenCalledTimes(1);
@@ -174,6 +174,6 @@ test('world cascade preflight and selected options are passed through', async ()
     expect(popupCalls[0].html).toContain('<div>worlds</div>');
     expect(popupCalls[0].options.customButtons).toHaveLength(1);
     expect(deleteCharacter).toHaveBeenCalledWith(['a.png'], expect.objectContaining({
-        deleteChats: true, deleteWorlds: ['Lore'], clearWorldReferences: true,
+        deleteChats: true, deleteWorlds: ['Lore'],
     }));
 });

@@ -1,4 +1,4 @@
-import { characters, converter, substituteParams } from '../script.js';
+import { converter, substituteParams } from '../script.js';
 import { accountStorage } from './util/AccountStorage.js';
 import { callGenericPopup, POPUP_RESULT, POPUP_TYPE } from './popup.js';
 import { tag_import_setting } from './tags.js';
@@ -240,24 +240,15 @@ export function buildSkipAllChoices() {
  * @param {Object} character - characters[chid]
  * @param {Object} choices - From showUnifiedImportConfirm or buildSkipAllChoices
  */
-export async function applyImportChoices(character, choices) {
+export async function applyImportChoices(character, choices, book = character?.data?.character_book) {
     const avatar = character?.avatar;
     if (!avatar) return;
 
     // World book: pre-set alert key and optionally import
-    if (character?.data?.character_book) {
+    if (book) {
         accountStorage.setItem(`AlertWI_${avatar}`, 'true');
         if (choices.importWorldBook) {
-            const chid = characters.indexOf(character);
-            if (chid !== -1) {
-                const importControl = document.querySelector('#import_character_info');
-                const prevChid = importControl?.worldInfoChid;
-                if (importControl) importControl.worldInfoChid = chid;
-                await importEmbeddedWorldInfo(true);
-                // jQuery's data(key, undefined) is a getter, not a clearing setter.
-                const currentImportControl = document.querySelector('#import_character_info');
-                if (currentImportControl && prevChid !== undefined) currentImportControl.worldInfoChid = prevChid;
-            }
+            await importEmbeddedWorldInfo(true, character, book);
         }
     }
 

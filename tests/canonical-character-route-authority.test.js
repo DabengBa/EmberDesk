@@ -15,9 +15,10 @@ import { humanizedDateTime, setConfigFilePath } from '../src/util.js';
 import { canonicalSqliteManager } from '../src/canonical-sqlite.ts';
 import { ensureCanonicalSliceBackend } from '../src/canonical-backend.js';
 import { runCanonicalMigrations } from '../src/canonical-sqlite-migrations.ts';
-import { auditCanonicalShadowImport } from '../src/canonical-sqlite-shadow-import.ts';
+import { auditCanonicalShadowImport, persistCanonicalAuditStatus } from '../src/canonical-sqlite-shadow-import.ts';
 import { auditCanonicalChatShadowImport } from '../src/canonical-chat-shadow-import.ts';
 import { markCanonicalCharacterDeleted, upsertCanonicalCharacter } from '../src/endpoints/character-store.ts';
+import { upsertCanonicalWorldInfoBook } from '../src/endpoints/world-info-store.ts';
 import {
     createCanonicalChatSessionRecord,
     upsertCanonicalChatSession,
@@ -223,9 +224,9 @@ function makeCard(name) {
     };
 }
 
-async function seedCanonicalCharacter(directories, { avatarFilename = 'alice.png', name = 'Alice', world = '' } = {}) {
+async function seedCanonicalCharacter(directories, { avatarFilename = 'alice.png', name = 'Alice', world = '', cardFields = {} } = {}) {
     const db = openDb(directories);
-    const cardData = makeCard(name);
+    const cardData = { ...makeCard(name), ...cardFields };
     cardData.data.extensions.world = world;
     const cardJson = JSON.stringify(cardData);
     upsertCanonicalCharacter(db, {
@@ -255,9 +256,9 @@ async function seedCanonicalCharacter(directories, { avatarFilename = 'alice.png
     return { db, audit };
 }
 
-async function seedCanonicalChat(directories, db, { ownerId = 'alice', fileName = 'first' } = {}) {
+async function seedCanonicalChat(directories, db, { ownerId = 'alice', fileName = 'first', world } = {}) {
     const payload = [
-        { chat_metadata: { integrity: 'canonical-chat' } },
+        { chat_metadata: { integrity: 'canonical-chat', ...(world ? { world_info: world } : {}) } },
         { name: 'User', mes: 'Hello Alice', send_date: '2026-01-01T00:00:00.000Z' },
     ];
     upsertCanonicalChatSession(db, createCanonicalChatSessionRecord(db, {
@@ -894,6 +895,95 @@ describe('characters projection off', () => {
         expect(db.prepare(`
             SELECT COUNT(*) AS count FROM chat_sessions WHERE owner_type = 'character' AND owner_id = 'alice'
         `).get().count).toBe(0);
+    });
+
+    test('persisted embedded binding and auxiliary books are cleaned only after the owning card is deleted', async () => {
+        const directories = makeDirectories();
+        const { db } = await seedCanonicalCharacter(directories, { cardFields: {
+            data: { ...makeCard('Alice').data, scenario: '', first_mes: '', creator_notes: '', alternate_greetings: [], tags: [], creator: '', character_version: '', character_book: { name: 'Embedded', entries: [], extensions: {} } },
+        } });
+        const user = { directories, profile: { handle: 'alice' } };
+        const invoke = async (route, body) => {
+            const response = makeResponse();
+            await getRouteHandler(route)({ body, user }, response);
+            return response;
+        };
+        const getCard = avatar_url => invoke('/get', { avatar_url });
+        const bind = async (avatar, world) => invoke('/merge-attributes', {
+            avatar, expected_card_json: (await getCard(avatar)).body.canonical_card_version, data: { extensions: { world } },
+        });
+
+
+        for (const name of ['Embedded', 'Auxiliary', 'Shared', 'Global', 'Chat', 'Skipped', 'Unrelated']) {
+            upsertCanonicalWorldInfoBook(db, { name, payload: { entries: {} } });
+        }
+        expect((await bind('alice.png', 'Embedded')).statusCode).toBe(200);
+        expect((await getCard('alice.png')).body.data.extensions.world).toBe('Embedded');
+        const bob = makeCard('Bob');
+        bob.data.extensions.world = 'Shared';
+        upsertCanonicalCharacter(db, { id: 'bob', avatarFilename: 'bob.png', fullPayload: bob, shallowPayload: bob, createdAtMs: 1, updatedAtMs: 1 });
+        const settings = getCanonicalSettingsDocument(db, { userId: 'alice' });
+        upsertCanonicalSettingsDocument(db, {
+            userId: 'alice', expectedRevision: settings.revision, payload: { ...settings.payload,
+                world_info: { globalSelect: ['Global'], charLore: [{ name: 'alice', extraBooks: ['Auxiliary', 'Shared', 'Global', 'Chat', 'Skipped'] }] },
+            },
+        });
+        await seedCanonicalChat(directories, db, { world: 'Chat' });
+        const preflight = await invoke('/delete-preflight', { avatars: ['alice.png', 'bob.png'] });
+        expect(preflight.statusCode).toBe(200);
+        expect(preflight.body.worldInfos.map(info => info.name)).toEqual(['Embedded', 'Auxiliary', 'Shared', 'Global', 'Chat', 'Skipped']);
+        const outcome = await invoke('/delete', { avatar_url: 'alice.png', delete_chats: false, delete_worlds: ['Embedded', 'Auxiliary', 'Shared', 'Global', 'Chat', 'Unrelated'] });
+        expect(outcome.body).toEqual({ deletedWorlds: ['Embedded', 'Auxiliary'], projectionWarning: false, worldCleanupWarning: false });
+        expect(db.prepare('SELECT name FROM world_books WHERE deleted_at_ms IS NULL ORDER BY name').all().map(row => row.name)).toEqual(['Chat', 'Global', 'Shared', 'Skipped', 'Unrelated']);
+        expect((await getCard('bob.png')).body.data.extensions.world).toBe('Shared');
+        expect((await invoke('/delete', { avatar_url: 'bob.png', delete_worlds: ['Shared'] })).body.deletedWorlds).toEqual(['Shared']);
+    });
+
+    test('a failed world cleanup preserves its books without rolling back the card deletion', async () => {
+        const directories = makeDirectories();
+        const { db } = await seedCanonicalCharacter(directories, { world: 'Keep on failure' });
+        upsertCanonicalWorldInfoBook(db, { name: 'Keep on failure', payload: { entries: {} } });
+        db.exec(`CREATE TRIGGER reject_world_delete BEFORE UPDATE OF deleted_at_ms ON world_books
+            WHEN NEW.deleted_at_ms IS NOT NULL BEGIN SELECT RAISE(ABORT, 'test cleanup failure'); END`);
+        const response = makeResponse();
+        await getRouteHandler('/delete')({
+            body: { avatar_url: 'alice.png', delete_worlds: ['Keep on failure'] },
+            user: { directories, profile: { handle: 'alice' } },
+        }, response);
+        expect(response.statusCode).toBe(200);
+        expect(response.body).toEqual({ deletedWorlds: [], projectionWarning: false, worldCleanupWarning: true });
+        expect(db.prepare('SELECT deleted_at_ms FROM characters WHERE avatar_filename = ?').get('alice.png').deleted_at_ms).not.toBeNull();
+        expect(db.prepare('SELECT deleted_at_ms FROM world_books WHERE name = ?').get('Keep on failure').deleted_at_ms).toBeNull();
+    });
+
+    test.each(['Legacy Global', ['Legacy Global']])('keeps a book enabled by the legacy world_info setting %j', async worldInfo => {
+        const directories = makeDirectories();
+        const { db } = await seedCanonicalCharacter(directories, { world: 'Legacy Global' });
+        upsertCanonicalWorldInfoBook(db, { name: 'Legacy Global', payload: { entries: {} } });
+        const settings = getCanonicalSettingsDocument(db, { userId: 'alice' });
+        upsertCanonicalSettingsDocument(db, {
+            userId: 'alice', expectedRevision: settings.revision, payload: { ...settings.payload, world_info: worldInfo },
+        });
+        const response = makeResponse();
+        await getRouteHandler('/delete')({ body: { avatar_url: 'alice.png', delete_worlds: ['Legacy Global'] }, user: { directories, profile: { handle: 'alice' } } }, response);
+        expect(response.statusCode).toBe(200);
+        expect(response.body.deletedWorlds).toEqual([]);
+    });
+
+    test('preserves the book and warns if standalone world writes are blocked', async () => {
+        const directories = makeDirectories();
+        const { db } = await seedCanonicalCharacter(directories, { world: 'Blocked book' });
+        await ensureCanonicalSliceBackend('world_info', directories, 'alice');
+        upsertCanonicalWorldInfoBook(db, { name: 'Blocked book', payload: { entries: {} } });
+        persistCanonicalAuditStatus(db, {
+            ok: false, handle: 'alice', hasDrift: true, blocking: true, reason: 'audit_drift_blocked', entries: [{ status: 'drift' }],
+        }, { scope: 'world_info' });
+        const response = makeResponse();
+        await getRouteHandler('/delete')({ body: { avatar_url: 'alice.png', delete_worlds: ['Blocked book'] }, user: { directories, profile: { handle: 'alice' } } }, response);
+        expect(response.statusCode).toBe(200);
+        expect(response.body).toEqual({ deletedWorlds: [], worldCleanupWarning: true, projectionWarning: false });
+        expect(db.prepare('SELECT deleted_at_ms FROM characters WHERE avatar_filename = ?').get('alice.png').deleted_at_ms).not.toBeNull();
+        expect(db.prepare('SELECT deleted_at_ms FROM world_books WHERE name = ?').get('Blocked book').deleted_at_ms).toBeNull();
     });
 
     test('/rename retargets canonical chat sessions when no PNG exists', async () => {

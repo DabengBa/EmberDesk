@@ -5,7 +5,7 @@ import { world_names } from './world-info-state.js';
 const toastr = notificationOwner.native ?? notificationOwner;
 
 /** Character embedded-book and global-selection shell UI compatibility. */
-export function createWorldInfoReferenceUi({ characters, accountStorage, callGenericPopup, POPUP_TYPE, Popup, t, convertCharacterBook, saveWorldInfo, updateWorldInfoList, getWorldInfoShell, selectWorldInfoEditorName, setWorldInfoGlobalActiveNames }) {
+export function createWorldInfoReferenceUi({ characters, accountStorage, callGenericPopup, POPUP_TYPE, Popup, t, convertCharacterBook, getSanitizedFilename, saveWorldInfo, updateWorldInfoList, persistEmbeddedWorldLink, getWorldInfoShell, selectWorldInfoEditorName, setWorldInfoGlobalActiveNames }) {
     function setWorldInfoButtonClass(chid, forceValue = undefined) {
         if (forceValue !== undefined) {
             document.querySelectorAll('#set_character_world, #world_button').forEach(button => button.classList.toggle('world_set', forceValue));
@@ -29,7 +29,9 @@ export function createWorldInfoReferenceUi({ characters, accountStorage, callGen
             return false;
         }
 
-        if (characters[chid]?.data?.character_book) {
+        const character = characters[chid];
+        const book = character?.data?.character_book;
+        if (book) {
             if (importControl) {
                 importControl.worldInfoChid = chid;
                 importControl.style.display = '';
@@ -47,7 +49,7 @@ export function createWorldInfoReferenceUi({ characters, accountStorage, callGen
                     <div class="m-b-1">If you want to import it later, select "Import Card Lore" in the "More..." dropdown menu on the character panel.</div>`;
                     const checkResult = (result) => {
                         if (result) {
-                            importEmbeddedWorldInfo(true);
+                            void importEmbeddedWorldInfo(true, character, book);
                         }
                     };
                     callGenericPopup(html, POPUP_TYPE.CONFIRM, '', { okButton: 'Yes' }).then(checkResult);
@@ -59,21 +61,23 @@ export function createWorldInfoReferenceUi({ characters, accountStorage, callGen
         return false;
     }
 
-    async function importEmbeddedWorldInfo(skipPopup = false) {
-        const chid = document.querySelector('#import_character_info')?.worldInfoChid;
-
-        if (chid === undefined || chid === -1) {
-            return;
-        }
-
-        const hasEmbed = checkEmbeddedWorld(chid);
-
-        if (!hasEmbed) {
+    async function importEmbeddedWorldInfo(skipPopup = false, character = characters[document.querySelector('#import_character_info')?.worldInfoChid], book = character?.data?.character_book) {
+        if (!character?.avatar) return false;
+        if (!book) {
             toastr.info(t`This character card does not contain embedded World/Lorebook data.`);
             return;
         }
 
-        const bookName = characters[chid]?.data?.character_book?.name || `${characters[chid]?.name}'s Lorebook`;
+        const requestedName = book.name || `${character.name}'s Lorebook`;
+        let bookName;
+        try {
+            bookName = (await getSanitizedFilename(String(requestedName).trim())).trim();
+            if (!bookName) throw new Error('The sanitized book name is empty');
+        } catch (error) {
+            console.error('Embedded world name is invalid', error);
+            toastr.error(t`Could not import the world '${requestedName}'.`);
+            return false;
+        }
 
         if (!skipPopup) {
             const confirmation = await Popup.show.confirm(t`Are you sure you want to import '${bookName}'?`, world_names.includes(bookName) ? t`It will overwrite the World/Lorebook with the same name.` : '');
@@ -82,18 +86,25 @@ export function createWorldInfoReferenceUi({ characters, accountStorage, callGen
             }
         }
 
-        const convertedBook = convertCharacterBook(characters[chid].data.character_book);
-        setImportedWorldInfoPositions(convertedBook.entries);
-
-        await saveWorldInfo(bookName, convertedBook, true);
-        await updateWorldInfoList();
-        const characterWorld = document.getElementById('character_world');
-        if (characterWorld) {
-            characterWorld.value = bookName;
-            characterWorld.dispatchEvent(new Event('change', { bubbles: true }));
+        try {
+            const convertedBook = convertCharacterBook(book);
+            setImportedWorldInfoPositions(convertedBook.entries);
+            await saveWorldInfo(bookName, convertedBook, true);
+        } catch (error) {
+            console.error('Embedded world import failed', error);
+            toastr.error(t`Could not import the world '${bookName}'.`);
+            return false;
         }
-
-        toastr.success(t`The world '${bookName}' has been imported and linked to the character successfully.`, t`World/Lorebook imported`);
+        let linked = false;
+        try {
+            await persistEmbeddedWorldLink(character, bookName);
+            linked = true;
+        } catch (error) {
+            console.error('Embedded world link failed', error);
+            toastr.warning(t`The world '${bookName}' was saved but could not be linked to the character.`);
+        }
+        if (linked) toastr.success(t`The world '${bookName}' has been imported and linked to the character successfully.`, t`World/Lorebook imported`);
+        await updateWorldInfoList();
 
         if (world_names.includes(bookName)) {
             //show&draw the WI panel before..
@@ -102,7 +113,7 @@ export function createWorldInfoReferenceUi({ characters, accountStorage, callGen
             await selectWorldInfoEditorName(bookName);
         }
 
-        setWorldInfoButtonClass(chid, true);
+        return linked;
     }
 
     return {
