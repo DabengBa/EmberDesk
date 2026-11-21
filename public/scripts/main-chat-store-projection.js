@@ -392,6 +392,7 @@ export function buildMainChatSnapshotFromLegacyChat({
             scrollHeight: window.scrollHeight ?? 0,
             clientHeight: window.clientHeight ?? 0,
             scrollRestore: window.scrollRestore ?? null,
+            replyViewport: window.replyViewport ?? null,
         },
         turnSummaries: Array.isArray(turnSummaries) ? turnSummaries : [],
         greetings,

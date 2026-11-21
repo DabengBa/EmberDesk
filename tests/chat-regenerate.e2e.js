@@ -158,6 +158,107 @@ async function sendCharacterMessage(page, text, reply) {
     await expect.poll(async () => (await lastMessageText(page)).trim()).toBe(reply);
 }
 
+// These exercise the normal send path and the real chat viewport, including
+// the asynchronous size messages from a sandboxed frontend frame.
+test('reply viewport opens a long HTML reply at its start after iframe resize', async ({ page, characterModel }) => {
+    const html = [
+        '```html',
+        '<!DOCTYPE html><html><body>',
+        '<div id="card-start">LONG CARD START</div><div id="grow" style="height: 120px"></div><div>LONG CARD END</div>',
+        '<script>setTimeout(() => { document.querySelector("#grow").style.height = "2000px"; }, 1200);</script>',
+        '</body></html>',
+        '```',
+    ].join('\n');
+    await characterModel([
+        { content: 'Earlier history.\n\n'.repeat(80), stream: true },
+        { content: html, stream: true },
+    ], { streamOpenAi: true });
+    await sendCharacterMessage(page, 'Make history', 'Earlier history.\n\n'.repeat(80).trim());
+    await waitForRegenerateSettled(page);
+    await page.locator('#send_textarea').fill('Show me the long card');
+    await page.locator('#send_but').click();
+
+    const chat = page.locator('#chat');
+    const reply = chat.locator('.mes.last_mes');
+    const frame = reply.locator('iframe.ed-frontend-frame__iframe');
+    await expect(frame.contentFrame().locator('#card-start')).toHaveText('LONG CARD START', { timeout: 15_000 });
+    await expect.poll(() => frame.evaluate(el => el.offsetHeight)).toBeLessThan(500);
+    await expect.poll(() => frame.evaluate(el => el.offsetHeight)).toBeGreaterThan(1900);
+    const replyPosition = () => reply.evaluate(row => {
+        const view = document.querySelector('#chat').getBoundingClientRect();
+        const box = row.getBoundingClientRect();
+        return { top: box.top - view.top, bottom: box.bottom - view.bottom };
+    });
+    expect((await replyPosition()).bottom).toBeGreaterThan(100);
+    await expect.poll(async () => (await replyPosition()).top).toBeGreaterThanOrEqual(-5);
+    await expect.poll(async () => (await replyPosition()).top).toBeLessThan(80);
+});
+
+test('reply viewport preserves history while pending and jumps explicitly to the new reply', async ({ page, characterModel }) => {
+    const release = Promise.withResolvers();
+    await characterModel([
+        { content: 'History paragraph.\n\n'.repeat(80), stream: true },
+        { content: 'The new reply is ready.', wait: release.promise, stream: true },
+    ], { streamOpenAi: true });
+    await sendCharacterMessage(page, 'Make history', 'History paragraph.\n\n'.repeat(80).trim());
+    await waitForRegenerateSettled(page);
+    const chat = page.locator('#chat');
+    try {
+        await page.locator('#send_textarea').fill('Question after history');
+        await page.locator('#send_but').click();
+        await expect(page.locator('#mes_stop')).toBeVisible();
+        await chat.hover();
+        await page.mouse.wheel(0, -1600);
+        await expect.poll(() => chat.evaluate(el => el.scrollHeight - el.clientHeight - el.scrollTop)).toBeGreaterThan(500);
+        const historyPosition = await chat.evaluate(el => el.scrollTop);
+        release.resolve();
+        await expect(chat.getByText('The new reply is ready.', { exact: true })).toBeAttached();
+        await waitForRegenerateSettled(page);
+        expect(Math.abs(await chat.evaluate(el => el.scrollTop) - historyPosition)).toBeLessThanOrEqual(5);
+        const jump = page.locator('#chat_show_new_reply');
+        await expect(jump).toBeVisible();
+        await expect(jump).toHaveAccessibleName('查看新回复');
+        await jump.focus();
+        await jump.press('Enter');
+        await expect(chat.getByText('The new reply is ready.', { exact: true })).toBeInViewport();
+        await expect(chat.locator('.mes.last_mes')).toBeFocused();
+        await expect(jump).toBeHidden();
+    } finally {
+        release.resolve();
+    }
+});
+
+for (const [size, replyText] of [
+    ['short', 'A short reply.'],
+    ['medium', Array.from({ length: 7 }, (_, index) => `Reply paragraph ${index + 1}.`).join('\n\n')],
+]) {
+    test(`reply viewport shows the full ${size} turn when it fits`, async ({ page, characterModel }) => {
+        await characterModel([
+            { content: 'Earlier history.\n\n'.repeat(80), stream: true },
+            { content: replyText, stream: true },
+        ], { streamOpenAi: true });
+        await sendCharacterMessage(page, 'Make history', 'Earlier history.\n\n'.repeat(80).trim());
+        await waitForRegenerateSettled(page);
+        await sendCharacterMessage(page, `Question for ${size} reply`, replyText);
+        await waitForRegenerateSettled(page);
+        const turnMetrics = () => page.locator('#chat').evaluate(chat => {
+            const reply = chat.querySelector('.mes.last_mes');
+            const question = reply.previousElementSibling;
+            const viewport = chat.getBoundingClientRect();
+            return {
+                turnHeight: reply.getBoundingClientRect().bottom - question.getBoundingClientRect().top,
+                viewportHeight: chat.clientHeight,
+                questionTop: question.getBoundingClientRect().top - viewport.top,
+                replyBottom: reply.getBoundingClientRect().bottom - viewport.bottom,
+            };
+        });
+        const metrics = await turnMetrics();
+        expect(metrics.turnHeight).toBeLessThan(metrics.viewportHeight);
+        await expect.poll(async () => (await turnMetrics()).questionTop).toBeGreaterThanOrEqual(-2);
+        await expect.poll(async () => (await turnMetrics()).replyBottom).toBeLessThanOrEqual(2);
+    });
+}
+
 test('non-stream feedback follows explicit send and regenerate, but not a reader scrolling back', async ({ page, characterModel }) => {
     const send = Promise.withResolvers();
     const regenerate = Promise.withResolvers();
@@ -177,8 +278,9 @@ test('non-stream feedback follows explicit send and regenerate, but not a reader
         await page.locator('#send_but').click();
         await expect(chat.getByText('new question', { exact: true })).toBeVisible();
         await expect(page.locator('#mes_stop')).toBeVisible();
-        await expect.poll(bottomGap).toBeLessThan(5);
         await expect(chat.getByRole('status')).toHaveText('等待回复…');
+        await expect(chat.getByText('new question', { exact: true })).toBeInViewport();
+        await expect(chat.getByRole('status')).toBeInViewport();
         await scrollUp();
         send.resolve();
         await expect(chat.getByText('complete reply', { exact: true })).toBeAttached();

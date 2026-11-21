@@ -2,6 +2,7 @@ import { Fragment, useCallback, useMemo, useState, useSyncExternalStore } from '
 import type { MainChatCommands } from '../../compat/workspace-commands';
 import { getMainChatStore, type MainChatSnapshot } from '../../stores/main-chat-store';
 import { MainChatMessageRow } from './MainChatMessageRow';
+import { MainChatReplyViewport } from './MainChatReplyViewport';
 import { MainChatGreetingPicker } from './MainChatGreetingPicker';
 import { useMainChatHotkeys } from './useMainChatHotkeys';
 import { TurnSummaryCard } from './TurnSummaryCard';
@@ -21,6 +22,7 @@ export function MainChatMessageListWorkspacePanel({
         mainChatStore.getState().getSnapshot,
     );
     const snapshot = mainChatStoreSnapshot;
+    const replyViewport = snapshot.window.replyViewport;
     useMainChatHotkeys({ snapshot, commands });
     const messageIds = mainChatStoreSnapshot.window.visibleMessageIds.length > 0
         ? mainChatStoreSnapshot.window.visibleMessageIds
@@ -191,6 +193,16 @@ button.menu_button {
                     </Fragment>
                 );
             })}
+            {replyViewport && (
+                <MainChatReplyViewport
+                    key={replyViewport.requestId}
+                    questionId={replyViewport.questionId}
+                    replyId={replyViewport.replyId}
+                    questionUid={snapshot.messagesById[replyViewport.questionId]?.uid}
+                    replyUid={replyViewport.replyId === null ? undefined : snapshot.messagesById[replyViewport.replyId]?.uid}
+                    finished={replyViewport.finished}
+                />
+            )}
         </>
     );
 }

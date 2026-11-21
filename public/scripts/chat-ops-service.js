@@ -871,7 +871,7 @@ export async function getChat({ strictReload = false, reconciledChatVersion = un
         load.ready = true;
         failedCharacterChatLoad = undefined;
         queueMainChatMessageListScrollRestore(state.characters[state.this_chid].chat);
-        await getChatResult({ switchMenu: !strictReload });
+        await getChatResult({ switchMenu: !strictReload, reconciledChatVersion });
         if (!isCurrent()) return false;
         eventSource.emit(event_types.CHAT_LOADED, { detail: { id: state.this_chid, character: state.characters[state.this_chid], reconciledChatVersion } });
 

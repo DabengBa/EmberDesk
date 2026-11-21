@@ -88,6 +88,13 @@ export interface MainChatTurnSummaryRecord {
     readonly manual: boolean;
 }
 
+export interface MainChatReplyViewport {
+    readonly requestId: string;
+    readonly questionId: string;
+    readonly replyId: string | null;
+    readonly finished: boolean;
+}
+
 export interface MainChatWindowSnapshot {
     readonly visibleMessageIds: readonly string[];
     readonly anchorMessageId: string | null;
@@ -96,6 +103,7 @@ export interface MainChatWindowSnapshot {
     readonly scrollHeight: number;
     readonly clientHeight: number;
     readonly scrollRestore: MainChatScrollRestoreSnapshot | null;
+    readonly replyViewport: MainChatReplyViewport | null;
 }
 
 export interface MainChatGreetingOption {
@@ -436,6 +444,7 @@ function normalizeSnapshot(input: MainChatSnapshotInput = {}, previousMessages?:
     const streaming = input.streaming ?? {};
     const window = input.window ?? {};
     const scrollRestore = window.scrollRestore;
+    const reply = window.replyViewport;
     const turnSummaries = normalizeTurnSummaries(input.turnSummaries);
     const normalizeTarget = (target: MainChatMessageTarget | null | undefined): MainChatMessageTarget | null => {
         const id = normalizeNullableString(target?.id);
@@ -473,6 +482,14 @@ function normalizeSnapshot(input: MainChatSnapshotInput = {}, previousMessages?:
             scrollTop: normalizeNonNegativeNumber(window.scrollTop),
             scrollHeight: normalizeNonNegativeNumber(window.scrollHeight),
             clientHeight: normalizeNonNegativeNumber(window.clientHeight),
+            replyViewport: reply && normalizeNullableString(reply.requestId) && knownMessageIds.has(reply.questionId)
+                ? {
+                    requestId: reply.requestId,
+                    questionId: reply.questionId,
+                    replyId: reply.replyId !== null && knownMessageIds.has(reply.replyId) ? reply.replyId : null,
+                    finished: reply.finished === true,
+                }
+                : null,
             scrollRestore: scrollRestore && typeof scrollRestore === 'object'
                 ? (() => {
                     const anchorMessageId = normalizeNullableString(scrollRestore.anchorMessageId);
