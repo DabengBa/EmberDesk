@@ -300,12 +300,22 @@ test.describe('prompt inspector (request preview)', () => {
         await page.keyboard.press('Escape');
         await expect(dialog).toHaveCount(0);
         const call = id => ({ role: 'assistant', tool_calls: [{ id, type: 'function', function: { name: 'story_preset', arguments: JSON.stringify({ kind: 'system', content: 'First line\n\nHidden river', name: 'Lore' }) } }] });
+        const pair = (key, name, args) => {
+            const id = `story_${key.repeat(24)}`;
+            return [{ role: 'assistant', tool_calls: [{ id, type: 'function', function: { name, arguments: JSON.stringify(args) } }] },
+                { role: 'tool', content: 'OK', tool_call_id: id }];
+        };
         const id = `story_${'a'.repeat(24)}`;
         const request = {
             model: 'rpg', max_tokens: 64000,
             tools: [{ type: 'function', function: { name: 'submit_story', parameters: { type: 'object' } } }],
             messages: [call(id), { role: 'tool', content: 'OK', tool_call_id: id },
                 call(`story_${'b'.repeat(24)}`), { role: 'tool', content: 'OK', tool_call_id: 'different-id' },
+                ...pair('c', 'story_history', { content: '船长在午夜失踪。' }),
+                ...pair('d', 'submit_story', { kind: 'user', content: '我走下钟楼石阶。' }),
+                ...pair('e', 'submit_story', { kind: 'assistant', content: '石阶尽头有一扇铁门。' }),
+                ...pair('f', 'story_continuation_input', { kind: 'user', content: '我听听门后有没有动静。' }),
+                ...pair('g', 'submit_story', { content: 'Ordinary tool call' }),
                 { role: 'system', content: '[Reply pipeline 1/1] Readable step. Year 2026.' }],
         };
         await page.evaluate(request => {
@@ -320,11 +330,24 @@ test.describe('prompt inspector (request preview)', () => {
             });
         }, request);
         await open.click();
+        await expect(dialog.getByRole('heading', { name: '查看 Prompt' })).toBeVisible();
+        await expect(dialog.getByRole('heading', { name: /请求顺序/ })).toBeVisible();
         await expect(dialog.locator('.prompt-inspector-item').first()).toBeVisible();
         await expect(dialog.locator('.prompt-inspector-budget')).toHaveCount(0);
         const details = dialog.getByText('请求详情', { exact: true });
         const rows = dialog.locator('.prompt-inspector-item');
-        await expect(rows).toHaveCount(4);
+        for (const [indices, label, content] of [
+            ['#4–#5', '历史摘要', '船长在午夜失踪。'],
+            ['#6–#7', '玩家 · 历史原文', '我走下钟楼石阶。'],
+            ['#8–#9', '角色 · 历史原文', '石阶尽头有一扇铁门。'],
+            ['#10–#11', '本次输入', '我听听门后有没有动静。'],
+        ]) {
+            const row = rows.filter({ has: page.getByRole('button', { name: `${indices} ${label}`, exact: true }) });
+            await expect(row.locator('.prompt-inspector-item-preview')).toHaveText(content);
+        }
+        await expect(rows).toHaveCount(10);
+        await expect(rows.nth(7)).toContainText('#12');
+        await expect(rows.nth(8).locator('.prompt-inspector-item-preview')).toHaveText('OK');
         await expect(rows.first()).toContainText('#0–#1');
         await expect(rows.first()).toContainText('Lore');
         await expect(rows.nth(1)).toContainText('#2');
@@ -345,6 +368,12 @@ test.describe('prompt inspector (request preview)', () => {
         await expect(dialog.getByRole('button', { name: /submit_story/ })).toBeVisible();
         await details.click();
         const search = dialog.getByRole('searchbox', { name: '搜索消息' });
+        await search.fill('story_history');
+        await expect(rows).toHaveCount(1);
+        await expect(rows.first().locator('.prompt-inspector-item-content')).toHaveText(/船长在午夜失踪。.*story_history.*#5.*OK/s);
+        await search.fill('#7');
+        await expect(rows).toHaveCount(1);
+        await expect(rows.first().locator('.prompt-inspector-item-content')).toHaveText(/我走下钟楼石阶。.*submit_story.*#7.*OK/s);
         await search.fill('HIDDEN RIVER');
         await expect(rows).toHaveCount(2); // The unmatched call remains searchable, but is not grouped.
         await search.fill('story_preset');

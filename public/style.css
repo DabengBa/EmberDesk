@@ -6657,7 +6657,7 @@ body:has(#emberdesk-react-workspace-shell-chrome-host) {
     background: rgba(0, 0, 0, 0.6);
     align-items: center;
     justify-content: center;
-    padding: 4vh 4vw;
+    padding: 24px;
     box-sizing: border-box;
 }
 
@@ -6670,10 +6670,11 @@ body:has(#emberdesk-react-workspace-shell-chrome-host) {
 }
 
 .prompt-inspector-panel {
-    width: 980px;
-    max-width: 100%;
-    height: 760px;
-    max-height: 100%;
+    width: 100%;
+    max-width: 1440px;
+    height: 100%;
+    --inspector-gutter: 24px;
+    --inspector-row-indent: 116px;
     background-color: var(--SmartThemeBlurTintColor);
     border: 1px solid var(--SmartThemeBorderColor);
     border-radius: 10px;
@@ -6688,14 +6689,46 @@ body:has(#emberdesk-react-workspace-shell-chrome-host) {
     display: flex;
     align-items: center;
     gap: 8px;
-    padding: 12px 14px;
+    padding: 18px var(--inspector-gutter);
     border-bottom: 1px solid var(--SmartThemeBorderColor);
     flex-shrink: 0;
     flex-wrap: wrap;
 }
 
-.prompt-inspector-header-spacer {
-    flex: 1;
+.prompt-inspector-header h2,
+.prompt-inspector-toolbar h3 {
+    margin: 0;
+    font-weight: 650;
+}
+
+.prompt-inspector-header h2 {
+    font-size: 1.35em;
+}
+
+.prompt-inspector-meta,
+.prompt-inspector-meta label {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    min-width: 0;
+}
+
+.prompt-inspector-meta {
+    padding: 12px var(--inspector-gutter);
+    border-bottom: 1px solid var(--SmartThemeBorderColor);
+    justify-content: space-between;
+    flex-wrap: wrap;
+}
+
+.prompt-inspector-meta label > span {
+    flex-shrink: 0;
+}
+
+.prompt-inspector-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-inline-start: auto;
 }
 
 .prompt-inspector-header .menu_button {
@@ -6708,6 +6741,7 @@ body:has(#emberdesk-react-workspace-shell-chrome-host) {
 }
 
 .prompt-inspector-model {
+    margin-inline-start: auto;
     font-family: var(--monoFontFamily, monospace);
     font-size: calc(var(--mainFontSize) * 0.9);
     opacity: 0.85;
@@ -6721,7 +6755,8 @@ body:has(#emberdesk-react-workspace-shell-chrome-host) {
     width: auto;
     max-width: 100%;
     margin: 0;
-    padding: 2px 6px;
+    min-width: 0;
+    padding: 7px 10px;
     font-size: calc(var(--mainFontSize) * 0.85);
 }
 
@@ -6743,7 +6778,7 @@ body:has(#emberdesk-react-workspace-shell-chrome-host) {
     flex: 1;
     min-height: 0;
     overflow-y: auto;
-    padding: 10px 14px;
+    padding: 0 var(--inspector-gutter) 18px;
     display: flex;
     flex-direction: column;
     gap: 10px;
@@ -6759,17 +6794,39 @@ body:has(#emberdesk-react-workspace-shell-chrome-host) {
 .prompt-inspector-toolbar {
     justify-content: space-between;
     flex-wrap: wrap;
+    padding: 6px 0 0;
+}
+
+.prompt-inspector-toolbar h3 {
+    font-size: 1em;
+}
+
+.prompt-inspector-toolbar small {
+    opacity: 0.7;
+}
+
+.prompt-inspector-views {
+    gap: 20px;
+    border-bottom: 1px solid var(--SmartThemeBorderColor);
+    margin-inline: calc(-1 * var(--inspector-gutter));
+    padding-inline: var(--inspector-gutter);
 }
 
 .prompt-inspector-views .menu_button {
     width: auto;
     margin: 0;
     white-space: nowrap;
+    padding: 12px 0 10px;
+    border: 0;
+    border-bottom: 2px solid transparent;
+    border-radius: 0;
+    background: none;
+    filter: none;
 }
 
 .prompt-inspector-views .menu_button[aria-pressed="true"] {
-    border-color: var(--SmartThemeQuoteColor);
-    background: var(--black30a);
+    border-bottom-color: var(--SmartThemeQuoteColor);
+    background: none;
 }
 
 .prompt-inspector-search.text_pole {
@@ -6836,15 +6893,17 @@ body:has(#emberdesk-react-workspace-shell-chrome-host) {
 .prompt-inspector-messages {
     display: flex;
     flex-direction: column;
-    gap: 6px;
     margin: 0;
     padding: 0;
     list-style: none;
 }
 
 .prompt-inspector-item {
-    border: 1px solid var(--SmartThemeBorderColor);
-    border-radius: 6px;
+    border-top: 1px solid var(--SmartThemeBorderColor);
+}
+
+.prompt-inspector-item:last-child {
+    border-bottom: 1px solid var(--SmartThemeBorderColor);
 }
 
 .prompt-inspector-item-pending {
@@ -6860,7 +6919,7 @@ body:has(#emberdesk-react-workspace-shell-chrome-host) {
     border: none;
     color: inherit;
     font: inherit;
-    padding: 8px 10px;
+    padding: 14px 8px 8px;
     cursor: pointer;
     text-align: left;
 }
@@ -6873,21 +6932,22 @@ body:has(#emberdesk-react-workspace-shell-chrome-host) {
 .prompt-inspector-item-head > i {
     font-size: 0.7em;
     opacity: 0.7;
+    width: 12px;
+    flex-shrink: 0;
 }
 
 .prompt-inspector-item-index {
     font-family: var(--monoFontFamily, monospace);
     font-size: calc(var(--mainFontSize) * 0.8);
     opacity: 0.55;
-    min-width: 30px;
+    width: calc(var(--inspector-row-indent) - 36px);
     flex-shrink: 0;
 }
 
 .prompt-inspector-item-id {
     flex: 1;
     min-width: 0;
-    font-family: var(--monoFontFamily, monospace);
-    font-size: calc(var(--mainFontSize) * 0.85);
+    font-weight: 650;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -6905,7 +6965,7 @@ body:has(#emberdesk-react-workspace-shell-chrome-host) {
 .prompt-inspector-item-preview {
     font-size: calc(var(--mainFontSize) * 0.85);
     opacity: 0.75;
-    padding: 0 10px 8px;
+    padding: 0 8px 12px var(--inspector-row-indent);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -6916,10 +6976,8 @@ body:has(#emberdesk-react-workspace-shell-chrome-host) {
 }
 
 .prompt-inspector-item-content {
-    margin: 0 8px 8px;
-    padding: 10px;
-    background: var(--black30a);
-    border-radius: 6px;
+    margin: 0 8px 12px var(--inspector-row-indent);
+    padding: 0;
     font: calc(var(--mainFontSize) * 0.9) / 1.6 var(--mainFontFamily, sans-serif);
     white-space: pre-wrap;
     overflow-wrap: anywhere;
@@ -6960,10 +7018,9 @@ body:has(#emberdesk-react-workspace-shell-chrome-host) {
 }
 
 .prompt-inspector-params {
-    padding: 8px 10px;
-    border: 1px solid var(--SmartThemeBorderColor);
-    border-radius: 5px;
-    background: var(--black30a);
+    margin-inline: calc(-1 * var(--inspector-gutter));
+    padding: 0 var(--inspector-gutter) 8px;
+    border-bottom: 1px solid var(--SmartThemeBorderColor);
 }
 
 .prompt-inspector-params > summary {
@@ -7035,6 +7092,24 @@ body:has(#emberdesk-react-workspace-shell-chrome-host) {
 }
 
 @media (max-width: 560px) {
+    .prompt-inspector-overlay {
+        padding: 8px;
+    }
+
+    .prompt-inspector-panel {
+        --inspector-gutter: 14px;
+        --inspector-row-indent: 84px;
+    }
+
+    .prompt-inspector-header {
+        padding-block: 12px;
+    }
+
+    .prompt-inspector-actions {
+        flex-basis: 100%;
+        justify-content: flex-end;
+    }
+
     .prompt-inspector-search.text_pole {
         flex: 1 0 100%;
     }

@@ -199,19 +199,34 @@ function ToolRow({ tool }: { tool: Record<string, unknown> }) {
     );
 }
 
-/** Recognize the server's synthetic story_preset projection, not ordinary tool calls. */
-function readPresetPair(message: Record<string, unknown>, receipt: Record<string, unknown> | undefined) {
+/** Recognize synthetic story projections, not ordinary tool calls or receipts. */
+function readStoryPair(message: Record<string, unknown>, receipt: Record<string, unknown> | undefined) {
     if (message.role !== 'assistant' || message.content != null || message.reasoning != null
         || !Array.isArray(message.tool_calls) || message.tool_calls.length !== 1
         || receipt?.role !== 'tool' || receipt.content !== 'OK') return null;
     const call = message.tool_calls[0];
-    if (call?.type !== 'function' || call.function?.name !== 'story_preset'
-        || typeof call.id !== 'string' || !/^story_[\w-]{24}(?:_\d+)?$/.test(call.id)
-        || receipt.tool_call_id !== call.id || typeof call.function.arguments !== 'string') return null;
+    if (call?.type !== 'function' || typeof call.id !== 'string' || !/^story_[\w-]{24}(?:_\d+)?$/.test(call.id)
+        || receipt.tool_call_id !== call.id || typeof call.function?.arguments !== 'string') return null;
+    const tool = call.function.name;
     try {
-        const { kind, content, name } = JSON.parse(call.function.arguments);
-        if ((kind === 'system' || kind === 'user' || kind === 'assistant') && typeof content === 'string') {
-            return { kind, content, name: typeof name === 'string' ? name : null };
+        const args = JSON.parse(call.function.arguments);
+        const { kind, content, name } = args;
+        if (typeof content !== 'string') return null;
+        if (tool === 'story_preset' && (kind === 'system' || kind === 'user' || kind === 'assistant')) {
+            return { tool, content, label: typeof name === 'string' ? name : ROLE_BADGE_LABELS[kind] ?? kind, badge: translate('Preset') };
+        }
+        if (Object.keys(args).some(key => key !== 'content' && key !== 'kind' && key !== 'name')
+            || (name !== undefined && typeof name !== 'string')) return null;
+        if (tool === 'story_history' && kind === undefined && name === undefined) {
+            return { tool, content, label: translate('History summary') };
+        }
+        if (tool === 'story_continuation_input' && kind === 'user') {
+            return { tool, content, label: translate('Current input') };
+        }
+        if (tool === 'submit_story') {
+            if (kind === 'user') return { tool, content, label: translate('Player · Chat history') };
+            if (kind === 'assistant') return { tool, content, label: translate('Character · Chat history') };
+            if (kind === 'system') return { tool, content, label: translate('Narrator · Chat history') };
         }
     } catch {
         // Keep unrecognized argument shapes as ordinary request messages.
@@ -227,24 +242,25 @@ function messageRows(result: PromptInspectorResult) {
         const message = messages[index] ?? {};
         const entry = result.entries[index] ?? null;
         const role = String(message.role ?? entry?.role ?? '?');
-        const preset = pipeline ? readPresetPair(message, messages[index + 1] ?? undefined) : null;
-        const text = preset?.content ?? contentToText(message.content ?? entry?.content);
+        const story = pipeline ? readStoryPair(message, messages[index + 1] ?? undefined) : null;
+        const text = story?.content ?? contentToText(message.content ?? entry?.content);
         const toolCalls = message.tool_calls ?? entry?.tool_calls;
-        const tools = !preset && Array.isArray(toolCalls) ? JSON.stringify(toolCalls, null, 2) : '';
+        const tools = story
+            ? (story.tool === 'story_preset' ? '' : `${story.tool} · #${index + 1} OK`)
+            : Array.isArray(toolCalls) ? JSON.stringify(toolCalls, null, 2) : '';
         const roundInstruction = Boolean(pipeline && index === messages.length - 1 && role === 'system'
             && text.startsWith(pipeline.fallback ? '[Reply pipeline] All pipeline steps are complete.' : `[Reply pipeline ${pipeline.round + 1}/${pipeline.total}] `));
-        const badge = preset ? translate('Preset') : ROLE_BADGE_LABELS[role] ?? role;
-        const label = preset
-            ? preset.name ?? (ROLE_BADGE_LABELS[preset.kind] ?? preset.kind)
-            : roundInstruction ? translate('Round instruction') : entry?.identifier ?? entry?.collection ?? '';
-        const position = preset ? `#${index}–#${index + 1}` : `#${index}`;
+        const badge = story ? story.badge : ROLE_BADGE_LABELS[role] ?? role;
+        const label = story?.label ?? (roundInstruction ? translate('Round instruction') : entry?.identifier ?? entry?.collection ?? '');
+        const end = story ? index + 1 : index;
+        const position = story ? `#${index}–#${end}` : `#${index}`;
         const pending = entry?.identifier != null && entry.identifier === result.pendingEntryIdentifier;
         rows.push({
-            index, end: preset ? index + 1 : index, position, badge, label, text, tools, roundInstruction, pending,
+            index, end, position, badge, label, text, tools, roundInstruction, pending,
             tokens: entry?.tokens,
-            searchable: [role, badge, label, text, tools, preset && 'story_preset'].join('\n').toLowerCase(),
+            searchable: [role, badge, label, text, tools, story?.tool].join('\n').toLowerCase(),
         });
-        if (preset) index++;
+        index = end;
     }
     return rows;
 }
@@ -263,12 +279,13 @@ function MessageRow({ row, filtered }: { row: ReturnType<typeof messageRows>[num
                 aria-expanded={open}
                 title={open ? translate('Collapse') : translate('Expand content')}
             >
+                <i className={`fa-solid fa-chevron-${open ? 'down' : 'right'}`} aria-hidden="true" />
                 <span className="prompt-inspector-item-index">{row.position}</span>
-                <span className="prompt-inspector-badge">{row.badge}</span>
-                <span className="prompt-inspector-item-id">{row.label}</span>
+                <span className="prompt-inspector-item-id">{row.label || row.badge}</span>
+                {row.label && row.badge ? <span className="prompt-inspector-badge">{row.badge}</span> : null}
                 {row.pending ? <span className="prompt-inspector-badge prompt-inspector-badge-pending">{translate('Preview assembled')}</span> : null}
                 {row.tokens != null ? <span className="prompt-inspector-item-tokens">{formatTokens(row.tokens)}</span> : null}
-                <i className={`fa-solid fa-chevron-${open ? 'down' : 'right'}`} aria-hidden="true" />
+
             </button>
             {open
                 ? <pre className="prompt-inspector-item-content">{row.text}{row.text && row.tools ? '\n\n' : ''}{row.tools}</pre>
@@ -384,51 +401,57 @@ export function PromptInspector({ bridge }: { bridge: PromptInspectorBridge }) {
         }}>
             <div className="prompt-inspector-panel">
                 <div className="prompt-inspector-header">
+                    <h2>{translate('View Prompt')}</h2>
                     <span className="prompt-inspector-badge prompt-inspector-badge-preview">{translate('Preview (not sent)')}</span>
-                    {result?.model ? <span className="prompt-inspector-model" title={translate('Target model')}>{result.model}</span> : null}
-                    {pipeline && roundOptions.length > 1 ? (
-                        <select
-                            className="text_pole prompt-inspector-round"
-                            value={round}
-                            aria-label={translate('Pipeline rounds')}
-                            onChange={event => {
-                                setStatus('loading');
-                                setRound(Number(event.target.value));
-                            }}
+                    <div className="prompt-inspector-actions">
+                        <button
+                            type="button"
+                            className="menu_button"
+                            title={translate('Reassemble from the current state')}
+                            onClick={() => void load(round)}
                         >
-                            {roundOptions.map(option => (
-                                <option key={option.value} value={option.value}>{option.label}</option>
-                            ))}
-                        </select>
-                    ) : null}
-                    <span className="prompt-inspector-header-spacer" />
-                    <button
-                        type="button"
-                        className="menu_button"
-                        title={translate('Reassemble from the current state')}
-                        onClick={() => void load(round)}
-                    >
-                        <i className="fa-solid fa-rotate-right" aria-hidden="true" /> {translate('Refresh')}
-                    </button>
-                    <button
-                        type="button"
-                        className="menu_button"
-                        disabled={!result}
-                        title={translate('Copy the full request body JSON')}
-                        onClick={() => result && void copyText('json', JSON.stringify(result.request, null, 2))}
-                    >
-                        <i className="fa-solid fa-copy" aria-hidden="true" /> {copied === 'json' ? translate('Copied') : copied === 'json:failed' ? translate('Copy failed') : translate('Copy JSON')}
-                    </button>
-                    <button
-                        type="button"
-                        className="menu_button"
-                        aria-label={translate('Close')}
-                        title={translate('Close')}
-                        onClick={() => bridge.close()}
-                    >
-                        <i className="fa-solid fa-xmark" aria-hidden="true" />
-                    </button>
+                            <i className="fa-solid fa-rotate-right" aria-hidden="true" /> {translate('Refresh')}
+                        </button>
+                        <button
+                            type="button"
+                            className="menu_button"
+                            disabled={!result}
+                            title={translate('Copy the full request body JSON')}
+                            onClick={() => result && void copyText('json', JSON.stringify(result.request, null, 2))}
+                        >
+                            <i className="fa-solid fa-copy" aria-hidden="true" /> {copied === 'json' ? translate('Copied') : copied === 'json:failed' ? translate('Copy failed') : translate('Copy JSON')}
+                        </button>
+                        <button
+                            type="button"
+                            className="menu_button"
+                            aria-label={translate('Close')}
+                            title={translate('Close')}
+                            onClick={() => bridge.close()}
+                        >
+                            <i className="fa-solid fa-xmark" aria-hidden="true" />
+                        </button>
+                    </div>
                 </div>
+                {pipeline || result?.model ? (
+                    <div className="prompt-inspector-meta">
+                        {pipeline && roundOptions.length > 1 ? (
+                            <label>
+                                <span>{translate('Preview round')}</span>
+                                <select className="text_pole prompt-inspector-round" value={round}
+                                    aria-label={translate('Pipeline rounds')}
+                                    onChange={event => {
+                                        setStatus('loading');
+                                        setRound(Number(event.target.value));
+                                    }}>
+                                    {roundOptions.map(option => (
+                                        <option key={option.value} value={option.value}>{option.label}</option>
+                                    ))}
+                                </select>
+                            </label>
+                        ) : null}
+                        {result?.model ? <span className="prompt-inspector-model" title={translate('Target model')}>{result.model}</span> : null}
+                    </div>
+                ) : null}
 
                 {status === 'loading' ? (
                     <div className="prompt-inspector-status">{translate('Assembling the preview…')}</div>
@@ -455,21 +478,14 @@ export function PromptInspector({ bridge }: { bridge: PromptInspectorBridge }) {
                             </div>
                         ) : null}
 
-                        <div className="prompt-inspector-toolbar">
-                            <div className="prompt-inspector-views" role="group" aria-label={translate('Preview view')}>
-                                <button type="button" className="menu_button" aria-pressed={!raw} onClick={() => setRaw(false)}>{translate('Messages')}</button>
-                                <button type="button" className="menu_button" aria-pressed={raw} onClick={() => setRaw(true)}>{translate('Raw JSON')}</button>
-                            </div>
-                            {!raw ? (
-                                <input className="text_pole prompt-inspector-search" type="search" value={query}
-                                    aria-label={translate('Search messages')} placeholder={translate('Search messages')}
-                                    onChange={event => setQuery(event.target.value)} />
-                            ) : null}
+                        <div className="prompt-inspector-views" role="group" aria-label={translate('Preview view')}>
+                            <button type="button" className="menu_button" aria-pressed={!raw} onClick={() => setRaw(false)}>{translate('Messages')}</button>
+                            <button type="button" className="menu_button" aria-pressed={raw} onClick={() => setRaw(true)}>{translate('Raw JSON')}</button>
                         </div>
 
                         {raw
                             ? <pre className="prompt-inspector-raw">{JSON.stringify(result.request, null, 2)}</pre>
-                            : <MessageView result={result} rows={visibleRows} filtered={Boolean(term)} />}
+                            : <MessageView result={result} rows={visibleRows} filtered={Boolean(term)} total={rows.length} query={query} setQuery={setQuery} />}
                     </div>
                 ) : null}
             </div>
@@ -477,10 +493,13 @@ export function PromptInspector({ bridge }: { bridge: PromptInspectorBridge }) {
     );
 }
 
-function MessageView({ result, rows, filtered }: {
+function MessageView({ result, rows, filtered, total, query, setQuery }: {
     result: PromptInspectorResult;
     rows: ReturnType<typeof messageRows>;
     filtered: boolean;
+    total: number;
+    query: string;
+    setQuery: (query: string) => void;
 }) {
     return <>
         <RequestDetails request={result.request} />
@@ -491,6 +510,12 @@ function MessageView({ result, rows, filtered }: {
             </div>
         ) : null}
 
+        <div className="prompt-inspector-toolbar">
+            <h3>{translate('Request order')} <small>{filtered ? `${rows.length} / ${total}` : total}</small></h3>
+            <input className="text_pole prompt-inspector-search" type="search" value={query}
+                aria-label={translate('Search messages')} placeholder={translate('Search content, tool, or #index')}
+                onChange={event => setQuery(event.target.value)} />
+        </div>
         {rows.length ? (
             <ul className="prompt-inspector-messages" aria-label={translate('Message list')}>
                 {rows.map(row => <MessageRow key={`${row.index}:${filtered}`} row={row} filtered={filtered} />)}
