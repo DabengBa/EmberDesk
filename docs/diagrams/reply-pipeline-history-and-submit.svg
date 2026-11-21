@@ -1,0 +1,127 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1430" viewBox="0 0 1600 1430" role="img" aria-labelledby="title desc">
+  <title id="title">回复管线：历史摘要、逐条提交与本次输入</title>
+  <desc id="desc">两段已保存的记忆摘要按时间顺序合并成一个无角色的 story_history 调用；四条未摘要的历史消息分别调用 submit_story；最新用户输入单独调用 story_continuation_input。每个调用均对应一个工具 OK，首步提示词引用最新输入的调用 ID。</desc>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#94a3b8"/></marker>
+    <marker id="arrowInput" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#d97706"/></marker>
+    <style>
+      text { font-family: "Noto Sans CJK SC", "Microsoft YaHei", "PingFang SC", sans-serif; fill: #1e293b; }
+      .title { font-size: 34px; font-weight: 700; fill: #0f172a; }
+      .subtitle { font-size: 18px; fill: #64748b; }
+      .section { font-size: 21px; font-weight: 700; fill: #0f172a; }
+      .label { font-size: 16px; font-weight: 700; }
+      .body { font-size: 18px; }
+      .small { font-size: 15px; fill: #64748b; }
+      .code { font-family: "DejaVu Sans Mono", "Noto Sans CJK SC", "Microsoft YaHei", monospace; font-size: 17px; fill: #1e293b; }
+      .id { font-family: "DejaVu Sans Mono", monospace; font-size: 15px; fill: #475569; }
+      .num { font-size: 16px; font-weight: 700; fill: #fff; text-anchor: middle; }
+      .ok { font-family: "DejaVu Sans Mono", monospace; font-size: 20px; font-weight: 700; fill: #166534; }
+    </style>
+  </defs>
+
+  <rect width="1600" height="1430" fill="#f1f5f9"/>
+  <rect x="0" y="0" width="1600" height="130" fill="#0f172a"/>
+  <text x="64" y="57" class="title" style="fill:#f8fafc">回复管线：历史摘要、逐条提交与本次输入</text>
+  <text x="65" y="96" class="subtitle" style="fill:#cbd5e1">服务端计划布局  /  示例数据  /  从旧到新排列</text>
+  <rect x="1376" y="34" width="160" height="42" rx="21" fill="#334155" stroke="#64748b"/>
+  <text x="1456" y="61" text-anchor="middle" font-size="17" font-weight="700" style="fill:#f8fafc">服务端 · 回复管线</text>
+
+  <!-- Saved recaps are the only material merged. -->
+  <rect x="64" y="158" width="1472" height="194" rx="16" fill="#ffffff" stroke="#dbe3ed"/>
+  <text x="88" y="192" class="section">已保存的记忆摘要</text>
+  <text x="335" y="192" class="small">仅摘要合并；顺序保留，不为合并结果附加角色</text>
+  <rect x="88" y="212" width="445" height="109" rx="10" fill="#eff6ff" stroke="#bfdbfe"/>
+  <text x="106" y="239" class="label" fill="#1d4ed8">摘要 ① · 较早</text>
+  <text x="106" y="273" class="body">小岚在旧车站找到一把铜钥匙。</text>
+  <rect x="560" y="212" width="445" height="109" rx="10" fill="#eff6ff" stroke="#bfdbfe"/>
+  <text x="578" y="239" class="label" fill="#1d4ed8">摘要 ② · 较晚</text>
+  <text x="578" y="273" class="body">她得知钥匙能打开钟楼的门。</text>
+  <path d="M 1018 266 H 1064" fill="none" stroke="#94a3b8" stroke-width="2" marker-end="url(#arrow)"/>
+  <rect x="1080" y="212" width="430" height="109" rx="10" fill="#dbeafe"/>
+  <text x="1100" y="245" class="label" fill="#1d4ed8">按 ① → ② 合并</text>
+  <text x="1100" y="278" class="body">一次 story_history，仅含 content</text>
+  <text x="1100" y="302" class="small">对应下方调用 01</text>
+
+  <text x="64" y="392" class="section">发送顺序</text>
+  <text x="180" y="392" class="small">每行：一个调用 → 一个同 ID 的工具结果；编号表示时间与发送顺序</text>
+  <path d="M 81 441 V 1181" fill="none" stroke="#cbd5e1" stroke-width="3" marker-end="url(#arrow)"/>
+
+  <!-- 01: combined recap -->
+  <rect x="110" y="412" width="1426" height="118" rx="13" fill="#ffffff" stroke="#bfdbfe"/>
+  <rect x="110" y="412" width="7" height="118" rx="3" fill="#3b82f6"/>
+  <circle cx="81" cy="447" r="19" fill="#2563eb"/><text x="81" y="453" class="num">01</text>
+  <text x="140" y="441" class="label" fill="#1d4ed8">合并后的历史摘要 · 无角色</text>
+  <text x="140" y="470" class="code">story_history({content: "小岚在旧车站找到一把铜钥匙。</text>
+  <text x="140" y="495" class="code">她得知钥匙能打开钟楼的门。"})</text>
+  <text x="140" y="517" class="id">调用 ID: call_history_01</text>
+  <path d="M 1095 470 H 1142" stroke="#94a3b8" stroke-width="2" marker-end="url(#arrow)"/>
+  <rect x="1154" y="429" width="356" height="84" rx="9" fill="#f0fdf4" stroke="#bbf7d0"/>
+  <text x="1173" y="456" class="label" fill="#166534">工具结果</text><text x="1439" y="456" class="ok">OK</text>
+  <text x="1173" y="487" class="id">call_history_01</text>
+
+  <!-- 02–05: raw unsummarized rows remain individual calls. -->
+  <rect x="110" y="542" width="1426" height="118" rx="13" fill="#ffffff" stroke="#c4b5fd"/>
+  <rect x="110" y="542" width="7" height="118" rx="3" fill="#8b5cf6"/>
+  <circle cx="81" cy="577" r="19" fill="#7c3aed"/><text x="81" y="583" class="num">02</text>
+  <text x="140" y="571" class="label" fill="#6d28d9">未摘要旧消息 ① · user</text>
+  <text x="140" y="601" class="code">submit_story({kind: 'user', content: "她来到钟楼门前。"})</text>
+  <text x="140" y="639" class="id">调用 ID: call_submit_01</text>
+  <path d="M 1095 600 H 1142" stroke="#94a3b8" stroke-width="2" marker-end="url(#arrow)"/>
+  <rect x="1154" y="559" width="356" height="84" rx="9" fill="#f0fdf4" stroke="#bbf7d0"/>
+  <text x="1173" y="586" class="label" fill="#166534">工具结果</text><text x="1439" y="586" class="ok">OK</text>
+  <text x="1173" y="617" class="id">call_submit_01</text>
+
+  <rect x="110" y="672" width="1426" height="118" rx="13" fill="#ffffff" stroke="#c4b5fd"/>
+  <rect x="110" y="672" width="7" height="118" rx="3" fill="#8b5cf6"/>
+  <circle cx="81" cy="707" r="19" fill="#7c3aed"/><text x="81" y="713" class="num">03</text>
+  <text x="140" y="701" class="label" fill="#6d28d9">未摘要旧消息 ② · assistant</text>
+  <text x="140" y="731" class="code">submit_story({kind: 'assistant', content: "门锁轻轻转动。"})</text>
+  <text x="140" y="769" class="id">调用 ID: call_submit_02</text>
+  <path d="M 1095 730 H 1142" stroke="#94a3b8" stroke-width="2" marker-end="url(#arrow)"/>
+  <rect x="1154" y="689" width="356" height="84" rx="9" fill="#f0fdf4" stroke="#bbf7d0"/>
+  <text x="1173" y="716" class="label" fill="#166534">工具结果</text><text x="1439" y="716" class="ok">OK</text>
+  <text x="1173" y="747" class="id">call_submit_02</text>
+
+  <rect x="110" y="802" width="1426" height="118" rx="13" fill="#ffffff" stroke="#c4b5fd"/>
+  <rect x="110" y="802" width="7" height="118" rx="3" fill="#8b5cf6"/>
+  <circle cx="81" cy="837" r="19" fill="#7c3aed"/><text x="81" y="843" class="num">04</text>
+  <text x="140" y="831" class="label" fill="#6d28d9">未摘要旧消息 ③ · user</text>
+  <text x="140" y="861" class="code">submit_story({kind: 'user', content: "她推开门往里看。"})</text>
+  <text x="140" y="899" class="id">调用 ID: call_submit_03</text>
+  <path d="M 1095 860 H 1142" stroke="#94a3b8" stroke-width="2" marker-end="url(#arrow)"/>
+  <rect x="1154" y="819" width="356" height="84" rx="9" fill="#f0fdf4" stroke="#bbf7d0"/>
+  <text x="1173" y="846" class="label" fill="#166534">工具结果</text><text x="1439" y="846" class="ok">OK</text>
+  <text x="1173" y="877" class="id">call_submit_03</text>
+
+  <rect x="110" y="932" width="1426" height="118" rx="13" fill="#ffffff" stroke="#c4b5fd"/>
+  <rect x="110" y="932" width="7" height="118" rx="3" fill="#8b5cf6"/>
+  <circle cx="81" cy="967" r="19" fill="#7c3aed"/><text x="81" y="973" class="num">05</text>
+  <text x="140" y="961" class="label" fill="#6d28d9">未摘要旧消息 ④ · assistant</text>
+  <text x="140" y="991" class="code">submit_story({kind: 'assistant', content: "楼梯上亮着一盏灯。"})</text>
+  <text x="140" y="1029" class="id">调用 ID: call_submit_04</text>
+  <path d="M 1095 990 H 1142" stroke="#94a3b8" stroke-width="2" marker-end="url(#arrow)"/>
+  <rect x="1154" y="949" width="356" height="84" rx="9" fill="#f0fdf4" stroke="#bbf7d0"/>
+  <text x="1173" y="976" class="label" fill="#166534">工具结果</text><text x="1439" y="976" class="ok">OK</text>
+  <text x="1173" y="1007" class="id">call_submit_04</text>
+
+  <!-- 06: newest input is its own independently named call. -->
+  <rect x="110" y="1062" width="1426" height="118" rx="13" fill="#ffffff" stroke="#fcd34d"/>
+  <rect x="110" y="1062" width="7" height="118" rx="3" fill="#f59e0b"/>
+  <circle cx="81" cy="1097" r="19" fill="#d97706"/><text x="81" y="1103" class="num">06</text>
+  <text x="140" y="1091" class="label" fill="#b45309">最新用户输入 · 单独传入</text>
+  <text x="140" y="1121" class="code">story_continuation_input({kind: 'user', content: "她走上楼梯。"})</text>
+  <text x="140" y="1159" class="id">调用 ID: call_input_01</text>
+  <path d="M 1095 1120 H 1142" stroke="#94a3b8" stroke-width="2" marker-end="url(#arrow)"/>
+  <rect x="1154" y="1079" width="356" height="84" rx="9" fill="#f0fdf4" stroke="#bbf7d0"/>
+  <text x="1173" y="1106" class="label" fill="#166534">工具结果</text><text x="1439" y="1106" class="ok">OK</text>
+  <text x="1173" y="1137" class="id">call_input_01</text>
+
+  <!-- Prompt explicitly references the input call, not a submit call. -->
+  <path d="M 900 1180 V 1220" fill="none" stroke="#d97706" stroke-width="2" stroke-dasharray="6 5" marker-end="url(#arrowInput)"/>
+  <rect x="110" y="1232" width="1426" height="124" rx="13" fill="#fffbeb" stroke="#fcd34d"/>
+  <text x="140" y="1266" class="section" fill="#92400e">首步提示词</text>
+  <text x="140" y="1302" class="body">以最新用户输入调用为续写起点：</text>
+  <text x="480" y="1302" class="code" style="font-weight:700;fill:#92400e">call_input_01</text>
+  <text x="140" y="1332" class="small">指向 story_continuation_input 的调用 ID，而非历史摘要或旧消息的调用 ID。</text>
+  <text x="64" y="1400" class="small">示例仅展示计划中的消息组织与调用 / 结果配对，不代表已部署行为。</text>
+</svg>

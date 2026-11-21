@@ -52,7 +52,7 @@ beforeAll(async () => {
             return;
         }
         const hasStoryInput = text => completion.messages.some(message => message.tool_calls?.some(call =>
-            call.function.name === 'submit_story' && JSON.parse(call.function.arguments).content === text));
+            call.function.name === 'story_continuation_input' && JSON.parse(call.function.arguments).content === text));
         if (completion.tool_choice?.function?.name === 'first' && completion.model !== 'gpt-4o-mini'
             && hasStoryInput('Pipeline fallback input')) {
             res.writeHead(503).end();
@@ -277,7 +277,7 @@ test('temporary regenerate previews and executes the custom pipeline with upload
         expect(pending).toMatchObject({ name: 'custom', args: { content: 'from custom' } });
         expect(calls[offset]).toMatchObject({ messages: preview.messages, tool_choice: preview.toolChoice });
         const wire = JSON.stringify(preview.messages);
-        for (const text of ['Previous answer', 'Regenerate this question', 'TEMPORARY_FILE_CONTENT', 'The current user input is the submit_story call']) expect(wire).toContain(text);
+        for (const text of ['Previous answer', 'Regenerate this question', 'TEMPORARY_FILE_CONTENT', 'The current user input is the story_continuation_input call']) expect(wire).toContain(text);
         expect(wire).not.toContain('REMOVE_OLD_');
         const step = { stepId: pending.id, result: 'BROWSER RESULT' };
         expect((await call(`/generation/${id}/step`, step, 'bob')).status).toBe(404);
@@ -589,30 +589,50 @@ test('default pipeline completes without a browser; custom step resumes once fro
         } });
     };
     let run;
-    const open = async (file_name, text = 'Pipeline input') => {
+    const open = async (file_name, text = 'Pipeline input', version) => {
         const target = { avatar_url: 'mira.png', file_name };
         const command = { ...target, action: 'send', text };
         const preview = await call('/generation/preview', command);
         expect(preview.status).toBe(200);
-        const created = await call('/generation/create', { ...command, requestId: file_name });
+        const created = await call('/generation/create', { ...command, version, requestId: file_name });
         expect(created.status).toBe(202);
         run = await created.json();
         return { target, preview: await preview.json() };
     };
     try {
         setPipeline(['first', 'last'], []);
+        const history = [{ user_name: 'Rin', chat_metadata: { chat_memory: { keepTurns: 1, wrap: 'Recap: {{summary}}', summaries: [
+            { id: 's1', turnKey: 'u1', messageIds: ['u1', 'a1'], manual: true, text: 'earlier voyage' },
+            { id: 's2', turnKey: 'u2', messageIds: ['u2', 'a2'], manual: true, text: 'reached port' },
+        ] } } }];
+        for (let n = 1; n <= 4; n++) history.push(
+            { is_user: true, mes: `voyage question ${n}`, extra: { id: `u${n}` } },
+            { mes: `voyage answer ${n}`, extra: { id: `a${n}` } },
+        );
+        const savedHistory = await call('/save', { avatar_url: 'mira.png', file_name: 'default-pipeline', create: true, operationId: 'seed-default-pipeline', chat: history });
+        expect(savedHistory.status).toBe(200);
         const offset = calls.length;
-        const { target, preview } = await open('default-pipeline');
+        const { target, preview } = await open('default-pipeline', 'Pipeline input', (await savedHistory.json()).version);
         expect(await (await call(`/generation/${run.id}/events`)).text()).toContain('"status":"completed"');
         expect(calls[offset].messages).toEqual(preview.messages);
         const [firstWire, secondWire] = calls.slice(offset, offset + 2);
         expect(firstWire.messages[0]).toMatchObject({ role: 'assistant', tool_calls: expect.any(Array) });
         expect(firstWire.messages.some(message => message.role === 'user')).toBe(false);
-        const current = firstWire.messages.flatMap(message => message.tool_calls ?? [])
-            .find(call => JSON.parse(call.function.arguments).content === 'Pipeline input');
-        expect(current.function.name).toBe('submit_story');
-        const currentIndex = firstWire.messages.findIndex(message => message.tool_calls?.some(call => call.id === current.id));
-        expect(firstWire.messages[currentIndex + 1]).toEqual({ role: 'tool', tool_call_id: current.id, content: 'OK' });
+        const wireCalls = firstWire.messages.flatMap(message => message.tool_calls ?? [])
+            .filter(call => ['story_history', 'story_continuation_input', 'submit_story'].includes(call.function.name));
+        expect(wireCalls.map(({ function: fn }) => [fn.name, JSON.parse(fn.arguments)])).toEqual([
+            ['story_history', { content: 'Recap: earlier voyage\n\nRecap: reached port' }],
+            ['submit_story', { kind: 'user', content: 'voyage question 3' }],
+            ['submit_story', { kind: 'assistant', content: 'voyage answer 3' }],
+            ['submit_story', { kind: 'user', content: 'voyage question 4' }],
+            ['submit_story', { kind: 'assistant', content: 'voyage answer 4' }],
+            ['story_continuation_input', { kind: 'user', content: 'Pipeline input' }],
+        ]);
+        for (const synthetic of wireCalls) {
+            const index = firstWire.messages.findIndex(message => message.tool_calls?.includes(synthetic));
+            expect(firstWire.messages[index + 1]).toEqual({ role: 'tool', tool_call_id: synthetic.id, content: 'OK' });
+        }
+        const current = wireCalls.at(-1);
         expect(firstWire.messages.at(-1).content).toContain(current.id);
         expect(firstWire.tools.map(tool => tool.function.name)).toEqual(['first', 'last']);
         expect(secondWire.tools).toEqual(firstWire.tools);
