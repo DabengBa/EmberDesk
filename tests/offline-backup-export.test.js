@@ -33,7 +33,7 @@ test('user ZIP filters and sanitizes a symlinked user root without modifying its
             const [data, zip] = process.argv.slice(1);
             globalThis.DATA_ROOT = data;
             const { getUserDirectories } = await import('./src/user-directories.ts');
-            const { router } = await import('./src/endpoints/users-private.js');
+            const { router } = await import('./src/endpoints/users-private-routes.ts');
             const app = express(); app.use(express.json());
             app.use((req, res, next) => { req.user = { profile: { handle: 'alice', admin: false }, directories: getUserDirectories('alice') }; next(); });
             app.use(router);
@@ -134,7 +134,7 @@ test.each([[false, false, false], [true, false, false], [false, true, false], [f
             await runCanonicalChatShadowImport({handle:'alice',directories:dirs,db,featureFlags:{enabled:true,shadowImport:true,strict:false}});
             fs.rmSync(path.join(dirs.chats, 'alpha', 'one.jsonl'));
             fs.writeFileSync(path.join(dirs.userImages, 'image.png'), 'fixture-image');
-            const { router } = await import('./src/endpoints/users-private.js');
+            const { router } = await import('./src/endpoints/users-private-routes.ts');
             const app = express(); app.use(express.json());
             app.use((req,res,next) => { req.user = {profile:{handle:'alice',admin:false}, directories:dirs}; next(); });
             app.use(router);

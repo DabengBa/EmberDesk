@@ -11,7 +11,7 @@ import { runCanonicalWorldInfoShadowImport } from '../src/canonical-world-info-s
 import { getPersistedCanonicalAuditStatus, persistCanonicalAuditStatus } from '../src/canonical-sqlite-shadow-import.ts';
 import { runCanonicalWorldInfoAudit } from '../src/canonical-sqlite-operator.ts';
 import { upsertCanonicalWorldInfoBook } from '../src/endpoints/world-info-store.ts';
-import { router } from '../src/endpoints/worldinfo.js';
+import { router } from '../src/endpoints/worldinfo-routes.ts';
 import { setConfigFilePath } from '../src/util.js';
 
 const tempRoots = [];

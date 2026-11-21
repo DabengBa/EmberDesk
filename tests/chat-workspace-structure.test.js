@@ -27,15 +27,11 @@ describe('chat workspace structure', () => {
     test('retires same-version shell takeover flags and fallback diagnostics', () => {
         const scriptSource = readRepoFile('public/script.js');
         const bridgeSource = readRepoFile('public/scripts/workspace-panels-react-bridge.js');
-        const workspaceFeaturesSource = readRepoFile('src/workspace-react-features.js');
 
         expect(scriptSource).not.toContain('workspace-shell-takeover-contract');
         expect(scriptSource).not.toContain('WorkspaceShellTakeover');
         expect(bridgeSource).not.toContain('workspace-shell-takeover-contract');
         expect(bridgeSource).not.toContain('Falling back to legacy chrome');
-        expect(workspaceFeaturesSource).not.toContain('features.react.shell');
-        expect(workspaceFeaturesSource).not.toContain('reactShell');
-        expect(workspaceFeaturesSource).not.toContain('__emberDeskWorkspaceFeatures');
         expect(scriptSource).not.toContain('workspace-next');
         expect(scriptSource).not.toContain('/workspace-next');
     });

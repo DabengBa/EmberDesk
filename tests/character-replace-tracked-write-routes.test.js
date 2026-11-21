@@ -83,7 +83,7 @@ beforeAll(async () => {
     }));
     const { router: characters } = await import('../src/endpoints/characters.js');
     const { router: chats } = await import('../src/endpoints/chats.js');
-    const { router: worldinfo } = await import('../src/endpoints/worldinfo.js');
+    const { router: worldinfo } = await import('../src/endpoints/worldinfo-routes.ts');
     app.use('/api/characters', characters);
     app.use('/api/chats', chats);
     app.use('/api/worldinfo', worldinfo);

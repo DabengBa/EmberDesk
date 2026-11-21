@@ -125,7 +125,7 @@ Focused proof:
 
 ```bash
 pnpm --dir tests run test:unit -- canonical-sqlite-shadow-import.test.js canonical-sqlite-migrations.test.js canonical-sqlite.test.js --runInBand
-pnpm --dir tests run test:unit -- character-read-service.test.js interaction-performance-index.test.js --runInBand
+pnpm --dir tests run test:unit -- character-read-service.test.js character-runtime-routes.test.js --runInBand
 ```
 
 What the tests currently prove:

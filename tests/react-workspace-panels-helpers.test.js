@@ -317,7 +317,6 @@ describe('React workspace panels bridge helpers', () => {
         const configSource = read('default/config.yaml');
         const entrySource = read('app/compat/workspace-panels-entry.ts');
         const seedScriptSource = read('scripts/seed-dev-environment.mjs');
-        const workspaceFeatureSource = read('src/workspace-react-features.js');
         const bridgeSource = read('public/scripts/workspace-panels-react-bridge.js');
         const workspacePanelSource = read('app/workspace-panels.tsx');
         const scriptSource = read('public/script.js');
@@ -328,8 +327,6 @@ describe('React workspace panels bridge helpers', () => {
         expect(entrySource).toContain("from '../workspace-panels'");
         expect(seedScriptSource).not.toContain('EMBERDESK_FEATURES_REACT_PANELS_MAINCHATMESSAGELIST');
         expect(seedScriptSource).not.toContain('features:');
-        expect(workspaceFeatureSource).toContain('// Main Chat message list is React sole-owner; product flag is retired.');
-        expect(workspaceFeatureSource).toContain('return true;');
         expect(bridgeSource).toContain('mainChatMessageList: true');
         expect(bridgeSource).toContain('characterAuthoring: true');
         expect(bridgeSource).not.toContain('groupAuthoring');
@@ -942,7 +939,6 @@ describe('React workspace panels bridge helpers', () => {
         const workspaceCommandsSource = read('app/compat/workspace-commands.ts');
         const compatibilityBridgeSource = read('app/compat/global-compatibility-bridge.js');
         const bridgeSource = read('public/scripts/workspace-panels-react-bridge.js');
-        const featureSource = read('src/workspace-react-features.js');
 
         expect(indexHtmlSource).not.toContain('id="rm_extensions_block"');
         expect(indexHtmlSource).not.toContain('id="extensions-settings-button"');
@@ -970,7 +966,6 @@ describe('React workspace panels bridge helpers', () => {
         expect(workspaceCommandsSource).not.toContain('extensionsHost');
         expect(compatibilityBridgeSource).not.toContain('extensionsHost');
         expect(bridgeSource).not.toContain('extensionsHost');
-        expect(featureSource).not.toContain('extensionsHost');
     });
 
     test('mounts the React main-chat owner directly into #chat', () => {

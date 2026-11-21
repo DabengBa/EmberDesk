@@ -48,7 +48,7 @@ Canonical SQLite remains separate from derived caches.
 - canonical DB location: `DATA_ROOT/<handle>/storage/emberdesk.sqlite`
 - derived sidecar location: `DATA_ROOT/<handle>/_cache/*.sqlite`
 
-`src/canonical-sqlite.ts` intentionally does not reuse `src/derived-cache-sqlite.js`.
+`src/canonical-sqlite.ts` is separate from the retired derived-cache helper.
 
 The separation is structural, not just naming:
 
@@ -141,7 +141,7 @@ Code binding points:
 Focused proof:
 
 ```bash
-pnpm --dir tests run test:unit -- canonical-sqlite.test.js user-directories.test.js derived-cache-sqlite.test.js --runInBand
+pnpm --dir tests run test:unit -- canonical-sqlite.test.js user-directories.test.js --runInBand
 ```
 
 What the tests currently prove:

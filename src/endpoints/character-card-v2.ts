@@ -2,7 +2,7 @@ import _ from 'lodash';
 
 import { deepMerge, humanizedDateTime, tryParse } from '../util.js';
 import { normalizeTalkativeness } from './character-card-helpers.js';
-import { readWorldInfoFile } from './worldinfo.js';
+import { readWorldInfoFile } from './worldinfo-routes.ts';
 import type { UserDirectoryList } from '../users.js';
 
 type Card = Record<string, unknown> & { name: string; world?: string };

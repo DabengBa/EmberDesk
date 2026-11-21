@@ -45,7 +45,7 @@ const configRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'emberdesk-reset-config
 fs.writeFileSync(path.join(configRoot, 'config.yaml'), 'port: 8000\n', 'utf8');
 setConfigFilePath(path.join(configRoot, 'config.yaml'));
 
-const { router } = await import('../src/endpoints/users-private.js');
+const { router } = await import('../src/endpoints/users-private-routes.ts');
 const { canonicalSqliteManager } = await import('../src/canonical-sqlite.ts');
 const { resetCanonicalBackendsForTests } = await import('../src/canonical-backend.js');
 const { runCanonicalMigrations } = await import('../src/canonical-sqlite-migrations.ts');

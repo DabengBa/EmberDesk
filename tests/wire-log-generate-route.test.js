@@ -23,7 +23,7 @@ fs.writeFileSync(tmpConfigPath, process.env.WIRE_FLAG_CHILD
     : 'port: 8000\n', 'utf8');
 setConfigFilePath(tmpConfigPath);
 
-const { router: chatCompletionsRouter } = await import('../src/endpoints/backends/chat-completions.js');
+const { router: chatCompletionsRouter } = await import('../src/endpoints/backends/chat-completions.ts');
 const { router: wireLogRouter } = await import('../src/endpoints/wire-log.ts');
 const { canonicalSqliteManager } = await import('../src/canonical-sqlite.ts');
 

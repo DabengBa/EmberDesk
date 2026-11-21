@@ -6,11 +6,7 @@ topic: server-javascript-inventory
 
 # Server JavaScript inventory
 
-This is an inventory at baseline `9657b8179ed088dba38b474169f5c347902f07fe`,
-not a migration or deletion checklist. It covers all 68 `.js` files under
-`src/`, including operational scripts and test-only or historical candidates.
-There are also 82 `.ts` files under `src/` at that baseline. Counts are a
-snapshot, not a measure of route coverage or type safety.
+This inventory started at `9657b8179ed088dba38b474169f5c347902f07fe` (68 JavaScript files and 82 TypeScript files under `src/`). Before the first retirement wave there were 68 JavaScript files and 100 TypeScript files. After removing three retired modules and eight pure forwarders there are **57 JavaScript files and 100 TypeScript files** under `src/`. Counts are snapshots, not measures of type safety or route coverage.
 
 The review traced repository imports and direct execution paths, including
 dynamic imports, and inspected the route assembly and representative tests.
@@ -33,14 +29,9 @@ handler is TypeScript:
 - `src/endpoints/characters.js` owns registration, middleware order,
   dependencies and import coordination; `character-*-routes.ts` supplies
   handlers for the migrated slices.
-- The public, private and admin user JS endpoints re-export their TypeScript
-  routers. `src/endpoints/secrets.js` owns `SecretManager` and creates the TS
-  router; `src/endpoints/content-manager.js` owns downloaders and creates its
-  TS router. These are not all interchangeable with empty shims.
-- Since that baseline, `src/endpoints/worldinfo.js`, `src/endpoints/settings.js`,
-  `src/endpoints/presets.js`, and `src/endpoints/backends/chat-completions.js`
-  have become compatibility re-exports of strictly checked TypeScript handlers.
-  Other JS route files still contain actual handlers.
+- Startup imports the TypeScript public, private and admin user routers, World Info, settings, presets, and chat completions directly. The archive helper also has a direct TypeScript import. Their former JavaScript forwarders have been removed.
+- `src/endpoints/secrets.js` owns `SecretManager` and creates the TS router; `src/endpoints/content-manager.js` owns downloaders and creates its TS router. These modules have runtime responsibilities beyond forwarding exports.
+- The old character-index, derived-cache SQLite, and workspace React flag modules have been removed. This does not change canonical SQLite, user data, or React ownership.
 
 Node.js `>=26.13.1 <27` executes erasable TypeScript directly, with actual
 relative file extensions and no server emit or production loader.
@@ -87,7 +78,6 @@ deletion.
 
 | File | Purpose, caller and disposition |
 | --- | --- |
-| `src/archive-utils.js` | Compatibility re-export of the TS archive helpers; `src/util.js` and `tests/archive-utils.test.js` use it. Retain the existing export identity and path. |
 | `src/byaf.js` | BYAF parsing for `src/endpoints/characters.js` imports. Retain while that import flow uses it. |
 | `src/canonical-avatar-blobs.js` | Canonical avatar blob references and maintenance; used by character and canonical TS services. Retain the storage contract. |
 | `src/canonical-backend.js` | Canonical slice backend initialization; used by storage routes and TS services. Active mixed-language boundary. |
@@ -97,7 +87,6 @@ deletion.
 | `src/character-replace-write-coordinator.js` | Coordinates workspace writes and replace intents; used by routes and `scripts/character-replace-recovery.mjs`. Retain recovery and ordering. |
 | `src/charx.js` | CharX parsing and managed asset persistence; used by `src/endpoints/characters.js`, with dynamic canonical imports. Retain import behavior. |
 | `src/constants.js` | Shared constants; used by startup, accounts, endpoints and scripts. Retain shared contract. |
-| `src/derived-cache-sqlite.js` | Derived SQLite sidecar management; `src/endpoints/character-index.js` and `tests/derived-cache-sqlite.test.js` use it. Historical candidate: production callers beyond the historical index were not found; retirement requires separate confirmation. |
 | `src/image-processing.js` | Image and avatar conversion; used by character, content and thumbnail paths and the canonical operator. Retain image behavior. |
 | `src/storage-feature-flags.js` | Canonical storage flag access; used by registry, shadow imports and write coordination. Retain rollout behavior. |
 | `src/users.js` | User/auth middleware, user-data router and compatibility exports; used by startup and many routes and services. Active boundary, not merely a re-export. |
@@ -123,18 +112,15 @@ deletion.
 | `src/server-init.js` | Initial configuration setup; run by the package init script and Docker entrypoint. Retain direct entry. |
 | `src/server-startup-profiler.js` | Startup phase profiling; used by `src/server-main.ts`. Retain measurement integration. |
 | `src/validation-gate-selector.js` | Selects validation gates from changed paths; used by `scripts/validation-gate-selector.mjs`. Retain engineering tooling. |
-| `src/workspace-react-features.js` | Retired React feature flag helpers; tests read the source and `src/validation-gate-selector.js` matches the path. No runtime caller was found in the repository; historical candidate, external compatibility unconfirmed. |
 
 ### Endpoints and route helpers
 
 | File | Purpose, caller and disposition |
 | --- | --- |
 | `src/endpoints/assets.js` | Asset listing, download and deletion routes; mounted by `src/server-startup.ts` and used by `src/endpoints/files.js`. Active. |
-| `src/endpoints/backends/chat-completions.js` | Compatibility re-export of `src/endpoints/backends/chat-completions.ts`, mounted by startup. |
 | `src/endpoints/backups.js` | Chat backup routes; mounted by startup and uses chat code. Active. |
 | `src/endpoints/character-card-helpers.js` | Character card field helpers; used by character JS and TS modules. Active shared implementation. |
 | `src/endpoints/character-file-snapshot.js` | Character-file snapshots and chat statistics; used by character, chat and canonical import/operator paths. Active. |
-| `src/endpoints/character-index.js` | Historical derived character index; directly imported by `tests/interaction-performance-index.test.js`. `src/validation-gate-selector.js` calls it retired, and tests assert no legacy sidecar after create/save. No production caller found in-repo; historical candidate, not an authorized deletion. |
 | `src/endpoints/character-library-events.js` | Character-library event handler; used by `src/endpoints/characters.js`. Active. |
 | `src/endpoints/character-replace-coordination.js` | Replacement coordination routes; mounted by startup. Active. |
 | `src/endpoints/characters.js` | Character router, middleware, dependencies and import coordination; mounted by startup and delegates slices to TS handlers. Active assembly and implementation. |
@@ -146,16 +132,10 @@ deletion.
 | `src/endpoints/image-metadata.js` | Thumbnail dimensions and animation format detection; used by `src/endpoints/thumbnails.js`. Active helper. |
 | `src/endpoints/images.js` | Image upload, listing, directories and deletion routes; mounted by startup. Active. |
 | `src/endpoints/openai.js` | OpenAI-related routes including model listing; mounted by startup. Active. |
-| `src/endpoints/presets.js` | Compatibility re-export of `src/endpoints/presets.ts`; used by startup and settings. |
 | `src/endpoints/secrets.js` | `SecretManager`, secret operations and TS router creation; used by startup, authentication and model routes. Active secrets boundary. |
 | `src/endpoints/settings-cache.js` | Directory and world-info list caches; used by content and world-info routes. Active. |
-| `src/endpoints/settings.js` | Compatibility re-export of `src/endpoints/settings-routes.ts`; used by startup and user TS routes. |
 | `src/endpoints/thumbnails.js` | Thumbnail routes, generation and invalidation; used by startup and character routes, including dynamic avatar reads. Active. |
 | `src/endpoints/tokenizers.js` | Tokenizer initialization, encode and decode routes; mounted by startup. Active. |
-| `src/endpoints/users-admin.js` | Compatibility re-export of admin TS router; mounted by startup. Retain the existing import path. |
-| `src/endpoints/users-private.js` | Compatibility re-export of private TS router; mounted by startup. Retain the existing import path. |
-| `src/endpoints/users-public.js` | Compatibility re-export of public TS router; `src/server-main.ts` mounts it before login enforcement. Retain path and router singleton semantics. |
-| `src/endpoints/worldinfo.js` | Compatibility re-export of `src/endpoints/worldinfo-routes.ts`; used by startup, settings, characters and TS replacement service. |
 
 ### Middleware
 

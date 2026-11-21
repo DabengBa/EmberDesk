@@ -35,7 +35,7 @@ users.js (barrel + middleware + routes)
 
 Constraints:
 
-- `src/users.js` re-exports the shared symbols from the four modules. Account route implementations in `src/endpoints/users-public-routes.ts`, `src/endpoints/users-private-routes.ts`, and `src/endpoints/users-admin-routes.ts` import their shared helpers from `src/users.js`; the corresponding JavaScript endpoint files re-export their routers.
+- `src/users.js` re-exports the shared symbols from the four modules. Account route implementations import their shared helpers from `src/users.js`. `src/server-main.ts` imports `src/endpoints/users-public-routes.ts` directly; `src/server-startup.ts` imports `src/endpoints/users-private-routes.ts` and `src/endpoints/users-admin-routes.ts` directly.
 - Path traversal protection (`isPathUnderParent` + `path.resolve`) remains in `createRouteHandler` and `createExtensionsRouteHandler` in `users.js`.
 - `node-persist` storage is initialized once via `initUserStorage()` in `user-storage.ts`. SSO login functions in `user-auth.ts` access `storage.getItem()` directly.
 

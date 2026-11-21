@@ -33,7 +33,6 @@ The first selector slice covers these high-risk surfaces:
 | Express route/order | `pnpm --dir tests run test:unit -- express5-route-compatibility.test.js --runInBand` | required | `AGENTS.md`, `server-startup-orchestration.md` |
 | Startup/config | `pnpm --dir tests run test:unit -- command-line.test.js startup-critical-path.test.js startup-loader.test.js --runInBand` | required | `AGENTS.md`, `config-resolution.md`, `server-startup-orchestration.md` |
 | User auth/storage/directories/migrations | `pnpm --dir tests run test:unit -- user-auth.test.js user-storage.test.js user-directories.test.js user-migrations.test.js --runInBand` | required | `AGENTS.md`, `user-module-split.md` |
-| Derived cache / retired character index helper | `pnpm --dir tests run test:unit -- derived-cache-sqlite.test.js interaction-performance-index.test.js --runInBand` | required | `derived-cache-sqlite.md`, `interaction-performance-indexing.md` |
 | Shared `/lib.js` | `pnpm --dir tests run test:unit -- frontend-shared-library-boundary.test.js --runInBand` | required | `frontend-shared-library-boundary.md`, `pnpm-workflow.md` |
 | Semantic docs database | `pnpm run docs:check` | required | `AGENTS.md`, `.docs/db/scripts/doc-compiler.js` |
 
@@ -43,7 +42,7 @@ Example:
 node scripts/validation-gate-selector.mjs scripts/canonical-sqlite-repair.mjs .docs/db/pages/chat-workspace.md
 ```
 
-The output lists advisory gates such as the canonical-storage rollout proof lane and `pnpm run docs:check`, including reason and source references. Owning tech docs like `.docs/tech/derived-cache-sqlite.md` and `.docs/tech/interaction-performance-indexing.md` resolve to the derived-cache helper gate. Current character read authority changes resolve through the canonical-storage route/service gates, not through a required sidecar availability gate.
+The output lists advisory gates such as the canonical-storage rollout proof lane and `pnpm run docs:check`, including reason and source references. The retired sidecar notes no longer select a dedicated helper gate. Current character read authority changes resolve through the canonical-storage route/service gates, not through a required sidecar availability gate.
 
 ## Validation
 

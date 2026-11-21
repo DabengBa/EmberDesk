@@ -2,7 +2,7 @@
 
 > 适用对象:`data/<user>/OpenAI Settings/*.json` 的 chat-completion 预设文件。
 > 同目录示例:`Latest-1st.json`(已从上游 SillyTavern 格式转换)。
-> 权威代码:`public/scripts/openai.js`(`default_settings`、`migrateChatCompletionSettings`、`loadOpenAISettings`),`src/endpoints/presets.js`。
+> 权威代码:`public/scripts/openai.js`(`default_settings`、`migrateChatCompletionSettings`、`loadOpenAISettings`),`src/endpoints/presets.ts`。
 
 ## 顶层结构
 

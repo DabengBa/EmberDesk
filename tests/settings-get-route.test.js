@@ -15,7 +15,7 @@ const hadCommandLineArgs = Object.prototype.hasOwnProperty.call(globalThis, 'COM
 const previousCommandLineArgs = globalThis.COMMAND_LINE_ARGS;
 globalThis.COMMAND_LINE_ARGS = {};
 
-const { router } = await import('../src/endpoints/settings.js');
+const { router } = await import('../src/endpoints/settings-routes.ts');
 
 const roots = [];
 

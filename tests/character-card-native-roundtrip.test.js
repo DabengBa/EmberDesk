@@ -1,7 +1,7 @@
 import { expect, jest, test } from '@jest/globals';
 import { TavernCardValidator } from '../src/validator/TavernCardValidator.ts';
 
-jest.unstable_mockModule('../src/endpoints/worldinfo.js', () => ({
+jest.unstable_mockModule('../src/endpoints/worldinfo-routes.ts', () => ({
     readWorldInfoFile: jest.fn(() => ({
         entries: { 0: { uid: 0, key: ['Alice'], content: 'A linked world entry', position: 0 } },
     })),

@@ -47,12 +47,6 @@ async function importCharacterRoutes({ generateThumbnailImpl, thumbnailsEnabled 
 
     const mockGenerateThumbnail = jest.fn(generateThumbnailImpl ?? (() => Promise.resolve({ path: 'thumb.png', aspectRatio: 1, resolution: 1 })));
     const mockInvalidateThumbnail = jest.fn();
-    const mockRefreshCharacterIndexEntrySafe = jest.fn(async () => {});
-    const mockDeleteCharacterIndexEntrySafe = jest.fn();
-    const mockUpsertCharacterIndexEntry = jest.fn();
-    const mockGetFreshIndexedCharacterFullPayload = jest.fn(() => null);
-    const mockListIndexedCharacterPayloads = jest.fn(async () => []);
-    const mockFindCharactersBoundToWorld = jest.fn(() => []);
     const mockWrite = jest.fn(realImages ? realCharacterCard.write : () => Buffer.from('character-png'));
     const mockParse = jest.fn(parseImpl ?? (realImages ? realCharacterCard.parse : async () => '{"spec":"chara_card_v2","data":{"name":"Character"}}'));
 
@@ -121,7 +115,7 @@ async function importCharacterRoutes({ generateThumbnailImpl, thumbnailsEnabled 
         },
     }));
 
-    jest.unstable_mockModule('../src/endpoints/worldinfo.js', () => ({
+    jest.unstable_mockModule('../src/endpoints/worldinfo-routes.ts', () => ({
         findCharactersBoundToWorldFromFiles: () => [],
         readWorldInfoFile: async () => ({}),
         scanCharacterWorldBindingsFromFiles: () => ({
@@ -167,15 +161,6 @@ async function importCharacterRoutes({ generateThumbnailImpl, thumbnailsEnabled 
         writeCanonicalManagedMedia: realImages ? realManagedMediaWrites.writeCanonicalManagedMedia : async () => ({ authorityCommitted: false }),
     }));
 
-    jest.unstable_mockModule('../src/endpoints/character-index.js', () => ({
-        deleteCharacterIndexEntry: mockDeleteCharacterIndexEntrySafe,
-        findCharactersBoundToWorld: mockFindCharactersBoundToWorld,
-        getFreshIndexedCharacterFullPayload: mockGetFreshIndexedCharacterFullPayload,
-        isCharacterIndexSupported: () => false,
-        listIndexedCharacterPayloads: mockListIndexedCharacterPayloads,
-        upsertCharacterIndexEntry: mockUpsertCharacterIndexEntry,
-    }));
-
     jest.unstable_mockModule('node-persist', () => ({
         default: { create: async () => ({ getItem: async () => null, setItem: async () => {}, removeItem: async () => {}, getDatumPath: () => 'datum' }) },
     }));
@@ -190,7 +175,6 @@ async function importCharacterRoutes({ generateThumbnailImpl, thumbnailsEnabled 
         mocks: {
             generateThumbnail: mockGenerateThumbnail,
             invalidateThumbnail: mockInvalidateThumbnail,
-            refreshCharacterIndexEntrySafe: mockRefreshCharacterIndexEntrySafe,
             write: mockWrite,
         },
     };

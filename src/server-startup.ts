@@ -12,12 +12,12 @@ export type ServerStartupResult = {
 
 // Express routers
 import { router as userDataRouter } from './users.js';
-import { router as usersPrivateRouter } from './endpoints/users-private.js';
-import { router as usersAdminRouter } from './endpoints/users-admin.js';
+import { router as usersPrivateRouter } from './endpoints/users-private-routes.ts';
+import { router as usersAdminRouter } from './endpoints/users-admin-routes.ts';
 import { router as imagesRouter } from './endpoints/images.js';
 import { router as openAiRouter } from './endpoints/openai.js';
 import { router as tokenizersRouter } from './endpoints/tokenizers.js';
-import { router as presetsRouter } from './endpoints/presets.js';
+import { router as presetsRouter } from './endpoints/presets.ts';
 import { router as secretsRouter } from './endpoints/secrets.js';
 import { router as thumbnailRouter } from './endpoints/thumbnails.js';
 import { router as assetsRouter } from './endpoints/assets.js';
@@ -25,10 +25,10 @@ import { router as filesRouter } from './endpoints/files.js';
 import { router as charactersRouter } from './endpoints/characters.js';
 import { router as characterReplaceCoordinationRouter } from './endpoints/character-replace-coordination.js';
 import { router as chatsRouter } from './endpoints/chats.js';
-import { router as worldInfoRouter } from './endpoints/worldinfo.js';
+import { router as worldInfoRouter } from './endpoints/worldinfo-routes.ts';
 import { router as contentManagerRouter } from './endpoints/content-manager.js';
-import { router as settingsRouter } from './endpoints/settings.js';
-import { router as chatCompletionsRouter } from './endpoints/backends/chat-completions.js';
+import { router as settingsRouter } from './endpoints/settings-routes.ts';
+import { router as chatCompletionsRouter } from './endpoints/backends/chat-completions.ts';
 import { router as backupsRouter } from './endpoints/backups.js';
 import { router as wireLogRouter } from './endpoints/wire-log.ts';
 import { setupHealthEndpoint } from './endpoints/health.js';

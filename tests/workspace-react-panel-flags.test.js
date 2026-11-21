@@ -22,15 +22,12 @@ describe('workspace React shell retirement', () => {
     test('removes shell feature flags and inline workspace bootstrap payloads', () => {
         const configSource = read('default/config.yaml');
         const serverMainSource = read('src/server-main.ts');
-        const featureSource = read('src/workspace-react-features.js');
         const shellSource = read('public/script.js');
 
         expect(configSource).not.toContain('takeover:');
         expect(configSource).not.toContain('\n    shell:');
         expect(serverMainSource).not.toContain('injectWorkspaceReactFeatures');
         expect(serverMainSource).not.toContain('getWorkspaceReactFeatures');
-        expect(featureSource).not.toContain('buildWorkspaceReactFeaturesScript');
-        expect(featureSource).not.toContain('injectWorkspaceReactFeatures');
         expect(shellSource).not.toContain('__emberDeskWorkspaceFeatures');
     });
 

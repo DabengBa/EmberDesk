@@ -12,8 +12,8 @@ This document covers EmberDesk's historical interaction-performance work for the
 
 Primary files:
 
-- `src/endpoints/character-index.js` (retired from normal runtime; retained as historical/helper-level proof)
-- `src/derived-cache-sqlite.js`
+- `src/endpoints/character-index.js` (removed; historical implementation)
+- `src/derived-cache-sqlite.js` (removed; historical implementation)
 - `src/endpoints/character-read-service.ts`
 - `src/endpoints/character-write-service.ts`
 - `src/endpoints/character-import-service.ts`
@@ -34,7 +34,6 @@ Current status:
 - `POST /api/characters/all`, `/list`, and `/get` read from canonical SQLite when the canonical flags and audit gate allow it, otherwise they fall back directly to compatibility files
 - character write/import/chat and World Info delete-preflight/cascade paths no longer use `character-index.js` as an accelerator, dependency scanner, or second authority lane
 - deleting `<user root>/_cache/character-index.sqlite` cannot lose user data and should not affect normal character-library behavior
-- `src/endpoints/character-index.js` remains only as a retired helper surface for historical tests and interaction-performance report compatibility until a later cleanup deletes or archives it
 
 The historical interaction-performance slice originally aimed to:
 
@@ -46,7 +45,7 @@ The historical interaction-performance slice originally aimed to:
 - keep the indexed fast path self-healing when derived rows or SQLite state became inconsistent
 - add a reproducible local A/B runner that can prove whether the current SQLite slice is helping enough to justify its maintenance cost
 
-This tech note now treats the index details below as historical/helper-level context. Current runtime ownership lives in `src/endpoints/character-read-service.ts`, `src/endpoints/character-write-service.ts`, `src/endpoints/character-import-service.ts`, `src/endpoints/chats.js`, and `src/endpoints/worldinfo.js`, none of which use `_cache/character-index.sqlite` as a normal path.
+This tech note now treats the index details below as historical/helper-level context. Current runtime ownership lives in `src/endpoints/character-read-service.ts`, `src/endpoints/character-write-service.ts`, `src/endpoints/character-import-service.ts`, `src/endpoints/chats.js`, and `src/endpoints/worldinfo-routes.ts`, none of which use `_cache/character-index.sqlite` as a normal path.
 
 Separate from the SQLite slice, EmberDesk now also applies a short browser cache policy on non-Firefox `/thumbnail` responses:
 
@@ -129,23 +128,22 @@ Separate from the single-card write service, EmberDesk now also routes `POST /ap
   - `DiskCache` still accelerates PNG-to-JSON extraction through `readCharacterData()`
 - no normal character route now uses the SQLite sidecar as an accelerator or fallback
 - The indexed fast path is retired at runtime.
-  - `node:sqlite` availability can still matter for canonical SQLite and helper-level tests
+  - `node:sqlite` still matters for canonical SQLite
   - it no longer decides whether character reads take an indexed sidecar path
 - Historical benchmarking compared indexed and filesystem paths in the same runtime.
-  - the measurement runner can still use `EMBERDESK_CHARACTER_INDEX_MODE=force_on|force_off` for helper/report compatibility
-  - `force_off` disables the historical SQLite fast path without changing the Node build
-  - `force_on` still requires actual `node:sqlite` support; it is not a fake mock path
+  - `EMBERDESK_CHARACTER_INDEX_MODE=force_on|force_off` formerly selected whether to use the sidecar; `force_on` required `node:sqlite` support
+  - these values persist as report variant labels, not as active runtime controls
 - Chat save stays lightweight.
   - when the canonical chat-stats flag is enabled, character chat mutations update `character_chat_stats`
   - file-backed chat mutations still invalidate canonical audit state as needed
   - no chat route dirty-marks the retired character-index sidecar
-- Historical helper failures are isolated to helper-level tests or perf-report compatibility and should not affect normal character-list availability.
+- The helper-only tests were removed; historical performance-report compatibility is still covered.
 
 ## Core Implementation
 
 ### Retired character index storage
 
-`src/endpoints/character-index.js` still contains the historical per-user SQLite sidecar implementation with:
+`src/endpoints/character-index.js` formerly implemented a per-user SQLite sidecar with:
 
 - `meta`
   - `schema_version`
@@ -160,29 +158,27 @@ Separate from the single-card write service, EmberDesk now also routes `POST /ap
   - `source_world_size`
   - `chat_stats_dirty`
 
-The retired helper module:
+Before removal, the helper:
 
-- delegates `node:sqlite` feature detection to `src/derived-cache-sqlite.js`
-- delegates cached `DatabaseSync` handle lifecycle to `src/derived-cache-sqlite.js`
-- exposes disposal helpers for tests, but `src/server-main.ts` no longer opens, logs, or disposes character-index databases during normal startup/shutdown
-- resets cached handles through the helper when structural index operations fail
-- recreates derived rows when:
+- delegated `node:sqlite` feature detection and cached handle lifecycle to `src/derived-cache-sqlite.js`
+- reset cached handles through the helper when structural index operations fail
+- recreated derived rows when:
   - the row is missing
   - the source PNG `mtime` changes
   - the source PNG size changes
   - the row must be fully rebuilt for another source-of-truth reason
-- recomputes `chat_size` and `date_last_chat` in-place when `chat_stats_dirty=1`
-- removes rows whose source avatar files no longer exist
-- skips and cleans up corrupt payload rows instead of failing the entire request
-- sorts final rows in JavaScript with `Intl.Collator` instead of relying on SQLite `COLLATE NOCASE`
+- recomputed `chat_size` and `date_last_chat` in-place when `chat_stats_dirty=1`
+- removed rows whose source avatar files no longer exist
+- skipped and cleaned up corrupt payload rows instead of failing the entire request
+- sorted final rows in JavaScript with `Intl.Collator` instead of relying on SQLite `COLLATE NOCASE`
 
 ### Historical cached payloads
 
 The retired SQLite sidecar historically cached per-character derived payloads for `POST /api/characters/all`.
 
-Shared SQLite lifecycle details live in [Derived Cache SQLite Helper](derived-cache-sqlite.md). The helper owns feature detection, PRAGMA setup, cached handle lifecycle, schema-version reset plumbing, status reporting, and reset-count circuit breaking. `character-index.js` remains the owner of the retired helper schema, payloads, freshness checks, and fallback rules used by historical proof.
+The [Derived Cache SQLite Helper](derived-cache-sqlite.md) describes the former helper lifecycle. Neither module is present; the performance reporter still reads historical measurements.
 
-This sidecar uses the handwritten `node:sqlite` path rather than Drizzle.
+This sidecar used the handwritten `node:sqlite` path rather than Drizzle.
 
 It is not just a tiny row index with avatar and title fields.
 
@@ -307,7 +303,7 @@ Core design:
 - seeds deterministic character PNGs and chat files
 - keeps user auth simple by staying in the default single-user mode
 - uses `public/perf-harness.html` as an inert same-origin page so benchmark requests do not accidentally boot the full app and prewarm `/api/characters/all`
-- preserves historical `force_on` and `force_off` variants only for helper/report compatibility; normal route samples should observe canonical or filesystem paths, not indexed route paths
+- preserves historical `force_on` and `force_off` variant labels for report compatibility; normal route samples should observe canonical or filesystem paths, not indexed route paths
 - validates route-path headers before accepting a sample
 - rejects pair summaries when on/off payloads are not semantically equivalent
 
@@ -345,7 +341,7 @@ Artifact contract:
 - `artifacts/interaction-perf/<timestamp>/config.json`
 - scenario screenshots
 
-`report.json` can include a `derivedCache` section, and `report.md` renders the same information under "Derived Cache Observability". The section is retained for historical sidecar observability and records sanitized character-index sidecar status when helper-level status is collected:
+When historical samples contain sanitized character-index status, `report.json` can include a `derivedCache` section, and `report.md` renders the same information under "Derived Cache Observability":
 
 - variant name such as `sqlite_on` or `sqlite_off`
 - mode such as `force_on`, `force_off`, or `auto`
@@ -353,7 +349,7 @@ Artifact contract:
 - schema version and reset count
 - fallback or disabled reason such as `force_off`, `unsupported`, or `reset_threshold_exceeded`
 
-This derived-cache observability section intentionally omits `dbPath`, data-root paths, usernames, character filenames, and other user-specific filesystem details. Other report sections still include synthetic benchmark payload summaries, such as sample avatar names, for parity debugging. Character routes no longer emit `X-EmberDesk-Character-Index-Status`; the runner can still collect helper-level status directly for retired-sidecar report compatibility, while `indexedPathObserved=false` is expected for normal route samples because the service no longer consults the sidecar. This is diagnostic evidence only; it does not add a health endpoint and does not change `/api/characters/all` or `/api/characters/get` response bodies.
+This derived-cache observability section intentionally omits `dbPath`, data-root paths, usernames, character filenames, and other user-specific filesystem details. Other report sections still include synthetic benchmark payload summaries, such as sample avatar names, for parity debugging. The runner only reads optional response headers; it does not call the removed helper. Current character routes no longer emit `X-EmberDesk-Character-Index-Status` or consult the sidecar, so a variant label does not indicate that an indexed path was observed.
 
 Raw runner artifacts are local evidence and are not committed by default. Durable docs should record the command, runtime, scenario set, warnings, and the local artifact path used during the delivery.
 
@@ -512,7 +508,6 @@ Stability-sensitive binding points:
 - `POST /api/chats/import`
 - `performance.lazyLoadCharacters`
 - `<user root>/_cache/character-index.sqlite` as retired disposable state
-- `SCHEMA_VERSION` in `src/endpoints/character-index.js` for helper-level historical proof only
 - `removeCharactersFromState()` in `public/scripts/character-list-state.js`
 - `shouldRefreshCharacterAfterEdit()` in `public/scripts/character-list-state.js`
 - `syncBulkSelectionDomState()` in `public/scripts/character-list-state.js`

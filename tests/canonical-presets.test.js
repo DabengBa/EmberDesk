@@ -35,8 +35,8 @@ const {
     auditCanonicalPresetsShadowImport,
     runCanonicalPresetsShadowImport,
 } = await import('../src/canonical-presets-shadow-import.ts');
-const { router: presetsRouter } = await import('../src/endpoints/presets.js');
-const { router: settingsRouter } = await import('../src/endpoints/settings.js');
+const { router: presetsRouter } = await import('../src/endpoints/presets.ts');
+const { router: settingsRouter } = await import('../src/endpoints/settings-routes.ts');
 const { exportCanonicalStorageToFiles } = await import('../src/canonical-sqlite-export.ts');
 
 const roots = [];

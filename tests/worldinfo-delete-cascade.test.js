@@ -19,7 +19,7 @@ jest.unstable_mockModule('../src/endpoints/settings-cache.js', () => ({
     invalidateDirectory: invalidateDirectoryMock,
 }));
 
-const { router } = await import('../src/endpoints/worldinfo.js');
+const { router } = await import('../src/endpoints/worldinfo-routes.ts');
 const { ensureCanonicalSliceBackend, resetCanonicalBackendsForTests } = await import('../src/canonical-backend.js');
 
 function createResponse() {

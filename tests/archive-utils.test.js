@@ -10,7 +10,7 @@ import {
     extractFileFromZipBuffer,
     extractFilesFromZipBuffer,
     getImageBuffers,
-} from '../src/archive-utils.js';
+} from '../src/archive-utils.ts';
 import {
     extractFileFromZipBuffer as extractFileFromZipBufferViaUtil,
     extractFilesFromZipBuffer as extractFilesFromZipBufferViaUtil,

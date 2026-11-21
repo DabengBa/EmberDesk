@@ -36,7 +36,6 @@ const RULES = [
                 /^app\/workspace-panels\.tsx$/,
                 /^public\/scripts\/workspace-panel/,
                 /^public\/scripts\/workspace-panels-react-bridge\.js$/,
-                /^src\/workspace-react-features\.js$/,
                 /^default\/config\.yaml$/,
                 /^tests\/react-workspace-panels-helpers\.test\.js$/,
                 /^tests\/workspace-react-panel-flags\.test\.js$/,
@@ -151,26 +150,6 @@ const RULES = [
                 /^tests\/character-write-service\.test\.js$/,
                 /^\.docs\/tech\/canonical-sqlite-storage-roadmap\.md$/,
                 /^(canonical sqlite|canonical storage|repair tooling|repair tool|rollout contract|rollback blocker|projection repair|shadow import|db-first reads|db-first writes)$/i,
-            ]);
-        },
-    },
-    {
-        id: 'derived-cache',
-        required: true,
-        command: 'pnpm --dir tests run test:unit -- derived-cache-sqlite.test.js interaction-performance-index.test.js --runInBand',
-        reason: 'Derived SQLite helper, retired character-index helper, or historical interaction performance cache proof changed.',
-        sources: [
-            '.docs/tech/derived-cache-sqlite.md',
-            '.docs/tech/interaction-performance-indexing.md',
-        ],
-        matches(input) {
-            return matchesAny(input, [
-                /^src\/derived-cache-sqlite\.js$/,
-                /^src\/endpoints\/character-index\.js$/,
-                /^scripts\/interaction-performance-runner\.mjs$/,
-                /^\.docs\/tech\/derived-cache-sqlite\.md$/,
-                /^\.docs\/tech\/interaction-performance-indexing\.md$/,
-                /^(derived cache|character-index|character index|interaction performance index|derived index retirement|legacy-mode character index)$/i,
             ]);
         },
     },

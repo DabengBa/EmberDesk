@@ -58,7 +58,7 @@ import {
     assertCanonicalCharacterCardCurrent,
 } from './character-store.ts';
 import { getCanonicalWorldInfoBook, markCanonicalWorldInfoBookDeleted, normalizeCanonicalWorldInfoName } from './world-info-store.ts';
-import { getCanonicalWorldInfoWriteState } from './worldinfo.js';
+import { getCanonicalWorldInfoWriteState } from './worldinfo-routes.ts';
 import { recordWorldProjectionIntent, replayWorldProjection } from '../canonical-world-info-projection.ts';
 import { invalidateDirectory } from './settings-cache.js';
 import { mutateCharacterMediaAuthorizationInTransaction } from './settings-store.ts';
