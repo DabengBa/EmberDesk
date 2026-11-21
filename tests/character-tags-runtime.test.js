@@ -15,7 +15,7 @@ jest.unstable_mockModule('../public/scripts/filters.js', () => {
     const stateKey = state => typeof state === 'string' ? state : Object.keys(FILTER_STATES).find(key => FILTER_STATES[key] === state);
     return { FILTER_TYPES: { TAG: 'tag', FAV: 'fav' }, FILTER_STATES, DEFAULT_FILTER_STATE: 'UNDEFINED', isFilterState: (a, b) => stateKey(a) === stateKey(b), FilterHelper: class {} };
 });
-jest.unstable_mockModule('../public/scripts/utils.js', () => ({ download: jest.fn(), parseJsonFile: jest.fn(), uuidv4: () => 'id', equalsIgnoreCaseAndAccents: (a, b) => a.toLowerCase() === b.toLowerCase(), includesIgnoreCaseAndAccents: jest.fn(), removeFromArray: (items, item) => { const index = items.indexOf(item); if (index === -1) return false; items.splice(index, 1); return true; }, getFreeName: jest.fn(), findChar: jest.fn(), escapeHtml: x => x }));
+jest.unstable_mockModule('../public/scripts/utils.js', () => ({ download: jest.fn(), parseJsonFile: jest.fn(), loadFileToDocument: jest.fn().mockResolvedValue(undefined), uuidv4: () => 'id', equalsIgnoreCaseAndAccents: (a, b) => a.toLowerCase() === b.toLowerCase(), includesIgnoreCaseAndAccents: jest.fn(), removeFromArray: (items, item) => { const index = items.indexOf(item); if (index === -1) return false; items.splice(index, 1); return true; }, getFreeName: jest.fn(), findChar: jest.fn(), escapeHtml: x => x }));
 jest.unstable_mockModule('../public/scripts/power-user.js', () => ({ power_user: { tag_sort_mode: 'manual' } }));
 jest.unstable_mockModule('../public/scripts/popup.js', () => ({ POPUP_RESULT: { AFFIRMATIVE: 1 }, POPUP_TYPE: { CONFIRM: 1 }, Popup: {}, callGenericPopup: jest.fn() }));
 jest.unstable_mockModule('../public/scripts/keyboard.js', () => ({ INTERACTABLE_CONTROL_CLASS: 'interactable' }));
@@ -26,6 +26,7 @@ jest.unstable_mockModule('../public/scripts/workspace-panels-react-bridge.js', (
 
 const { registerCharacterTagsShellContext } = await import('../public/scripts/character-tags-shell-context.js');
 const tags = await import('../public/scripts/tags.js');
+const messageTagRuntime = globalThis[Symbol.for('emberdesk.messageTagRuntime')];
 
 test('React message rows own live character tag attributes while legacy projection leaves them alone', async () => {
     const original = { document: globalThis.document, window: globalThis.window };
@@ -92,7 +93,7 @@ test('React message rows own live character tag attributes while legacy projecti
 test('React folder bridge opens nested folders and backs out via the real tag model without jQuery', () => {
     const source = fs.readFileSync(new URL('../public/script.js', import.meta.url), 'utf8');
     const start = source.indexOf('function getReactCharacterLibraryPanelBridge() {');
-    const end = source.indexOf('\nasync function loadReactCharacterLibraryPanelModule()', start);
+    const end = source.indexOf('\nfunction getCharacterLibraryEntityTags(', start);
     expect(start).toBeGreaterThanOrEqual(0);
     expect(end).toBeGreaterThan(start);
     const model = { tag: { selected: [], excluded: [] } };
@@ -362,6 +363,9 @@ test('character library manager mounts into popup without jQuery and cleans up o
     try {
         const opening = tags.openCharacterTagManager();
         await Promise.resolve();
+        await Promise.resolve();
+        await Promise.resolve();
+        await Promise.resolve();
         expect(callGenericPopup).toHaveBeenCalledTimes(1);
         expect(mount).toHaveBeenCalledWith(elements[1], expect.objectContaining({ runtime: expect.any(Object) }));
         expect(cleanup).not.toHaveBeenCalled();
@@ -440,43 +444,21 @@ test('tag initialization handles delegated manager click and registers events wi
         const event = new Event('click', { bubbles: true, cancelable: true });
         doc.dispatchEvent(event);
         expect(event.defaultPrevented).toBe(true);
-        await Promise.resolve(); await Promise.resolve();
+        await Promise.resolve(); await Promise.resolve(); await Promise.resolve(); await Promise.resolve();
         expect(callGenericPopup).toHaveBeenCalled();
         expect(cleanup).toHaveBeenCalledTimes(1);
     } finally { globalThis.document = original.document; globalThis.Element = original.Element; globalThis.$ = original.$; }
 });
 
-test('message tag projection updates selected direct rows and preserves unrelated attributes without jQuery', () => {
-    const original = { document: globalThis.document, window: globalThis.window, $: globalThis.$ };
-    function message(id, src, initial = {}) {
-        const attrs = new Map(Object.entries({ mesid: String(id), ...initial }));
-        return {
-            matches: selector => selector.split(',').some(part => part === '.mes' || part === `.mes[mesid="${id}"]`),
-            get attributes() { return [...attrs.keys()].map(name => ({ name })); },
-            removeAttribute: name => attrs.delete(name), setAttribute: (name, value) => attrs.set(name, value),
-            querySelector: selector => selector === '.avatar img' && src ? { getAttribute: () => src } : null,
-            attrs,
-        };
-    }
-    const first = message(1, '/thumbnail?type=avatar&file=a.png', { 'data-char-tag-stale': '', 'data-other': 'keep' });
-    const second = message(2, '/thumbnail?type=avatar&file=a.png', { 'data-char-tags': 'unchanged' });
-    const missing = message(3, null, { 'data-char-tag-stale': '', 'data-char-tags': 'stale' });
-    const child = { matches: () => false, attributes: [] };
-    globalThis.document = { getElementById: id => id === 'chat' ? { children: [first, second, missing, child] } : null };
-    globalThis.window = { location: { origin: 'https://example.test' } };
-    globalThis.$ = () => { throw new Error('message projection must not use jQuery'); };
-    tags.loadTagsSettings({ tags: [{ id: 'a', name: 'Café, Hello_World!' }, { id: 'b', name: '!!!' }], tag_map: { 'a.png': ['a', 'b'] } });
+test('message tag projection notifies React without mutating rows', () => {
+    const original = globalThis.document;
+    globalThis.document = { getElementById: () => { throw new Error('tag projection must not read rows'); } };
+    const notify = jest.fn();
+    const unsubscribe = messageTagRuntime.subscribe(notify);
     try {
         tags.applyCharacterTagsToMessageDivs({ mesIds: [1, 3] });
-        expect(Object.fromEntries(first.attrs)).toEqual({ mesid: '1', 'data-other': 'keep', 'data-char-tags': 'Café  Hello_World!,!!!', 'data-char-tag-cafe-hello-world': '' });
-        expect(Object.fromEntries(second.attrs)).toEqual({ mesid: '2', 'data-char-tags': 'unchanged' });
-        expect(Object.fromEntries(missing.attrs)).toEqual({ mesid: '3' });
-        tags.applyCharacterTagsToMessageDivs();
-        expect(second.attrs.get('data-char-tags')).toBe('Café  Hello_World!,!!!');
-        tags.loadTagsSettings({ tags: [], tag_map: {} });
-        tags.applyCharacterTagsToMessageDivs({ mesIds: 2 });
-        expect(Object.fromEntries(second.attrs)).toEqual({ mesid: '2' });
-    } finally { globalThis.document = original.document; globalThis.window = original.window; globalThis.$ = original.$; }
+        expect(notify).toHaveBeenCalledTimes(1);
+    } finally { unsubscribe(); globalThis.document = original; }
 });
 
 test('ASK import displays existing, new and folder tags and removal affects the final assignment without jQuery', async () => {

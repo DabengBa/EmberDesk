@@ -22,7 +22,7 @@ test('clearing a React-owned chat removes only zoomed character avatars without 
     expect(mount).toHaveBeenCalledTimes(1);
 });
 
-test.each(['native root', 'existing collection'])('legacy clear removes all direct element children from %s', async (kind) => {
+test.each(['native root', 'existing collection'])('clear updates the React projection without mutating rows from %s', async (kind) => {
     const source = readFileSync(new URL('../public/scripts/chat-ops-service.js', import.meta.url), 'utf8');
     const start = source.indexOf('export async function clearChat(');
     const end = source.indexOf('export async function renamePastChats(', start);
@@ -39,8 +39,9 @@ test.each(['native root', 'existing collection'])('legacy clear removes all dire
     const values = [document, state, noop, async () => {}, noop, noop, noop, noop, () => false, mount];
     const clear = new Function(...names, `let chatSessionVersion = 0; let chatClearInProgress = true; ${clearSource}; return clearChat;`)(...values);
     await clear({ clearData: true });
-    expect(message.remove).toHaveBeenCalledTimes(1);
-    expect(loadMore.remove).toHaveBeenCalledTimes(1);
+    expect(message.remove).not.toHaveBeenCalled();
+    expect(loadMore.remove).not.toHaveBeenCalled();
     expect(state.chat).toEqual([]);
-    expect(mount).not.toHaveBeenCalled();
+    expect(state.reactMainChatProjectionCleared).toBe(true);
+    expect(mount).toHaveBeenCalledTimes(1);
 });

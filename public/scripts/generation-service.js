@@ -94,10 +94,9 @@ const substituteParams = (...args) => shell().substituteParams(...args);
 const unblockGeneration = (...args) => shell().unblockGeneration(...args);
 const unshallowCharacter = (...args) => shell().unshallowCharacter(...args);
 const Generate = (...args) => shell().Generate(...args);
-const addCopyToCodeBlocks = (...args) => shell().addCopyToCodeBlocks(...args);
-const appendMediaToMessage = (...args) => shell().appendMediaToMessage(...args);
+
 const getStoppingStrings = (...args) => shell().getStoppingStrings(...args);
-const isReactMainChatOwner = (...args) => shell().isReactMainChatOwner(...args);
+
 const mountReactMainChatMessageListPanel = (...args) => shell().mountReactMainChatMessageListPanel(...args);
 const processImageAttachment = (...args) => shell().processImageAttachment(...args);
 const scrollChatToBottom = (...args) => shell().scrollChatToBottom(...args);
@@ -155,39 +154,6 @@ export class GenerationStreamSession {
         this.promptReasoning = promptReasoning;
     }
 
-    /**
-     * Initializes DOM elements for the current message.
-     * @param {number} messageId Current message ID
-     * @param {boolean?} continueOnReasoning If continuing on reasoning
-     */
-    async #checkDomElements(messageId) {
-        if (isReactMainChatOwner()) {
-            return;
-        }
-
-        if (this.messageDom && this.messageDom.getAttribute('mesid') !== String(messageId)) {
-            this.messageDom = null;
-            this.messageTextDom = null;
-            this.messageTimerDom = null;
-        }
-        if (this.messageDom === null || this.messageTextDom === null) {
-            this.messageDom = document.querySelector(`#chat .mes[mesid="${messageId}"]`);
-            this.messageTextDom = this.messageDom?.querySelector('.mes_text');
-            this.messageTimerDom = this.messageDom?.querySelector('.mes_timer');
-        }
-        this.reasoningHandler.updateDom(messageId);
-    }
-
-    #updateMessageBlockVisibility() {
-        if (isReactMainChatOwner()) {
-            return;
-        }
-
-        if (this.messageDom instanceof HTMLElement && Array.isArray(this.toolCalls) && this.toolCalls.length > 0) {
-            const shouldHide = ['', '...'].includes(this.result) && !this.reasoningHandler.reasoning;
-            this.messageDom.classList.toggle('displayNone', shouldHide);
-        }
-    }
 
     markUIGenStarted() {
         deactivateSendButtons();
@@ -204,8 +170,8 @@ export class GenerationStreamSession {
             indexOfMessage: message => shell().state.chat.indexOf(message),
             saveInitial: (text, ownsRun) => saveReply({ type: this.type, getMessage: text, fromStreaming: true, ownsRun }),
             lastMessageId: () => shell().state.chat.length - 1,
-            checkDom: id => this.#checkDomElements(id),
-            updateVisibility: () => this.#updateMessageBlockVisibility(),
+            checkDom: async () => {},
+            updateVisibility: () => {},
             clean: (text, isFinal, stoppingStrings) => cleanUpMessage({ getMessage: text, displayIncompleteSentences: !isFinal, stoppingStrings }),
             count: (text, token) => countOccurrences(text, token),
             isOdd: count => isOdd(count),
@@ -215,17 +181,9 @@ export class GenerationStreamSession {
             isScrollLocked: () => shell().state.scrollLock,
             refresh: () => scheduleMainChatMessageListPanelRefresh(),
             mount: () => { void mountReactMainChatMessageListPanel(); },
-            addCopyButtons: id => {
-                const chatElement = shell().state.chatElement;
-                const root = chatElement;
-                const element = isReactMainChatOwner() ? null : root?.querySelector(`.mes[mesid="${id}"]`);
-                if (element) addCopyToCodeBlocks(element);
-            },
+            addCopyButtons: () => {},
             processImages: (message, imageUrls, ownsRun) => processImageAttachment(message, { imageUrls, ownsRun }),
-            renderImages: message => {
-                if (!isReactMainChatOwner()) appendMediaToMessage(message, this.messageDom);
-                else scheduleMainChatMessageListPanelRefresh();
-            },
+            renderImages: () => scheduleMainChatMessageListPanelRefresh(),
             emitReceived: (id, type) => eventSource.emit(event_types.MESSAGE_RECEIVED, id, type),
             emitRendered: (id, type) => eventSource.emit(event_types.CHARACTER_MESSAGE_RENDERED, id, type),
             saveChat: ownsRun => saveChatConditional(ownsRun),
@@ -530,14 +488,7 @@ async function executeOwnedGenerationRequestInShell(generationEnvelope, lease) {
                     clean: text => cleanUpMessage({ getMessage: text, displayIncompleteSentences: false, stoppingStrings: [] }),
                     formatTags: (invocations, text) => shell().state.ToolManager.formatPipelineTagMarkup(invocations, text),
                     regexOutput: text => getRegexedString(text, shell().state.regex_placement.AI_OUTPUT),
-                    removeCardView: index => {
-                        if (isReactMainChatOwner()) void mountReactMainChatMessageListPanel();
-                        else {
-                            const chatElement = shell().state.chatElement;
-                            const root = chatElement;
-                            root?.querySelectorAll(`.mes[mesid="${index}"]`).forEach(row => row.remove());
-                        }
-                    },
+                    removeCardView: () => { void mountReactMainChatMessageListPanel(); },
                     emitDeleted: length => eventSource.emit(event_types.MESSAGE_DELETED, length),
                     saveReply: reply => saveReply(reply),
                     endPipeline: () => endPipelineRun(),
@@ -785,26 +736,5 @@ export async function previewNextGenerationRequest({ round = 0 } = {}) {
 }
 
 export function updateEditArrowClasses() {
-    if (!(shell().state.this_edit_mes_id >= 0)) {
-        return;
-    }
-    if (isReactMainChatOwner()) {
-        return;
-    }
-
-    const chatElement = shell().state.chatElement;
-    const root = chatElement;
-    if (!root) return;
-
-    const rows = root.querySelectorAll('.mes');
-    const lastId = Number(rows[rows.length - 1]?.getAttribute('mesid') ?? undefined);
-    const firstId = Number(rows[0]?.getAttribute('mesid') ?? undefined);
-    const editId = shell().state.this_edit_mes_id;
-    for (const message of root.children) {
-        if (!message.matches('.mes') || message.getAttribute('mesid') !== String(editId)) continue;
-        message.querySelectorAll('.mes_edit_copy, .mes_edit_delete').forEach(button => button.classList.remove('disabled'));
-        message.querySelectorAll('.mes_edit_down').forEach(button => button.classList.toggle('disabled', lastId === Number(editId)));
-        message.querySelectorAll('.mes_edit_up').forEach(button => button.classList.toggle('disabled', firstId === Number(editId)));
-    }
 }
 

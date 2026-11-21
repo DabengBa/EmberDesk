@@ -75,6 +75,18 @@ describe('main chat store projection', () => {
         expect(JSON.stringify(record)).not.toContain('HTMLElement');
     });
 
+    test('formats display text and preserves reasoning and media in the React projection', () => {
+        const formatMessage = jest.fn(createFormatMessage());
+        const record = buildMainChatMessageRecord({
+            name: 'A', mes: 'original', is_user: false, is_system: false,
+            extra: { display_text: 'display', reasoning: 'thinking', media: [{ type: 'image', url: '/files/image.png' }] },
+        }, { messageId: 4, formatMessage });
+        expect(formatMessage).toHaveBeenCalledWith('display', 'A', false, false, 4, {}, false);
+        expect(record.render.messageHtml).toContain('display');
+        expect(record.render.reasoningHtml).toContain('thinking');
+        expect(record.render.mediaHtml).toContain('/files/image.png');
+    });
+
     test('projects full chat order with rich records limited to the visible window', () => {
         const snapshot = buildMainChatSnapshotFromLegacyChat({
             chatId: 'chat-1',

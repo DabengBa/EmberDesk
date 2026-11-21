@@ -140,27 +140,19 @@ test('reasoning reads the current chat and preserves React message identity and 
     await expect(row.locator('.mes_reasoning')).toContainText('FE3 thought');
 });
 
-test('legacy reasoning mounts safe fragments without losing formatting or scoped styles', async ({ page }) => {
+test('React reasoning mounts safe fragments without losing formatting or scoped styles', async ({ page }) => {
     await testSetup.awaitST({ page });
-    const result = await page.evaluate(async () => {
-        const { ReasoningHandler, ReasoningState } = await import('/scripts/reasoning.js');
-        const chat = document.getElementById('chat');
-        const owner = chat.dataset.reactMainChatOwner;
-        const row = document.createElement('div');
-        row.setAttribute('mesid', '0');
-        row.innerHTML = '<details class="mes_reasoning_details"><summary class="mes_reasoning_header_title"></summary><div class="mes_reasoning"></div></details><button class="mes_edit_add_reasoning"></button>';
-        const content = row.querySelector('.mes_reasoning');
-        // Exercise the legacy consumer with real DOMPurify, not a formatter mock.
-        Object.defineProperty(content, 'innerHTML', {
-            set() { throw new Error('Reasoning must mount a sanitized DOM fragment'); },
+    await page.evaluate(async () => {
+        const context = window.SillyTavern.getContext();
+        context.chat.splice(0, context.chat.length, {
+            name: 'Assistant', is_user: false, is_system: false, mes: 'Response', send_date: Date.now(),
+            extra: { reasoning: '**Legacy thought**\n\n`safe code`\n\n<style>.reasoning-accent { color: red; }</style><span class="reasoning-accent">Styled thought</span><a target="_blank" href="https://example.com/">Reference</a><img src="invalid" onerror="window.__fe3ReasoningXss = true"><script>window.__fe3ReasoningXss = true</script><a href="javascript:alert(1)">Unsafe link</a>' },
         });
-        try {
-            chat.dataset.reactMainChatOwner = '';
-            const handler = new ReasoningHandler();
-            handler.messageDom = row;
-            handler.state = ReasoningState.Done;
-            handler.reasoning = '**Legacy thought**\n\n`safe code`\n\n<style>.reasoning-accent { color: red; }</style><span class="reasoning-accent">Styled thought</span><a target="_blank" href="https://example.com/">Reference</a><img src="invalid" onerror="window.__fe3ReasoningXss = true"><script>window.__fe3ReasoningXss = true</script><a href="javascript:alert(1)">Unsafe link</a>';
-            handler.updateDom(0);
+        await context.printMessages();
+    });
+    const content = page.locator('#chat > .mes[mesid="0"] .mes_reasoning');
+    await expect(content.locator('strong')).toHaveText('Legacy thought');
+    const result = await content.evaluate(content => {
             content.querySelectorAll('img').forEach(image => image.dispatchEvent(new Event('error')));
             const link = content.querySelector('a[target="_blank"]');
             return {
@@ -174,11 +166,6 @@ test('legacy reasoning mounts safe fragments without losing formatting or scoped
                 unsafe: Boolean(content.querySelector('script, [onerror], a[href^="javascript:"]')),
                 executed: window.__fe3ReasoningXss === true,
             };
-        } finally {
-            if (owner === undefined) delete chat.dataset.reactMainChatOwner;
-            else chat.dataset.reactMainChatOwner = owner;
-            delete window.__fe3ReasoningXss;
-        }
     });
     expect(result).toMatchObject({ bold: 'Legacy thought', code: 'safe code', linkTarget: '_blank', linkSafe: true, unsafe: false, executed: false });
     expect(result.scope).toBeTruthy();

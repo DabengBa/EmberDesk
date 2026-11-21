@@ -1,18 +1,12 @@
-import {
-    DOMPurify,
-    moment,
-} from '../lib.js';
 import { REASONING_PREFIX, REASONING_SUFFIX, REASONING_SEPARATOR } from './constants.js';
-import { messageFormatting, updateMessageBlock } from './message-service.js';
+import { updateMessageBlock } from './message-service.js';
 import { requireMessageShellContext } from './message-shell-context.js';
 import { eventSource, event_types } from './events.js';
 import { getRegexedString, regex_placement } from './extensions/regex/engine.js';
-import { getCurrentLocale, t, translate } from './i18n.js';
+import { t } from './i18n.js';
 import { macros, MacroCategory } from './macros/macro-system.js';
 import { chat_completion_sources, getChatCompletionModel, oai_settings } from './openai.js';
-import { escapeRegex, setDatasetProperty, trimSpaces } from './utils.js';
-
-const getChatMessageCommands = () => requireMessageShellContext().getChatMessageCommands();
+import { escapeRegex, trimSpaces } from './utils.js';
 
 /**
  * @typedef {object} ReasoningTemplate
@@ -40,18 +34,6 @@ export const ReasoningType = {
     Edited: 'edited',
 };
 
-/**
- * Gets a message from an element.
- * @param {Element} element
- * @returns {{messageId: number, message: object, messageBlock: Element|null}}
- */
-function getMessageFromElement(element) {
-    const chat = requireMessageShellContext().state.chat;
-    const messageBlock = element.closest('.mes');
-    const messageId = Number(messageBlock?.getAttribute('mesid') ?? undefined);
-    const message = chat[messageId];
-    return { messageId: messageId, message, messageBlock };
-}
 
 /**
  * Extracts the reasoning from the response data.
@@ -163,13 +145,7 @@ export function isHiddenReasoningModel() {
  * @param {Object} [options={}] - Optional arguments
  * @param {boolean} [options.reset=false] - Whether to reset state, and not take the current mess properties (for example when swiping)
  */
-export function updateReasoningUI(messageIdOrElement, { reset = false } = {}) {
-    if (document.getElementById('chat')?.dataset.reactMainChatOwner === 'react') {
-        return;
-    }
-    const handler = new ReasoningHandler();
-    handler.initHandleMessage(messageIdOrElement, { reset });
-}
+export function updateReasoningUI(_messageIdOrElement, _options = {}) {}
 
 
 /**
@@ -470,114 +446,7 @@ export class ReasoningHandler {
      *
      * @param {number} messageId - The ID of the message to update
      */
-    updateDom(messageId) {
-        if (document.getElementById('chat')?.dataset.reactMainChatOwner === 'react') {
-            return;
-        }
-
-        this.#checkDomElements(messageId);
-
-        // Main CSS class to show this message includes reasoning
-        this.messageDom.classList.toggle('reasoning', this.state !== ReasoningState.None);
-
-        // Update states to the relevant DOM elements
-        setDatasetProperty(this.messageDom, 'reasoningState', this.state !== ReasoningState.None ? this.state : null);
-        setDatasetProperty(this.messageReasoningDetailsDom, 'state', this.state);
-        setDatasetProperty(this.messageReasoningDetailsDom, 'type', this.type);
-
-        // Update the reasoning message
-        const reasoning = trimSpaces(this.reasoningDisplayText ?? this.reasoning);
-        const displayReasoning = messageFormatting(reasoning, '', false, false, messageId, {}, true);
-
-        // Keep the formatter's scoped styles while mounting only sanitized nodes.
-        const fragment = DOMPurify.sanitize(displayReasoning, {
-            RETURN_DOM_FRAGMENT: true,
-            ADD_TAGS: ['style'],
-            ADD_ATTR: ['target'],
-        });
-        for (const anchor of fragment.querySelectorAll('a[target]')) {
-            if (anchor.getAttribute('target')?.toLowerCase() === '_blank') {
-                anchor.relList.add('noopener');
-            }
-        }
-        this.messageReasoningContentDom.replaceChildren(fragment);
-
-        // Update tooltip for hidden reasoning edit
-        /** @type {HTMLElement} */
-        const button = this.messageDom.querySelector('.mes_edit_add_reasoning');
-        button.title = this.state === ReasoningState.Hidden ? t`Hidden reasoning - Add reasoning block` : t`Add reasoning block`;
-
-        // Make sure that hidden reasoning headers are collapsed by default, to not show a useless edit button
-        if (this.state === ReasoningState.Hidden) {
-            this.messageReasoningDetailsDom.open = false;
-        }
-
-        // Update the reasoning duration in the UI
-        this.#updateReasoningTimeUI();
-    }
-
-    /**
-     * Finds and caches reasoning-related DOM elements for the given message.
-     *
-     * @param {number} messageId - The ID of the message to cache the DOM elements for
-     */
-    #checkDomElements(messageId) {
-        // Make sure we reset dom elements if we are checking for a different message (shouldn't happen, but be sure)
-        if (this.messageDom !== null && this.messageDom.getAttribute('mesid') !== messageId.toString()) {
-            this.messageDom = null;
-        }
-
-        // Cache the DOM elements once
-        if (this.messageDom === null) {
-            this.messageDom = document.querySelector(`#chat .mes[mesid="${messageId}"]`);
-            if (this.messageDom === null) throw new Error('message dom does not exist');
-        }
-        if (this.messageReasoningDetailsDom === null) {
-            this.messageReasoningDetailsDom = this.messageDom.querySelector('.mes_reasoning_details');
-        }
-        if (this.messageReasoningContentDom === null) {
-            this.messageReasoningContentDom = this.messageDom.querySelector('.mes_reasoning');
-        }
-        if (this.messageReasoningHeaderDom === null) {
-            this.messageReasoningHeaderDom = this.messageDom.querySelector('.mes_reasoning_header_title');
-        }
-    }
-
-    /**
-     * Updates the reasoning time display in the UI.
-     *
-     * Shows the duration in a human-readable format with a tooltip for exact seconds.
-     * Displays "Thinking..." if still processing, or a generic message otherwise.
-     */
-    #updateReasoningTimeUI() {
-        const element = this.messageReasoningHeaderDom;
-        const duration = this.getDuration();
-        let data = null;
-        let title = '';
-        if (duration) {
-            const seconds = moment.duration(duration).asSeconds();
-
-            const durationStr = moment.duration(duration).locale(getCurrentLocale()).humanize({ s: 50, ss: 3 });
-            element.textContent = t`Thought for ${durationStr}`;
-            data = String(seconds);
-            title = `${seconds} seconds`;
-        } else if ([ReasoningState.Done, ReasoningState.Hidden].includes(this.state)) {
-            element.textContent = t`Thought for some time`;
-            data = 'unknown';
-        } else {
-            element.textContent = t`Thinking...`;
-            data = null;
-        }
-
-        if (this.type && this.type !== ReasoningType.Model) {
-            title += ` [${translate(this.type)}]`;
-            title = title.trim();
-        }
-        element.title = title;
-
-        setDatasetProperty(this.messageReasoningDetailsDom, 'duration', data);
-        setDatasetProperty(element, 'duration', data);
-    }
+    updateDom(_messageId) {}
 }
 
 /**
@@ -717,102 +586,7 @@ function registerReasoningMacros() {
     });
 }
 
-function isReactMainChatMessageRow(element) {
-    return document.getElementById('chat')?.dataset.reactMainChatOwner === 'react'
-        && element instanceof Element
-        && element.closest('[data-main-chat-message-row-owner="react"]') !== null;
-}
 
-function setReasoningEventHandlers() {
-    const handlers = new Map();
-    function delegate(type, selector, handler) {
-        if (!handlers.has(type)) {
-            const registrations = [];
-            handlers.set(type, registrations);
-            document.addEventListener(type, event => {
-                let target = event.target?.nodeType === 3 ? event.target.parentElement : event.target;
-                while (target && target !== document) {
-                    for (const entry of registrations) {
-                        if (target.matches?.(entry.selector)) entry.handler.call(target, event);
-                    }
-                    if (event.cancelBubble) break;
-                    target = target.parentElement;
-                }
-            });
-        }
-        handlers.get(type).push({ selector, handler });
-    }
-
-    delegate('click', '.mes_reasoning_details', function (e) {
-        if (isReactMainChatMessageRow(this)) return;
-        if (!e.target.closest('.mes_reasoning_actions') && !e.target.closest('.mes_reasoning_header')) e.preventDefault();
-    });
-
-    delegate('click', '.mes_reasoning_header', function (e) {
-        if (isReactMainChatMessageRow(this)) return;
-        e.preventDefault();
-        const { messageId, messageBlock } = getMessageFromElement(this);
-        const wasOpen = messageBlock?.querySelector('.mes_reasoning_details')?.open === true;
-        const commands = getChatMessageCommands();
-        if (commands.setMessageReasoningOpen(messageId, !wasOpen) && !wasOpen && messageBlock?.querySelector('#curEditTextarea')) {
-            commands.startMessageReasoningEdit(messageId);
-        }
-    });
-
-    delegate('click', '.mes_reasoning_copy', function (e) {
-        if (isReactMainChatMessageRow(this)) return;
-        e.stopPropagation();
-        e.preventDefault();
-    });
-
-    delegate('click', '.mes_reasoning_edit, .mes_edit_add_reasoning', function (e) {
-        if (isReactMainChatMessageRow(this)) return;
-        e.stopPropagation();
-        e.preventDefault();
-        const { messageId } = getMessageFromElement(this);
-        getChatMessageCommands().startMessageReasoningEdit(messageId);
-    });
-
-    delegate('click', '.mes_reasoning_close_all', function (e) {
-        if (isReactMainChatMessageRow(this)) return;
-        e.stopPropagation();
-        e.preventDefault();
-        getChatMessageCommands().collapseAllMessageReasoning();
-    });
-
-    delegate('click', '.mes_reasoning_edit_done', async function (e) {
-        if (isReactMainChatMessageRow(this)) return;
-        e.stopPropagation();
-        e.preventDefault();
-        const { messageId, messageBlock } = getMessageFromElement(this);
-        const commands = getChatMessageCommands();
-        const textarea = messageBlock?.querySelector('.reasoning_edit_textarea');
-        if (textarea) commands.updateMessageReasoningEdit(messageId, textarea.value);
-        await commands.commitMessageReasoningEdit(messageId);
-    });
-
-    delegate('click', '.mes_reasoning_edit_cancel', async function (e) {
-        if (isReactMainChatMessageRow(this)) return;
-        e.stopPropagation();
-        e.preventDefault();
-        const { messageId } = getMessageFromElement(this);
-        await getChatMessageCommands().cancelMessageReasoningEdit(messageId);
-    });
-
-    delegate('click', '.mes_reasoning_delete', async function (e) {
-        if (isReactMainChatMessageRow(this)) return;
-        e.stopPropagation();
-        e.preventDefault();
-        const { messageId } = getMessageFromElement(this);
-        await getChatMessageCommands().deleteMessageReasoning(messageId);
-    });
-
-    delegate('pointerup', '.mes_reasoning_copy', async function () {
-        if (isReactMainChatMessageRow(this)) return;
-        const { messageId } = getMessageFromElement(this);
-        await getChatMessageCommands().copyMessageReasoning(messageId);
-    });
-}
 
 /**
  * Removes reasoning from a string if auto-parsing is enabled.
@@ -968,7 +742,7 @@ function registerReasoningAppEvents() {
  * Initializes reasoning settings and event handlers.
  */
 export function initReasoning() {
-    setReasoningEventHandlers();
+
     registerReasoningMacros();
     registerReasoningAppEvents();
 }

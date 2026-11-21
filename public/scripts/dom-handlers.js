@@ -96,7 +96,7 @@ const importFromURL = (...args) => shell().importFromURL(...args);
 const importTags = (...args) => shell().importTags(...args);
 const initCharacterSearch = (...args) => shell().initCharacterSearch(...args);
 const isDataURL = (...args) => shell().isDataURL(...args);
-const isReactMainChatOwner = (...args) => shell().isReactMainChatOwner(...args);
+
 
 const loadEarlierChatMessages = (...args) => shell().loadEarlierChatMessages(...args);
 const messageEdit = (...args) => shell().messageEdit(...args);
@@ -786,40 +786,7 @@ export async function bindLegacyShellHandlers() {
         document.getElementById('options_button').focus();
     });
 
-    delegate('pointerup', '.mes_copy', async function () {
-        if (isReactMainChatOwner() && this.closest('[data-main-chat-message-row-owner="react"]')) {
-            return;
-        }
-        if (state.this_chid !== undefined || state.name2 === state.neutralCharacterName) {
-            try {
-                const messageId = this.closest('.mes')?.getAttribute('mesid');
-                const text = state.chat[messageId].mes;
-                await copyText(text);
-                toastr.info('Copied!', '', { timeOut: 2000 });
-            } catch (err) {
-                console.error('Failed to copy: ', err);
-            }
-        }
-    });
 
-    //********************
-    //***Message Editor***
-    delegate('click', '.mes_edit', async function () {
-        if (isReactMainChatOwner()) {
-            return;
-        }
-        if (state.is_delete_mode) {
-            return;
-        }
-        if (state.this_chid !== undefined || state.name2 === state.neutralCharacterName) {
-            if (state.this_edit_mes_id >= 0) {
-                await messageEditDone();
-            }
-            const edit_mes_id = Number(this.closest('.mes')?.getAttribute('mesid'));
-
-            await messageEdit(edit_mes_id);
-        }
-    });
 
 
     state.mainChatMessageActionsController = createChatMessageActionsController(document, {
@@ -827,9 +794,7 @@ export async function bindLegacyShellHandlers() {
         animationDuration: state.animation_duration,
         animationEasing: state.animation_easing,
         onReactOwnedOutsideClick: () => {
-            if (isReactMainChatOwner()) {
-                runMainChatVisibleMessageActionsShellAction({ kind: 'close' });
-            }
+            runMainChatVisibleMessageActionsShellAction({ kind: 'close' });
         },
         onStateChanged: () => {
             void mountReactMainChatMessageListPanel();
@@ -837,53 +802,7 @@ export async function bindLegacyShellHandlers() {
     });
     state.mainChatMessageActionsController.init();
 
-    delegate('click', '.mes_edit_cancel', async function () {
-        if (isReactMainChatOwner()) {
-            return;
-        }
-        await messageEditCancel.call(this, state.this_edit_mes_id);
-    });
 
-    delegate('click', '.mes_edit_up', async function () {
-        if (isReactMainChatOwner()) return;
-        if (state.this_edit_mes_id <= 0) {
-            return;
-        }
-        const targetId = Number(state.this_edit_mes_id) - 1;
-        await messageEditMove(state.this_edit_mes_id, targetId);
-    });
-
-    delegate('click', '.mes_edit_down', async function () {
-        if (isReactMainChatOwner()) return;
-        if (state.this_edit_mes_id >= state.chat.length - 1) {
-            return;
-        }
-
-        const targetId = Number(state.this_edit_mes_id) + 1;
-        await messageEditMove(state.this_edit_mes_id, targetId);
-    });
-
-    delegate('click', '.mes_edit_copy', async function () {
-        if (isReactMainChatOwner()) return;
-        const confirmation = await callGenericPopup(t`Create a copy of this message?`, state.POPUP_TYPE.CONFIRM);
-        if (!confirmation) {
-            return;
-        }
-
-        await shell().getChatMessageCommands().duplicateMessage(state.this_edit_mes_id);
-    });
-
-    delegate('click', '.mes_edit_delete', async function () {
-        if (isReactMainChatOwner()) return;
-        await deleteMessage(Number(state.this_edit_mes_id), true);
-    });
-
-    delegate('click', '.mes_edit_done', async function () {
-        if (isReactMainChatOwner()) {
-            return;
-        }
-        await messageEditDone();
-    });
 
     //Select chat
 

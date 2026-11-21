@@ -1,5 +1,5 @@
 import toastr from './notifications.js';
-import { buildChatMessageRenderDescriptor, buildChatMessageRowPopulation } from './chat-message-render-descriptor.js';
+
 import { buildChatMessageRichBodyRender } from './chat-message-render-service.js';
 import { MEDIA_DISPLAY, MEDIA_TYPE, REASONING_PREFIX, REASONING_SUFFIX, SCROLL_BEHAVIOR, debounce_timeout } from './constants.js';
 import { eventSource, event_types } from './events.js';
@@ -44,7 +44,7 @@ function getMessageStyleScope(messageId, isReasoning) {
     return scopes[key] ??= `message-${uuidv4()}`;
 }
 
-const applyCharacterTagsToMessageDivs = (...args) => shell().applyCharacterTagsToMessageDivs(...args);
+
 const copyText = (...args) => shell().copyText(...args);
 const decodeStyleTags = (...args) => shell().decodeStyleTags(...args);
 const delay = (...args) => shell().delay(...args);
@@ -57,10 +57,9 @@ const getGeneratingModel = (...args) => shell().getGeneratingModel(...args);
 const getMessageTimeStamp = (...args) => shell().getMessageTimeStamp(...args);
 const getRegexedString = (...args) => shell().getRegexedString(...args);
 const getStoppingStrings = (...args) => shell().getStoppingStrings(...args);
-const getThumbnailUrl = (...args) => shell().getThumbnailUrl(...args);
-const humanFileSize = (...args) => shell().humanFileSize(...args);
+
 const isDataURL = (...args) => shell().isDataURL(...args);
-const isReactMainChatOwner = (...args) => shell().isReactMainChatOwner(...args);
+
 const mountReactMainChatMessageListPanel = (...args) => shell().mountReactMainChatMessageListPanel(...args);
 const onlyUnique = (...args) => shell().onlyUnique(...args);
 const saveBase64AsFile = (...args) => shell().saveBase64AsFile(...args);
@@ -68,9 +67,7 @@ const saveImageToMessage = (...args) => shell().saveImageToMessage(...args);
 const scheduleMainChatMessageListPanelRefresh = (...args) => shell().scheduleMainChatMessageListPanelRefresh(...args);
 const substituteParams = (...args) => shell().substituteParams(...args);
 const t = (...args) => shell().t(...args);
-const timestampToMoment = (...args) => shell().timestampToMoment(...args);
-const updateEditArrowClasses = (...args) => shell().updateEditArrowClasses(...args);
-const updateReasoningUI = (...args) => shell().updateReasoningUI(...args);
+
 
 let requestId = null;
 
@@ -243,32 +240,13 @@ export function messageFormatting(mes, ch_name, isSystem, isUser, messageId, san
  * @param {number} messageId Message ID
  * @param {object} message Message object
  * @param {object} [options={}] Optional arguments
- * @param {boolean} [options.rerenderMessage=true] Whether to re-render the message content (inside <c>.mes_text</c>)
+ * @param {boolean} [options.rerenderMessage=true] Retained for compatibility; React renders from the model.
  */
-export function updateMessageBlock(messageId, message, { rerenderMessage = true } = {}) {
-    if (isReactMainChatOwner()) {
-        if (message && state.chat[messageId] !== message) {
-            state.chat[messageId] = message;
-        }
-        void mountReactMainChatMessageListPanel();
-        return;
+export function updateMessageBlock(messageId, message, _options = {}) {
+    if (message && state.chat[messageId] !== message) {
+        state.chat[messageId] = message;
     }
-
-    const root = state.chatElement;
-    const matches = root?.querySelectorAll(`[mesid="${messageId}"]`) ?? [];
-    const rows = Array.from(matches);
-
-    if (rerenderMessage) {
-        const text = message?.extra?.display_text ?? message.mes;
-        const html = messageFormatting(text, message.name, message.is_system, message.is_user, messageId, {}, false);
-        rows.forEach(row => row.querySelectorAll('.mes_text').forEach(element => { element.innerHTML = html; }));
-    }
-
-    rows.forEach(messageElement => {
-        updateReasoningUI(messageElement);
-        addCopyToCodeBlocks(messageElement);
-        appendMediaToMessage(message, messageElement);
-    });
+    void mountReactMainChatMessageListPanel();
 }
 
 /**
@@ -441,308 +419,9 @@ export function getMediaIndex(mes) {
  * @param {HTMLElement|null} messageElement Message element
  * @param {string} [scrollBehavior] Scroll behavior when adjusting scroll position
  */
-export function appendMediaToMessage(mes, messageElement, scrollBehavior = SCROLL_BEHAVIOR.ADJUST) {
+export function appendMediaToMessage(mes, _messageElement, _scrollBehavior = SCROLL_BEHAVIOR.ADJUST) {
     ensureMessageMediaIsArray(mes);
-    if (isReactMainChatOwner()) {
-        scheduleMainChatMessageListPanelRefresh();
-        return;
-    }
-
-    const rows = messageElement ? [messageElement] : [];
-    const findInRows = selector => [...new Set(rows.flatMap(row => Array.from(row.querySelectorAll(selector))))];
-    const fileWrapper = findInRows('.mes_file_wrapper');
-    const mediaWrapper = findInRows('.mes_media_wrapper');
-
-    // Like collection append, insert originals in the last target and clones
-    // in earlier targets. Real message rendering normally has one target.
-    const appendToWrappers = (wrappers, nodes) => wrappers.forEach((wrapper, index) => {
-        const inserted = index === wrappers.length - 1 ? nodes : nodes.map(node => node.cloneNode(true));
-        wrapper.append(...inserted);
-    });
-    const setSource = (element, url) => {
-        if (url === null) element.removeAttribute('src');
-        else if (url !== undefined) element.setAttribute('src', url);
-    };
-
-    const hasMedia = Array.isArray(mes?.extra?.media) && mes.extra.media.length > 0;
-    const hasFiles = Array.isArray(mes?.extra?.files) && mes.extra.files.length > 0;
-    const mediaDisplay = hasMedia ? getMediaDisplay(mes) : null;
-    const hideMessageText = hasMedia && mes?.extra?.inline_image === false;
-
-    const mediaBlocks = [];
-    const mediaPromises = [];
-
-    const chatRoot = (hasMedia || hasFiles) ? state.chatElement : undefined;
-    const chatHeight = (hasMedia || hasFiles) ? chatRoot?.scrollHeight : 0;
-    const scrollPosition = (hasMedia || hasFiles) ? chatRoot?.scrollTop : 0;
-    const doAdjustScroll = () => {
-        if (!hasMedia && !hasFiles) {
-            return;
-        }
-        if (scrollBehavior === SCROLL_BEHAVIOR.NONE) {
-            return;
-        }
-        if (scrollBehavior === SCROLL_BEHAVIOR.KEEP) {
-            if (chatRoot) chatRoot.scrollTop = scrollPosition;
-            return;
-        }
-        const newChatHeight = chatRoot?.scrollHeight;
-        const diff = newChatHeight - chatHeight;
-        if (chatRoot) chatRoot.scrollTop = scrollPosition + diff;
-    };
-
-    for (const row of rows) {
-        if (mediaDisplay === null) row.removeAttribute('data-media-display');
-        else row.setAttribute('data-media-display', mediaDisplay);
-        row.querySelectorAll('.mes_text').forEach(text => text.classList.toggle('inline_media', hideMessageText));
-    }
-
-    /**
-     * Appends a single image attachment to the message element.
-     * @param {MediaAttachment} attachment Image attachment object
-     * @param {number} index Index of the image attachment
-     * @returns {HTMLElement} The appended image container element
-     */
-    function appendImageAttachment(attachment, index) {
-        const template = document.querySelector('#message_image_template .mes_img_container').cloneNode(true);
-        template.setAttribute('data-index', String(index));
-
-        const image = template.querySelector('.mes_img');
-        setSource(image, attachment.url);
-        image.setAttribute('title', attachment.title || mes.extra.title || '');
-        mediaPromises.push(new Promise((resolve) => {
-            function onLoad() {
-                image.removeAttribute('alt');
-                image.classList.remove('error');
-                resolve();
-            }
-            function onError() {
-                image.setAttribute('alt', '');
-                image.classList.add('error');
-                resolve();
-            }
-            if (image.complete) {
-                onLoad();
-            } else {
-                image.addEventListener('load', onLoad);
-                image.addEventListener('error', onError);
-            }
-        }));
-
-        mediaBlocks.push(template);
-        return template;
-    }
-
-    /**
-     * Appends a single video attachment to the message element.
-     * @param {MediaAttachment} attachment Video attachment object
-     * @param {number} index Index of the video attachment
-     * @returns {HTMLElement} The appended video container element
-     */
-    function appendVideoAttachment(attachment, index) {
-        const template = document.querySelector('#message_video_template .mes_video_container').cloneNode(true);
-        template.setAttribute('data-index', String(index));
-
-        const video = template.querySelector('.mes_video');
-        setSource(video, attachment.url);
-        video.setAttribute('title', attachment.title || mes.extra.title || '');
-        mediaPromises.push(new Promise((resolve) => {
-            function onLoad() {
-                resolve();
-            }
-            function onError() {
-                video.classList.add('error');
-                resolve();
-            }
-            if (video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
-                onLoad();
-            } else {
-                video.addEventListener('loadeddata', onLoad);
-                video.addEventListener('error', onError);
-            }
-        }));
-
-        mediaBlocks.push(template);
-        return template;
-    }
-
-    /**
-     * Appends a single audio attachment to the message element.
-     * @param {MediaAttachment} attachment Audio attachment object
-     * @param {number} index Index of the audio attachment
-     * @returns {HTMLElement} The appended audio container element
-     */
-    function appendAudioAttachment(attachment, index) {
-        const template = document.querySelector('#message_audio_template .mes_audio_container').cloneNode(true);
-        template.setAttribute('data-index', String(index));
-        const audio = template.querySelector('.mes_audio');
-        setSource(audio, attachment.url);
-        audio.setAttribute('title', attachment.title || mes.extra.title || '');
-
-        mediaPromises.push(new Promise((resolve) => {
-            function onLoad() {
-                resolve();
-            }
-            function onError() {
-                audio.classList.add('error');
-                resolve();
-            }
-            if (audio.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
-                onLoad();
-            } else {
-                audio.addEventListener('loadeddata', onLoad);
-                audio.addEventListener('error', onError);
-            }
-        }));
-
-        new state.AudioPlayer(audio, template);
-
-        mediaBlocks.push(template);
-        return template;
-    }
-
-    /**
-     * Appends a media attachment to the message element.
-     * @param {MediaAttachment} attachment Media attachment object
-     * @param {number} index Index of the media attachment
-     * @returns {HTMLElement} The appended media container element
-     */
-    function appendMediaAttachment(attachment, index) {
-        if (!attachment.type) {
-            attachment.type = MEDIA_TYPE.IMAGE;
-        }
-        switch (attachment.type) {
-            case MEDIA_TYPE.IMAGE:
-                return appendImageAttachment(attachment, index);
-            case MEDIA_TYPE.VIDEO:
-                return appendVideoAttachment(attachment, index);
-            case MEDIA_TYPE.AUDIO:
-                return appendAudioAttachment(attachment, index);
-        }
-
-        console.warn(`Unknown media type: ${attachment.type}, defaulting to image.`, attachment);
-        return appendImageAttachment(attachment, index);
-    }
-
-    /**
-     * Saves the current playback times of media elements in the message.
-     * @returns {Map<string, MediaState>} Media playback times by source URL
-     */
-    function saveMediaStates() {
-        const states = new Map();
-        for (const element of getPlaybackElements()) {
-            if (element instanceof HTMLMediaElement) {
-                if (!element.currentSrc || element.readyState === HTMLMediaElement.HAVE_NOTHING) {
-                    continue;
-                }
-                const state = { currentTime: element.currentTime, paused: element.paused };
-                states.set(element.currentSrc, state);
-            }
-        }
-        return states;
-    }
-
-    function getPlaybackElements() {
-        const elements = new Set();
-        for (const wrapper of mediaWrapper) {
-            for (const element of wrapper.querySelectorAll('video, audio')) elements.add(element);
-        }
-        return elements;
-    }
-
-    /**
-     * Restores the playback times of media elements in the message.
-     * @param {Map<string, MediaState>} states Media playback times by source URL
-     */
-    function restoreMediaStates(states) {
-        for (const element of getPlaybackElements()) {
-            if (element instanceof HTMLMediaElement) {
-                const restoreState = () => {
-                    if (!states.has(element.currentSrc)) {
-                        return;
-                    }
-                    const state = states.get(element.currentSrc);
-                    element.currentTime = state.currentTime;
-                    if (!state.paused) {
-                        element.play();
-                    }
-                };
-                if (element.readyState < HTMLMediaElement.HAVE_METADATA) {
-                    element.addEventListener('loadedmetadata', () => restoreState(), { once: true });
-                } else {
-                    restoreState();
-                }
-            }
-        }
-    }
-
-    // Add media gallery to message
-    if (hasMedia && mediaDisplay === MEDIA_DISPLAY.GALLERY) {
-        const mediaIndex = getMediaIndex(mes);
-        const selectedMedia = mes.extra.media[mediaIndex];
-
-        const galleryControls = Array.from(document.querySelectorAll('#message_gallery_controls .mes_img_swipes'), node => node.cloneNode(true));
-        for (const controls of galleryControls) {
-            controls.querySelectorAll('.mes_img_swipe_counter').forEach(counter => {
-                counter.textContent = `${mediaIndex + 1}/${mes.extra.media.length}`;
-            });
-        }
-
-        const template = appendMediaAttachment(selectedMedia, mediaIndex);
-        template.classList.add('img_swipes');
-        template.append(...galleryControls);
-    }
-
-    // Add media as a list to message
-    if (hasMedia && mediaDisplay === MEDIA_DISPLAY.LIST) {
-        for (let index = 0; index < mes.extra.media.length; index++) {
-            const attachment = mes.extra.media[index];
-            appendMediaAttachment(attachment, index);
-        }
-    }
-
-    // Remove existing file containers
-    fileWrapper.forEach(wrapper => wrapper.replaceChildren());
-
-    // Add files to message
-    if (hasFiles) {
-        for (let index = 0; index < mes.extra.files.length; index++) {
-            const file = mes.extra.files[index];
-            const templates = Array.from(document.querySelectorAll('#message_file_template .mes_file_container'), node => node.cloneNode(true));
-            const sizeText = humanFileSize(file.size);
-            for (const template of templates) {
-                template.setAttribute('data-index', String(index));
-                template.querySelectorAll('.mes_file_name').forEach(name => {
-                    name.textContent = file.name ?? '';
-                    if (file.name === null) name.removeAttribute('title');
-                    else if (file.name !== undefined) name.setAttribute('title', file.name);
-                });
-                template.querySelectorAll('.mes_file_size').forEach(size => {
-                    size.textContent = sizeText ?? '';
-                    if (file.size === null) size.removeAttribute('title');
-                    else if (file.size !== undefined) size.setAttribute('title', String(file.size));
-                });
-            }
-            appendToWrappers(fileWrapper, templates);
-        }
-    }
-
-    // Early return if no media
-    if (!hasMedia) {
-        mediaWrapper.forEach(wrapper => wrapper.replaceChildren());
-        doAdjustScroll();
-        return;
-    }
-
-    // TODO: Consider making this awaitable
-    Promise.race([Promise.all(mediaPromises), delay(debounce_timeout.short)]).then(() => {
-        const states = saveMediaStates();
-        mediaWrapper.forEach(wrapper => wrapper.replaceChildren());
-        appendToWrappers(mediaWrapper, mediaBlocks);
-        restoreMediaStates(states);
-        doAdjustScroll();
-        void mountReactMainChatMessageListPanel();
-    });
+    scheduleMainChatMessageListPanelRefresh();
 }
 
 export function addCopyToCodeBlocks(messageElement) {
@@ -807,167 +486,16 @@ function buildChatMessageRichBody(message, { messageId = state.chat.indexOf(mess
  * @param {number} [options.forceId=null] Force the message ID
  * @returns {HTMLElement|undefined} The message element, or undefined when React owns rendering
  */
-export function addOneMessage(mes, { insertAfter = null, scroll = true, insertBefore = null, forceId = null } = {}) {
-    // Callers push the new message to chat before calling addOneMessage
-    const messageId = (() => {
-        if (typeof forceId === 'number') {
-            return forceId;
-        }
-        if (typeof insertBefore === 'number') {
-            return insertBefore - 1;
-        }
-        if (typeof insertAfter === 'number') {
-            return insertAfter + 1;
-        }
-        const index = state.chat.indexOf(mes);
-        if (index !== -1) {
-            return index;
-        }
-        return state.chat.length - 1;
-    })();
-
-    if (isReactMainChatOwner()) {
-        void mountReactMainChatMessageListPanel();
-        if (!insertAfter && !insertBefore && scroll) {
-            scrollChatToBottom({ waitForFrame: true });
-        }
-        return;
-    }
-
-    let messageElement;
-
-    messageElement = updateMessageElement(mes, { messageId, adjustMediaScroll: scroll ? SCROLL_BEHAVIOR.ADJUST : SCROLL_BEHAVIOR.NONE });
-    const root = state.chatElement;
-    if ((typeof insertAfter === 'number' && insertAfter >= 0) || (typeof insertBefore === 'number' && insertBefore >= 0)) {
-        const after = typeof insertAfter === 'number' && insertAfter >= 0;
-        const id = after ? insertAfter : insertBefore;
-        const targets = root.querySelectorAll(`.mes[mesid="${id}"]`);
-        targets.forEach((target, index) => {
-            const reference = after ? target.nextSibling : target;
-            target.parentNode?.insertBefore(index === targets.length - 1 ? messageElement : messageElement.cloneNode(true), reference);
-        });
-    } else {
-        root.append(messageElement);
-    }
-
-
-    //last_mes should always be updated.
-    const rows = root.querySelectorAll('.mes');
-    rows.forEach(row => row.classList.remove('last_mes'));
-    rows[rows.length - 1]?.classList.add('last_mes');
-
-    // Don't scroll if not inserting last
+export function addOneMessage(_mes, { insertAfter = null, scroll = true, insertBefore = null, forceId: _forceId = null } = {}) {
+    void mountReactMainChatMessageListPanel();
     if (!insertAfter && !insertBefore && scroll) {
         scrollChatToBottom({ waitForFrame: true });
     }
-
-    applyCharacterTagsToMessageDivs({ mesIds: messageId });
-    updateEditArrowClasses();
-    return messageElement;
 }
 
-/**
- * Creates the element of a single message as if it were the last message or at forceMesId
- * @param {ChatMessage} mes Message object
- * @param {object} [options] Options
- * @param {number} [options.messageId=chat.length - 1] Force the message ID
- * @param {HTMLElement} [options.messageElement] This message element will be updated with the ChatMessage object.
- * @param {SCROLL_BEHAVIOR} [options.adjustMediaScroll=SCROLL_BEHAVIOR.NONE] Scroll behavior option passed to appendMediaToMessage.
- * @returns {HTMLElement} Rendered HTMLElement.
- */
-export function updateMessageElement(mes, { messageId = state.chat.length - 1, messageElement, adjustMediaScroll = SCROLL_BEHAVIOR.NONE } = {}) {
-    if (messageElement === undefined) {
-        messageElement = state.messageTemplate.cloneNode(true);
-    }
-    const rows = [messageElement];
-    if (rows.some(row => row.closest?.('[data-main-chat-message-row-owner="react"]'))) {
-        scheduleMainChatMessageListPanelRefresh();
-        return messageElement;
-    }
-    let avatarImg = state.default_user_avatar;
-
-    //for non-user messages
-    if (!mes.is_user) {
-        if (mes.force_avatar) {
-            avatarImg = mes.force_avatar;
-        } else if (state.this_chid === undefined) {
-            avatarImg = state.system_avatar;
-        } else if (state.characters[state.this_chid] && state.characters[state.this_chid].avatar !== 'none') {
-            avatarImg = getThumbnailUrl('avatar', state.characters[state.this_chid].avatar);
-        } else {
-            avatarImg = state.default_avatar;
-        }
-    }
-    const momentDate = timestampToMoment(mes.send_date);
-    const timestamp = momentDate.isValid() ? momentDate.format('LL LT') : '';
-    const renderDescriptor = buildChatMessageRenderDescriptor(mes, { messageId, timestamp });
-    const timestampTitle = `${mes.extra?.api ? mes.extra.api + ' - ' : ''}${mes.extra?.model ?? ''}`;
-    const richBody = buildChatMessageRichBody(mes, { messageId });
-    const messageHTML = richBody.messageHtml;
-    const { timerValue, timerTitle } = formatGenerationTimer(mes.gen_started, mes.gen_finished, mes.extra?.token_count, mes.extra?.reasoning_duration, mes.extra?.time_to_first_token);
-    const rowPopulation = buildChatMessageRowPopulation(renderDescriptor, {
-        avatarImg,
-        messageTitle: mes.title,
-        timestampTitle,
-        timerValue,
-        timerTitle,
-    });
-
-    const setAttribute = (element, name, value) => {
-        if (value === undefined) return;
-        if (value === null) element.removeAttribute(name);
-        else element.setAttribute(name, String(value));
-    };
-    const setText = (element, value) => {
-        if (value !== undefined) element.textContent = value === null ? '' : String(value);
-    };
-    for (const row of rows) {
-        for (const [name, value] of Object.entries(rowPopulation.attributes)) setAttribute(row, name, value);
-        row.querySelectorAll('.avatar img').forEach(image => setAttribute(image, 'src', rowPopulation.avatarSrc));
-        row.querySelectorAll('.ch_name .name_text').forEach(name => setText(name, rowPopulation.displayName));
-        row.querySelectorAll('.timestamp').forEach(timestamp => {
-            setText(timestamp, rowPopulation.timestampText);
-            setAttribute(timestamp, 'title', rowPopulation.timestampTitle);
-        });
-        if (rowPopulation.messageTitle) setAttribute(row, 'title', rowPopulation.messageTitle);
-        if (rowPopulation.timer.value) row.querySelectorAll('.mes_timer').forEach(timer => {
-            setAttribute(timer, 'title', rowPopulation.timer.title);
-            setText(timer, rowPopulation.timer.value);
-        });
-    }
-
-    if (richBody.biasHtml) {
-        rows.forEach(row => row.querySelectorAll('.mes_bias').forEach(bias => { bias.innerHTML = richBody.biasHtml; }));
-    }
-
-    updateReasoningUI(messageElement);
-
-
-    if (rowPopulation.classes.smallSysMes) {
-        rows.forEach(row => row.classList.add('smallSysMes'));
-    }
-
-    if (rowPopulation.classes.toolCall) {
-        rows.forEach(row => row.classList.add('toolCall'));
-    }
-
-    if (rowPopulation.classes.replyPipelineHidden) {
-        rows.forEach(row => row.classList.add('replyPipelineHidden'));
-    }
-
-    rows.forEach(row => {
-        row.querySelectorAll('.avatar img').forEach(image => {
-            image.addEventListener('error', () => {
-                image.style.display = 'none';
-                if (image.parentElement) image.parentElement.innerHTML = '<div class="missing-avatar fa-solid fa-user-slash"></div>';
-            });
-        });
-    });
-
-    appendMediaToMessage(mes, messageElement, adjustMediaScroll);
-    rows.forEach(row => row.querySelectorAll('.mes_text').forEach(text => { text.innerHTML = messageHTML; }));
-    addCopyToCodeBlocks(messageElement);
-
+/** Compatibility adapter: React owns the message row. */
+export function updateMessageElement(_mes, { messageElement } = {}) {
+    scheduleMainChatMessageListPanelRefresh();
     return messageElement;
 }
 

@@ -247,7 +247,7 @@ const characterTagsService = createCharacterTagsService({
         tagRevision++;
         requireCharacterTagsShellContext().saveSettingsDebounced();
         requireCharacterTagsShellContext().printCharactersDebounced();
-        if (messageTagsChanged) applyCharacterTagsToMessageDivs();
+
         for (const listener of tagListeners) listener();
     },
 });
@@ -1691,73 +1691,9 @@ function removeMissingTagFilters() {
     }
 }
 
-export function applyCharacterTagsToMessageDivs({ mesIds = [] } = {}) {
-    try {
-        if (document.getElementById('chat')?.dataset?.reactMainChatOwner === 'react') return;
-        const messagesFilter = buildMessagesFilter(mesIds);
-        const messages = Array.from(document.getElementById('chat')?.children ?? []).filter(element => element.matches(messagesFilter));
-
-        // Clear existing tags
-        for (const element of messages) {
-            for (const attr of Array.from(element.attributes)) {
-                if (attr.name.startsWith('data-char-tag-') || attr.name === 'data-char-tags') {
-                    element.removeAttribute(attr.name);
-                }
-            }
-        }
-
-        const tagsList = tags, characterTagData = tag_map;
-
-        if (!tagsList?.length || !characterTagData) {
-            return;
-        }
-
-        const tagNamesById = tagsList.reduce((acc, tag) => {
-            acc[tag.id] = tag.name;
-            return acc;
-        }, {});
-
-        const characterTagsCache = new Map();
-
-        // Iterate each message div
-        for (const element of messages) {
-            const avatarFileName = extractCharacterAvatar(element.querySelector('.avatar img')?.getAttribute('src'));
-
-            if (!avatarFileName) {
-                continue;
-            }
-
-            let tagsForCharacter = characterTagsCache.get(avatarFileName);
-
-            // If tags are NOT in the cache, compute and store them
-            if (!tagsForCharacter) {
-                const tagIds = characterTagData[avatarFileName];
-                if (tagIds?.length) {
-                    const tagNames = tagIds
-                        .map(id => tagNamesById[id])
-                        .filter(Boolean);
-
-                    if (tagNames.length) {
-                        tagsForCharacter = {
-                            tagNames,
-                            joinedTagNames: tagNames
-                                .map(name => name?.replace(/,/g, ' ')) // replace commas with spaces to avoid issues with tag names containing commas
-                                .join(','),
-                        };
-                        // Add the newly computed tags to the cache
-                        characterTagsCache.set(avatarFileName, tagsForCharacter);
-                    }
-                }
-            }
-
-            // If we have tags (either from cache or newly computed), apply them
-            if (tagsForCharacter) {
-                applyTags(element, tagsForCharacter);
-            }
-        }
-    } catch (error) {
-        console.error('Error applying character tags to message divs:', error);
-    }
+export function applyCharacterTagsToMessageDivs(_options = {}) {
+    tagRevision++;
+    for (const listener of tagListeners) listener();
 }
 
 function getMessageTagAttributes(avatarSrc) {
@@ -1775,53 +1711,7 @@ function getMessageTagAttributes(avatarSrc) {
     return attributes;
 }
 
-/**
- * Builds a jQuery selector string to filter messages by their IDs.
- * @param {number|number[]} mesIds - An id or array of message IDs to filter by.
- * @returns {string} A jQuery selector string that matches messages with the specified IDs.
- * If mesIds is empty, it returns '.mes' to select all messages.
- * @example
- * buildMessagesFilter([1, 5]); // Returns '.mes[mesid="1"],.mes[mesid="5"]'
- * buildMessagesFilter([]); // Returns '.mes'
- */
-function buildMessagesFilter(mesIds) {
-    const allMessages = '.mes';
 
-    if (!mesIds) {
-        return allMessages; // If no mesIds provided, select all messages
-    }
-
-    const mesIdsArray = Array.isArray(mesIds) ? mesIds : [mesIds];
-
-    if (mesIdsArray?.length) {
-        // Create a valid jQuery selector for multiple attribute values.
-        // Example output: '.mes[mesid="1"],.mes[mesid="5"]'
-        return mesIdsArray.map(id => `.mes[mesid="${id}"]`).join(',');
-    }
-
-    // If mesIds is empty, select all messages.
-    return allMessages;
-}
-
-/**
- * Helper function to apply all necessary data attributes to a DOM element.
- * @param {Element} element - The message div.
- * @param {object} tagData - An object containing tag information.
- * @param {string[]} tagData.tagNames - An array of tag names.
- * @param {string} tagData.joinedTagNames - A comma-separated string of tag names.
- */
-function applyTags(element, tagData) {
-    element.setAttribute('data-char-tags', tagData.joinedTagNames);
-    tagData.tagNames.forEach(tagName => {
-        const normalizedTagName = normalizeTagName(tagName);
-
-        if (!normalizedTagName) {
-            return; // Skip empty tag names
-        }
-
-        element.setAttribute(`data-char-tag-${normalizedTagName}`, '');
-    });
-}
 
 /**
  * Normalizes a tag name by trimming, converting spaces to hyphens, replacing accented characters,

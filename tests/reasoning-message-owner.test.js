@@ -80,18 +80,7 @@ describe('reasoning message owner', () => {
             expect(chat[0]).toMatchObject({ mes: 'next', extra: { reasoning: 'regex:second', reasoning_type: 'parsed' } });
             handler.updateReasoning(0, 'switched', { persist: true });
             expect(chat[0].extra.reasoning).toBe('regex:switched');
-            const { messageFormatting } = await import('../public/scripts/message-service.js');
-            const formatted = '<div data-message-style-scope="reasoning-0"><strong>switched</strong><style>.scoped { color: red; }</style></div>';
-            messageFormatting.mockReturnValue(formatted);
-            handler.updateDom(0);
-            expect(messageFormatting).toHaveBeenCalledWith('regex:switched', '', false, false, 0, {}, true);
-            expect(sanitize).toHaveBeenCalledWith(formatted, {
-                RETURN_DOM_FRAGMENT: true,
-                ADD_TAGS: ['style'],
-                ADD_ATTR: ['target'],
-            });
-            expect(display.replaceChildren).toHaveBeenCalledWith(fragment);
-            expect(anchor.relList.add).toHaveBeenCalledWith('noopener');
+
             expect(first.mes).toBe('answer');
             expect(save).toHaveBeenCalledTimes(2);
             finishSaves.forEach(resolve => resolve());

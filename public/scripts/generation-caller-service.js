@@ -137,7 +137,7 @@ export function createGenerationCallerService(ports) {
         const chatId = ports.getChatId() ?? null;
         return lifecycle.removeRegenerateTail(snapshot, {
             capture: () => lifecycle.captureContextGuard(ports.getAbortController()?.signal, signal),
-            clearView: start => { if (ports.isReactOwner()) { for (let i = ports.getChat().length - 1; i >= start; i--) ports.clearMessageUi(i); ports.clearVisibleStart(ports.getChatId()); } },
+            clearView: start => { for (let i = ports.getChat().length - 1; i >= start; i--) ports.clearMessageUi(i); ports.clearVisibleStart(ports.getChatId()); },
             clearEditing: start => { if (ports.getEditId() !== undefined && ports.getEditId() >= start) ports.clearEditId(); },
             chat, markTainted: ports.markTainted,
             save: () => ports.saveDebounced(() => ports.getChat() === chat && (ports.getChatId() ?? null) === chatId),
@@ -158,7 +158,7 @@ export function createGenerationCallerService(ports) {
         return ports.getLifecycle().restoreRegenerateTurn(snapshot, {
             commit() {
                 const chat = ports.getChat();
-                if (ports.isReactOwner()) for (let i = chat.length - 1; i >= attemptTail.insertIndex; i--) ports.clearMessageUi(i);
+                for (let i = chat.length - 1; i >= attemptTail.insertIndex; i--) ports.clearMessageUi(i);
                 if (ports.getEditId() !== undefined && ports.getEditId() >= attemptTail.insertIndex) ports.clearEditId();
                 const removed = chat.length - attemptTail.insertIndex;
                 chat.length = attemptTail.insertIndex;

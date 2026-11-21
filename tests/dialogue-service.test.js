@@ -38,7 +38,7 @@ describe('dialogue controller', () => {
         ports.isReactOwner = () => false;
         ports.save = async () => { events.push(`save:${chat.length}`); };
         await runBulkDeleteEffects(0, ports);
-        expect(events).toEqual(['prepare', 'legacy-remove', 'save:0', 'legacy-scroll', 'emit:0', 'legacy-last', 'cleanup']);
+        expect(events).toEqual(['prepare', 'identity', 'truncate:0', 'save:0', 'emit:0', 'refresh:chat-a', 'cleanup']);
         events.length = 0;
         await runBulkDeleteEffects(-1, ports);
         expect(events).toEqual(['prepare', 'invalid', 'cleanup']);

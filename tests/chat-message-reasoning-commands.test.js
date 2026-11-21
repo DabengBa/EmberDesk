@@ -176,7 +176,7 @@ describe('reasoning row event ownership', () => {
             const { initReasoning } = await import('../public/scripts/reasoning.js');
             initReasoning();
             const start = jest.spyOn(f.commands, 'startMessageReasoningEdit');
-            handlers.get('click')({ target: new globalThis.Element(), preventDefault: jest.fn(), stopPropagation: jest.fn() });
+            expect(handlers.has('click')).toBe(false);
             expect(start).not.toHaveBeenCalled();
         } finally {
             globalThis.document = previousDocument;

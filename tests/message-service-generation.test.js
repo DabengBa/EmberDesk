@@ -83,34 +83,6 @@ test('React message insertion scrolls a native chat root when the animation fram
     expect(root.scrollTop).toBe(375);
 });
 
-test('legacy edit controls honor first and last visible message without jQuery collection methods', () => {
-    const makeRow = id => {
-        const buttons = Object.fromEntries(['down', 'up', 'copy', 'delete'].map(name => {
-            const classes = new Set(['disabled']);
-            return [`.mes_edit_${name}`, { classes, classList: { remove: value => classes.delete(value), toggle: (value, enabled) => enabled ? classes.add(value) : classes.delete(value) } }];
-        }));
-        return { matches: selector => selector === '.mes', getAttribute: () => String(id), querySelectorAll: selector => selector.split(', ').flatMap(part => buttons[part] ? [buttons[part]] : []), buttons };
-    };
-    const rows = [makeRow(3), makeRow(4), makeRow(5)];
-    const root = { children: rows, querySelectorAll: selector => selector === '.mes' ? rows : [] };
-    state.chatElement = root;
-    state.this_edit_mes_id = 3;
-    registerGenerationShellContext({ state, isReactMainChatOwner: () => false });
-    updateEditArrowClasses();
-    expect(rows[0].buttons['.mes_edit_up'].classes.has('disabled')).toBe(true);
-    expect(rows[0].buttons['.mes_edit_down'].classes.has('disabled')).toBe(false);
-    expect(rows[0].buttons['.mes_edit_copy'].classes.has('disabled')).toBe(false);
-    expect(rows[0].buttons['.mes_edit_delete'].classes.has('disabled')).toBe(false);
-    state.this_edit_mes_id = 5;
-    updateEditArrowClasses();
-    expect(rows[2].buttons['.mes_edit_up'].classes.has('disabled')).toBe(false);
-    expect(rows[2].buttons['.mes_edit_down'].classes.has('disabled')).toBe(true);
-    state.chatElement = root;
-    state.this_edit_mes_id = 4;
-    updateEditArrowClasses();
-    expect(rows[1].buttons['.mes_edit_up'].classes.has('disabled')).toBe(false);
-    expect(rows[1].buttons['.mes_edit_down'].classes.has('disabled')).toBe(false);
-});
 
 test('edit control update leaves React-owned rows alone', () => {
     state.this_edit_mes_id = 0;
@@ -253,7 +225,7 @@ test('React swipe reaches the real media service without a global jQuery binding
     }
 });
 
-test('media refresh accepts a native message row for React and the legacy template path', () => {
+test('media refresh accepts a native message row for React', () => {
     const fileWrapper = { replaceChildren: jest.fn() };
     const mediaWrapper = { replaceChildren: jest.fn() };
     const row = { nodeType: 1, removeAttribute: jest.fn(), querySelectorAll: selector => ({ '.mes_file_wrapper': [fileWrapper], '.mes_media_wrapper': [mediaWrapper] })[selector] ?? [] };
@@ -263,12 +235,8 @@ test('media refresh accepts a native message row for React and the legacy templa
     appendMediaToMessage({ extra: {} }, row);
     expect(refresh).toHaveBeenCalledTimes(1);
 
-    globalThis.$ = jest.fn(() => { throw Error('legacy media refresh must not wrap the row'); });
-    registerMessageShellContext({ state, isReactMainChatOwner: () => false });
-    appendMediaToMessage({ extra: {} }, row);
-    expect(globalThis.$).not.toHaveBeenCalled();
-    expect(fileWrapper.replaceChildren).toHaveBeenCalledTimes(1);
-    expect(mediaWrapper.replaceChildren).toHaveBeenCalledTimes(1);
+    expect(fileWrapper.replaceChildren).not.toHaveBeenCalled();
+    expect(mediaWrapper.replaceChildren).not.toHaveBeenCalled();
 });
 
 test('late image conversion after chat switch neither attaches nor publishes a reply', async () => {

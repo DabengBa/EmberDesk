@@ -3,7 +3,7 @@ import { eventSource, event_types } from './events.js';
 import { CHAT_TRUNCATION, debounce_timeout } from './constants.js';
 import { getRequestHeaders } from './request-context.js';
 import { createOrEditCharacter } from './character-lifecycle-service.js';
-import { ensureMessageMediaIsArray, scrollChatToBottom, updateMessageElement } from './message-service.js';
+import { ensureMessageMediaIsArray, scrollChatToBottom } from './message-service.js';
 import { runDeleteCharacterClosePreflight } from './delete-character-preflight.js';
 import { requireChatOpsShellContext } from './chat-ops-shell-context.js';
 import { buildGreetingOptions, canSwitchGreeting, replaceGreeting } from './main-chat-greetings.js';
@@ -26,29 +26,28 @@ const state = new Proxy({}, {
     getOwnPropertyDescriptor: (_, key) => Object.getOwnPropertyDescriptor(shell().state, key),
 });
 
-const applyStylePins = (...args) => shell().applyStylePins(...args);
+
 const compressRequest = (...args) => shell().compressRequest(...args);
 const cancelDebouncedChatSave = (...args) => shell().cancelDebouncedChatSave(...args);
 const cancelDebouncedMetadataSave = (...args) => shell().cancelDebouncedMetadataSave(...args);
-const clamp = (...args) => shell().clamp(...args);
+
 const closeMessageEditor = (...args) => shell().closeMessageEditor(...args);
-const consumeMainChatMessageListScrollRestore = (...args) => shell().consumeMainChatMessageListScrollRestore(...args);
+
 const delay = (...args) => shell().delay(...args);
 const deleteMainChatMessageListScrollSnapshot = (...args) => shell().deleteMainChatMessageListScrollSnapshot(...args);
 const equalsIgnoreCaseAndAccents = (...args) => shell().equalsIgnoreCaseAndAccents(...args);
 
 const getChatResult = (...args) => shell().getChatResult(...args);
 const getCurrentChatId = (...args) => shell().getCurrentChatId(...args);
-const getLastMessageId = (...args) => shell().getLastMessageId(...args);
+
 const getMainChatReactVisibleWindow = (...args) => shell().getMainChatReactVisibleWindow(...args);
 const hasMainChatMessageListScrollRestore = (...args) => shell().hasMainChatMessageListScrollRestore(...args);
 const humanizedDateTime = (...args) => shell().humanizedDateTime(...args);
-const isElementInViewport = (...args) => shell().isElementInViewport(...args);
-const isReactMainChatOwner = (...args) => shell().isReactMainChatOwner(...args);
+
 const mountReactMainChatMessageListPanel = (...args) => shell().mountReactMainChatMessageListPanel(...args);
 const persistMainChatMessageListScrollSnapshotBeforeClear = (...args) => shell().persistMainChatMessageListScrollSnapshotBeforeClear(...args);
 const queueMainChatMessageListScrollRestore = (...args) => shell().queueMainChatMessageListScrollRestore(...args);
-const redisplayChat = (...args) => shell().redisplayChat(...args);
+
 const reloadCurrentChat = (...args) => shell().reloadCurrentChat(...args);
 
 
@@ -138,7 +137,7 @@ export function shouldPreserveCharacterChatTarget(avatar, chat) {
     return [activeCharacterChatLoad, failedCharacterChatLoad].some(load => load && load.avatar === avatar && load.chat === chat);
 }
 const saveTokenCache = (...args) => shell().saveTokenCache(...args);
-const scrollOnMediaLoad = (...args) => shell().scrollOnMediaLoad(...args);
+
 const select_rm_characters = (...args) => shell().select_rm_characters(...args);
 const setActiveCharacter = (...args) => shell().setActiveCharacter(...args);
 const setCharacterId = (...args) => shell().setCharacterId(...args);
@@ -202,65 +201,16 @@ export async function deleteCharacterChatByName(characterId, fileName) {
  * @returns {Promise<void>}
  */
 export async function loadEarlierChatMessages(messagesToLoad = null) {
-    if (isReactMainChatOwner()) {
-        const visibleWindow = getMainChatReactVisibleWindow(state.reactMainChatProjectionCleared ? [] : state.chat);
-        const count = Number.isInteger(messagesToLoad) && messagesToLoad > 0
-            ? messagesToLoad
-            : CHAT_TRUNCATION;
-        state.mainChatVisibleStartIndices.set(getCurrentChatId(), Math.max(
-            0,
-            (visibleWindow.visibleMessageIds.length > 0
-                ? Number(visibleWindow.visibleMessageIds[0])
-                : state.chat.length) - count,
-        ));
-        await eventSource.emit(event_types.MORE_MESSAGES_LOADED);
-        void mountReactMainChatMessageListPanel();
-        return;
-    }
-
-    const chatElement = state.chatElement;
-    const firstDisplayedMessage = Array.from(chatElement?.children ?? []).find(element => element.matches('.mes'));
-    const firstDisplayedMesId = firstDisplayedMessage?.getAttribute('mesid') ?? undefined;
-    let messageId = Number(firstDisplayedMesId);
-    let count = messagesToLoad || CHAT_TRUNCATION;
-
-    // If there are no messages displayed, or the message somehow has no mesid, we default to one higher than last message id,
-    // so the first "new" message being shown will be the last available message
-    if (isNaN(messageId)) {
-        messageId = getLastMessageId() + 1;
-    }
-
-    console.debug('Inserting messages before', messageId, 'count', count, 'chat length', state.chat.length);
-    const prevHeight = chatElement?.scrollHeight;
-    const showMoreButton = document.getElementById('show_more_messages');
-    const isButtonInView = isElementInViewport(showMoreButton ?? undefined);
-
-    const firstId = clamp(messageId - count, 0, Infinity);
-    const messageElements = [];
-    state.chat.slice(firstId, messageId).forEach((message, id) => {
-        messageElements.push(updateMessageElement(message, { messageId: firstId + id }));
-    });
-    const messageNodes = messageElements.filter(node => node instanceof HTMLElement);
-
-    // Insert older rows ahead of the current first message so load-more keeps
-    // chronological DOM order and scroll compensation remains stable.
-    if (firstDisplayedMessage instanceof HTMLElement && messageNodes.length > 0) {
-        firstDisplayedMessage.before(...messageNodes);
-    } else if (showMoreButton) {
-        showMoreButton.after(...messageNodes);
-    } else {
-        chatElement?.prepend(...messageNodes);
-    }
-    if (firstId === 0) {
-        showMoreButton?.remove();
-    }
-
-    if (isButtonInView && chatElement) {
-        const newHeight = chatElement.scrollHeight;
-        chatElement.scrollTop = newHeight - prevHeight;
-    }
-
-    applyStylePins();
+    const visibleWindow = getMainChatReactVisibleWindow(state.reactMainChatProjectionCleared ? [] : state.chat);
+    const count = Number.isInteger(messagesToLoad) && messagesToLoad > 0
+        ? messagesToLoad
+        : CHAT_TRUNCATION;
+    state.mainChatVisibleStartIndices.set(getCurrentChatId(), Math.max(
+        0,
+        (visibleWindow.visibleMessageIds.length > 0
+            ? Number(visibleWindow.visibleMessageIds[0])
+            : state.chat.length) - count,
+    ));
     await eventSource.emit(event_types.MORE_MESSAGES_LOADED);
     void mountReactMainChatMessageListPanel();
 }
@@ -268,36 +218,11 @@ export async function loadEarlierChatMessages(messagesToLoad = null) {
 
 export async function printMessages() {
     state.mainChatMessageUiState.clear();
-    if (isReactMainChatOwner()) {
-        state.reactMainChatProjectionCleared = false;
-        const shouldRestore = hasMainChatMessageListScrollRestore();
-        void mountReactMainChatMessageListPanel();
-        if (!shouldRestore) {
-            scrollChatToBottom({ waitForFrame: true });
-        }
-        return;
-    }
-
-    let startIndex = 0;
-    let count = CHAT_TRUNCATION;
-
-    if (state.chat.length > count) {
-        startIndex = state.chat.length - count;
-        const chatElement = state.chatElement;
-        if (chatElement) {
-            const showMoreButton = document.createElement('div');
-            showMoreButton.id = 'show_more_messages';
-            showMoreButton.textContent = 'Show more messages';
-            chatElement.append(showMoreButton);
-        }
-    }
-
-    await redisplayChat({ startIndex, fade: false });
-    const renderGeneration = ++state.mainChatMessageRenderGeneration;
-
-    if (!consumeMainChatMessageListScrollRestore()) {
+    state.reactMainChatProjectionCleared = false;
+    const shouldRestore = hasMainChatMessageListScrollRestore();
+    void mountReactMainChatMessageListPanel();
+    if (!shouldRestore) {
         scrollChatToBottom({ waitForFrame: true });
-        delay(debounce_timeout.short).then(() => scrollOnMediaLoad(renderGeneration));
     }
 }
 
@@ -381,12 +306,7 @@ export async function clearChat({ clearData = false, preserveMainChatScrollSnaps
         if (state.is_delete_mode) {
             runDeleteMessageCommand('cancel');
         }
-        // React owns #chat after the main-chat cutover; changing the store projection
-        // is enough to clear rows and avoids a second DOM writer.
-        if (!isReactMainChatOwner()) {
-            // This also removes non '.mes' elements, e.g. '#show_more_messages'.
-            Array.from(state.chatElement?.children ?? []).forEach(child => child.remove());
-        }
+
         const zoomedAvatars = document.querySelectorAll('.zoomed_avatar[forChar]');
         if (zoomedAvatars.length) {
             console.debug('saw avatars to remove');
@@ -394,10 +314,8 @@ export async function clearChat({ clearData = false, preserveMainChatScrollSnaps
         } else { console.debug('saw no avatars'); }
 
         if (clearData) state.chat.length = 0;
-        if (isReactMainChatOwner()) {
-            state.reactMainChatProjectionCleared = true;
-            void mountReactMainChatMessageListPanel();
-        }
+        state.reactMainChatProjectionCleared = true;
+        void mountReactMainChatMessageListPanel();
     } finally {
         chatClearInProgress = false;
     }

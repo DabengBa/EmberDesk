@@ -220,25 +220,23 @@ describe('chat workspace structure', () => {
             'buildChatMessageRichBodyRender',
             'function buildChatMessageRichBody(message, { messageId = state.chat.indexOf(message) } = {}) {',
             'return buildChatMessageRichBody(message, { messageId }).messageHtml;',
-            'const richBody = buildChatMessageRichBody(mes, { messageId });',
+
         ], { contractName: 'message service render delegation' });
-        // The bias and message DOM population are exercised through the real
-        // addOneMessage export in u001-message-template-native.test.js.
+
         expectContainsMarkers(scriptSource, [
             'formatMessage: messageFormatting',
         ], { contractName: 'script.js render service delegation' });
     });
 
-    test('refreshes React main-chat snapshots after async media attachments render', () => {
+    test('normalizes media and refreshes React main-chat snapshots', () => {
         const scriptSource = readRepoFile('public/scripts/message-service.js');
 
         expectContainsMarkers(scriptSource, [
-            'Promise.race([Promise.all(mediaPromises), delay(debounce_timeout.short)]).then(() => {',
-            'appendToWrappers(mediaWrapper, mediaBlocks);',
-            'void mountReactMainChatMessageListPanel();',
+            'ensureMessageMediaIsArray(mes);',
+            'scheduleMainChatMessageListPanelRefresh();',
         ]);
-        const appendIndex = scriptSource.indexOf('appendToWrappers(mediaWrapper, mediaBlocks);');
-        const refreshIndex = scriptSource.indexOf('void mountReactMainChatMessageListPanel();', appendIndex);
+        const appendIndex = scriptSource.indexOf('ensureMessageMediaIsArray(mes);');
+        const refreshIndex = scriptSource.indexOf('scheduleMainChatMessageListPanelRefresh();', appendIndex);
         expect(refreshIndex).toBeGreaterThan(appendIndex);
     });
 

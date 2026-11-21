@@ -114,6 +114,36 @@ test('shows the workspace frame without admitting composer input while settings 
     await page.screenshot({ path: testInfo.outputPath('ready.png') });
 });
 
+test('retains a message update made before the main chat owner mounts', async ({ page }) => {
+    await signIn(page.request);
+    const held = Promise.withResolvers();
+    const release = Promise.withResolvers();
+    await page.route('**/api/settings/get', async route => {
+        held.resolve();
+        await release.promise;
+        await route.continue();
+    });
+    await page.goto('/', { waitUntil: 'domcontentloaded' });
+    let pending;
+    try {
+        await held.promise;
+        pending = await page.evaluate(async () => {
+            const { chat, updateMessageBlock } = await import('/script.js');
+            const owner = document.querySelector('#chat').dataset.reactMainChatOwner ?? null;
+            chat.push({ name: 'Bootstrap', mes: 'before update', is_user: true, is_system: false });
+            const index = chat.length - 1;
+            updateMessageBlock(index, { name: 'Bootstrap', mes: 'bootstrap update', is_user: true, is_system: false }, { rerenderMessage: false });
+            return { owner, message: chat[index].mes };
+        });
+    } finally {
+        release.resolve();
+    }
+    expect(pending.owner).toBeNull();
+    expect(pending.message).toBe('bootstrap update');
+    await expect(page.locator('#chat')).toHaveAttribute('data-react-main-chat-owner', 'react');
+    await expect(page.locator('#chat')).toContainText('bootstrap update');
+});
+
 test('workspace reaches APP_READY before an unrelated image finishes loading', async ({ page }) => {
     await signIn(page.request);
     const held = Promise.withResolvers();
