@@ -75,15 +75,18 @@ test('deleting linked book clears field with bubbling change before character sa
     expect(save).toHaveBeenCalledTimes(1);
 });
 
-test('embedded import links field with bubbling change after book is saved', async () => {
+test('embedded import persists its binding without relying on a hidden field event', async () => {
     const f = fields('');
     const control = { style: {}, worldInfoChid: 0 };
     const lookup = globalThis.document.querySelector;
     globalThis.document.querySelector = selector => selector === '#import_character_info' ? control : lookup(selector);
     const save = jest.fn(async () => { expect(f.changes).toEqual([]); });
-    const ui = createWorldInfoReferenceUi({ characters: [{ name: 'A', avatar: 'a', data: { character_book: { name: 'Book' } } }],
-        accountStorage: { getItem: () => 'true' }, saveWorldInfo: save, convertCharacterBook: book => book,
+    const character = { name: 'A', avatar: 'a', data: { character_book: { name: 'Book' } } };
+    const persist = jest.fn(async () => { expect(save).toHaveBeenCalledTimes(1); });
+    const ui = createWorldInfoReferenceUi({ characters: [character], persistEmbeddedWorldLink: persist,
+        accountStorage: { getItem: () => 'true' }, saveWorldInfo: save, convertCharacterBook: book => book, getSanitizedFilename: async name => name,
         updateWorldInfoList: async () => {}, t: s => s.join('') });
     await ui.importEmbeddedWorldInfo(true);
-    expect(f.changes).toEqual([['change', true, 'Book']]);
+    expect(persist).toHaveBeenCalledWith(character, 'Book');
+    expect(f.changes).toEqual([]);
 });

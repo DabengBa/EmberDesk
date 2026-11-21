@@ -130,14 +130,14 @@ describe('world info import feedback', () => {
         const source = read('public/scripts/world-info-reference-ui.js');
         const importEmbeddedSource = extractBlock(
             source,
-            'async function importEmbeddedWorldInfo(skipPopup = false)',
+            'async function importEmbeddedWorldInfo(skipPopup = false,',
             '    return {\n        setWorldInfoButtonClass,',
         );
 
-        expect(importEmbeddedSource).toContain('if (chid === undefined || chid === -1) {');
-        expect(importEmbeddedSource).toContain('if (!hasEmbed) {');
+        expect(importEmbeddedSource).toContain('if (!character?.avatar) return false;');
+        expect(importEmbeddedSource).toContain('if (!book) {');
         expect(importEmbeddedSource).toContain('toastr.info(t`This character card does not contain embedded World/Lorebook data.`);');
-        expect(importEmbeddedSource.indexOf('if (chid === undefined || chid === -1) {')).toBeLessThan(importEmbeddedSource.indexOf('toastr.info(t`This character card does not contain embedded World/Lorebook data.`);'));
+
     });
 
     test('world import input supports multi-file selection', () => {

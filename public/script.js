@@ -554,6 +554,7 @@ registerWorldInfoShellContext({
     createOrEditCharacter: () => createOrEditCharacter(),
     getName1: () => name1,
     getOneCharacter: (avatar) => getOneCharacter(avatar),
+    persistEmbeddedWorldLink,
     selectSelectedCharacter: (chid, options) => select_selected_character(chid, options),
     getCharaFilename: (chid, options) => getCharaFilename(chid, options),
     getTagKeyForEntity: (entityId) => getTagKeyForEntity(entityId),
@@ -8775,7 +8776,7 @@ async function handleUnifiedImport(avatarFileNames) {
             console.warn(`[unified-import] Character not found after refresh: ${av}`);
             return null;
         }
-        return scanImportedCharacter(ch);
+        return { ...scanImportedCharacter(ch), character: ch, book: ch.data?.character_book };
     }).filter(Boolean);
 
     let tagImportSetting = null;
@@ -8783,13 +8784,10 @@ async function handleUnifiedImport(avatarFileNames) {
         const importChoices = await showUnifiedImportConfirm(scanResults);
         const effectiveChoices = importChoices ?? buildSkipAllChoices();
         for (const result of scanResults) {
-            const ch = characters.find(c => c.avatar === result.avatar);
-            if (ch) {
-                try {
-                    await applyImportChoices(ch, effectiveChoices);
-                } catch (e) {
-                    console.error(`[unified-import] Failed to apply choices for ${result.avatar}`, e);
-                }
+            try {
+                await applyImportChoices(result.character, effectiveChoices, result.book);
+            } catch (e) {
+                console.error(`[unified-import] Failed to apply choices for ${result.avatar}`, e);
             }
         }
         tagImportSetting = effectiveChoices.tagImportSetting;
@@ -9015,6 +9013,29 @@ export async function closeCurrentChat() {
     } else {
         toastr.info(t`Please stop the message generation first.`);
         return false;
+    }
+}
+
+async function persistEmbeddedWorldLink(character, world) {
+    const avatar = character.avatar;
+    const expected = await getCharacterPatchVersion(character);
+    if (!expected) throw new Error('Missing character version');
+    const response = await fetch('/api/characters/merge-attributes', {
+        method: 'POST',
+        headers: getRequestHeaders(),
+        body: JSON.stringify({ avatar, expected_card_json: expected, data: { extensions: { world } } }),
+    });
+    if (!response.ok) throw new Error(`Character link failed (${response.status})`);
+    const { canonical_card_version: version } = await response.json();
+    if (!version) throw new Error('Missing acknowledged character version');
+    const current = characters.find(card => card.avatar === avatar);
+    if (current && (current.canonical_card_version === expected || (current === character && !current.canonical_card_version))) {
+        current.canonical_card_version = version;
+        current.data.extensions ??= {};
+        current.data.extensions.world = world;
+    }
+    if (acknowledgeLegacyCharacterWrite(avatar, expected, version, { world }) && characters[this_chid]?.avatar === avatar) {
+        setWorldInfoButtonClass(this_chid, true);
     }
 }
 

@@ -57,7 +57,10 @@ import {
     upsertCanonicalCharacter,
     assertCanonicalCharacterCardCurrent,
 } from './character-store.ts';
-import { getCanonicalWorldInfoBook } from './world-info-store.ts';
+import { getCanonicalWorldInfoBook, markCanonicalWorldInfoBookDeleted, normalizeCanonicalWorldInfoName } from './world-info-store.ts';
+import { getCanonicalWorldInfoWriteState } from './worldinfo.js';
+import { recordWorldProjectionIntent, replayWorldProjection } from '../canonical-world-info-projection.ts';
+import { invalidateDirectory } from './settings-cache.js';
 import { mutateCharacterMediaAuthorizationInTransaction } from './settings-store.ts';
 import { createCharacterCard } from './character-write-service.ts';
 import { listCanonicalCharacterChatPayload } from './canonical-chat-query-service.ts';
@@ -78,7 +81,7 @@ import { createCharacterReadHandlers } from './character-read-routes.ts';
 import { createCharacterTransferHandlers } from './character-transfer-routes.ts';
 import { createCharacterEditHandlers } from './character-edit-routes.ts';
 import { createCharacterMergeHandler } from './character-merge-routes.ts';
-import { createCharacterDeletePreflightHandler } from './character-delete-preflight-routes.ts';
+import { createCharacterDeletePreflightHandler, scanCharacterDeleteWorldReferences } from './character-delete-preflight-routes.ts';
 import { createCharacterTextReplaceHandlers } from './character-replace-routes.ts';
 import { coordinateWorkspaceWrite } from './coordinate-workspace-write.js';
 import { coordinateReplaceIntent } from './coordinate-workspace-write.js';
@@ -754,6 +757,8 @@ async function getCanonicalWorldBindingScanState(request) {
         const directories = request.user.directories;
         await ensureCanonicalSliceBackend('characters', directories, handle);
         await ensureCanonicalSliceBackend('world_info', directories, handle);
+        await ensureCanonicalSliceBackend('settings', directories, handle);
+        await ensureCanonicalSliceBackend('chats', directories, handle);
         const storageStatus = getCanonicalStorageStatus({ handle, directories, featureFlags: characterFlags });
         if (!storageStatus.supported || storageStatus.disabledReason === 'migration_blocked') {
             return { ok: false };
@@ -1019,6 +1024,8 @@ function createCharacterWriteDependencies({ bustCache = null } = {}) {
             let mediaAuthorization;
             let settingsRevision;
             let cardVersion;
+            const deletedWorlds = [];
+            let worldCleanupWarning = false;
 
             try {
                 if (operation === 'rename') {
@@ -1050,7 +1057,32 @@ function createCharacterWriteDependencies({ bustCache = null } = {}) {
                         });
                     });
                 } else if (operation === 'delete') {
+                    const worldRepairs = [];
+                    const requested = new Set(payload.deleteWorlds ?? []);
+                    const worldHandle = handle ?? path.basename(directories.root);
+                    if (requested.size) {
+                        try {
+                            for (const slice of ['settings', 'chats']) {
+                                if (!(await ensureCanonicalSliceBackend(slice, directories, handle)).ok) throw new Error(`${slice} unavailable`);
+                            }
+                            const worldState = await getCanonicalWorldInfoWriteState(payload.request);
+                            if (!worldState.ok) throw new Error(worldState.reason);
+                        } catch (error) {
+                            worldCleanupWarning = true;
+                            console.warn('World cleanup unavailable:', error);
+                        }
+                    }
                     withCanonicalTransaction(db, txnDb => {
+                        let candidates = [];
+                        if (requested.size && !worldCleanupWarning) {
+                            try {
+                                const { worldsByAvatar } = scanCharacterDeleteWorldReferences(txnDb, worldHandle);
+                                candidates = [...worldsByAvatar.get(payload.avatarName) ?? []].filter(name => requested.has(name));
+                            } catch (error) {
+                                worldCleanupWarning = true;
+                                console.warn('Could not read world cleanup candidates:', error);
+                            }
+                        }
                         const deleteResult = markCanonicalCharacterDeleted(txnDb, {
                             avatarFilename: payload.avatarName,
                             deletedAtMs: nowMs,
@@ -1067,7 +1099,36 @@ function createCharacterWriteDependencies({ bustCache = null } = {}) {
                                 String(payload.avatarName ?? '').replace(/\.png$/i, ''),
                             );
                         }
+                        if (!candidates.length) return;
+                        // Keep the card deletion if the optional world writes fail.
+                        txnDb.exec('SAVEPOINT character_world_cleanup');
+                        try {
+                            const { boundCharacters, otherReferences } = scanCharacterDeleteWorldReferences(txnDb, worldHandle);
+                            const mode = getCanonicalStorageSlice('world_info').getProjectionMode();
+                            for (const name of candidates) {
+                                if (boundCharacters.has(name) || otherReferences.has(name) || normalizeCanonicalWorldInfoName(name) !== name) continue;
+                                if (!markCanonicalWorldInfoBookDeleted(txnDb, { name, deletedAtMs: nowMs }).changes) continue;
+                                worldRepairs.push(recordWorldProjectionIntent(txnDb, { directories, name, action: 'delete', mode, nowMs }));
+                                deletedWorlds.push(name);
+                            }
+                            txnDb.exec('RELEASE character_world_cleanup');
+                        } catch (error) {
+                            txnDb.exec('ROLLBACK TO character_world_cleanup; RELEASE character_world_cleanup');
+                            deletedWorlds.length = 0;
+                            worldRepairs.length = 0;
+                            worldCleanupWarning = true;
+                            console.warn('World cleanup failed:', error);
+                        }
                     });
+                    for (const repairKey of worldRepairs) {
+                        try {
+                            replayWorldProjection(db, { directories, repairKey });
+                        } catch (error) {
+                            worldCleanupWarning = true;
+                            console.warn('World cleanup projection failed:', error);
+                        }
+                    }
+                    if (worldRepairs.length) invalidateDirectory(directories.worlds);
                 } else {
                     const fullPayload = JSON.parse(payload.characterData);
                     fullPayload.json_data = payload.characterData;
@@ -1106,6 +1167,7 @@ function createCharacterWriteDependencies({ bustCache = null } = {}) {
                 mediaAuthorization,
                 settingsRevision,
                 cardVersion,
+                ...(operation === 'delete' ? { deletedWorlds, worldCleanupWarning } : {}),
                 repairKey,
                 projection: typeof characterSlice.getProjectionMode === 'function'
                     ? characterSlice.getProjectionMode()

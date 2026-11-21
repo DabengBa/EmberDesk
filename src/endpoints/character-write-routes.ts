@@ -97,17 +97,24 @@ export function createCharacterWriteHandlers({ createWriteDependencies, getBustC
                 return response.sendStatus(403);
             }
             try {
+                const worlds = request.body.delete_worlds;
+                if (worlds !== undefined && (!Array.isArray(worlds) || worlds.some(name => typeof name !== 'string'))) return response.sendStatus(400);
                 const result = await deleteCharacterCard({
                     request, avatarName: request.body.avatar_url, deleteChats: request.body.delete_chats == true,
+                    deleteWorlds: worlds,
                     dependencies: createWriteDependencies(),
                 });
                 if (result.reason === 'missing_avatar') return response.sendStatus(400);
-                if (!result.ok) return response.status(500).send(result.message);
+                if (!result.ok && !result.authorityCommitted) return response.status(500).send(result.message);
+                return response.send({
+                    deletedWorlds: result.deletedWorlds ?? [],
+                    worldCleanupWarning: Boolean(result.worldCleanupWarning),
+                    projectionWarning: result.reason === 'projection_failed',
+                });
             } catch (error) {
                 console.error(error);
                 return response.sendStatus(500);
             }
-            return response.sendStatus(200);
         },
     };
 }

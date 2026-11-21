@@ -25,6 +25,7 @@ Let a user remove one or more [character cards](term.character_card) through an 
 - Successful deletion removes the card rows from the visible library, shows a success toast, prevents the selected-character title from reopening deleted-card data, and keeps safe pagination context when the after-delete page can be computed.
 - Delayed edit/save responses and late character-list snapshots must not restore a card that the user has already deleted locally.
 - If optional world-file cleanup fails, character deletion can still complete, but the UI must not imply every optional cleanup succeeded.
+- Optional cleanup considers both the primary book and auxiliary books. It keeps books still referenced by another live character, the global selection, or a retained chat. Bulk deletion reports the number of cards actually deleted.
 
 ## Semantic Interaction IDs
 

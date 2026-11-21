@@ -26,7 +26,7 @@ export const FIRST_PARTY_SCRIPT_JS_IMPORT_CONTRACT = Object.freeze([
     contractEntry('extensions/regex/engine.js', '../../../script.js', ['characters', 'saveSettingsDebounced', 'substituteParams', 'substituteParamsExtended', 'this_chid']),
     contractEntry('extensions/regex/index.js', '../../../script.js', ['characters', 'getCurrentChatId', 'messageFormatting', 'reloadCurrentChat', 'saveSettingsDebounced', 'this_chid']),
 
-    contractEntry('import-confirm-dialog.js', '../script.js', ['characters', 'converter', 'substituteParams']),
+    contractEntry('import-confirm-dialog.js', '../script.js', ['converter', 'substituteParams']),
 
     contractEntry('macros.js', '../script.js', ['chat', 'substituteParams']),
     contractEntry('macros/definitions/chat-macros.js', '../../../script.js', ['chat', 'chat_metadata']),

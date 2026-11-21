@@ -14,8 +14,9 @@ type EditBody = CharacterBody & { avatar_url: { toString(): string }; chat?: unk
 type RenameBody = CharacterBody & { avatar_url: string; new_name: string };
 type FormattedCharacter = Record<string, unknown>;
 export type CanonicalWriteOperation = 'create' | 'edit' | 'rename' | 'delete';
-export type CanonicalWritePayload = { directories: UserDirectoryList; request: Request; avatarName?: string; internalName?: string; characterData?: string; expectedCardJson?: string; response?: Response | null; oldAvatarName?: string; oldInternalName?: string; newAvatarName?: string; newInternalName?: string; deleteChats?: boolean };
-export type CanonicalWriteResult = { enabled: boolean; authorityCommitted: boolean; repairKey: string | null; projection?: string; mediaAuthorization?: unknown; settingsRevision?: number; cardVersion?: string };
+export type CanonicalWritePayload = { directories: UserDirectoryList; request: Request; avatarName?: string; internalName?: string; characterData?: string; expectedCardJson?: string; response?: Response | null; oldAvatarName?: string; oldInternalName?: string; newAvatarName?: string; newInternalName?: string; deleteChats?: boolean; deleteWorlds?: string[] };
+type WorldCleanup = { deletedWorlds?: string[]; worldCleanupWarning?: boolean };
+export type CanonicalWriteResult = WorldCleanup & { enabled: boolean; authorityCommitted: boolean; repairKey: string | null; projection?: string; mediaAuthorization?: unknown; settingsRevision?: number; cardVersion?: string };
 export type ProjectionRepair = { repairKey: string | null; repairType: 'character_projection'; avatarName: string; operation: CanonicalWriteOperation; reason: 'projection_failed'; directories: UserDirectoryList; handle: string | null; details: Record<string, unknown> };
 type ProjectionOptions = { shouldRegenerateThumbnail?: boolean; skipCanonicalAuditInvalidation?: boolean; projection?: string };
 type FileOperations =
@@ -49,8 +50,8 @@ export type CreateCharacterOptions = CommonWriteOptions & FileWriteOptions & { s
 export type EditCharacterOptions = CommonWriteOptions & FileWriteOptions & { response?: Response | null; expectedCardJson?: string } & ({ body: EditBody; avatarUrl?: string; targetFile?: string; characterData?: string } | { body?: null; avatarUrl: string; targetFile: string; characterData: string });
 type PreparedRename = { directories: UserDirectoryList; oldAvatarName: string; oldInternalName: string; newAvatarName: string; newInternalName: string; characterData: string; body?: null };
 export type RenameCharacterOptions = CommonWriteOptions & ({ body: RenameBody } | PreparedRename);
-export type DeleteCharacterOptions = Omit<CommonWriteOptions, 'dependencies'> & { dependencies: CharacterWriteDependencies & { removeDirectory: (target: string) => MaybePromise<unknown> }; avatarName?: string | null; deleteChats?: boolean };
-export type CharacterWriteResult = { ok: boolean; avatarName?: string; internalName?: string; reason?: string; message?: string; avatarPath?: string; authorityCommitted?: boolean; repairKey?: string | null; mediaAuthorization?: unknown; settingsRevision?: number; cardVersion?: string };
+export type DeleteCharacterOptions = Omit<CommonWriteOptions, 'dependencies'> & { dependencies: CharacterWriteDependencies & { removeDirectory: (target: string) => MaybePromise<unknown> }; avatarName?: string | null; deleteChats?: boolean; deleteWorlds?: string[] };
+export type CharacterWriteResult = WorldCleanup & { ok: boolean; avatarName?: string; internalName?: string; reason?: string; message?: string; avatarPath?: string; authorityCommitted?: boolean; repairKey?: string | null; mediaAuthorization?: unknown; settingsRevision?: number; cardVersion?: string };
 
 function getDirectories({ request, directories }: Pick<CommonWriteOptions, 'request' | 'directories'>): UserDirectoryList {
     return directories ?? request.user.directories;
@@ -562,6 +563,7 @@ export async function deleteCharacterCard({
     directories,
     avatarName = null,
     deleteChats = false,
+    deleteWorlds,
     dependencies,
 }: DeleteCharacterOptions): Promise<CharacterWriteResult> {
     const userDirectories = getDirectories({ request, directories });
@@ -578,6 +580,7 @@ export async function deleteCharacterCard({
     const canonicalResult = await maybeCommitCanonicalWrite(dependencies, 'delete', {
         avatarName: targetAvatarName,
         deleteChats,
+        ...(deleteWorlds?.length ? { deleteWorlds } : {}),
         directories: userDirectories,
         request,
     });
@@ -586,6 +589,7 @@ export async function deleteCharacterCard({
         return canonicalUnavailableResult(targetAvatarName);
     }
 
+    const worldCleanup = { deletedWorlds: canonicalResult.deletedWorlds, worldCleanupWarning: canonicalResult.worldCleanupWarning };
     try {
         if (canonicalResult.projection !== 'off' || exists(dependencies, avatarPath)) {
             unlinkFile(dependencies, avatarPath);
@@ -614,8 +618,8 @@ export async function deleteCharacterCard({
                 chatsDirectoryName: sanitize(targetAvatarName.replace(/\.png$/i, '')),
             }),
         });
-        return projectionFailedResult(targetAvatarName, canonicalResult.repairKey);
+        return { ...projectionFailedResult(targetAvatarName, canonicalResult.repairKey), ...worldCleanup };
     }
 
-    return okResult(targetAvatarName);
+    return { ...okResult(targetAvatarName), ...worldCleanup };
 }

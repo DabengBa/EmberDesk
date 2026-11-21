@@ -945,14 +945,14 @@ class BulkEditOverlay {
 
         try {
             await BulkEditOverlay.#stopGenerationAndWait();
-            await requireCharacterLifecycleShellContext().deleteCharacter(avatarList, {
+            const deletedCount = await requireCharacterLifecycleShellContext().deleteCharacter(avatarList, {
                 deleteChats,
                 deleteWorlds: capturedCascade.deleteWorlds,
-                clearWorldReferences: capturedCascade.clearWorldReferences,
+
                 temporaryChatAcknowledged: inTempChat,
                 deleteContext: { source: 'bulk', selectedCount: count },
             });
-            toastr.success(t`Deleted ${count} character(s)`);
+            if (deletedCount) toastr.success(t`Deleted ${deletedCount} character(s)`);
         } finally {
             loaderHandle.hide();
             this.browseState();
