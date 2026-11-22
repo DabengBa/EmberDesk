@@ -126,9 +126,25 @@ const countOccurrences = (...args: any[]) => shell().countOccurrences(...args);
 const isOdd = (...args: any[]) => shell().isOdd(...args);
 const delay = (...args: any[]) => shell().delay(...args);
 
-export interface GenerationStreamSession extends OwnedGenerationStreamState {}
-export class GenerationStreamSession {
-    #streamState;
+export class GenerationStreamSession implements OwnedGenerationStreamState {
+    #streamState: OwnedGenerationStreamState;
+    declare result: string;
+    declare messageId: number;
+    declare isStopped: boolean;
+    declare isFinished: boolean;
+    declare abortController: AbortController;
+    declare firstMessageText: string;
+    declare timeStarted: Date;
+    declare timeToFirstToken: number | null;
+    declare createdAt: Date;
+    declare toolCalls: unknown[];
+    declare images: string[];
+    declare reasoningSignature: string | null;
+    declare suppressErrorRecovery: boolean;
+    declare isFinalizing: boolean;
+    declare observedTokenCount: number;
+    declare observedChunkCount: number;
+    declare fromFallbackAttempt: boolean;
     declare messageDom: HTMLElement | null;
     declare messageTextDom: HTMLElement | null;
     declare messageTimerDom: HTMLElement | null;
@@ -147,16 +163,17 @@ export class GenerationStreamSession {
      * @param {PromptReasoning} promptReasoning Prompt reasoning instance
      */
     constructor(type: string, forceName2: boolean, timeStarted: Date, promptReasoning: unknown, ownsRun = () => true) {
-        this.#streamState = getGenerationLifecycleService().createStreamState(timeStarted);
+        const streamState = this.#streamState = getGenerationLifecycleService().createStreamState(timeStarted);
         // Keep the existing session API while the installed typed lifecycle owns the mutable stream data.
-        for (const key of Object.keys(this.#streamState) as Array<keyof OwnedGenerationStreamState>) {
+        const bindStateField = <K extends keyof OwnedGenerationStreamState>(key: K) => {
             Object.defineProperty(this, key, {
                 enumerable: true,
                 configurable: true,
-                get: () => this.#streamState[key],
-                set: value => { (this.#streamState as any)[key] = value; },
+                get: () => streamState[key],
+                set: (value: OwnedGenerationStreamState[K]) => { streamState[key] = value; },
             });
-        }
+        };
+        (Object.keys(streamState) as Array<keyof OwnedGenerationStreamState>).forEach(bindStateField);
         /** @type {HTMLElement} */
         this.messageDom = null;
         /** @type {HTMLElement} */
@@ -545,11 +562,12 @@ async function executeOwnedGenerationRequestInShell(generationEnvelope: ShellEnv
                 recoveryIndexOf: message => shell().state.chat.indexOf(message),
                 createRecoveryMessage: async () => {
                     const chat = shell().state.chat;
-                    let message;
-                    await saveReply({ type, getMessage: '', fromStreaming: true, ownsRun: () => lease.owns(), onMessageCreated: (created: object) => { message = created; } });
+                    const recovery: { message?: object } = {};
+                    await saveReply({ type, getMessage: '', fromStreaming: true, ownsRun: () => lease.owns(), onMessageCreated: (created: object) => { recovery.message = created; } });
+                    const { message } = recovery;
                     const messageId = message ? chat.indexOf(message) : -1;
-                    if (!lease.owns() || shell().state.chat !== chat || messageId < 0) throw new Error('Generation recovery message is no longer available.');
-                    return { messageId, identity: message as unknown as object };
+                    if (!message || !lease.owns() || shell().state.chat !== chat || messageId < 0) throw new Error('Generation recovery message is no longer available.');
+                    return { messageId, identity: message };
                 },
                 getModel: () => shell().state.generatingAttemptModel,
                 setModel: model => { shell().state.generatingAttemptModel = model; },

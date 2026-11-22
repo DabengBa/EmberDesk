@@ -68,14 +68,14 @@ const cancelTtsPlay = (...args) => shell().cancelTtsPlay(...args);
 const closeCharacterExportPopup = (...args) => shell().closeCharacterExportPopup(...args);
 const closeCurrentChat = (...args) => shell().closeCurrentChat(...args);
 const handleWorkspaceDrawerOutsidePointer = target => shell().handleWorkspaceDrawerOutsidePointer(target);
-const copyText = (...args) => shell().copyText(...args);
+
 const createChatMessageActionsController = (...args) => shell().createChatMessageActionsController(...args);
 const createOrEditCharacter = (...args) => shell().createOrEditCharacter(...args);
 const debounce = (...args) => shell().debounce(...args);
 const delChat = (...args) => shell().delChat(...args);
 const delay = (...args) => shell().delay(...args);
 const deleteCharacter = (...args) => shell().deleteCharacter(...args);
-const deleteMessage = (...args) => shell().deleteMessage(...args);
+
 const displayPastChats = (...args) => shell().displayPastChats(...args);
 
 const doNewChat = (...args) => shell().doNewChat(...args);
@@ -98,10 +98,7 @@ const isDataURL = (...args) => shell().isDataURL(...args);
 
 
 const loadEarlierChatMessages = (...args) => shell().loadEarlierChatMessages(...args);
-const messageEdit = (...args) => shell().messageEdit(...args);
-const messageEditCancel = (...args) => shell().messageEditCancel(...args);
-const messageEditDone = (...args) => shell().messageEditDone(...args);
-const messageEditMove = (...args) => shell().messageEditMove(...args);
+
 const mountReactMainChatMessageListPanel = (...args) => shell().mountReactMainChatMessageListPanel(...args);
 const mountReactWorkspaceShellChromeHost = (...args) => shell().mountReactWorkspaceShellChromeHost(...args);
 const newAssistantChat = (...args) => shell().newAssistantChat(...args);

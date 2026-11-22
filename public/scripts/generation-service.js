@@ -128,9 +128,25 @@ const countOccurrences = (...args       ) => shell().countOccurrences(...args);
 const isOdd = (...args       ) => shell().isOdd(...args);
 const delay = (...args       ) => shell().delay(...args);
 
+export class GenerationStreamSession                                       {
+    #streamState                            ;
 
-export class GenerationStreamSession {
-    #streamState;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -149,16 +165,17 @@ export class GenerationStreamSession {
      * @param {PromptReasoning} promptReasoning Prompt reasoning instance
      */
     constructor(type        , forceName2         , timeStarted      , promptReasoning         , ownsRun = () => true) {
-        this.#streamState = getGenerationLifecycleService().createStreamState(timeStarted);
+        const streamState = this.#streamState = getGenerationLifecycleService().createStreamState(timeStarted);
         // Keep the existing session API while the installed typed lifecycle owns the mutable stream data.
-        for (const key of Object.keys(this.#streamState)                                           ) {
+        const bindStateField =                                             (key   ) => {
             Object.defineProperty(this, key, {
                 enumerable: true,
                 configurable: true,
-                get: () => this.#streamState[key],
-                set: value => { (this.#streamState       )[key] = value; },
+                get: () => streamState[key],
+                set: (value                               ) => { streamState[key] = value; },
             });
-        }
+        };
+        (Object.keys(streamState)                                           ).forEach(bindStateField);
         /** @type {HTMLElement} */
         this.messageDom = null;
         /** @type {HTMLElement} */
@@ -547,11 +564,12 @@ async function executeOwnedGenerationRequestInShell(generationEnvelope          
                 recoveryIndexOf: message => shell().state.chat.indexOf(message),
                 createRecoveryMessage: async () => {
                     const chat = shell().state.chat;
-                    let message;
-                    await saveReply({ type, getMessage: '', fromStreaming: true, ownsRun: () => lease.owns(), onMessageCreated: (created        ) => { message = created; } });
+                    const recovery                       = {};
+                    await saveReply({ type, getMessage: '', fromStreaming: true, ownsRun: () => lease.owns(), onMessageCreated: (created        ) => { recovery.message = created; } });
+                    const { message } = recovery;
                     const messageId = message ? chat.indexOf(message) : -1;
-                    if (!lease.owns() || shell().state.chat !== chat || messageId < 0) throw new Error('Generation recovery message is no longer available.');
-                    return { messageId, identity: message                      };
+                    if (!message || !lease.owns() || shell().state.chat !== chat || messageId < 0) throw new Error('Generation recovery message is no longer available.');
+                    return { messageId, identity: message };
                 },
                 getModel: () => shell().state.generatingAttemptModel,
                 setModel: model => { shell().state.generatingAttemptModel = model; },

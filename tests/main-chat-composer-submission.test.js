@@ -48,29 +48,24 @@ function generate() {
     return executeGenerationRequestInShell({ type: 'normal', options: { composerSubmission: submission }, dryRun: false });
 }
 
-test('streaming message ports use native rows for media and copy controls', async () => {
-    const row = {};
-    const querySelector = jest.fn(() => row);
-    const oldDollar = globalThis.$;
-    globalThis.$ = () => { throw new Error('streaming rows must not be wrapped in jQuery'); };
+test('streaming media refreshes the React projection without mutating native rows', async () => {
     context.state.ReasoningHandler = class {};
-    context.state.chatElement = { jquery: 'test', 0: { querySelector }, find: () => { throw new Error('copy controls must use native DOM'); } };
-    context.isReactMainChatOwner = jest.fn(() => false);
+    const querySelector = jest.fn();
+    context.state.chatElement = { querySelector };
     context.appendMediaToMessage = jest.fn();
     context.addCopyToCodeBlocks = jest.fn();
-    const message = {};
-    const spy = jest.spyOn(lifecycle, 'startStreamMessage').mockImplementation((session, ports) => {
-        session.messageDom = row;
-        ports.renderImages(message);
+    context.scheduleMainChatMessageListPanelRefresh = jest.fn();
+    const spy = jest.spyOn(lifecycle, 'startStreamMessage').mockImplementation((_session, ports) => {
+        ports.renderImages({});
         ports.addCopyButtons(7);
     });
     try {
         await new GenerationStreamSession('normal', false, new Date(), null).onStartStreaming('');
-        expect(context.appendMediaToMessage).toHaveBeenCalledWith(message, row);
-        expect(querySelector).toHaveBeenCalledWith('.mes[mesid="7"]');
-        expect(context.addCopyToCodeBlocks).toHaveBeenCalledWith(row);
+        expect(context.scheduleMainChatMessageListPanelRefresh).toHaveBeenCalledTimes(1);
+        expect(context.appendMediaToMessage).not.toHaveBeenCalled();
+        expect(querySelector).not.toHaveBeenCalled();
+        expect(context.addCopyToCodeBlocks).not.toHaveBeenCalled();
     } finally {
-        globalThis.$ = oldDollar;
         spy.mockRestore();
     }
 });

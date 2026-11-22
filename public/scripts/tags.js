@@ -243,7 +243,7 @@ const characterTagsService = createCharacterTagsService({
     getCharacters: () => requireCharacterTagsShellContext().state.characters,
     equalNames: equalsIgnoreCaseAndAccents,
     newTag: name => newTag(name),
-    changed: (messageTagsChanged) => {
+    changed: () => {
         tagRevision++;
         requireCharacterTagsShellContext().saveSettingsDebounced();
         requireCharacterTagsShellContext().printCharactersDebounced();

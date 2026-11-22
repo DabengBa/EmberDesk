@@ -17,7 +17,7 @@ import {
     initLibraryShims,
     localforage,
     default as libs,
-    lodash,
+
 } from './lib.js';
 
 import { humanizedDateTime, favsToHotswap, getMessageTimeStamp, dragElement, isMobile, initRossMods, shouldSendOnEnter } from './scripts/RossAscends-mods.js';
@@ -154,7 +154,7 @@ import {
     createTimeout,
     cancelDebounce,
 } from './scripts/utils.js';
-import { CHAT_TRUNCATION, debounce_timeout, IGNORE_SYMBOL, inject_ids, MEDIA_SOURCE, MEDIA_TYPE, SCROLL_BEHAVIOR } from './scripts/constants.js';
+import { CHAT_TRUNCATION, debounce_timeout, IGNORE_SYMBOL, inject_ids, MEDIA_SOURCE, MEDIA_TYPE } from './scripts/constants.js';
 
 import {
     cancelDebouncedMetadataSave,
@@ -1834,12 +1834,6 @@ function getMainChatRecoveryUiState() {
     return { recovery, failure };
 }
 
-function getMainChatGenerationControlMessageId(element) {
-    const candidateRow = element instanceof HTMLElement ? element.closest('.mes[mesid]') : null;
-    const messageRow = candidateRow?.closest('#chat') ? candidateRow : null;
-    const messageId = Number(messageRow?.getAttribute('mesid'));
-    return Number.isInteger(messageId) && messageId >= 0 ? messageId : null;
-}
 
 function getMainChatComposerActiveContext() {
     if (this_chid !== undefined) {

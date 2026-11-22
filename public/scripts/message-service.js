@@ -1,7 +1,7 @@
 import toastr from './notifications.js';
 
 import { buildChatMessageRichBodyRender } from './chat-message-render-service.js';
-import { MEDIA_DISPLAY, MEDIA_TYPE, REASONING_PREFIX, REASONING_SUFFIX, SCROLL_BEHAVIOR, debounce_timeout } from './constants.js';
+import { MEDIA_DISPLAY, MEDIA_TYPE, REASONING_PREFIX, REASONING_SUFFIX, SCROLL_BEHAVIOR } from './constants.js';
 import { eventSource, event_types } from './events.js';
 import { isFrontendContent } from './frontend-frame.js';
 import { isCharacterExternalMediaAllowed } from './external-media-policy.js';
@@ -47,7 +47,7 @@ function getMessageStyleScope(messageId, isReasoning) {
 
 const copyText = (...args) => shell().copyText(...args);
 const decodeStyleTags = (...args) => shell().decodeStyleTags(...args);
-const delay = (...args) => shell().delay(...args);
+
 const encodeStyleTags = (...args) => shell().encodeStyleTags(...args);
 const normalizeStyleTagsForMarkdown = (...args) => shell().normalizeStyleTagsForMarkdown(...args);
 const escapeHtml = (...args) => shell().escapeHtml(...args);
