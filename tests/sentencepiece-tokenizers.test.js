@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import express from 'express';
 
 test('local Llama preserves SentencePiece route payloads and server prompt budgets', async () => {
-    const { router } = await import('../src/endpoints/tokenizers.js');
+    const { router } = await import('../src/endpoints/tokenizers.ts');
     const { assembleServerPrompt } = await import('../src/server-prompt.ts');
     const previousCwd = process.cwd();
     process.chdir(fileURLToPath(new URL('..', import.meta.url)));

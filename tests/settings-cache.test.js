@@ -9,7 +9,7 @@ describe('settings cache invalidation', () => {
         const {
             getCachedPayload,
             invalidateDirectory,
-        } = await import('../src/endpoints/settings-cache.js');
+        } = await import('../src/endpoints/settings-cache.ts');
 
         let resolveFirst;
         const firstGate = new Promise(resolve => {
@@ -44,7 +44,7 @@ describe('settings cache invalidation', () => {
     test('rebuilds cached payloads after the TTL expires', async () => {
         const {
             getCachedPayload,
-        } = await import('../src/endpoints/settings-cache.js');
+        } = await import('../src/endpoints/settings-cache.ts');
 
         let calls = 0;
         await expect(getCachedPayload('/tmp/themes', async () => {

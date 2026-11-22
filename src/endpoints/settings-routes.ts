@@ -2,18 +2,18 @@ import express from 'express';
 import bytes from 'bytes';
 import type { Request } from 'express';
 import type { DatabaseSync } from 'node:sqlite';
-import type { UserDirectoryList } from '../users.js';
+import type { UserDirectoryList } from '../user-types.ts';
 
-import { getConfigValue, tryParse } from '../util.js';
-import { getFileNameValidationFunction } from '../middleware/validateFileName.js';
-import { getDefaultTemplateFile } from './content-manager.js';
+import { getConfigValue, tryParse } from '../util.ts';
+import { getFileNameValidationFunction } from '../middleware/validateFileName.ts';
+import { getDefaultTemplateFile } from './content-manager.ts';
 import { getCanonicalPresetsReadState } from './presets.ts';
 import { getCanonicalWorldInfoReadState } from './worldinfo-routes.ts';
 import { listCanonicalWorldInfoBooks } from './world-info-store.ts';
 import { canonicalSqliteManager, withCanonicalTransaction } from '../canonical-sqlite.ts';
 import { runCanonicalMigrations } from '../canonical-sqlite-migrations.ts';
 import { getPersistedCanonicalAuditStatus } from '../canonical-sqlite-shadow-import.ts';
-import { ensureCanonicalSliceBackend } from '../canonical-backend.js';
+import { ensureCanonicalSliceBackend } from '../canonical-backend.ts';
 import { getCanonicalStorageSlice } from '../canonical-storage-slice-registry.ts';
 import {
     createSettingsSnapshot,

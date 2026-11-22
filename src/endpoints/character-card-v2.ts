@@ -1,9 +1,9 @@
 import _ from 'lodash';
 
-import { deepMerge, humanizedDateTime, tryParse } from '../util.js';
-import { normalizeTalkativeness } from './character-card-helpers.js';
+import { deepMerge, humanizedDateTime, tryParse } from '../util.ts';
+import { normalizeTalkativeness } from './character-card-helpers.ts';
 import { readWorldInfoFile } from './worldinfo-routes.ts';
-import type { UserDirectoryList } from '../users.js';
+import type { UserDirectoryList } from '../user-types.ts';
 
 type Card = Record<string, unknown> & { name: string; world?: string };
 type CardForm = Record<string, unknown> & { ch_name: string; json_data?: string; world?: string; extensions?: string };
@@ -14,7 +14,7 @@ type WorldInfo = { originalData?: unknown; entries?: Record<string, WorldEntry> 
 /**
  * Convert a character object to Spec V2 format.
  * @param {object} jsonObject Character object
- * @param {import('../users.js').UserDirectoryList} directories User directories
+ * @param {import('../user-types.ts').UserDirectoryList} directories User directories
  * @param {boolean} hoistDate Will set the chat and create_date fields to the current date if they are missing
  * @returns {object} Character object in Spec V2 format
  */
@@ -34,7 +34,7 @@ export function getCharaCardV2(jsonObject: Card, directories: UserDirectoryList,
 /**
  * Convert a character object to Spec V2 format.
  * @param {object} char Character object
- * @param {import('../users.js').UserDirectoryList} directories User directories
+ * @param {import('../user-types.ts').UserDirectoryList} directories User directories
  * @returns {object} Character object in Spec V2 format
  */
 export function convertToV2(char: Card, directories: UserDirectoryList) {
@@ -140,7 +140,7 @@ export function readFromV2(char: Card) {
 /**
  * Format character data to Spec V2 format.
  * @param {object} data Character data
- * @param {import('../users.js').UserDirectoryList} directories User directories
+ * @param {import('../user-types.ts').UserDirectoryList} directories User directories
  * @returns
  */
 export function charaFormatData(data: CardForm, directories: UserDirectoryList) {

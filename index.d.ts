@@ -1,9 +1,12 @@
+/// <reference path="./src/shared-browser-modules.d.ts" />
+/// <reference path="./src/types/byaf.d.ts" />
 import { EventEmitter } from 'node:events';
 import type {} from 'cookie-session'; // Load its Express.Request augmentation.
 import { CsrfSyncedToken } from 'csrf-sync';
-import { UserDirectoryList, User } from './src/users.js';
+import { UserDirectoryList } from './src/user-types.ts';
+import { User } from './src/user-storage.ts';
 import { CommandLineArguments } from './src/command-line.ts';
-import { EVENT_NAMES } from './src/server-events.js';
+import { EVENT_NAMES } from './src/server-events.ts';
 
 /**
  * Event payload for SERVER_STARTED event.

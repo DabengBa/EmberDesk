@@ -1,5 +1,5 @@
 ---
-description: "src/validation-gate-selector.js maps touched file paths or surface names to the focused validation commands that are most likely to prove the affected EmberDesk boundary. scripts/validation-gate-selector.mjs is a read-only CLI wrapper..."
+description: "src/validation-gate-selector.ts maps touched file paths or surface names to the focused validation commands that are most likely to prove the affected EmberDesk boundary. scripts/validation-gate-selector.mjs is a read-only CLI wrapper..."
 kind: technical
 topic: validation-gate-selector
 ---
@@ -8,7 +8,7 @@ topic: validation-gate-selector
 
 ## Module Responsibility
 
-`src/validation-gate-selector.js` maps touched file paths or surface names to the focused validation commands that are most likely to prove the affected EmberDesk boundary. `scripts/validation-gate-selector.mjs` is a read-only CLI wrapper around the same selector.
+`src/validation-gate-selector.ts` maps touched file paths or surface names to the focused validation commands that are most likely to prove the affected EmberDesk boundary. `scripts/validation-gate-selector.mjs` is a read-only CLI wrapper around the same selector.
 
 The selector is advisory-only. It helps implementation and review agents start from a consistent validation shortlist, but final diff review still owns the decision to add, remove, or broaden gates.
 
@@ -61,7 +61,7 @@ Semantic IDs: none. This is a developer workflow helper and does not change user
 
 Stable binding points:
 
-- `src/validation-gate-selector.js`
+- `src/validation-gate-selector.ts`
 - `scripts/validation-gate-selector.mjs`
 - `tests/validation-gate-selector.test.js`
 - `.docs/tech/validation-gate-selector.md`

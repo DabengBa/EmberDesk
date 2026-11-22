@@ -3,10 +3,10 @@ import path from 'node:path';
 import type { Dirent } from 'node:fs';
 import type { DatabaseSync } from 'node:sqlite';
 
-import { formatBytes } from '../util.js';
+import { formatBytes } from '../util.ts';
 import { createTextMatcher, getPreviewMessage } from './chat-route-service.ts';
-import type { ChatInfo } from './chats.js';
-import type { UserDirectoryList } from '../users.js';
+import type { ChatInfo } from './chats.ts';
+import type { UserDirectoryList } from '../user-types.ts';
 
 type ChatDirectories = Pick<UserDirectoryList, 'chats' | 'characters'>;
 type Dependencies = {

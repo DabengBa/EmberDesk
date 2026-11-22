@@ -5,7 +5,7 @@ import path from 'node:path';
 import type { DatabaseSync, SQLOutputValue } from 'node:sqlite';
 
 import { withCanonicalTransaction } from '../canonical-sqlite.ts';
-import { uuidv4 } from '../util.js';
+import { uuidv4 } from '../util.ts';
 
 type Row = Record<string, SQLOutputValue>;
 type MediaRecord = { compatibilityPath: string; contentHash: unknown; sizeBytes: unknown; mediaType?: unknown; managedRelativePath?: unknown; ownerType: unknown; ownerId?: unknown; role?: unknown; displayName?: unknown; metadata?: unknown; nowMs?: unknown };

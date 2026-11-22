@@ -3,8 +3,8 @@ import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { getVersion } from '../src/util.js';
-import { serverDirectory } from '../src/server-directory.js';
+import { getVersion } from '../src/util.ts';
+import { serverDirectory } from '../src/server-directory.ts';
 
 test('version info reads the running worktree revision when Git is available', async () => {
     const revision = spawnSync('git', ['rev-parse', '--short', 'HEAD'], { cwd: serverDirectory, encoding: 'utf8' });
@@ -29,8 +29,8 @@ test.each(unavailableGitCases)('$kind Git preserves version fallback and allows 
         }
         fs.mkdirSync(path.join(temp, 'plugins', 'example'), { recursive: true });
         const child = spawnSync(process.execPath, ['--input-type=module', '-e', `
-            import { getVersion } from './src/util.js';
-            import { updatePlugins } from './src/plugin-updater.js';
+            import { getVersion } from './src/util.ts';
+            import { updatePlugins } from './src/plugin-updater.ts';
             await updatePlugins(process.argv[1], { autoUpdate: true });
             console.log(JSON.stringify(await getVersion()));
         `, path.join(temp, 'plugins')], {

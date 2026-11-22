@@ -1,9 +1,9 @@
 import path from 'node:path';
 import fs from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
-import { DEFAULT_USER, PUBLIC_DIRECTORIES } from './constants.js';
-import { color, delay, setPermissionsSync } from './util.js';
-import { serverDirectory } from './server-directory.js';
+import { DEFAULT_USER, PUBLIC_DIRECTORIES } from './constants.ts';
+import { color, delay, setPermissionsSync } from './util.ts';
+import { serverDirectory } from './server-directory.ts';
 import { getUserDirectories } from './user-directories.ts';
 import { applyCanonicalPragmas, resolveCanonicalDatabasePath } from './canonical-sqlite.ts';
 import { runCanonicalMigrations } from './canonical-sqlite-migrations.ts';

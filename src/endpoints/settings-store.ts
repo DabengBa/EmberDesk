@@ -4,7 +4,7 @@ import path from 'node:path';
 import type { DatabaseSync, SQLInputValue } from 'node:sqlite';
 
 import { withCanonicalTransaction } from '../canonical-sqlite.ts';
-import { tryParse, uuidv4 } from '../util.js';
+import { tryParse, uuidv4 } from '../util.ts';
 
 // Views describe existing unchecked JSON access, not runtime validation.
 type PowerUserView = {

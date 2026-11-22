@@ -5,13 +5,12 @@ import express from 'express';
 import lodash from 'lodash';
 import { RateLimiterMemory, RateLimiterRes } from 'rate-limiter-flexible';
 import { getIpAddress, retryAfter } from '../express-common.ts';
-import { color, Cache, getConfigValue } from '../util.js';
+import { color, Cache, getConfigValue } from '../util.ts';
 import { ensureCanonicalSettingsForUser } from './settings-routes.ts';
-import {
-    KEY_PREFIX, getUserAvatar, toKey, getPasswordHash, getPasswordSalt, getAccountVersion,
-    needsSetup, ensurePublicDirectoriesExist, getUserDirectories, getAllUserHandles,
-} from '../users.js';
-import type { UserViewModel } from '../users.js';
+import { KEY_PREFIX, toKey, getAccountVersion, needsSetup, getAllUserHandles } from '../user-storage.ts';
+import { getUserAvatar, ensurePublicDirectoriesExist, getUserDirectories } from '../user-directories.ts';
+import { getPasswordHash, getPasswordSalt } from '../user-auth.ts';
+import type { UserViewModel } from '../user-types.ts';
 
 const DISCREET_LOGIN = getConfigValue('enableDiscreetLogin', false, 'boolean');
 const PREFER_REAL_IP_HEADER = getConfigValue('rateLimiting.preferRealIpHeader', false, 'boolean');
@@ -84,10 +83,10 @@ router.post('/list', async (_request, response) => {
             return response.sendStatus(204);
         }
 
-        /** @type {import('../users.js').User[]} */
+        /** @type {import('../user-storage.ts').User[]} */
         const users = await storage.values(x => x.key.startsWith(KEY_PREFIX));
 
-        /** @type {Promise<import('../users.js').UserViewModel>[]} */
+        /** @type {Promise<import('../user-types.ts').UserViewModel>[]} */
         const viewModelPromises = users
             .filter(x => x.enabled)
             .map(user => new Promise<UserViewModel>((resolve) => {
@@ -141,7 +140,7 @@ router.post('/login', async (request, response) => {
             throw error;
         }
 
-        /** @type {import('../users.js').User} */
+        /** @type {import('../user-storage.ts').User} */
         const user = await storage.getItem(toKey(request.body.handle));
 
         if (!user) {
@@ -186,7 +185,7 @@ router.post('/recover-step1', async (request, response) => {
         const ip = getIpAddress(request, PREFER_REAL_IP_HEADER);
         await recoverLimiter.consume(ip);
 
-        /** @type {import('../users.js').User} */
+        /** @type {import('../user-storage.ts').User} */
         const user = await storage.getItem(toKey(request.body.handle));
 
         if (!user) {
@@ -223,7 +222,7 @@ router.post('/recover-step2', async (request, response) => {
             return response.status(400).json({ error: 'Missing required fields' });
         }
 
-        /** @type {import('../users.js').User} */
+        /** @type {import('../user-storage.ts').User} */
         const user = await storage.getItem(toKey(request.body.handle));
         const ip = getIpAddress(request, PREFER_REAL_IP_HEADER);
         const rateLimit = await recoverLimiter.get(ip);

@@ -5,7 +5,7 @@ import process from 'node:process';
 import {
     formatValidationGateSelection,
     selectValidationGates,
-} from '../src/validation-gate-selector.js';
+} from '../src/validation-gate-selector.ts';
 
 const inputs = process.argv.slice(2);
 const selection = selectValidationGates(inputs);

@@ -1,12 +1,12 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import type { Request, RequestHandler } from 'express';
-import type { UserDirectoryList } from '../users.js';
+import type { UserDirectoryList } from '../user-types.ts';
 import _ from 'lodash';
-import { forbiddenRegExp } from '../middleware/validateFileName.js';
-import { deepMerge } from '../util.js';
+import { forbiddenRegExp } from '../middleware/validateFileName.ts';
+import { deepMerge } from '../util.ts';
 import { TavernCardValidator } from '../validator/TavernCardValidator.ts';
-import { processUnsetSentinels } from './character-card-helpers.js';
+import { processUnsetSentinels } from './character-card-helpers.ts';
 import { editCharacterCard } from './character-write-service.ts';
 import type { DeleteCharacterOptions } from './character-write-service.ts';
 

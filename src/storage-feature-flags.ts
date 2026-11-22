@@ -1,0 +1,308 @@
+import { getConfig, getConfigValue, hasConfigFilePath, keyToEnv } from './util.ts';
+
+const STORAGE_FLAG_PREFIX = 'features.storage.canonicalSqlite';
+
+// Staged-rollout flags retired with the P4 cutover: runtime reads/writes are
+// always canonical, chat stats always derive from chat_sessions, and blocked
+// canonical operations fail instead of falling back to files. `enabled` stays
+// as the init-freeze switch and `shadowImport` stays as the import control.
+const RETIRED_STORAGE_FLAG_NAMES = Object.freeze(['reads', 'writes', 'chatStats', 'strict']);
+const BASE_STORAGE_FLAG_NAMES = Object.freeze([
+    'enabled',
+    'shadowImport',
+    'reads',
+    'writes',
+    'strict',
+]);
+
+const warnedRetiredFlagPaths = new Set();
+
+function warnRetiredStorageFlag(configPath: string) {
+    if (warnedRetiredFlagPaths.has(configPath)) {
+        return;
+    }
+    warnedRetiredFlagPaths.add(configPath);
+    console.warn(
+        `Canonical storage flag '${configPath}' is retired and ignored; `
+        + 'runtime reads/writes are always canonical now. Remove it from config/env.',
+    );
+}
+
+function getStorageFlagNames(supportsChatStats: boolean) {
+    return supportsChatStats
+        ? ['enabled', 'shadowImport', 'reads', 'writes', 'chatStats', 'strict']
+        : BASE_STORAGE_FLAG_NAMES;
+}
+
+function getStorageFlag(flagName: string, defaultValue = true) {
+    return getConfigValue(`${STORAGE_FLAG_PREFIX}.${flagName}`, defaultValue, 'boolean');
+}
+
+export function getCanonicalSqliteFeatureFlags() {
+    const enabled = getStorageFlag('enabled');
+    for (const flagName of RETIRED_STORAGE_FLAG_NAMES) {
+        const configPath = `${STORAGE_FLAG_PREFIX}.${flagName}`;
+        if (getExplicitConfigValue(configPath).present) {
+            warnRetiredStorageFlag(configPath);
+        }
+    }
+    return {
+        enabled,
+        shadowImport: enabled && getStorageFlag('shadowImport'),
+        reads: enabled,
+        writes: enabled,
+        chatStats: enabled,
+        strict: enabled,
+    };
+}
+
+function getObjectValue(object: unknown, path: string) {
+    return path.split('.').reduce<unknown>((value, key) => (
+        value != null && Object.prototype.hasOwnProperty.call(value, key)
+            ? (value as Record<string, unknown>)[key]
+            : undefined
+    ), object);
+}
+
+function getExplicitConfigValue(path: string) {
+    const environmentKey = keyToEnv(path);
+    if (Object.prototype.hasOwnProperty.call(process.env, environmentKey)) {
+        return {
+            present: true,
+            value: process.env[environmentKey],
+        };
+    }
+
+    // getConfig() hard-exits without a registered config path (bare CLI use).
+    if (!hasConfigFilePath()) {
+        return { present: false, value: undefined };
+    }
+    const value = getObjectValue(getConfig(), path);
+    return {
+        present: value !== undefined,
+        value,
+    };
+}
+
+function parseExplicitBoolean(value: unknown) {
+    if (typeof value === 'boolean') {
+        return { ok: true, value };
+    }
+    if (typeof value === 'string') {
+        const normalized = value.trim().toLowerCase();
+        if (normalized === 'true') {
+            return { ok: true, value: true };
+        }
+        if (normalized === 'false') {
+            return { ok: true, value: false };
+        }
+    }
+    return { ok: false, value: false };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+    return value != null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function getSliceOverride(overrides: Record<string, unknown>, flagKey: string) {
+    const snakeCaseFlagKey = flagKey.replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`);
+    const slices = overrides?.slices;
+    if (slices !== undefined && !isRecord(slices)) {
+        return { ok: false, value: null };
+    }
+
+    for (const container of [slices, overrides]) {
+        if (!isRecord(container)) {
+            continue;
+        }
+        for (const key of [flagKey, snakeCaseFlagKey]) {
+            if (Object.prototype.hasOwnProperty.call(container, key)) {
+                return {
+                    ok: isRecord(container[key]),
+                    value: container[key],
+                };
+            }
+        }
+    }
+
+    return { ok: true, value: null };
+}
+
+function getConfiguredSliceOverride(flagKey: string): { ok: boolean; value?: unknown } {
+    const slices = getExplicitConfigValue(`${STORAGE_FLAG_PREFIX}.slices`);
+    if (slices.present && !isRecord(slices.value)) {
+        return { ok: false };
+    }
+
+    const slice = getExplicitConfigValue(`${STORAGE_FLAG_PREFIX}.slices.${flagKey}`);
+    return {
+        ok: !slice.present || isRecord(slice.value),
+    };
+}
+
+function buildDisabledSnapshot({ flagNames, reasonCode = null, source = 'disabled_by_enabled' }: { flagNames: readonly string[]; reasonCode?: string | null; source?: string }) {
+    return {
+        featureFlags: Object.fromEntries(flagNames.map(flagName => [flagName, false])),
+        sources: Object.fromEntries(flagNames.map(flagName => [flagName, source])),
+        resolution: {
+            ok: reasonCode == null,
+            reasonCode,
+        },
+    };
+}
+
+function buildGlobalOverrideFlags(overrides: Record<string, unknown>, flagNames: readonly string[]) {
+    const values: Record<string, boolean> = {};
+    for (const flagName of flagNames) {
+        const parsed = parseExplicitBoolean(overrides?.[flagName] ?? false);
+        if (!parsed.ok) {
+            return {
+                ok: false,
+                flags: null,
+            };
+        }
+        values[flagName] = parsed.value;
+    }
+
+    const enabled = values.enabled;
+    for (const flagName of flagNames) {
+        if (flagName !== 'enabled') {
+            values[flagName] = enabled && values[flagName];
+        }
+    }
+    return {
+        ok: true,
+        flags: values,
+    };
+}
+
+/**
+ * Resolve the effective feature flags for one canonical storage slice.
+ * Explicit per-slice settings override matching global settings field-by-field.
+ */
+export function getCanonicalStorageSliceFeatureFlagSnapshot(options: { flagKey: string; supportsChatStats?: boolean; fallbackToGlobal?: boolean; overrides?: object | null }) {
+    const {
+        flagKey,
+        supportsChatStats = false,
+        fallbackToGlobal = true,
+        overrides = null,
+    } = options ?? {};
+    const flagNames = getStorageFlagNames(supportsChatStats);
+
+    if (typeof flagKey !== 'string' || flagKey.length === 0) {
+        throw new Error('Canonical storage slice flagKey is required.');
+    }
+
+    const sliceOverrideResult = overrides == null
+        ? getConfiguredSliceOverride(flagKey)
+        : getSliceOverride(overrides as Record<string, unknown>, flagKey);
+    if (!sliceOverrideResult.ok) {
+        return buildDisabledSnapshot({
+            flagNames,
+            reasonCode: 'invalid_slice_flag_configuration',
+            source: 'invalid',
+        });
+    }
+    const sliceOverride = sliceOverrideResult.value as Record<string, unknown> | null | undefined;
+    const globalSource = overrides == null ? 'global' : 'global_override';
+    const sliceSource = overrides == null ? 'slice' : 'slice_override';
+    const globalFeatureFlags = overrides == null ? getCanonicalSqliteFeatureFlags() : null;
+    const globalResult = overrides == null
+        ? {
+            ok: true,
+            flags: Object.fromEntries(flagNames.map(flagName => [
+                flagName,
+                (globalFeatureFlags! as Record<string, boolean>)[flagName] ?? false,
+            ])),
+        }
+        : buildGlobalOverrideFlags(overrides as Record<string, unknown>, flagNames);
+
+    if (!globalResult.ok) {
+        return buildDisabledSnapshot({
+            flagNames,
+            reasonCode: 'invalid_slice_flag_configuration',
+            source: 'invalid',
+        });
+    }
+
+    const featureFlags: Record<string, boolean> = {};
+    const sources: Record<string, string> = {};
+    for (const flagName of flagNames) {
+        let value = globalResult.flags![flagName];
+        let source = globalSource;
+        let explicit = null;
+
+        if (overrides == null) {
+            explicit = getExplicitConfigValue(`${STORAGE_FLAG_PREFIX}.slices.${flagKey}.${flagName}`);
+        } else if (sliceOverride != null && Object.prototype.hasOwnProperty.call(sliceOverride, flagName)) {
+            explicit = {
+                present: true,
+                value: sliceOverride[flagName],
+            };
+        }
+
+        if (explicit?.present) {
+            const parsed = parseExplicitBoolean(explicit.value);
+            if (!parsed.ok) {
+                return buildDisabledSnapshot({
+                    flagNames,
+                    reasonCode: 'invalid_slice_flag_configuration',
+                    source: 'invalid',
+                });
+            }
+            if (RETIRED_STORAGE_FLAG_NAMES.includes(flagName)) {
+                warnRetiredStorageFlag(`${STORAGE_FLAG_PREFIX}.slices.${flagKey}.${flagName}`);
+            } else {
+                value = parsed.value;
+                source = sliceSource;
+            }
+        } else if (!fallbackToGlobal) {
+            value = false;
+            source = 'default';
+        }
+
+        featureFlags[flagName] = value;
+        sources[flagName] = source;
+    }
+
+    // Retired staged-rollout flags always track `enabled`.
+    for (const flagName of RETIRED_STORAGE_FLAG_NAMES) {
+        if (flagName in featureFlags) {
+            featureFlags[flagName] = featureFlags.enabled;
+            sources[flagName] = 'retired';
+        }
+    }
+
+    if (!featureFlags.enabled) {
+        for (const flagName of flagNames) {
+            if (flagName !== 'enabled') {
+                featureFlags[flagName] = false;
+                sources[flagName] = 'disabled_by_enabled';
+            }
+        }
+    }
+
+    return {
+        featureFlags,
+        sources,
+        resolution: {
+            ok: true,
+            reasonCode: null,
+        },
+    };
+}
+
+export function getCanonicalManagedMediaFeatureFlags() {
+    return getCanonicalStorageSliceFeatureFlagSnapshot({
+        flagKey: 'managedMedia',
+    }).featureFlags;
+}
+
+/**
+ * Runtime compatibility projection is retired. Legacy YAML and environment
+ * overrides are ignored; explicit export and repair select their own mode.
+ * @returns {'off'}
+ */
+export function getCanonicalSliceProjectionMode() {
+    return 'off';
+}

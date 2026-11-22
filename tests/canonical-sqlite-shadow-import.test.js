@@ -18,7 +18,7 @@ import {
     runCanonicalShadowImport,
 } from '../src/canonical-sqlite-shadow-import.ts';
 import { recordProjectionRepair } from '../src/endpoints/character-store.ts';
-import { buildCharacterFileSnapshotRow } from '../src/endpoints/character-file-snapshot.js';
+import { buildCharacterFileSnapshotRow } from '../src/endpoints/character-file-snapshot.ts';
 
 const tempRoots = [];
 const managers = [];

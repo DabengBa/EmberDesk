@@ -4,12 +4,12 @@ import path from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, test } from '@jest/globals';
 
-import { setConfigFilePath } from '../src/util.js';
+import { setConfigFilePath } from '../src/util.ts';
 import { canonicalSqliteManager } from '../src/canonical-sqlite.ts';
 import {
     ensureCanonicalSliceBackend,
     resetCanonicalBackendsForTests,
-} from '../src/canonical-backend.js';
+} from '../src/canonical-backend.ts';
 import { closeCanonicalDatabase } from '../src/canonical-sqlite.ts';
 import {
     getCanonicalSettingsDocument,
@@ -82,7 +82,7 @@ afterEach(() => {
 
 describe('canonical sqlite flag defaults', () => {
     test('resolve enabled with all runtime flags forced on after the staged-rollout retirement', async () => {
-        const { getCanonicalSqliteFeatureFlags } = await import('../src/storage-feature-flags.js');
+        const { getCanonicalSqliteFeatureFlags } = await import('../src/storage-feature-flags.ts');
         expect(getCanonicalSqliteFeatureFlags()).toEqual({
             enabled: true,
             shadowImport: true,

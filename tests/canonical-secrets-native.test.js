@@ -21,7 +21,7 @@ test('Node loads the real Secrets manager and synchronous TypeScript backend wit
             assert.equal(typeof state.then, 'undefined');
             assert.equal(typeof SecretManager, 'function');
             console.log('secrets-callers:native');
-        `, url('util.js'), config, root, url('endpoints/secrets.js'), url('canonical-secrets-backend.ts')], {
+        `, url('util.ts'), config, root, url('endpoints/secrets.ts'), url('canonical-secrets-backend.ts')], {
             encoding: 'utf8', timeout: 10_000,
         });
         expect({ status: result.status, stderr: result.status === 0 ? '' : result.stderr })

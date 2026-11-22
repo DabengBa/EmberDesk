@@ -3,7 +3,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { afterEach, beforeEach, describe, expect, test } from '@jest/globals';
 
 import { runCanonicalMigrations } from '../src/canonical-sqlite-migrations.ts';
-import * as coordinator from '../src/character-replace-write-coordinator.js';
+import * as coordinator from '../src/character-replace-write-coordinator.ts';
 import {
     acknowledgeReplaceIntent,
     claimReplaceIntent,
@@ -22,7 +22,7 @@ import {
     markReplaceIntentReady,
     registerIntentWrites,
     removeSettledWorkspaceWriteDetails,
-} from '../src/character-replace-write-coordinator.js';
+} from '../src/character-replace-write-coordinator.ts';
 
 let db;
 let sessionId;

@@ -20,9 +20,9 @@ Primary files:
 - `app/components/workspace/WorkspaceHost.tsx`
 - `app/components/workspace/workspace-entry.ts`
 - `scripts/startup-performance-runner.mjs`
-- `src/endpoints/settings-cache.js`
-- `src/server-startup-profiler.js`
-- `src/performance-report.js`
+- `src/endpoints/settings-cache.ts`
+- `src/server-startup-profiler.ts`
+- `src/performance-report.ts`
 
 ## Architecture And Constraints
 
@@ -66,7 +66,7 @@ The former deferred background catalog warmup and Background Library panel loadi
 
 ### Settings-cache for /api/settings/get
 
-`src/endpoints/settings-cache.js` provides an in-process directory payload cache used by `POST /api/settings/get`. Stability-sensitive constraints:
+`src/endpoints/settings-cache.ts` provides an in-process directory payload cache used by `POST /api/settings/get`. Stability-sensitive constraints:
 
 - The cache key is the absolute directory path, which naturally partitions by user.
 - `getCachedPayload(dirPath, rebuild)` implements single-flight rebuild: concurrent callers for the same uncached directory await one shared rebuild promise instead of triggering duplicate work.
@@ -95,7 +95,7 @@ The former deferred background catalog warmup and Background Library panel loadi
 - waits briefly for deferred startup stages so the report captures post-ready work
 - kills the spawned server with `SIGKILL` if shutdown does not complete in time
 
-`src/server-startup-profiler.js` now records failure stacks alongside the error message, and `src/performance-report.js` remains the stable server/profile summary surface.
+`src/server-startup-profiler.ts` now records failure stacks alongside the error message, and `src/performance-report.ts` remains the stable server/profile summary surface.
 
 ## Related Semantic IDs And Code Binding Points
 

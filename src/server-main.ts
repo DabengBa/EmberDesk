@@ -6,7 +6,7 @@ import dns from 'node:dns';
 import process from 'node:process';
 import http from 'node:http';
 import https from 'node:https';
-import { characterLibraryChangeObserver } from './character-library-change-observer.js';
+import { characterLibraryChangeObserver } from './character-library-change-observer.ts';
 
 import cors from 'cors';
 import type { CorsOptions } from 'cors';
@@ -19,53 +19,38 @@ import responseTime from 'response-time';
 import helmet from 'helmet';
 
 // local library imports
-import './fetch-patch.js';
-import { serverDirectory } from './server-directory.js';
+import './fetch-patch.ts';
+import { serverDirectory } from './server-directory.ts';
 
-import { serverEvents, EVENT_NAMES } from './server-events.js';
-import { loadPlugins } from './plugin-loader.js';
-import {
-    initUserStorage,
-    getCookieSecret,
-    getCookieSessionName,
-    ensurePublicDirectoriesExist,
-    getUserDirectoriesList,
-    migrateUserData,
-    requireLoginMiddleware,
-    setUserDataMiddleware,
-    shouldRedirectToLogin,
-    cleanUploads,
-    getSessionCookieAge,
-    verifySecuritySettings,
-    loginPageMiddleware,
-    setupPageMiddleware,
-    settingsPageMiddleware,
-    createLegacyLoginHtmlRedirectMiddleware,
-    createLegacySetupHtmlRedirectMiddleware,
-    createLegacyAuthHtmlRedirectMiddleware,
-    needsSetup,
-    migratePublicOverrides,
-} from './users.js';
+import { serverEvents, EVENT_NAMES } from './server-events.ts';
+import { loadPlugins } from './plugin-loader.ts';
+import { initUserStorage, needsSetup } from './user-storage.ts';
+import { getCookieSecret, getCookieSessionName, shouldRedirectToLogin, getSessionCookieAge } from './user-auth.ts';
+import { ensurePublicDirectoriesExist, getUserDirectoriesList, cleanUploads, getUserUploadsPath } from './user-directories.ts';
+import { migrateUserData, migratePublicOverrides } from './user-migrations.ts';
+import { requireLoginMiddleware, setUserDataMiddleware } from './user-session.ts';
+import { verifySecuritySettings } from './user-security.ts';
+import { loginPageMiddleware, setupPageMiddleware, settingsPageMiddleware, createLegacyLoginHtmlRedirectMiddleware, createLegacySetupHtmlRedirectMiddleware, createLegacyAuthHtmlRedirectMiddleware } from './user-pages.ts';
 
-import getViteLibServeMiddleware from './middleware/vite-lib-serve.js';
-import { getReactLoginServeMiddleware, hasReactLoginBuild, sendReactLoginIndex } from './middleware/react-login-serve.js';
-import basicAuthMiddleware from './middleware/basicAuth.js';
+import getViteLibServeMiddleware from './middleware/vite-lib-serve.ts';
+import { getReactLoginServeMiddleware, hasReactLoginBuild, sendReactLoginIndex } from './middleware/react-login-serve.ts';
+import basicAuthMiddleware from './middleware/basicAuth.ts';
 import getWhitelistMiddleware from './middleware/whitelist.ts';
-import accessLoggerMiddleware, { getAccessLogPath, migrateAccessLog } from './middleware/accessLogWriter.js';
-import multerMonkeyPatch from './middleware/multerMonkeyPatch.js';
+import accessLoggerMiddleware, { getAccessLogPath, migrateAccessLog } from './middleware/accessLogWriter.ts';
+import multerMonkeyPatch from './middleware/multerMonkeyPatch.ts';
 import initRequestProxy from './request-proxy.ts';
 import initPrivateRequestFilter from './private-request-filter.ts';
-import cacheBuster from './middleware/cacheBuster.js';
+import cacheBuster from './middleware/cacheBuster.ts';
 import corsProxyMiddleware from './middleware/corsProxy.ts';
-import errorHandlerMiddleware from './middleware/errorHandler.js';
+import errorHandlerMiddleware from './middleware/errorHandler.ts';
 import hostWhitelistMiddleware from './middleware/hostWhitelist.ts';
-import userCssMiddleware from './middleware/userCss.js';
+import userCssMiddleware from './middleware/userCss.ts';
 import {
     CORS_PROXY_ROUTE,
     OAUTH_CALLBACK_ROUTE,
     disabledCorsProxyMiddleware,
     oauthCallbackMiddleware,
-} from './express-route-compat.js';
+} from './express-route-compat.ts';
 import {
     getVersion,
     color,
@@ -75,21 +60,21 @@ import {
     setupLogLevel,
     setWindowTitle,
     getConfigValue,
-} from './util.js';
-import { getUserUploadsPath } from './user-directories.ts';
-import { REACT_LOGIN_BASE_PATH } from './react-login-feature.js';
+} from './util.ts';
+
+import { REACT_LOGIN_BASE_PATH } from './react-login-feature.ts';
 
 // Routers
 import { router as usersPublicRouter } from './endpoints/users-public-routes.ts';
 
-import { checkForNewContent } from './endpoints/content-manager.js';
+import { checkForNewContent } from './endpoints/content-manager.ts';
 import { redirectDeprecatedEndpoints, ServerStartup, setupPrivateEndpoints, setupPublicEndpoints } from './server-startup.ts';
 import type { ServerStartupResult } from './server-startup.ts';
 import type { CommandLineArguments } from './command-line.ts';
 import type { Express } from 'express';
-import { diskCache } from './endpoints/characters.js';
-import { migrateFlatSecrets } from './endpoints/secrets.js';
-import { createServerStartupProfiler } from './server-startup-profiler.js';
+import { diskCache } from './endpoints/characters.ts';
+import { migrateFlatSecrets } from './endpoints/secrets.ts';
+import { createServerStartupProfiler } from './server-startup-profiler.ts';
 
 // Unrestrict console logs display limit
 util.inspect.defaultOptions.maxArrayLength = null;

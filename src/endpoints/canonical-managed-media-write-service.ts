@@ -9,9 +9,9 @@ import { getPersistedCanonicalAuditStatus, invalidateCanonicalAuditStatus } from
 import {
     recordImportLedgerEntry,
     removeImportLedgerEntry,
-} from '../canonical-import-ledger.js';
+} from '../canonical-import-ledger.ts';
 import { getCanonicalStorageSlice } from '../canonical-storage-slice-registry.ts';
-import { uuidv4 } from '../util.js';
+import { uuidv4 } from '../util.ts';
 import {
     getCanonicalManagedMediaReference,
     hasCanonicalManagedMediaConsumers,
@@ -24,7 +24,7 @@ import {
     resolveCanonicalManagedMediaRepair,
 } from './canonical-managed-media-store.ts';
 
-type Directories = import('../users.js').UserDirectoryList;
+type Directories = import('../user-types.ts').UserDirectoryList;
 type Flags = ReturnType<ReturnType<typeof getCanonicalStorageSlice>['getFeatureFlags']>;
 type OpenOptions = { handle: string | undefined; directories: Directories | undefined; featureFlags: { enabled: boolean; strict: boolean } };
 type Dependencies = {

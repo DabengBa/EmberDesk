@@ -29,7 +29,7 @@ The sttest environment is a shared remote test target, not a source of canonical
 - Compose service and container: `emberdesk-test`
 - Image tag: `emberdesk-test:local`
 - Port mapping: `8001:8000`
-- Container healthcheck: `node src/healthcheck.js`
+- Container healthcheck: `node src/healthcheck.ts`
 
 The sttest host is now reachable via the local SSH alias `vps-kl` (`root@72.62.76.115`, key `~/.ssh/hostinger_root_ed25519`). The previous `31.97.210.149` host and `hostops`/`hostinger` aliases are retired; on the current host all operations run as root, and Git commands in `/opt/emberdesk-test` need `git -c safe.directory=/opt/emberdesk-test` because the checkout is owned by uid 1002.
 
@@ -159,6 +159,6 @@ Operational binding points:
 
 - `Dockerfile` - production image build and pnpm install behavior
 - `pnpm run build:lib` - Vite browser library precompile during image build
-- `src/healthcheck.js` - container healthcheck entry point
+- `src/healthcheck.ts` - container healthcheck entry point
 - `server.js` - deployed process entry point
 - `src/server-main.ts` - server boot orchestration inside the container

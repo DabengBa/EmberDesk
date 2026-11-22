@@ -14,7 +14,7 @@ Primary files:
 
 - `public/lib.js` - shared browser-library entrypoint and legacy shim installer
 - `vite.config.ts` - Vite library-mode build for `/lib.js`
-- `src/middleware/vite-lib-serve.js` - Vite-built `/lib.js` serving middleware
+- `src/middleware/vite-lib-serve.ts` - Vite-built `/lib.js` serving middleware
 - `tests/frontend-shared-library-boundary.test.js` - regression proof for exports, shims, and built output
 - `public/script.js` - separate workspace composition root; it calls `initLibraryShims()` during `bootstrapWorkspace()` but does not own the library export resolver
 
@@ -160,7 +160,7 @@ Stability-sensitive binding points:
 - `installPublicBrowserApi()` call during `public/script.js` module composition
 - `public/scripts/events.js` and `public/scripts/request-context.js` as separate extracted contract owners
 - Vite library config in `vite.config.ts`
-- `getViteLibServeMiddleware()` in `src/middleware/vite-lib-serve.js`
+- `getViteLibServeMiddleware()` in `src/middleware/vite-lib-serve.ts`
 
 Current processing rules are documented in [Frontend Shared Library Boundary Processing Flow](../logic-description/frontend_shared_library_boundary_processing_flow.md).
 

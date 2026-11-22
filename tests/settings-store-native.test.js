@@ -41,7 +41,7 @@ test('Node resolves the production settings and presets graphs without a loader'
             assert.equal(persisted.contentHash, settings.hashSettingsPayload(persisted.payloadJson));
             db.close();
             console.log('settings-callers:native');
-        `, url('util.js'), config, root, url('endpoints/settings-routes.ts'),
+        `, url('util.ts'), config, root, url('endpoints/settings-routes.ts'),
         url('endpoints/presets-store.ts'), url('endpoints/settings-store.ts'), url('canonical-sqlite-migrations.ts'),
         url('endpoints/presets.ts')], {
             encoding: 'utf8', timeout: 10_000,

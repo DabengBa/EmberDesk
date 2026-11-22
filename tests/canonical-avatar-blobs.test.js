@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 
 import { afterEach, describe, expect, jest, test } from '@jest/globals';
 
-import { setConfigFilePath } from '../src/util.js';
+import { setConfigFilePath } from '../src/util.ts';
 import {
     CHARACTER_AVATAR_ROLE,
     CHARACTER_AVATAR_VIRTUAL_ROOT,
@@ -14,12 +14,12 @@ import {
     getCharacterAvatarBlobReference,
     renameCharacterAvatarBlobReference,
     retireCharacterAvatarBlobReference,
-} from '../src/canonical-avatar-blobs.js';
+} from '../src/canonical-avatar-blobs.ts';
 import {
     backfillCharacterAvatarBlobs,
     recordCharacterAvatarBlob,
 } from '../src/canonical-avatar-blob-service.ts';
-import { resetCanonicalBackendsForTests } from '../src/canonical-backend.js';
+import { resetCanonicalBackendsForTests } from '../src/canonical-backend.ts';
 import { createCanonicalSqliteManager } from '../src/canonical-sqlite.ts';
 import { runCanonicalMigrations } from '../src/canonical-sqlite-migrations.ts';
 import {
@@ -31,7 +31,7 @@ import {
 import { readManagedMediaContent } from '../src/endpoints/canonical-managed-media-read-service.ts';
 import { extractImageData, write } from '../src/character-card-parser.ts';
 import encode from '../src/png/encode.ts';
-import { getImportLedgerEntry } from '../src/canonical-import-ledger.js';
+import { getImportLedgerEntry } from '../src/canonical-import-ledger.ts';
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const REAL_AVATAR_PNG = path.join(REPO_ROOT, 'public', 'img', 'ai4.png');
@@ -277,7 +277,7 @@ describe('character avatar blobs', () => {
 
         // Loaded lazily: image-metadata reads config at module eval time, so the
         // module must be imported after setConfigFilePath ran in this file.
-        const { generateThumbnail } = await import('../src/endpoints/thumbnails.js');
+        const { generateThumbnail } = await import('../src/endpoints/thumbnails.ts');
 
         // Seed a cached thumbnail + hash sidecar as if a prior generation ran.
         const cachedPath = path.join(directories.thumbnailsAvatar, 'eta.png');

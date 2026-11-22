@@ -1,8 +1,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import type { RequestHandler } from 'express';
-import type { UserDirectoryList } from '../users.js';
-import { tryParse } from '../util.js';
+import type { UserDirectoryList } from '../user-types.ts';
+import { tryParse } from '../util.ts';
 import { editCharacterCard } from './character-write-service.ts';
 import type { CharacterWriteDependencies, DeleteCharacterOptions } from './character-write-service.ts';
 

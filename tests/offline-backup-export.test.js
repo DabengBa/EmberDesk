@@ -82,7 +82,7 @@ test.each([[false, false, false], [true, false, false], [false, true, false], [f
             import express from 'express';
             const [data, config, zip, symlink, rootSymlink] = process.argv.slice(1);
             globalThis.DATA_ROOT = data;
-            const { setConfigFilePath } = await import('./src/util.js');
+            const { setConfigFilePath } = await import('./src/util.ts');
             setConfigFilePath(config);
             const { getUserDirectories } = await import('./src/user-directories.ts');
             const { canonicalSqliteManager } = await import('./src/canonical-sqlite.ts');

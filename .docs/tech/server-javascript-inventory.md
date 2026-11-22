@@ -6,6 +6,14 @@ topic: server-javascript-inventory
 
 # Server JavaScript inventory
 
+**Current status:** The 57 tracked `src/` JavaScript modules inventoried below
+have since migrated to strict native TypeScript, including a split of
+`src/users.js` into directly imported `user-*.ts` modules. The tables below
+are a historical baseline, not a list of current JavaScript files. The root
+`server.js`, browser JavaScript and external plugin boundaries remain JS.
+The server TypeScript project no longer enables `allowJs` or `checkJs`; see
+[server TypeScript](server-typescript.md) for the current checking boundary.
+
 This inventory started at `9657b8179ed088dba38b474169f5c347902f07fe` (68 JavaScript files and 82 TypeScript files under `src/`). Before the first retirement wave there were 68 JavaScript files and 100 TypeScript files. After removing three retired modules and eight pure forwarders there are **57 JavaScript files and 100 TypeScript files** under `src/`. Counts are snapshots, not measures of type safety or route coverage.
 
 The review traced repository imports and direct execution paths, including

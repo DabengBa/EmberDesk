@@ -4,9 +4,9 @@ import path from 'node:path';
 import type { Request, RequestHandler, Response, Router } from 'express';
 import sanitize from 'sanitize-filename';
 
-import validateAvatarUrlMiddleware from '../middleware/validateFileName.js';
-import { isPathUnderParent } from '../util.js';
-import type { UserDirectoryList } from '../users.js';
+import validateAvatarUrlMiddleware from '../middleware/validateFileName.ts';
+import { isPathUnderParent } from '../util.ts';
+import type { UserDirectoryList } from '../user-types.ts';
 import type { ChatRouteContext } from './chat-route-context.ts';
 
 type ChatLocator = { ownerType: 'character'; ownerId: string; sourcePath: string };

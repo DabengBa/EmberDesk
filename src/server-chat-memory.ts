@@ -3,7 +3,7 @@ import type { DatabaseSync } from 'node:sqlite';
 import { getFallbackOpenAIModel } from '../app/lib/generation/shared-state.ts';
 import { createChatMemoryCore } from '../public/scripts/chat-memory-shared.js';
 import { isLegacyOpenAICompletionSource, resolveReasoningEffort, resolveVerbosity } from '../public/scripts/openai-provider-capabilities.js';
-import { OPENAI_FIXED_REASONING_EFFORT, OPENAI_REASONING_EFFORT_MAP, OPENAI_REASONING_EFFORT_MODELS, OPENAI_VERBOSITY_MODELS } from './constants.js';
+import { OPENAI_FIXED_REASONING_EFFORT, OPENAI_REASONING_EFFORT_MAP, OPENAI_REASONING_EFFORT_MODELS, OPENAI_VERBOSITY_MODELS } from './constants.ts';
 import { readCanonicalChatPayload, type CanonicalChatLocator } from './endpoints/canonical-chat-read-service.ts';
 import { getCanonicalCharacter } from './endpoints/character-store.ts';
 import { getCanonicalSettingsDocument } from './endpoints/settings-store.ts';

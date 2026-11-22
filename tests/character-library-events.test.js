@@ -14,16 +14,18 @@ import { runCanonicalMigrations } from '../src/canonical-sqlite-migrations.ts';
 import { canonicalSqliteManager } from '../src/canonical-sqlite.ts';
 import { getPersistedCanonicalAuditStatus } from '../src/canonical-sqlite-shadow-import.ts';
 import { upsertCanonicalSettingsDocument } from '../src/endpoints/settings-store.ts';
-import { setConfigFilePath } from '../src/util.js';
-import { createCharacterLibraryChangeObserver } from '../src/character-library-change-observer.js';
-import { createCharacterLibraryEventsHandler } from '../src/endpoints/character-library-events.js';
+import { setConfigFilePath } from '../src/util.ts';
+import { createCharacterLibraryChangeObserver } from '../src/character-library-change-observer.ts';
+import { createCharacterLibraryEventsHandler } from '../src/endpoints/character-library-events.ts';
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'library-events-'));
 fs.writeFileSync(path.join(root, 'config.yaml'), 'enableUserAccounts: true\n');
 setConfigFilePath(path.join(root, 'config.yaml'));
 globalThis.DATA_ROOT = root;
-const { setUserDataMiddleware, requireLoginMiddleware, getUserDirectories, getAccountVersion } = await import('../src/users.js');
-const { router: charactersRouter } = await import('../src/endpoints/characters.js');
+const { setUserDataMiddleware, requireLoginMiddleware } = await import('../src/user-session.ts');
+const { getUserDirectories } = await import('../src/user-directories.ts');
+const { getAccountVersion } = await import('../src/user-storage.ts');
+const { router: charactersRouter } = await import('../src/endpoints/characters.ts');
 const user = { handle: 'alice', enabled: true, password: 'hash', salt: 'salt' };
 const service = createCharacterLibraryChangeObserver({ pollMs: 10, lifetimeMs: 300, maxPerUser: 2 });
 let server; let url; let db; let cookie;
@@ -154,7 +156,7 @@ test('handshake errors and backpressure release subscriptions', () => {
 });
 
 test('production router mounts the SSE handler; commit during header flush follows ready', async () => {
-    const { characterLibraryEventsHandler } = await import('../src/endpoints/character-library-events.js');
+    const { characterLibraryEventsHandler } = await import('../src/endpoints/character-library-events.ts');
     expect(charactersRouter.stack.find(layer => layer.route?.path === '/events').route.stack[0].handle).toBe(characterLibraryEventsHandler);
     const response = new EventEmitter(); const frames = [];
     const local = createCharacterLibraryChangeObserver({ pollMs: 10 });
@@ -171,7 +173,7 @@ test('production router mounts the SSE handler; commit during header flush follo
 });
 
 test('actual production router serves authenticated SSE over HTTP', async () => {
-    const { characterLibraryChangeObserver } = await import('../src/character-library-change-observer.js');
+    const { characterLibraryChangeObserver } = await import('../src/character-library-change-observer.ts');
     const app = express();
     app.use(compression());
     app.use(cookieSession({ name: 'session', keys: ['isolated-test-key'] }));

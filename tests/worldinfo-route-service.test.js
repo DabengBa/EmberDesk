@@ -12,7 +12,7 @@ import { getPersistedCanonicalAuditStatus, persistCanonicalAuditStatus } from '.
 import { runCanonicalWorldInfoAudit } from '../src/canonical-sqlite-operator.ts';
 import { upsertCanonicalWorldInfoBook } from '../src/endpoints/world-info-store.ts';
 import { router } from '../src/endpoints/worldinfo-routes.ts';
-import { setConfigFilePath } from '../src/util.js';
+import { setConfigFilePath } from '../src/util.ts';
 
 const tempRoots = [];
 const tmpConfigDir = fs.mkdtempSync(path.join(os.tmpdir(), 'emberdesk-worldinfo-route-config-'));

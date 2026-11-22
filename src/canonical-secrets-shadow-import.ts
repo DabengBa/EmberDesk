@@ -7,7 +7,7 @@ import {
     classifyImportCandidate,
     recordImportLedgerEntry,
     resolveAuditDriftReason,
-} from './canonical-import-ledger.js';
+} from './canonical-import-ledger.ts';
 import { getCanonicalMigrationStatus, runCanonicalMigrations } from './canonical-sqlite-migrations.ts';
 import { persistCanonicalAuditStatus } from './canonical-sqlite-shadow-import.ts';
 import {
@@ -17,7 +17,7 @@ import {
     listOpenSecretProjectionRepairs,
     replaceCanonicalSecretRecords,
 } from './endpoints/canonical-secrets-store.ts';
-import { uuidv4 } from './util.js';
+import { uuidv4 } from './util.ts';
 
 export const CANONICAL_SECRETS_AUDIT_SCOPE = 'secrets';
 export const CANONICAL_SECRETS_FILE = 'secrets.json';

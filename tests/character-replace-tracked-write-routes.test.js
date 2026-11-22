@@ -15,9 +15,9 @@ import {
     getReplaceIntent,
     getWorkspaceWrite,
     markReplaceIntentReady,
-} from '../src/character-replace-write-coordinator.js';
-import { getCanonicalSqliteFeatureFlags } from '../src/storage-feature-flags.js';
-import { setConfigFilePath } from '../src/util.js';
+} from '../src/character-replace-write-coordinator.ts';
+import { getCanonicalSqliteFeatureFlags } from '../src/storage-feature-flags.ts';
+import { setConfigFilePath } from '../src/util.ts';
 
 let root;
 let server;
@@ -55,7 +55,7 @@ beforeAll(async () => {
     const directories = { root: path.join(root, 'alice'), storage: path.join(root, 'alice', 'storage') };
     db = openCanonicalDatabase({ handle: 'alice', directories, featureFlags: getCanonicalSqliteFeatureFlags() });
     runCanonicalMigrations(db, { strict: true });
-    const { coordinateWorkspaceWrite, coordinateReplaceIntent } = await import('../src/endpoints/coordinate-workspace-write.js');
+    const { coordinateWorkspaceWrite, coordinateReplaceIntent } = await import('../src/endpoints/coordinate-workspace-write.ts');
     const app = express();
     app.use(express.json());
     app.use((request, _response, next) => {
@@ -81,8 +81,8 @@ beforeAll(async () => {
             warnings: [],
         });
     }));
-    const { router: characters } = await import('../src/endpoints/characters.js');
-    const { router: chats } = await import('../src/endpoints/chats.js');
+    const { router: characters } = await import('../src/endpoints/characters.ts');
+    const { router: chats } = await import('../src/endpoints/chats.ts');
     const { router: worldinfo } = await import('../src/endpoints/worldinfo-routes.ts');
     app.use('/api/characters', characters);
     app.use('/api/chats', chats);

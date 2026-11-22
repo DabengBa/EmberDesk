@@ -5,7 +5,7 @@ import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { setConfigFilePath } from '../src/util.js';
+import { setConfigFilePath } from '../src/util.ts';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -88,9 +88,9 @@ function writeReactDist(label = 'login') {
 async function createLoginRouteApp({ reactLoginDistRoot } = {}) {
     globalThis.COMMAND_LINE_ARGS = { basicAuthMode: false };
 
-    const usersModule = await import(`../src/users.js?loginRoute=${Date.now()}-${Math.random()}`);
-    const middlewareModule = await import(`../src/middleware/react-login-serve.js?loginRoute=${Date.now()}-${Math.random()}`);
-    const featureModule = await import(`../src/react-login-feature.js?loginRoute=${Date.now()}-${Math.random()}`);
+    const usersModule = await import(`../src/user-pages.ts?loginRoute=${Date.now()}-${Math.random()}`);
+    const middlewareModule = await import(`../src/middleware/react-login-serve.ts?loginRoute=${Date.now()}-${Math.random()}`);
+    const featureModule = await import(`../src/react-login-feature.ts?loginRoute=${Date.now()}-${Math.random()}`);
 
     const app = express();
     app.use((request, _response, next) => {
@@ -181,10 +181,10 @@ describe('login React sole owner route', () => {
     test('removes legacy login page files and feature flag helpers from the runtime surface', () => {
         expect(fs.existsSync(path.join(repoRoot, 'public', 'login.html'))).toBe(false);
         expect(fs.existsSync(path.join(repoRoot, 'public', 'scripts', 'login.js'))).toBe(false);
-        const featureSource = fs.readFileSync(path.join(repoRoot, 'src', 'react-login-feature.js'), 'utf8');
+        const featureSource = fs.readFileSync(path.join(repoRoot, 'src', 'react-login-feature.ts'), 'utf8');
         expect(featureSource).not.toContain('isReactLoginEnabled');
         expect(featureSource).toContain('REACT_LOGIN_BASE_PATH');
-        const usersSource = fs.readFileSync(path.join(repoRoot, 'src', 'users.js'), 'utf8');
+        const usersSource = fs.readFileSync(path.join(repoRoot, 'src', 'user-pages.ts'), 'utf8');
         expect(usersSource).not.toContain('isReactLoginEnabled');
         expect(usersSource).not.toContain("sendFile('login.html'");
     });

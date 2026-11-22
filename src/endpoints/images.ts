@@ -1,0 +1,254 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import { Buffer } from 'node:buffer';
+
+import express from 'express';
+import sanitize from 'sanitize-filename';
+
+import { clientRelativePath, removeFileExtension, getImages, isPathUnderParent } from '../util.ts';
+import { MEDIA_EXTENSIONS, MEDIA_REQUEST_TYPE } from '../constants.ts';
+import {
+    collectCanonicalManagedMediaGarbage,
+    deleteCanonicalManagedMediaReference,
+    writeCanonicalManagedMedia,
+} from './canonical-managed-media-write-service.ts';
+import {
+    getCanonicalManagedMediaReadState,
+    listCanonicalUserImageFiles,
+    listCanonicalUserImageFolders,
+} from './canonical-managed-media-read-service.ts';
+import { ensureCanonicalSliceBackend } from '../canonical-backend.ts';
+
+/**
+ * Ensure the directory for the provided file path exists.
+ * If not, it will recursively create the directory.
+ *
+ * @param {string} filePath - The full path of the file for which the directory should be ensured.
+ */
+function ensureDirectoryExistence(filePath: string): true | undefined {
+    const dirname = path.dirname(filePath);
+    if (fs.existsSync(dirname)) {
+        return true;
+    }
+    ensureDirectoryExistence(dirname);
+    fs.mkdirSync(dirname);
+}
+
+export const router = express.Router();
+
+function getRequestHandle(request: import('express').Request) {
+    return request.user?.profile?.handle ?? (request.user as typeof request.user & { handle?: string })?.handle ?? 'default-user';
+}
+
+
+/**
+ * Canonical managed-media read state for listing endpoints, or null when the
+ * slice cannot initialize (legacy fallback keeps serving the file tree).
+ * @param {import('express').Request} request Request object
+ * @returns {Promise<object|null>} Read state or null
+ */
+async function tryManagedMediaReadState(request: import('express').Request) {
+    try {
+        await ensureCanonicalSliceBackend('managed_media', request.user.directories, getRequestHandle(request));
+        const state = getCanonicalManagedMediaReadState({
+            handle: getRequestHandle(request),
+            directories: request.user.directories,
+        });
+        return state?.ok ? state : null;
+    } catch {
+        return null;
+    }
+}
+
+/**
+ * Endpoint to handle image uploads.
+ * The image should be provided in the request body in base64 format.
+ * Optionally, a character name can be provided to save the image in a sub-folder.
+ *
+ * @route POST /api/images/upload
+ * @param {Object} request.body - The request payload.
+ * @param {string} request.body.image - The base64 encoded image data.
+ * @param {string} [request.body.ch_name] - Optional character name to determine the sub-directory.
+ * @returns {Object} response - The response object containing the path where the image was saved.
+ */
+router.post('/upload', async (request, response) => {
+    try {
+        if (!request.body) {
+            return response.status(400).send({ error: 'No data provided' });
+        }
+
+        const { image, format } = request.body;
+
+        if (!image) {
+            return response.status(400).send({ error: 'No image data provided' });
+        }
+
+        const validFormat = MEDIA_EXTENSIONS.includes(format);
+        if (!validFormat) {
+            return response.status(400).send({ error: 'Invalid image format' });
+        }
+
+        // Constructing filename and path
+        let filename;
+        if (request.body.filename) {
+            filename = `${removeFileExtension(request.body.filename)}.${format}`;
+        } else {
+            filename = `${Date.now()}.${format}`;
+        }
+
+        // if character is defined, save to a sub folder for that character
+        let pathToNewFile = path.join(request.user.directories.userImages, sanitize(filename));
+        if (request.body.ch_name) {
+            pathToNewFile = path.join(request.user.directories.userImages, sanitize(request.body.ch_name), sanitize(filename));
+        }
+
+        ensureDirectoryExistence(pathToNewFile);
+        const imageBuffer = Buffer.from(image, 'base64');
+        const compatibilityPath = clientRelativePath(request.user.directories.root, pathToNewFile).split(path.sep).join(path.posix.sep);
+        await ensureCanonicalSliceBackend('managed_media', request.user.directories, getRequestHandle(request));
+        const canonicalResult = await writeCanonicalManagedMedia({
+            handle: getRequestHandle(request),
+            directories: request.user.directories,
+            compatibilityPath: path.relative(request.user.directories.root, pathToNewFile).split(path.sep).join(path.posix.sep),
+            ownerType: 'user_image',
+            ownerId: compatibilityPath,
+            role: 'user_image',
+            displayName: path.basename(pathToNewFile),
+            contents: imageBuffer,
+        }) as Awaited<ReturnType<typeof writeCanonicalManagedMedia>> & { authorityCommitted?: boolean };
+        if (canonicalResult.authorityCommitted && !canonicalResult.ok) {
+            return response.status(500).send({ error: 'Image upload committed but compatibility projection failed' });
+        }
+        if (!canonicalResult.authorityCommitted) {
+            return response.status(503).send({
+                error: 'canonical_storage_unavailable',
+                reason: canonicalResult.reason ?? 'canonical_storage_unavailable',
+            });
+        }
+        response.send({ path: compatibilityPath });
+    } catch (error) {
+        console.error(error);
+        response.status(500).send({ error: 'Failed to save the image' });
+    }
+});
+
+router.post('/list{/:folder}', async (request, response) => {
+    try {
+        if (request.params.folder) {
+            if (request.body.folder) {
+                return response.status(400).send({ error: 'Folder specified in both URL and body' });
+            }
+
+            console.warn('Deprecated: Use POST /api/images/list with folder in request body');
+            request.body.folder = request.params.folder;
+        }
+
+        if (!request.body.folder) {
+            return response.status(400).send({ error: 'No folder specified' });
+        }
+
+        const type = Number(request.body.type ?? MEDIA_REQUEST_TYPE.IMAGE);
+        const sort = request.body.sortField || 'date';
+        const order = request.body.sortOrder || 'asc';
+
+        const canonicalReadState = await tryManagedMediaReadState(request);
+        if (canonicalReadState?.ok) {
+            const images = listCanonicalUserImageFiles(canonicalReadState.db, sanitize(request.body.folder), sort, type);
+            if (order === 'desc') {
+                images.reverse();
+            }
+            return response.send(images);
+        }
+
+        const directoryPath = path.join(request.user.directories.userImages, sanitize(request.body.folder));
+        if (!fs.existsSync(directoryPath)) {
+            fs.mkdirSync(directoryPath, { recursive: true });
+        }
+
+        const images = getImages(directoryPath, sort, type);
+        if (order === 'desc') {
+            images.reverse();
+        }
+        return response.send(images);
+    } catch (error) {
+        console.error(error);
+        return response.status(500).send({ error: 'Unable to retrieve files' });
+    }
+});
+
+router.post('/folders', async (request, response) => {
+    try {
+        const canonicalReadState = await tryManagedMediaReadState(request);
+        if (canonicalReadState?.ok) {
+            return response.send(listCanonicalUserImageFolders(canonicalReadState.db));
+        }
+
+        const directoryPath = request.user.directories.userImages;
+        if (!fs.existsSync(directoryPath)) {
+            fs.mkdirSync(directoryPath, { recursive: true });
+        }
+
+        const folders = fs.readdirSync(directoryPath, { withFileTypes: true })
+            .filter(dirent => dirent.isDirectory())
+            .map(dirent => dirent.name);
+
+        return response.send(folders);
+    } catch (error) {
+        console.error(error);
+        return response.status(500).send({ error: 'Unable to retrieve folders' });
+    }
+});
+
+router.post('/delete', async (request, response) => {
+    try {
+        if (!request.body.path) {
+            return response.status(400).send('No path specified');
+        }
+
+        const pathToDelete = path.join(request.user.directories.root, request.body.path);
+        if (!isPathUnderParent(request.user.directories.userImages, pathToDelete)) {
+            return response.status(400).send('Invalid path');
+        }
+
+        // Under projection 'off' the compatibility file may not exist while the
+        // canonical reference does — let the canonical delete decide.
+        const fileExists = fs.existsSync(pathToDelete);
+        const compatibilityPath = path.relative(request.user.directories.root, pathToDelete).split(path.sep).join(path.posix.sep);
+        const handle = getRequestHandle(request);
+        await ensureCanonicalSliceBackend('managed_media', request.user.directories, handle);
+        // An image can be deleted before the first chat request imports its attachments.
+        await ensureCanonicalSliceBackend('chats', request.user.directories, handle);
+        const canonicalResult = await deleteCanonicalManagedMediaReference({
+            handle,
+            directories: request.user.directories,
+            compatibilityPath,
+        }) as Awaited<ReturnType<typeof deleteCanonicalManagedMediaReference>> & { authorityCommitted?: boolean };
+        if (canonicalResult.authorityCommitted) {
+            if (!canonicalResult.ok) {
+                return response.status(500).send('Image deletion committed but compatibility projection failed');
+            }
+            const collected = await collectCanonicalManagedMediaGarbage({
+                handle,
+                directories: request.user.directories,
+                blobId: (canonicalResult.reference as NonNullable<typeof canonicalResult.reference>).blobId,
+                dryRun: false,
+            });
+            if (!collected.ok) {
+                return response.status(500).send('Image deletion committed but managed media collection failed');
+            }
+            console.info(`Deleted image: ${request.body.path} from ${request.user.profile.handle}`);
+            return response.sendStatus(200);
+        }
+        if (!fileExists) {
+            return response.status(404).send('File not found');
+        }
+
+        return response.status(503).send({
+            error: 'canonical_storage_unavailable',
+            reason: canonicalResult.reason ?? 'canonical_storage_unavailable',
+        });
+    } catch (error) {
+        console.error(error);
+        return response.sendStatus(500);
+    }
+});

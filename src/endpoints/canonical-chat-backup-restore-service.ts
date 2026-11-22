@@ -23,7 +23,7 @@ import {
 import { parseCanonicalChatJsonl } from './canonical-chat-write-service.ts';
 import { resolveCanonicalChatProjectionPath } from './canonical-chat-projection-path.ts';
 import { getCanonicalStorageSlice } from '../canonical-storage-slice-registry.ts';
-import { recordImportLedgerEntry, removeImportLedgerEntry } from '../canonical-import-ledger.js';
+import { recordImportLedgerEntry, removeImportLedgerEntry } from '../canonical-import-ledger.ts';
 
 export const CANONICAL_CHAT_BACKUP_MANIFEST_VERSION = 2;
 export const CANONICAL_CHAT_ATTACHMENT_MANIFEST_VERSION = 1;

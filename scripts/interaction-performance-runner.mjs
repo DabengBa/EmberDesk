@@ -13,7 +13,7 @@ import { chromium } from '../tests/node_modules/playwright/index.mjs';
 
 import { applyCanonicalPragmas } from '../src/canonical-sqlite.ts';
 import { runCanonicalMigrations } from '../src/canonical-sqlite-migrations.ts';
-import { DEFAULT_USER } from '../src/constants.js';
+import { DEFAULT_USER } from '../src/constants.ts';
 import { upsertCanonicalSettingsDocument } from '../src/endpoints/settings-store.ts';
 import {
     buildDerivedCacheObservabilitySummary,
@@ -22,7 +22,7 @@ import {
     renderDerivedCacheObservabilityMarkdown,
     summarizeScenarioPayload,
     validateInteractionPath,
-} from '../src/interaction-performance-report.js';
+} from '../src/interaction-performance-report.ts';
 import { write as writeCharacterCardPngData } from '../src/character-card-parser.ts';
 
 const __filename = fileURLToPath(import.meta.url);

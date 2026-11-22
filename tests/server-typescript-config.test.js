@@ -30,7 +30,7 @@ function compile(name, source, dependencies = {}) {
     fs.writeFileSync(configPath, JSON.stringify({
         extends: path.join(repoRoot, 'tsconfig.server.json'),
         compilerOptions: { typeRoots: [path.join(repoRoot, 'node_modules/@types')] },
-        files: [entry, path.join(repoRoot, 'index.d.ts')],
+        files: [entry, path.join(repoRoot, 'index.d.ts'), path.join(repoRoot, 'src/shared-browser-modules.d.ts')],
         include: [],
     }));
     const result = spawnSync(process.execPath, [compiler, '--project', configPath, '--pretty', 'false'], {
@@ -83,17 +83,21 @@ describe('server TypeScript compiler environment', () => {
         expect(fs.readdirSync(path.join(projectRoot, 'node')).sort()).toEqual(['entry.ts', 'tsconfig.json']);
     });
 
-    test('checks explicit TypeScript imports in a mixed Node module graph', () => {
-        const result = compile('mixed', [
+    test('checks explicit TypeScript imports in the native server module graph', () => {
+        const result = compile('native', [
             "import { value } from './dependency.ts';",
-            "import { suffix } from './legacy.js';",
-            'export const result: string = value + suffix;',
+            'export const result: string = value;',
         ].join('\n'), {
             'dependency.ts': "export const value: string = 'native';",
-            'legacy.js': "export const suffix = '-node';",
         });
 
         expect(result).toEqual({ status: 0, diagnostics: '' });
+    });
+
+    test('server source project does not enable JavaScript compilation', () => {
+        const config = JSON.parse(fs.readFileSync(path.join(repoRoot, 'tsconfig.server.json'), 'utf8'));
+        expect(config.compilerOptions.allowJs).toBeUndefined();
+        expect(config.include).toContain('server.js');
     });
 
     test('rejects browser globals in a server module', () => {

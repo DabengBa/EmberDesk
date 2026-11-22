@@ -40,16 +40,16 @@ export default {
                 // directory roots, sanitize-filename, strict filename
                 // validators, readdir-derived names, or isPathUnderParent.
                 files: [
-                    'src/endpoints/assets.js',
+                    'src/endpoints/assets.ts',
                     'src/endpoints/avatars.js',
-                    'src/endpoints/backups.js',
-                    'src/endpoints/characters.js',
-                    'src/endpoints/chats.js',
+                    'src/endpoints/backups.ts',
+                    'src/endpoints/characters.ts',
+                    'src/endpoints/chats.ts',
                     'src/endpoints/extensions.js',
-                    'src/endpoints/files.js',
+                    'src/endpoints/files.ts',
                     'src/endpoints/groups.js',
-                    'src/endpoints/images.js',
-                    'src/endpoints/openai.js',
+                    'src/endpoints/images.ts',
+                    'src/endpoints/openai.ts',
                     'src/endpoints/quick-replies.js',
 
                     'src/endpoints/stable-diffusion.js',
@@ -67,7 +67,7 @@ export default {
                 files: [
 
                     'src/endpoints/novelai.js',
-                    'src/endpoints/openai.js',
+                    'src/endpoints/openai.ts',
                     'src/endpoints/stable-diffusion.js',
                 ],
                 rules: [

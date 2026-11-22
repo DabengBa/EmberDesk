@@ -15,7 +15,7 @@ import {
     extractFileFromZipBuffer as extractFileFromZipBufferViaUtil,
     extractFilesFromZipBuffer as extractFilesFromZipBufferViaUtil,
     getImageBuffers as getImageBuffersViaUtil,
-} from '../src/util.js';
+} from '../src/util.ts';
 
 const tmpRoots = [];
 const pngBuffer = Buffer.from(
@@ -78,7 +78,7 @@ async function createZipFile(entries, fileName = 'archive.zip') {
 
 describe('archive utils', () => {
     test.each(['character.json', 'cards/character.json'])('BYAF resolves an image relative to %s', async characterPath => {
-        const { ByafParser } = await import('../src/byaf.js');
+        const { ByafParser } = await import('../src/byaf.ts');
         const archiveBuffer = await createZipBuffer([
             { name: path.posix.join(path.posix.dirname(characterPath), 'images/avatar.png'), data: pngBuffer },
         ]);
@@ -123,9 +123,9 @@ describe('archive utils', () => {
             assert.equal(typeof router.router, 'function');
             assert.equal(typeof byaf.ByafParser, 'function');
             assert.equal(typeof charx.CharXParser, 'function');
-        `, url('util.js'), config, root, url('archive-utils.ts'), url('png/encode.ts'),
+        `, url('util.ts'), config, root, url('archive-utils.ts'), url('png/encode.ts'),
         url('character-card-parser.ts'), url('endpoints/character-card-v2.ts'),
-        url('validator/TavernCardValidator.ts'), url('endpoints/characters.js'), url('byaf.js'), url('charx.js')], {
+        url('validator/TavernCardValidator.ts'), url('endpoints/characters.ts'), url('byaf.ts'), url('charx.ts')], {
             encoding: 'utf8', timeout: 10_000,
         });
         expect({ status: result.status, stderr: result.status === 0 ? '' : result.stderr })

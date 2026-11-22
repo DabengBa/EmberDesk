@@ -1,6 +1,6 @@
 import path from 'node:path';
 
-import type { UserDirectoryList } from '../users.js';
+import type { UserDirectoryList } from '../user-types.ts';
 
 import {
     flattenChubChat,

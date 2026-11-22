@@ -49,7 +49,7 @@ Important constraints:
 
 `public/scripts/secrets.js` maps `SECRET_KEYS.OPENAI_FALLBACK` to `#fallback_provider_api_key`. `public/scripts/openai.js` delegates fallback status, save, clear, and mask behavior to the state module while keeping current event binding and visible drawer structure.
 
-On the server, `src/endpoints/secrets.js` remains the public manager/router boundary and exports the router created by `src/endpoints/secrets-routes.ts`. When canonical storage flags and the `secrets` audit gate pass, `SecretManager` reads and writes `secret_records` through `src/canonical-secrets-backend.ts`; writes commit SQLite first. When projection is enabled, they then atomically project `secrets.json`; projection is off by default. Projection failures record only record identifiers, operation, error class, and timestamps, keep DB reads authoritative, and block later writes until operator repair and re-audit.
+On the server, `src/endpoints/secrets.ts` remains the public manager/router boundary and exports the router created by `src/endpoints/secrets-routes.ts`. When canonical storage flags and the `secrets` audit gate pass, `SecretManager` reads and writes `secret_records` through `src/canonical-secrets-backend.ts`; writes commit SQLite first. When projection is enabled, they then atomically project `secrets.json`; projection is off by default. Projection failures record only record identifiers, operation, error class, and timestamps, keep DB reads authoritative, and block later writes until operator repair and re-audit.
 
 The secret read state masks non-exportable values. `/view` returns 403, `/find` returns values only for `EXPORTABLE_KEYS`, and `/settings` reports `allowKeysExposure: false`, regardless of the configured exposure flag.
 
@@ -80,7 +80,7 @@ Stable binding points:
 - `public/scripts/provider-secret-field-state.js`
 - `public/scripts/openai.js`
 - `public/scripts/secrets.js`
-- `src/endpoints/secrets.js`
+- `src/endpoints/secrets.ts`
 - `src/canonical-secrets-backend.ts`
 - `src/endpoints/canonical-secrets-store.ts`
 - `src/canonical-secrets-shadow-import.ts`

@@ -1,5 +1,5 @@
 import http from 'node:http';
-import { readAllChunks, tryParse } from '../../src/util.js';
+import { readAllChunks, tryParse } from '../../src/util.ts';
 
 export class MockServer {
     /** @type {string} */

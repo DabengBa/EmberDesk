@@ -15,7 +15,7 @@ import {
     listCanonicalUserImageFolders,
     readManagedMediaContent,
 } from '../src/endpoints/canonical-managed-media-read-service.ts';
-import { MEDIA_REQUEST_TYPE } from '../src/constants.js';
+import { MEDIA_REQUEST_TYPE } from '../src/constants.ts';
 import {
     upsertCanonicalManagedMediaReference,
 } from '../src/endpoints/canonical-managed-media-store.ts';

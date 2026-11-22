@@ -9,7 +9,7 @@ import {
     classifyImportCandidate,
     recordImportLedgerEntry,
     resolveAuditDriftReason,
-} from './canonical-import-ledger.js';
+} from './canonical-import-ledger.ts';
 import { getCanonicalMigrationStatus, runCanonicalMigrations } from './canonical-sqlite-migrations.ts';
 import { withCanonicalTransaction } from './canonical-sqlite.ts';
 import { persistCanonicalAuditStatus } from './canonical-sqlite-shadow-import.ts';
@@ -20,8 +20,8 @@ import {
     managedMediaRelativePath,
     persistCanonicalManagedMediaContents,
 } from './endpoints/canonical-managed-media-store.ts';
-import { isVirtualAvatarReference } from './canonical-avatar-blobs.js';
-import { isPathUnderParent } from './util.js';
+import { isVirtualAvatarReference } from './canonical-avatar-blobs.ts';
+import { isPathUnderParent } from './util.ts';
 
 export const MANAGED_MEDIA_AUDIT_SCOPE = 'managed_media';
 

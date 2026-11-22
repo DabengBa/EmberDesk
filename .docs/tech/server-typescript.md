@@ -6,7 +6,7 @@ topic: server-typescript
 
 # Server TypeScript
 
-For the remaining JavaScript implementations, callers and compatibility boundaries, see the [server JavaScript inventory](server-javascript-inventory.md).
+The tracked server `src/` implementations are native TypeScript. The root `server.js` remains the normal JavaScript entry; external browser JavaScript remains at its actual `.js` paths. For the historical migration inventory, see the [server JavaScript inventory](server-javascript-inventory.md).
 
 `src/canonical-secrets-backend.ts` is the synchronous canonical Secrets backend. The existing SecretManager remains the public boundary; initialization, audit, SQLite authority and projection repair behavior are unchanged.
 
@@ -22,7 +22,7 @@ and settings API. `tests/wire-log-native.test.js` imports the actual module
 graph in Node without a loader. Product behavior is documented in
 `feature.wire_log`.
 
-`src/archive-utils.ts` owns archive helpers and is imported directly by `src/util.js`. The format chain includes
+`src/archive-utils.ts` owns archive helpers and is imported directly by `src/util.ts`. The format chain includes
 `src/png/encode.ts`, `src/character-card-parser.ts`,
 `src/endpoints/character-card-v2.ts` and
 `src/validator/TavernCardValidator.ts`. Existing callers use actual `.ts`
@@ -58,15 +58,18 @@ NodeNext module resolution, ES2022 and Node types, `strict`, `noEmit`,
 Its roots include `src/**/*`, `server.js`, and `index.d.ts`, which supplies
 the existing server globals and Express/session augmentations.
 
-Existing JavaScript remains `allowJs: true`, `checkJs: false`. Migrated
-TypeScript receives strict checking; this does not make all legacy server
-JavaScript type checked. The root tsconfig selects public/app/index.d.ts
+The server project does not enable `allowJs` or `checkJs`. Its TypeScript is
+strictly checked; `src/shared-browser-modules.d.ts` describes imported browser
+JavaScript and the side-effect-only `server.js` entry without compiling them.
+The root tsconfig selects public/app/index.d.ts
 instead of broadly selecting src and root JavaScript. Real cross-boundary
 imports and JSDoc types can still bring server declarations into that graph;
 exclude rules do not cut transitive imports. The frontend no-emit project also
 allows explicit `.ts` import extensions for those transitive server modules.
-`index.d.ts` explicitly imports the cookie-session type augmentation so its
-Express request fields are available independently of other entry points.
+`index.d.ts` explicitly loads the cookie-session augmentation and the shared
+browser and BYAF declarations so standalone type consumers get the same types.
+When adding a server import from browser JavaScript, update its declaration in
+`src/shared-browser-modules.d.ts` alongside the import.
 
 ```bash
 pnpm run typecheck
@@ -116,6 +119,11 @@ and exercise unsupported syntax and invalid specifiers. Node subprocesses
 run without a production loader or emitted graph.
 
 ## Migrated slices
+
+The earlier slice descriptions below record the incremental migration; their
+former JavaScript caller names describe the state at that time. Those tracked
+`src/` callers now use their actual `.ts` paths. `src/users.js` was subsequently
+split into directly imported `user-*.ts` modules, with no barrel or shim.
 
 The canonical SQLite manager, migration runner, slice registry, operator and
 export helper are `src/canonical-sqlite.ts`,
@@ -331,15 +339,13 @@ internal migration changes no user-visible semantic contract.
 
 `src/user-directories.ts` is the sole implementation of directory lookup,
 per-handle caching, public and user directory creation, upload cleanup and
-avatar lookup. Existing consumers, maintenance scripts and `src/users.js`
-use the actual `.ts` path; the barrel retains its existing exports and
-`UserDirectoryList` type. Native Node tests run the real module graph against
+avatar lookup. Consumers and maintenance scripts use the actual `.ts` path;
+`UserDirectoryList` is defined in `src/user-types.ts`. Native Node tests run the real module graph against
 isolated temporary data roots without changing directory or cleanup semantics.
 
 `src/user-storage.ts` and `src/config-init.ts` are the sole implementations of
-their existing modules. Their JavaScript callers use explicit `.ts` imports;
-`src/users.js` retains its compatibility exports and exposes the storage
-module's `User` type through JSDoc. Account key prefixes, SHAKE256 account
+their existing modules. Callers use explicit `.ts` imports and the storage
+module exports the `User` type directly. Account key prefixes, SHAKE256 account
 versions, lazy account configuration, default-user/setup behavior, deprecated
 configuration migrations, environment coercion, and lodash default merging
 retain their existing behavior. Types describe the existing trusted values;
@@ -357,18 +363,18 @@ Jest adapter.
 ## User authentication
 
 `src/user-auth.ts` is the sole implementation of credential, SSO, CSRF and
-session helpers; the `src/users.js` compatibility barrel imports it directly.
+session helpers, imported directly by its consumers.
 SSO and trusted-proxy configuration is still read at module load time. The
-native user/config test exercises the real barrel and auth module, trusted and
+native user/config test exercises the real auth module, trusted and
 untrusted SSO clients, anonymous and user CSRF secrets, and cookie-secret
 migration. This internal migration changes no user-visible semantic contract.
 
 ## User data migrations
 
 `src/user-migrations.ts` is the sole implementation of the existing startup
-user-data and public-override migrations. `src/users.js` re-exports both
-functions via their real `.ts` path. SQLite settings remain authoritative;
+user-data and public-override migrations, imported directly via their real
+`.ts` path. SQLite settings remain authoritative;
 file backup and removal preserve their existing ordering and are not a single
 transaction with SQLite. The native user/config test imports both production
-modules and checks their shared exports without a loader. No user-visible
+modules without a loader. No user-visible
 behavior or semantic documentation changes are intended.

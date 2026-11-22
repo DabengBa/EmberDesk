@@ -15,7 +15,7 @@ jest.unstable_mockModule('node-persist', () => ({
     default: storageMock,
 }));
 
-jest.unstable_mockModule('../src/util.js', () => ({
+jest.unstable_mockModule('../src/util.ts', () => ({
     Cache: class {
         #values = new Map();
         set(key, value) { this.#values.set(key, value); }
@@ -39,7 +39,7 @@ jest.unstable_mockModule('../src/endpoints/settings-routes.ts', () => ({
     ensureCanonicalSettingsForUser: ensureCanonicalSettingsForUserMock,
 }));
 
-jest.unstable_mockModule('../src/users.js', () => ({
+const usersMock = {
     KEY_PREFIX: 'user:',
     ensurePublicDirectoriesExist: ensurePublicDirectoriesExistMock,
     getAccountVersion: () => 'account-version',
@@ -54,7 +54,10 @@ jest.unstable_mockModule('../src/users.js', () => ({
     }),
     needsSetup: async () => users.size === 0,
     toKey: handle => `user:${handle}`,
-}));
+};
+jest.unstable_mockModule('../src/user-storage.ts', () => usersMock);
+jest.unstable_mockModule('../src/user-directories.ts', () => usersMock);
+jest.unstable_mockModule('../src/user-auth.ts', () => usersMock);
 
 const { router } = await import('../src/endpoints/users-public-routes.ts');
 

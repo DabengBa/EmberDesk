@@ -34,10 +34,10 @@ const manager = {
     isValidName: () => true,
     sanitizeName: value => value,
 };
-jest.unstable_mockModule('../src/util.js', () => ({
+jest.unstable_mockModule('../src/util.ts', () => ({
     getConfigValue: (_key, fallback) => fallback,
 }));
-const { postProcessPrompt } = await import('../src/prompt-converters.js');
+const { postProcessPrompt } = await import('../src/prompt-converters.ts');
 jest.unstable_mockModule('../public/lib.js', () => ({ DOMPurify: {} }));
 jest.unstable_mockModule('../public/script.js', () => Object.fromEntries([
     'abortStatusCheck', 'extension_prompt_roles', 'extension_prompt_types', 'getExtensionPrompt', 'getExtensionPromptMaxDepth',
@@ -634,7 +634,7 @@ test('dry-run appends the same step-only tail as live without mutating the run',
     expect(core.getPipelineRunState().stepPrompts).toEqual(preview.filter(message => message.content === 'STEP_TAIL'));
 });
 
-/** Mirrors src/endpoints/tokenizers.js:957-969: each value goes to encode(), a throw loses the rest of that message. */
+/** Mirrors the /openai/count handler in src/endpoints/tokenizers.ts: a throw loses the rest of that message. */
 function serverCountLoop(encoding) {
     return async messages => {
         let tokens = 0;

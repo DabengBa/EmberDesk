@@ -10,7 +10,7 @@ import {
     auditCanonicalChatShadowImport,
     runCanonicalChatShadowImport,
 } from '../src/canonical-chat-shadow-import.ts';
-import { setConfigFilePath } from '../src/util.js';
+import { setConfigFilePath } from '../src/util.ts';
 import {
     readCanonicalRecentChatPayload,
     searchCanonicalChatPayload,
@@ -48,7 +48,7 @@ fs.writeFileSync(configPath, [
 ].join('\n'), 'utf8');
 setConfigFilePath(configPath);
 
-const { getChatInfo } = await import('../src/endpoints/chats.js');
+const { getChatInfo } = await import('../src/endpoints/chats.ts');
 
 function makeDirectories(prefix = 'emberdesk-canonical-chat-query-') {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), prefix));

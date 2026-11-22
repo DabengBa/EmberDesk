@@ -4,7 +4,7 @@ import { prepareChatMemorySummary } from '../server-chat-memory.ts';
 import { streamServerModel } from '../server-generation-model-transport.ts';
 import { record } from '../server-prompt/snapshot.ts';
 import type { ChatRouteContext } from './chat-route-context.ts';
-import { readSecret, SECRET_KEYS } from './secrets.js';
+import { readSecret, SECRET_KEYS } from './secrets.ts';
 
 const commandKeys = new Set(['avatar_url', 'file_name', 'turnKey', 'messageIds', 'contentHash', 'locale']);
 

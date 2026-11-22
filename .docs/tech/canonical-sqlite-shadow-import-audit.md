@@ -13,8 +13,8 @@ topic: canonical-sqlite-shadow-import-audit
 Primary files:
 
 - `src/canonical-sqlite-shadow-import.ts`
-- `src/endpoints/character-file-snapshot.js`
-- `src/endpoints/characters.js`
+- `src/endpoints/character-file-snapshot.ts`
+- `src/endpoints/characters.ts`
 - `tests/canonical-sqlite-shadow-import.test.js`
 
 This slice owns:
@@ -51,7 +51,7 @@ The canonical `characters.id` contract is now internal and stable across repeat 
 
 ### Snapshot parity
 
-`src/endpoints/character-file-snapshot.js` is the shared file-backed snapshot seam. It now owns:
+`src/endpoints/character-file-snapshot.ts` is the shared file-backed snapshot seam. It now owns:
 
 - full payload extraction from character cards
 - shallow payload derivation
@@ -59,7 +59,7 @@ The canonical `characters.id` contract is now internal and stable across repeat 
 - world metadata extraction for the legacy derived index
 - chat-directory path derivation
 
-`src/endpoints/characters.js` reuses the same helper so the shadow importer and the current file-backed read/index path stay on the same payload and chat-stat semantics.
+`src/endpoints/characters.ts` reuses the same helper so the shadow importer and the current file-backed read/index path stay on the same payload and chat-stat semantics.
 
 ### Shadow import
 
@@ -104,7 +104,7 @@ Code binding points:
 
 - `src/canonical-sqlite.ts` owns DB lifecycle and transaction boundaries
 - `src/canonical-sqlite-migrations.ts` owns schema readiness and blocked-status reporting
-- `src/endpoints/character-file-snapshot.js` owns file-backed payload/chat-stat snapshot parity
+- `src/endpoints/character-file-snapshot.ts` owns file-backed payload/chat-stat snapshot parity
 - later DB-first read/write slices must treat this module as Phase 1 import/audit ownership, not as a general query layer
 
 ## Performance Or Caching Notes

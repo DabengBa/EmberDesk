@@ -1,7 +1,7 @@
 import { getRequestHeaders } from './request-context.js';
 
 /**
- * @type {import('../../src/users.js').UserViewModel} Logged in user
+ * @type {import('../../src/user-types.ts').UserViewModel} Logged in user
  */
 let currentUser = null;
 

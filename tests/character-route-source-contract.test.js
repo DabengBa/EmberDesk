@@ -14,7 +14,7 @@ function readRepoFile(relativePath) {
 
 describe('character route source contract', () => {
     test('keeps rename route response shape stable after command delegation', () => {
-        const source = readRepoFile('src/endpoints/characters.js');
+        const source = readRepoFile('src/endpoints/characters.ts');
         const handlers = readRepoFile('src/endpoints/character-write-routes.ts');
 
         expect(source).toContain('router.post(\'/rename\', validateAvatarUrlMiddleware');
@@ -24,7 +24,7 @@ describe('character route source contract', () => {
     });
 
     test('keeps production route registration and coordination in the facade', () => {
-        const source = readRepoFile('src/endpoints/characters.js');
+        const source = readRepoFile('src/endpoints/characters.ts');
         const registrations = [...source.matchAll(/router\.post\('([^']+)'/g)].map(match => match[1]);
         expect(registrations).toEqual([
             '/create', '/rename', '/edit', '/edit-avatar', '/edit-attribute', '/merge-attributes',

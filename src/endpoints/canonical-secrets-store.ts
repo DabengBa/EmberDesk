@@ -12,7 +12,7 @@ type RepairOptions = { repairKey?: unknown; key?: unknown; recordId?: unknown; o
 type ResolveOptions = { repairKey?: unknown; resolvedAtMs?: unknown };
 
 import { withCanonicalTransaction } from '../canonical-sqlite.ts';
-import { uuidv4 } from '../util.js';
+import { uuidv4 } from '../util.ts';
 
 export const SECRET_MIGRATION_MARKER = 'secret_records_import';
 

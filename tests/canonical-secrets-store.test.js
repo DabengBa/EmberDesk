@@ -325,9 +325,9 @@ describe('canonical secrets store', () => {
         process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_SLICES_SECRETS_PROJECTION = 'sync';
 
         jest.resetModules();
-        const { setConfigFilePath } = await import('../src/util.js');
+        const { setConfigFilePath } = await import('../src/util.ts');
         setConfigFilePath(fileURLToPath(new URL('../default/config.yaml', import.meta.url)));
-        const { SecretManager } = await import(`../src/endpoints/secrets.js?canonicalSecrets=${Date.now()}-${Math.random()}`);
+        const { SecretManager } = await import(`../src/endpoints/secrets.ts?canonicalSecrets=${Date.now()}-${Math.random()}`);
         const { canonicalSqliteManager } = await import('../src/canonical-sqlite.ts');
         const secretManager = new SecretManager(directories);
 
@@ -385,9 +385,9 @@ describe('canonical secrets store', () => {
         process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_SLICES_SECRETS_PROJECTION = 'sync';
 
         jest.resetModules();
-        const { setConfigFilePath } = await import('../src/util.js');
+        const { setConfigFilePath } = await import('../src/util.ts');
         setConfigFilePath(fileURLToPath(new URL('../default/config.yaml', import.meta.url)));
-        const { SecretManager } = await import(`../src/endpoints/secrets.js?canonicalRepair=${Date.now()}-${Math.random()}`);
+        const { SecretManager } = await import(`../src/endpoints/secrets.ts?canonicalRepair=${Date.now()}-${Math.random()}`);
         const { canonicalSqliteManager } = await import('../src/canonical-sqlite.ts');
         const secretManager = new SecretManager(directories);
         expect(secretManager.readSecret('api_key_openai')).toBe(`${canary}-seed`);
@@ -456,9 +456,9 @@ describe('canonical secrets store', () => {
         process.env.EMBERDESK_FEATURES_STORAGE_CANONICALSQLITE_SLICES_SECRETS_PROJECTION = 'off';
 
         jest.resetModules();
-        const { setConfigFilePath } = await import('../src/util.js');
+        const { setConfigFilePath } = await import('../src/util.ts');
         setConfigFilePath(fileURLToPath(new URL('../default/config.yaml', import.meta.url)));
-        const { SecretManager } = await import(`../src/endpoints/secrets.js?canonicalOff=${Date.now()}-${Math.random()}`);
+        const { SecretManager } = await import(`../src/endpoints/secrets.ts?canonicalOff=${Date.now()}-${Math.random()}`);
         const { canonicalSqliteManager } = await import('../src/canonical-sqlite.ts');
         const secretManager = new SecretManager(directories);
 

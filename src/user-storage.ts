@@ -1,8 +1,8 @@
 import path from 'node:path';
 import crypto from 'node:crypto';
 import storage from 'node-persist';
-import { DEFAULT_USER } from './constants.js';
-import { getConfigValue } from './util.js';
+import { DEFAULT_USER } from './constants.ts';
+import { getConfigValue } from './util.ts';
 
 export const KEY_PREFIX = 'user:';
 const AVATAR_PREFIX = 'avatar:';

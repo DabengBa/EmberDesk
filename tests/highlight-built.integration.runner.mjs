@@ -10,7 +10,7 @@ import express from 'express';
 import { chromium } from '@playwright/test';
 import full from 'highlight.js';
 import { createServer as createViteServer, parseAst } from 'vite';
-import getViteLibServeMiddleware from '../src/middleware/vite-lib-serve.js';
+import getViteLibServeMiddleware from '../src/middleware/vite-lib-serve.ts';
 
 const app = express();
 app.use(getViteLibServeMiddleware());

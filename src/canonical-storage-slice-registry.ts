@@ -4,7 +4,7 @@ import {
     getCanonicalSliceProjectionMode,
     getCanonicalSqliteFeatureFlags,
     getCanonicalStorageSliceFeatureFlagSnapshot,
-} from './storage-feature-flags.js';
+} from './storage-feature-flags.ts';
 import { getCanonicalMigrationStatus } from './canonical-sqlite-migrations.ts';
 import { getPersistedCanonicalAuditStatus } from './canonical-sqlite-shadow-import.ts';
 import { WORLD_INFO_AUDIT_SCOPE } from './canonical-world-info-shadow-import.ts';
@@ -19,7 +19,7 @@ import {
     getCanonicalSliceFlagContractStatus,
     listOpenProjectionRepairs,
     registerDefaultCanonicalStorageSliceRegistry,
-} from './canonical-sqlite-rollout-contract.js';
+} from './canonical-sqlite-rollout-contract.ts';
 import { listOpenWorldInfoProjectionRepairs } from './endpoints/world-info-store.ts';
 import { listOpenSettingsProjectionRepairs } from './endpoints/settings-store.ts';
 import { listOpenSecretProjectionRepairs } from './endpoints/canonical-secrets-store.ts';

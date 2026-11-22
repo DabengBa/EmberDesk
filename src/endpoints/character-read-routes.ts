@@ -1,6 +1,6 @@
 import { performance } from 'node:perf_hooks';
 import type { Request, RequestHandler, Response } from 'express';
-import type { UserDirectoryList } from '../users.js';
+import type { UserDirectoryList } from '../user-types.ts';
 import { readCharacterFullPayload, readCharacterListPayload } from './character-read-service.ts';
 import type { CharacterReadDependencies } from './character-read-service.ts';
 
@@ -11,7 +11,7 @@ type Dependencies = {
     canonicalReadErrorReason: (error: unknown) => string | null;
     applyInteractionPerfHeaders: (response: Response, pathName: string | undefined, startedAt: number, directories?: UserDirectoryList | null) => void;
     sendCharacterListResponse: (request: Request, response: Response) => Promise<unknown>;
-    listCanonicalCharacterChats: (request: Request, ownerId: string) => Promise<{ file_name: string; file_id: string }[] | null>;
+    listCanonicalCharacterChats: (request: Request, ownerId: string) => Promise<{ file_name?: string; file_id?: string }[] | null>;
 };
 
 export function createCharacterReadHandlers(deps: Dependencies): { all: RequestHandler; list: RequestHandler; get: RequestHandler; chats: RequestHandler } {

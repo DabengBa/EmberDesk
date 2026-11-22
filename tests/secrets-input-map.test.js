@@ -9,7 +9,7 @@ import {
 describe('secrets input map', () => {
     test('retired fallback secret is removed from both secret maps', () => {
         const frontendSecrets = readRepoFile('public/scripts/secrets.js');
-        const backendSecrets = readRepoFile('src/endpoints/secrets.js');
+        const backendSecrets = readRepoFile('src/endpoints/secrets.ts');
 
         expectNotContainsMarkers(frontendSecrets, [
             'OPENAI_FALLBACK',

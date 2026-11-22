@@ -1,5 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite';
-import type { UserDirectoryList } from './users.js';
+import type { UserDirectoryList } from './user-types.ts';
 
 type ExportDirectories = UserDirectoryList & { exportActiveWorlds: string; exportSourceStorage: string; exportIsolated: boolean };
 type ExportResult = { status: string; [key: string]: unknown };
@@ -14,7 +14,7 @@ import { sync as writeFileAtomicSync } from 'write-file-atomic';
 import sanitize from 'sanitize-filename';
 
 import { write as writeCharacterCard } from './character-card-parser.ts';
-import { listImportLedgerEntries, recordImportLedgerEntry } from './canonical-import-ledger.js';
+import { listImportLedgerEntries, recordImportLedgerEntry } from './canonical-import-ledger.ts';
 import { resolveCanonicalChatProjectionPath } from './endpoints/canonical-chat-projection-path.ts';
 import { listCanonicalChatSessions } from './endpoints/canonical-chat-store.ts';
 import { getCanonicalManagedMediaReference, listCanonicalManagedMediaReferences } from './endpoints/canonical-managed-media-store.ts';
@@ -303,7 +303,7 @@ const SLICE_EXPORTERS = {
 /**
  * @param {object} options
  * @param {object} options.db Canonical database handle
- * @param {import('./users.js').UserDirectoryList} options.directories
+ * @param {import('./user-types.ts').UserDirectoryList} options.directories
  * @param {string} options.handle User handle (settings document user id)
  * @param {string[]} [options.sliceKeys] Slices to export; defaults to all
  * @param {string} [options.outDir] Alternate root to materialize into

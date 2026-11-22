@@ -3,20 +3,21 @@ import path from 'node:path';
 import os from 'node:os';
 import fs from 'node:fs';
 import crypto from 'node:crypto';
-import { setConfigFilePath } from '../src/util.js';
+import { setConfigFilePath, tryParse } from '../src/util.ts';
 
 const overrideServerDir = fs.mkdtempSync(path.join(os.tmpdir(), 'emberdesk-mig-server-'));
-jest.unstable_mockModule('../src/server-directory.js', () => ({ serverDirectory: overrideServerDir }));
+jest.unstable_mockModule('../src/server-directory.ts', () => ({ serverDirectory: overrideServerDir }));
 
 // The migration countdown delay is real seconds; stub the util surface the
 // migration chain touches. isPathUnderParent/uuidv4 get faithful stand-ins
 // because canonical helpers (resolveCanonicalDatabasePath, upsert) use them.
-jest.unstable_mockModule('../src/util.js', () => ({
+jest.unstable_mockModule('../src/util.ts', () => ({
     color: { magenta: v => v, yellow: v => v, blue: v => v, green: v => v, red: v => v },
     delay: async () => {},
     setPermissionsSync: () => {},
     getConfigValue: (key, defaultValue) => defaultValue,
     setConfigFilePath: () => {},
+    tryParse,
     isPathUnderParent: (parentPath, childPath) => {
         const relativePath = path.relative(path.normalize(parentPath), path.normalize(childPath));
         return relativePath !== '..' && !relativePath.startsWith('..' + path.sep) && !path.isAbsolute(relativePath);

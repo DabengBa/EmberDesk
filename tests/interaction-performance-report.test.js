@@ -8,7 +8,7 @@ import {
     summarizeScenarioPayload,
     summarizeInteractionSamples,
     validateInteractionPath,
-} from '../src/interaction-performance-report.js';
+} from '../src/interaction-performance-report.ts';
 
 describe('interaction performance report helpers', () => {
     test('summarizes browser and server timing distributions', () => {

@@ -30,7 +30,7 @@ The `st` environment is the production Hostinger target. It is not a source of c
 - Compose service and container: `emberdesk`
 - Image name from compose build: `deploy-emberdesk`
 - Port mapping: `8000:8000`
-- Container healthcheck: `node src/healthcheck.js`
+- Container healthcheck: `node src/healthcheck.ts`
 
 Use the non-root SSH user for Git work and root only for Docker operations:
 
@@ -139,7 +139,7 @@ Operational binding points:
 
 - `Dockerfile` - production image build, React prebuild, and pnpm install behavior
 - `pnpm run build:lib` - Vite browser library precompile during image build
-- `src/healthcheck.js` - container healthcheck entry point
-- `src/middleware/react-login-serve.js` - required `app/dist` login shell contract
+- `src/healthcheck.ts` - container healthcheck entry point
+- `src/middleware/react-login-serve.ts` - required `app/dist` login shell contract
 - `server.js` - deployed process entry point
 - `src/server-main.ts` - server boot orchestration inside the container

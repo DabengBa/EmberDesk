@@ -5,7 +5,7 @@ import sharp from 'sharp';
 import extract from '../src/png/extract.ts';
 import { makeAnimatedImages, makeBmp } from './helpers/animated-image-fixtures.js';
 import { read as readCharacterCard } from '../src/character-card-parser.ts';
-import { AVATAR_HEIGHT, AVATAR_WIDTH } from '../src/constants.js';
+import { AVATAR_HEIGHT, AVATAR_WIDTH } from '../src/constants.ts';
 
 import { afterEach, describe, expect, test } from '@jest/globals';
 
@@ -18,7 +18,7 @@ import {
     recordWorldInfoProjectionRepair,
     upsertCanonicalWorldInfoBook,
 } from '../src/endpoints/world-info-store.ts';
-import { buildCharacterFileSnapshotRow } from '../src/endpoints/character-file-snapshot.js';
+import { buildCharacterFileSnapshotRow } from '../src/endpoints/character-file-snapshot.ts';
 import {
     explainCanonicalRolloutBlockers,
     getCanonicalStorageControlPlaneStatus,

@@ -21,10 +21,10 @@ test.each([false, true].flatMap(exposure => ['read', 'find', 'view'].map(probe =
             import storage from 'node-persist';
             const [root, config, probe] = process.argv.slice(1);
             const secretValue = 'synthetic-value';
-            const { setConfigFilePath } = await import('./src/util.js');
+            const { setConfigFilePath } = await import('./src/util.ts');
             setConfigFilePath(config);
             globalThis.DATA_ROOT = root;
-            const users = await import('./src/users.js');
+            const users = { ...await import('./src/user-storage.ts'), ...await import('./src/user-auth.ts'), ...await import('./src/user-directories.ts'), ...await import('./src/user-session.ts') };
             await users.initUserStorage(root);
             for (const [handle, admin] of [['alice', false], ['admin', true]]) {
                 const salt = users.getPasswordSalt();
@@ -37,8 +37,8 @@ test.each([false, true].flatMap(exposure => ['read', 'find', 'view'].map(probe =
             const publicUsers = await import('./src/endpoints/users-public-routes.ts');
             const privateUsers = await import('./src/endpoints/users-private-routes.ts');
             const adminUsers = await import('./src/endpoints/users-admin-routes.ts');
-            const secrets = await import('./src/endpoints/secrets.js');
-            const content = await import('./src/endpoints/content-manager.js');
+            const secrets = await import('./src/endpoints/secrets.ts');
+            const content = await import('./src/endpoints/content-manager.ts');
             const app = express();
             app.use(express.json());
             app.use(cookieSession({ name: 'test-session', keys: ['test-only-signing-key'] }));

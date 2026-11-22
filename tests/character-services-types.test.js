@@ -40,7 +40,7 @@ test('strict NodeNext accepts all character route modules', () => {
 });
 
 test('strict consumers can compose reads, writes, text replacement and import callbacks', () => {
-    const routeSource = fs.readFileSync(path.join(repoRoot, 'src/endpoints/characters.js'), 'utf8');
+    const routeSource = fs.readFileSync(path.join(repoRoot, 'src/endpoints/characters.ts'), 'utf8');
     const factoryReturn = routeSource.match(/ \* @returns \{(.+)\}\r?\n \*\/\r?\nfunction createCharacterWriteDependencies\(/)?.[1];
     if (!factoryReturn) throw new Error('Character write factory return type not found');
     const factoryReturnType = factoryReturn.replaceAll('import(\'./character-write-service.ts\')', `import(${modulePath('character-write-service.ts')})`);

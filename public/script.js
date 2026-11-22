@@ -7400,7 +7400,7 @@ async function read_avatar_load(input) {
 
 /**
  * Gets the URL for a thumbnail of a specific type and file.
- * @param {import('../src/endpoints/thumbnails.js').ThumbnailType} type The type of the thumbnail to get
+ * @param {import('../src/endpoints/thumbnails.ts').ThumbnailType} type The type of the thumbnail to get
  * @param {string} file The file name or path for which to get the thumbnail URL
  * @param {boolean} [t=false] Whether to add a cache-busting timestamp to the URL
  * @returns {string} The URL for the thumbnail

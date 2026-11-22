@@ -2,7 +2,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, test } from '@jest/gl
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { setConfigFilePath } from '../src/util.js';
+import { setConfigFilePath } from '../src/util.ts';
 
 const tmpConfigRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'emberdesk-settings-get-config-'));
 const tmpConfigPath = path.join(tmpConfigRoot, 'config.yaml');

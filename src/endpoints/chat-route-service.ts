@@ -1,8 +1,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-import type { ChatInfo } from './chats.js';
-import type { UserDirectoryList } from '../users.js';
+import type { ChatInfo } from './chats.ts';
+import type { UserDirectoryList } from '../user-types.ts';
 
 type TextMatcher = (textArray: string[]) => boolean;
 type GetChatInfo = (pathToFile: string, additionalData?: object, withMetadata?: boolean, matcher?: TextMatcher | null) => Promise<ChatInfo>;

@@ -162,10 +162,10 @@ test.each(['fallback', 'managed-first', 'clean-media-repair', 'legacy-chat', 'de
                 canonicalSqliteManager.dispose();
             }
             console.log('managed-media-read:native-route');
-        `, url('util.js'), config, root, url('canonical-sqlite.ts'), url('canonical-sqlite-migrations.ts'),
+        `, url('util.ts'), config, root, url('canonical-sqlite.ts'), url('canonical-sqlite-migrations.ts'),
         url('canonical-sqlite-shadow-import.ts'), url('endpoints/canonical-managed-media-store.ts'),
-        url('endpoints/canonical-managed-media-read-service.ts'), url('users.js'), url('endpoints/assets.js'),
-        url('endpoints/images.js'), url('endpoints/files.js'), url('canonical-avatar-blob-service.ts'), scenario, url('canonical-backend.js')],
+        url('endpoints/canonical-managed-media-read-service.ts'), url('user-files.ts'), url('endpoints/assets.ts'),
+        url('endpoints/images.ts'), url('endpoints/files.ts'), url('canonical-avatar-blob-service.ts'), scenario, url('canonical-backend.ts')],
         { encoding: 'utf8', timeout: 20_000 });
         expect({ status: result.status, stderr: result.status === 0 ? '' : result.stderr })
             .toEqual({ status: 0, stderr: '' });

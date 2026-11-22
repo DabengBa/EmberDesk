@@ -22,7 +22,7 @@ import {
     recordSecretProjectionRepair,
     writeCanonicalSecret,
 } from '../src/endpoints/canonical-secrets-store.ts';
-import { buildCharacterFileSnapshotRow } from '../src/endpoints/character-file-snapshot.js';
+import { buildCharacterFileSnapshotRow } from '../src/endpoints/character-file-snapshot.ts';
 import { writeCanonicalChatPayload } from '../src/endpoints/canonical-chat-write-service.ts';
 
 const __filename = fileURLToPath(import.meta.url);

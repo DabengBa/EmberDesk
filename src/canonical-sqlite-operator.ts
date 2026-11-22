@@ -2,13 +2,13 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import type { DatabaseSync } from 'node:sqlite';
-import type { UserDirectoryList } from './users.js';
+import type { UserDirectoryList } from './user-types.ts';
 
 import { sync as writeFileAtomicSync } from 'write-file-atomic';
 
-import { AVATAR_HEIGHT, AVATAR_WIDTH, DEFAULT_AVATAR_PATH } from './constants.js';
-import { avatarToPngSized } from './image-processing.js';
-import { serverDirectory } from './server-directory.js';
+import { AVATAR_HEIGHT, AVATAR_WIDTH, DEFAULT_AVATAR_PATH } from './constants.ts';
+import { avatarToPngSized } from './image-processing.ts';
+import { serverDirectory } from './server-directory.ts';
 import { withCanonicalTransaction } from './canonical-sqlite.ts';
 import { getPersistedCanonicalAuditStatus, invalidateCanonicalAuditStatus, auditCanonicalShadowImport } from './canonical-sqlite-shadow-import.ts';
 import { auditCanonicalWorldInfoShadowImport, WORLD_INFO_AUDIT_SCOPE } from './canonical-world-info-shadow-import.ts';
@@ -18,7 +18,7 @@ import {
     auditCanonicalChatShadowImport,
     CANONICAL_CHAT_AUDIT_SCOPE,
 } from './canonical-chat-shadow-import.ts';
-import { recordImportLedgerEntry, removeImportLedgerEntry } from './canonical-import-ledger.js';
+import { recordImportLedgerEntry, removeImportLedgerEntry } from './canonical-import-ledger.ts';
 import { replayWorldProjection } from './canonical-world-info-projection.ts';
 import { repairCanonicalManagedMediaProjection } from './endpoints/canonical-managed-media-write-service.ts';
 import {
@@ -29,7 +29,7 @@ import {
 import {
     buildCanonicalRollbackBlockers,
     listOpenProjectionRepairs,
-} from './canonical-sqlite-rollout-contract.js';
+} from './canonical-sqlite-rollout-contract.ts';
 import {
     getCanonicalBackupRestoreReadiness,
     getCanonicalStorageSlice,
@@ -63,7 +63,7 @@ import {
     buildCharacterFileSnapshotRow,
     calculateCharacterChatStats,
     getCharacterChatDirectory,
-} from './endpoints/character-file-snapshot.js';
+} from './endpoints/character-file-snapshot.ts';
 import { getCharaCardV2 } from './endpoints/character-card-v2.ts';
 import { parse as parseCharacterCard, write as writeCharacterCard } from './character-card-parser.ts';
 

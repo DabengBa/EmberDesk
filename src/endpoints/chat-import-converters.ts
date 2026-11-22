@@ -1,4 +1,4 @@
-import { tryParse } from '../util.js';
+import { tryParse } from '../util.ts';
 
 type OobaChatImport = { data_visible: [unknown?, unknown?][] };
 type AgnaiChatImport = { messages: { userId?: unknown; msg?: unknown }[] };

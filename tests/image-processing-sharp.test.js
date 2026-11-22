@@ -3,8 +3,8 @@ import sharp from 'sharp';
 import extract from '../src/png/extract.ts';
 import encode from '../src/png/encode.ts';
 import { read, write } from '../src/character-card-parser.ts';
-import { AVATAR_HEIGHT, AVATAR_WIDTH } from '../src/constants.js';
-import { avatarToPng, avatarToPngSized, imageToPng, thumbnailImage } from '../src/image-processing.js';
+import { AVATAR_HEIGHT, AVATAR_WIDTH } from '../src/constants.ts';
+import { avatarToPng, avatarToPngSized, imageToPng, thumbnailImage } from '../src/image-processing.ts';
 import { makeAnimatedImages } from './helpers/animated-image-fixtures.js';
 import * as PNGtext from '../src/png/text.ts';
 

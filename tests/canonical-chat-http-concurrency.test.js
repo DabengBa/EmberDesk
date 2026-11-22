@@ -5,7 +5,7 @@ import crypto from 'node:crypto';
 
 import express from 'express';
 import { afterAll, beforeAll, expect, jest, test } from '@jest/globals';
-import { setConfigFilePath } from '../src/util.js';
+import { setConfigFilePath } from '../src/util.ts';
 import { canonicalSqliteManager } from '../src/canonical-sqlite.ts';
 import { runCanonicalMigrations } from '../src/canonical-sqlite-migrations.ts';
 import { auditCanonicalChatShadowImport, runCanonicalChatShadowImport } from '../src/canonical-chat-shadow-import.ts';
@@ -15,7 +15,7 @@ const root = fs.mkdtempSync(path.join(os.tmpdir(), 'emberdesk-chat-http-concurre
 const configPath = path.join(root, 'config.yaml');
 fs.writeFileSync(configPath, `backups:\n  chat:\n    enabled: false\nfeatures:\n  storage:\n    canonicalSqlite:\n      enabled: true\n      shadowImport: true\n      reads: true\n      writes: true\n      strict: false\n      slices:\n        chats:\n          enabled: true\n          shadowImport: true\n          reads: true\n          writes: true\n          projection: sync\n`);
 setConfigFilePath(configPath);
-const { router } = await import('../src/endpoints/chats.js');
+const { router } = await import('../src/endpoints/chats.ts');
 
 const directories = Object.fromEntries(['storage', 'chats', 'groupChats', 'backups'].map(name => [name, path.join(root, name)]));
 directories.root = root;

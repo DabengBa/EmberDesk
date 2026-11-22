@@ -15,7 +15,7 @@ import {
     createWorkspaceWriteSession,
     markReplaceIntentReady,
     registerIntentWrites,
-} from '../src/character-replace-write-coordinator.js';
+} from '../src/character-replace-write-coordinator.ts';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const cli = path.join(repoRoot, 'scripts', 'character-replace-recovery.mjs');

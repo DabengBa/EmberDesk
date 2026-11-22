@@ -86,7 +86,7 @@
     },
     "version": "1.18.0",
     "scripts": {
-        "init": "node src/server-init.js",
+        "init": "node src/server-init.ts",
         "test": "pnpm --dir tests run test:unit",
         "test:unit": "pnpm --dir tests run test:unit",
         "test:component": "pnpm --dir tests run test:component",
@@ -117,14 +117,14 @@
         "perf:interaction": "node scripts/interaction-performance-runner.mjs",
         "start:global": "node server.js --global",
         "start:no-csrf": "node server.js --disableCsrf",
-        "lint": "eslint \"src/**/*.js\" \"public/**/*.js\" \"./*.js\" && oxlint src --ignore-pattern \"**/*.js\" --tsconfig tsconfig.server.json --deny-warnings && pnpm run typecheck",
+        "lint": "eslint \"public/**/*.js\" \"./*.js\" && oxlint src --ignore-pattern \"**/*.js\" --tsconfig tsconfig.server.json --deny-warnings && pnpm run typecheck",
         "lint:fast": "oxlint src public app *.js *.ts",
-        "lint:fix": "eslint \"src/**/*.js\" \"public/**/*.js\" \"./*.js\" --fix",
+        "lint:fix": "eslint \"public/**/*.js\" \"./*.js\" --fix",
         "plugins:update": "node plugins update",
         "plugins:install": "node plugins install"
     },
     "bin": {
-        "sillytavern": "./src/server-global.js"
+        "sillytavern": "./src/server-global.ts"
     },
     "rules": {
         "no-path-concat": "off",

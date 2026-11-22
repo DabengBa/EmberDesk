@@ -7,18 +7,18 @@ import { getCanonicalMigrationStatus, runCanonicalMigrations } from './canonical
 import {
     calculateCharacterChatStats,
     getCharacterChatDirectory,
-} from './endpoints/character-file-snapshot.js';
+} from './endpoints/character-file-snapshot.ts';
 import { calculateCanonicalCharacterChatStats } from './endpoints/canonical-chat-store.ts';
-import { getCanonicalSliceProjectionMode } from './storage-feature-flags.js';
-import { countMissingCharacterAvatarBlobs } from './canonical-avatar-blobs.js';
-import { listOpenProjectionRepairs } from './canonical-sqlite-rollout-contract.js';
+import { getCanonicalSliceProjectionMode } from './storage-feature-flags.ts';
+import { countMissingCharacterAvatarBlobs } from './canonical-avatar-blobs.ts';
+import { listOpenProjectionRepairs } from './canonical-sqlite-rollout-contract.ts';
 import { normalizeCanonicalCharacterPayload } from './endpoints/character-store.ts';
 import {
     classifyImportCandidate,
     recordImportLedgerEntry,
     resolveAuditDriftReason,
-} from './canonical-import-ledger.js';
-import { uuidv4 } from './util.js';
+} from './canonical-import-ledger.ts';
+import { uuidv4 } from './util.ts';
 
 type Directories = { root: string; characters: string; chats: string; storage?: string };
 type Payload = { name?: unknown; date_added?: unknown; world?: unknown; data?: { extensions?: { world?: unknown } } };

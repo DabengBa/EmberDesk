@@ -33,8 +33,8 @@ test('Node resolves the production managed media graph without a loader', () => 
             assert.equal(typeof router, 'function');
             db.close();
             console.log('media-callers:native');
-        `, url('util.js'), config, root, url('endpoints/canonical-managed-media-store.ts'),
-        url('endpoints/files.js'), url('canonical-sqlite-operator.ts'), url('canonical-sqlite-export.ts'),
+        `, url('util.ts'), config, root, url('endpoints/canonical-managed-media-store.ts'),
+        url('endpoints/files.ts'), url('canonical-sqlite-operator.ts'), url('canonical-sqlite-export.ts'),
         url('canonical-sqlite-migrations.ts')], { encoding: 'utf8', timeout: 10_000 });
         expect({ status: result.status, stderr: result.status === 0 ? '' : result.stderr })
             .toEqual({ status: 0, stderr: '' });

@@ -6,7 +6,7 @@ import { afterAll, beforeAll, describe, expect, test } from '@jest/globals';
 import express from 'express';
 
 import { disposeCanonicalDatabases } from '../src/canonical-sqlite.ts';
-import { setConfigFilePath } from '../src/util.js';
+import { setConfigFilePath } from '../src/util.ts';
 
 let root;
 let server;
@@ -27,7 +27,7 @@ beforeAll(async () => {
     const config = path.join(root, 'config.yaml');
     fs.writeFileSync(config, 'features:\n  storage:\n    canonicalSqlite:\n      enabled: true\n');
     setConfigFilePath(config);
-    const { router } = await import('../src/endpoints/character-replace-coordination.js');
+    const { router } = await import('../src/endpoints/character-replace-coordination.ts');
     const app = express();
     app.use(express.json());
     app.use((request, _response, next) => {

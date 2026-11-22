@@ -20,14 +20,14 @@ jest.unstable_mockModule('node:crypto', async () => {
     return { ...actual, default: { ...actual, randomInt }, randomInt };
 });
 
-jest.unstable_mockModule('../src/endpoints/content-manager.js', () => ({
+jest.unstable_mockModule('../src/endpoints/content-manager.ts', () => ({
     checkForNewContent: checkForNewContentMock,
     getDefaultTemplateFile: (name) => (name === 'settings-defaults.json' ? structuredClone(defaultsPayload) : null),
     getDefaultPresets: () => [],
     getDefaultPresetFile: () => null,
 }));
 
-jest.unstable_mockModule('../src/users.js', () => ({
+const usersMock = {
     getUserAvatar: async () => '',
     toKey: handle => `user:${handle}`,
     getPasswordHash: password => `hash:${password}`,
@@ -38,16 +38,20 @@ jest.unstable_mockModule('../src/users.js', () => ({
     getAccountVersion: () => 'account-version',
     getAllUserHandles: async () => [],
     getUserDirectories: () => ({}),
-}));
+};
+jest.unstable_mockModule('../src/user-storage.ts', () => usersMock);
+jest.unstable_mockModule('../src/user-directories.ts', () => usersMock);
+jest.unstable_mockModule('../src/user-auth.ts', () => usersMock);
+jest.unstable_mockModule('../src/user-backup.ts', () => usersMock);
 
-const { setConfigFilePath } = await import('../src/util.js');
+const { setConfigFilePath } = await import('../src/util.ts');
 const configRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'emberdesk-reset-config-'));
 fs.writeFileSync(path.join(configRoot, 'config.yaml'), 'port: 8000\n', 'utf8');
 setConfigFilePath(path.join(configRoot, 'config.yaml'));
 
 const { router } = await import('../src/endpoints/users-private-routes.ts');
 const { canonicalSqliteManager } = await import('../src/canonical-sqlite.ts');
-const { resetCanonicalBackendsForTests } = await import('../src/canonical-backend.js');
+const { resetCanonicalBackendsForTests } = await import('../src/canonical-backend.ts');
 const { runCanonicalMigrations } = await import('../src/canonical-sqlite-migrations.ts');
 const { upsertCanonicalSettingsDocument, getCanonicalSettingsDocument } = await import('../src/endpoints/settings-store.ts');
 const { persistCanonicalAuditStatus } = await import('../src/canonical-sqlite-shadow-import.ts');

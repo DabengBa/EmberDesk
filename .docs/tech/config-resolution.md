@@ -16,10 +16,10 @@ Primary files:
 
 - `src/command-line.ts` — three-phase pipeline: `parseArgv`, `prepareConfigFilesystem` / `prepareDataRoot`, `resolveConfig`
 - `src/config-init.ts` — config-file migration, deprecated-key rewriting, default-fill logic
-- `src/util.js` — `getConfigValue`, `stringToBool`, `setConfigFilePath`, `keyToEnv`
+- `src/util.ts` — `getConfigValue`, `stringToBool`, `setConfigFilePath`, `keyToEnv`
 - `default/config.yaml` — canonical default values
 
-`src/util.js` no longer carries EmberDesk's archive/zip helper implementations. Those live in `src/archive-utils.ts`, which `src/util.js` imports directly. This document treats `util.js` only as the remaining config-related helper surface.
+`src/util.ts` no longer carries EmberDesk's archive/zip helper implementations. Those live in `src/archive-utils.ts`, which `src/util.ts` imports directly. This document treats `util.js` only as the remaining config-related helper surface.
 
 ## Architecture And Constraints
 

@@ -9,7 +9,7 @@ import {
     processUnsetSentinels,
     toShallow,
     unsetPrivateFields,
-} from '../src/endpoints/character-card-helpers.js';
+} from '../src/endpoints/character-card-helpers.ts';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -208,7 +208,7 @@ describe('character-card helpers', () => {
     });
 
     test('unsetPrivateFields keeps JSON and PNG Spec V2 import wiring on the shared helper', () => {
-        const source = readRepoFile('src/endpoints/characters.js');
+        const source = readRepoFile('src/endpoints/characters.ts');
         const v2ImportWiring = [...source.matchAll(/if \(jsonData\.spec !== undefined\) \{[\s\S]*?unsetPrivateFields\(jsonData\);[\s\S]*?jsonData = readFromV2\(jsonData\);[\s\S]*?characterData: JSON\.stringify\(jsonData\),/g)];
 
         expect(v2ImportWiring).toHaveLength(2);

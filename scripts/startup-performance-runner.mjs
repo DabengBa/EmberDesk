@@ -14,9 +14,9 @@ import { chromium } from '../tests/node_modules/playwright/index.mjs';
 
 import { applyCanonicalPragmas } from '../src/canonical-sqlite.ts';
 import { runCanonicalMigrations } from '../src/canonical-sqlite-migrations.ts';
-import { DEFAULT_USER } from '../src/constants.js';
+import { DEFAULT_USER } from '../src/constants.ts';
 import { upsertCanonicalSettingsDocument } from '../src/endpoints/settings-store.ts';
-import { summarizeStartupPerformance } from '../src/performance-report.js';
+import { summarizeStartupPerformance } from '../src/performance-report.ts';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);

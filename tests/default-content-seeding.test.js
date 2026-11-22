@@ -47,12 +47,12 @@ describe('default content seeding', () => {
         dataRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'emberdesk-content-seed-'));
         globalThis.DATA_ROOT = dataRoot;
 
-        const { setConfigFilePath } = await import('../src/util.js');
+        const { setConfigFilePath } = await import('../src/util.ts');
         const configPath = path.join(dataRoot, 'config.yaml');
         fs.writeFileSync(configPath, 'port: 8000\n', 'utf8');
         setConfigFilePath(configPath);
 
-        const contentManager = await import('../src/endpoints/content-manager.js');
+        const contentManager = await import('../src/endpoints/content-manager.ts');
         const userDirectories = await import('../src/user-directories.ts');
         checkForNewContent = contentManager.checkForNewContent;
         getUserDirectories = userDirectories.getUserDirectories;
@@ -64,7 +64,7 @@ describe('default content seeding', () => {
     });
 
     test('index.json registers no retired content types', async () => {
-        const { serverDirectory } = await import('../src/server-directory.js');
+        const { serverDirectory } = await import('../src/server-directory.ts');
         const index = JSON.parse(fs.readFileSync(path.join(serverDirectory, 'default/content/index.json'), 'utf8'));
         const types = new Set(index.map(item => item.type));
 
