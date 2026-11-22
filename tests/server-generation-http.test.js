@@ -27,6 +27,7 @@ const holdRegex = Promise.withResolvers();
 const summaryOpened = Promise.withResolvers();
 const summaryClosed = Promise.withResolvers();
 let closingAttempts = 0;
+let plainAttempts = 0;
 
 async function listen(server) {
     servers.push(server);
@@ -53,14 +54,35 @@ beforeAll(async () => {
         }
         const hasStoryInput = text => completion.messages.some(message => message.tool_calls?.some(call =>
             call.function.name === 'story_continuation_input' && JSON.parse(call.function.arguments).content === text));
+        const hasUser = text => completion.messages.some(message => message.role === 'user' && message.content === text);
+        if (hasUser('Recover plain reply') && ++plainAttempts === 1) {
+            res.writeHead(503).end();
+            return;
+        }
+        if (hasUser('Reject plain reply')) {
+            res.writeHead(400).end();
+            return;
+        }
+        if (hasUser('Recover empty JSON reply') && completion.model !== 'gpt-4o-mini') {
+            res.writeHead(200, { 'content-type': 'application/json' }).end('{"choices":[]}');
+            return;
+        }
         if (completion.tool_choice?.function?.name === 'first' && completion.model !== 'gpt-4o-mini'
             && hasStoryInput('Pipeline fallback input')) {
             res.writeHead(503).end();
             return;
         }
         res.writeHead(200, { 'content-type': 'text/event-stream' });
+        if (hasUser('Recover plain reply') && completion.model !== 'gpt-4o-mini') {
+            res.end('data: [DONE]\n\n');
+            return;
+        }
         if (completion.tool_choice?.function) {
             const name = completion.tool_choice.function.name;
+            if (completion.model !== 'gpt-4o-mini' && hasStoryInput('Reject pipeline prose')) {
+                res.end('data: {"choices":[{"delta":{"content":"Not a tool call"}}]}\n\ndata: [DONE]\n\n');
+                return;
+            }
             res.end(`data: ${JSON.stringify({ choices: [{ delta: { tool_calls: [{ index: 0, id: `call-${name}`, function: { name, arguments: JSON.stringify({ content: `from ${name}` }) } }] } }] })}\n\ndata: [DONE]\n\n`);
             return;
         }
@@ -242,7 +264,7 @@ test('temporary exit cancels before create or after an SSE disconnect, scoped to
     }
 });
 
-test('temporary regenerate previews and executes the custom pipeline with uploaded history, then continue remains plain', async () => {
+test('temporary regenerate and continue execute the custom pipeline without persisting the chat', async () => {
     const { directories } = users.get('alice');
     const db = canonicalSqliteManager.open({ handle: 'alice', directories, featureFlags: { enabled: true } });
     const counts = () => ['chat_sessions', 'chat_messages', 'chat_generation_runs'].map(table => db.prepare(`SELECT count(*) AS count FROM ${table}`).get().count);
@@ -257,8 +279,9 @@ test('temporary regenerate previews and executes the custom pipeline with upload
         expect(upload.status).toBe(200);
         const { path: url } = await upload.json();
         const command = { temporary: true, action: 'regenerate', history: [
-            { is_user: true, mes: 'Previous question' }, { is_user: false, mes: 'Previous answer' },
+            { is_user: true, mes: 'Previous question' }, { is_user: false, mes: 'Previous answer', extra: { api: 'manual' } },
             { is_user: true, mes: 'Regenerate this question', extra: { files: [{ name: 'temporary-history.txt', url }] } },
+            { is_user: false, is_system: true, mes: 'Retain narration', extra: { type: 'narrator' } },
             { is_user: false, mes: 'REMOVE_OLD_DRAFT' }, { is_user: false, mes: 'REMOVE_OLD_REPLY' },
         ] };
         const preview = await (await call('/generation/preview', command)).json();
@@ -277,7 +300,7 @@ test('temporary regenerate previews and executes the custom pipeline with upload
         expect(pending).toMatchObject({ name: 'custom', args: { content: 'from custom' } });
         expect(calls[offset]).toMatchObject({ messages: preview.messages, tool_choice: preview.toolChoice });
         const wire = JSON.stringify(preview.messages);
-        for (const text of ['Previous answer', 'Regenerate this question', 'TEMPORARY_FILE_CONTENT', 'The current user input is the story_continuation_input call']) expect(wire).toContain(text);
+        for (const text of ['Previous answer', 'Regenerate this question', 'Retain narration', 'TEMPORARY_FILE_CONTENT', 'The current user input is the story_continuation_input call']) expect(wire).toContain(text);
         expect(wire).not.toContain('REMOVE_OLD_');
         const step = { stepId: pending.id, result: 'BROWSER RESULT' };
         expect((await call(`/generation/${id}/step`, step, 'bob')).status).toBe(404);
@@ -291,13 +314,52 @@ test('temporary regenerate previews and executes the custom pipeline with upload
         const continued = await call('/generation/create', { ...command, action: 'continue', requestId: 'temp-continue' });
         expect(continued.status).toBe(202);
         ({ id } = await continued.json());
-        expect(await (await call(`/generation/${id}/events`)).text()).toContain('"mes":"REMOVE_OLD_REPLYHello"');
-        expect(calls[offset + 2].tool_choice).toBeUndefined();
+        for (let attempt = 0; attempt < 100; attempt++) {
+            pending = (await (await call(`/generation/${id}`)).json()).step;
+            if (pending) break;
+            await new Promise(resolve => setTimeout(resolve, 10));
+        }
+        expect(pending?.name).toBe('custom');
+        expect((await call(`/generation/${id}/step`, { stepId: pending.id, result: 'BROWSER RESULT' })).status).toBe(204);
+        expect(await (await call(`/generation/${id}/events`)).text()).toContain('"mes":"REMOVE_OLD_REPLY&lt;custom&gt;');
+        expect(calls.slice(offset + 2).map(wire => wire.tool_choice.function.name)).toEqual(['custom', 'last']);
         expect(counts()).toEqual(before);
     } finally {
         if (id) await call(`/generation/${id}/cancel`, {});
         setSettings(saved.payload);
     }
+});
+
+test('temporary regenerate accepts an unanswered turn, but continue still needs an assistant', async () => {
+    const command = { temporary: true, history: [{ is_user: true, mes: 'Unanswered turn' }] };
+    expect((await call('/generation/create', { ...command, action: 'continue', requestId: 'temp-no-assistant' })).status).toBe(409);
+    const created = await call('/generation/create', { ...command, action: 'regenerate', requestId: 'temp-unanswered' });
+    expect(created.status).toBe(202);
+    const { id } = await created.json();
+    expect(await (await call(`/generation/${id}/events`)).text()).toContain('"status":"completed"');
+});
+
+test('plain generation retries 503 and empty output, but not a bad request', async () => {
+    const { directories } = users.get('alice');
+    const db = canonicalSqliteManager.open({ handle: 'alice', directories, featureFlags: { enabled: true } });
+    const initial = getCanonicalSettingsDocument(db, { userId: 'alice' }).payload;
+    const set = payload => upsertCanonicalSettingsDocument(db, { userId: 'alice', expectedRevision: getCanonicalSettingsDocument(db, { userId: 'alice' }).revision, payload });
+    set({ ...initial, oai_settings: { ...initial.oai_settings, fallback_provider_model: 'gpt-4o-mini' } });
+    try {
+        for (const [text, status, models] of [
+            ['Recover plain reply', 'completed', ['gpt-4o', 'gpt-4o', 'gpt-4o-mini']],
+            ['Recover empty JSON reply', 'completed', ['gpt-4o', 'gpt-4o', 'gpt-4o-mini']],
+            ['Reject plain reply', 'failed', ['gpt-4o']],
+        ]) {
+            const offset = calls.length;
+            const created = await call('/generation/create', { action: 'send', temporary: true, history: [], text, requestId: `recovery-${offset}` });
+            expect(created.status).toBe(202);
+            const { id } = await created.json();
+            expect(await (await call(`/generation/${id}/events`)).text()).toContain(`"status":"${status}"`);
+            expect(calls.slice(offset).map(wire => wire.model)).toEqual(models);
+            for (const wire of calls.slice(offset)) expect(wire).not.toHaveProperty('tool_choice');
+        }
+    } finally { set(initial); }
 });
 
 test('runs a temporary assistant prompt over SSE without saving a chat or exposing the run to another user', async () => {
@@ -652,8 +714,38 @@ test('default pipeline completes without a browser; custom step resumes once fro
         expect((await (await call('/get', target)).json()).at(-1).extra.tool_invocations).toHaveLength(2);
 
         const roleRegenerate = await (await call('/generation/preview', { ...target, action: 'regenerate' })).json();
-        expect(roleRegenerate.previewPipeline).toBeUndefined();
-        expect(roleRegenerate.messages).toContainEqual({ role: 'user', content: 'Pipeline input' });
+        expect(roleRegenerate.previewPipeline.step.tool).toBe('first');
+        expect(JSON.stringify(roleRegenerate.messages)).toContain('Pipeline input');
+        expect(JSON.stringify(roleRegenerate.messages)).not.toContain('from last');
+
+        const initialReply = (await (await call('/get', target)).json()).at(-1);
+        const continued = await call('/generation/create', { ...target, version: (await (await call(`/generation/${run.id}`)).json()).version,
+            action: 'continue', requestId: 'saved-pipeline-continue' });
+        expect(continued.status).toBe(202);
+        run = await continued.json();
+        expect(await (await call(`/generation/${run.id}/events`)).text()).toContain('"status":"completed"');
+        expect(calls.slice(-2).map(wire => wire.tool_choice.function.name)).toEqual(['first', 'last']);
+        for (const wire of calls.slice(-2)) expect(wire.messages.some(message => message.role === 'system' && message.content.includes('without repeating'))).toBe(true);
+        const reply = (await (await call('/get', target)).json()).at(-1);
+        expect(reply).toMatchObject({ name: initialReply.name, send_date: initialReply.send_date, extra: { tool_invocations: expect.any(Array) } });
+        expect(reply.extra.tool_invocations).toHaveLength(4);
+        const next = await (await call('/generation/preview', { ...target, action: 'continue' })).json();
+        const story = next.messages.flatMap(message => message.tool_calls ?? []).map(call => JSON.parse(call.function.arguments).content);
+        expect(story).toContainEqual(expect.stringMatching(/^\s*from last\s*from last$/));
+
+        const regenerateOffset = calls.length;
+        const regenerated = await call('/generation/create', { ...target, version: (await (await call(`/generation/${run.id}`)).json()).version,
+            action: 'regenerate', requestId: 'saved-pipeline-regenerate' });
+        expect(regenerated.status).toBe(202);
+        run = await regenerated.json();
+        expect(await (await call(`/generation/${run.id}/events`)).text()).toContain('"status":"completed"');
+        const regenerationRounds = calls.slice(regenerateOffset);
+        expect(regenerationRounds.map(wire => wire.tool_choice.function.name)).toEqual(['first', 'last']);
+        expect(regenerationRounds[0].messages).toEqual(roleRegenerate.messages);
+        for (const wire of regenerationRounds) {
+            expect(wire.tools).toEqual(firstWire.tools);
+            expect(JSON.stringify(wire.messages)).not.toContain('from last');
+        }
 
         const retryOffset = calls.length;
         const retry = await open('pipeline-fallback', 'Pipeline fallback input');
@@ -663,6 +755,12 @@ test('default pipeline completes without a browser; custom step resumes once fro
         ]);
         expect(calls.slice(retryOffset, retryOffset + 3).map(call => call.messages)).toEqual(Array(3).fill(calls[retryOffset].messages));
         expect((await (await call('/get', retry.target)).json()).slice(1)).toHaveLength(2);
+
+        const proseOffset = calls.length;
+        setPipeline(['first'], []);
+        await open('pipeline-reject-prose', 'Reject pipeline prose');
+        expect(await (await call(`/generation/${run.id}/events`)).text()).toContain('"status":"completed"');
+        expect(calls.slice(proseOffset).map(wire => wire.model)).toEqual(['gpt-4o', 'gpt-4o', 'gpt-4o-mini']);
 
         setPipeline(['custom', 'last'], [{ name: 'custom', enabled: true, actionBody: 'return args.content.toUpperCase();' }]);
         const custom = await open('custom-pipeline');
@@ -700,6 +798,10 @@ test('default pipeline completes without a browser; custom step resumes once fro
         expect(eventStream).toContain('"text":"Discard closing draft"');
         expect(eventStream).toContain('"text":"","reset":true');
         expect(eventStream).toContain('"text":"Closing answer"');
+        const [closingStep, failedClosing, successfulClosing] = calls.slice(-3);
+        expect(closingStep.tool_choice.function.name).toBe('custom');
+        expect(failedClosing).toMatchObject({ tool_choice: 'none', tools: closingStep.tools });
+        expect(successfulClosing).toEqual(failedClosing);
         expect((await (await call('/get', closing.target)).json()).at(-1).mes).toBe('&lt;custom&gt;Closing answer&lt;/custom&gt;');
     } finally {
         if (run) await call(`/generation/${run.id}/cancel`, {});

@@ -124,12 +124,16 @@ export function buildStepPrompt(step, index, total, historyGuidance = ' Historic
  */
 export const PIPELINE_FALLBACK_PROMPT = '[Reply pipeline] All pipeline steps are complete. Write the final user-facing reply now, based on the step results above. Do not call any tools in this round.';
 
+function pipelineTag(invocation) {
+    const name = String(invocation?.pipeline?.tool ?? invocation?.name ?? '');
+    return /^[a-zA-Z][a-zA-Z0-9_-]*$/.test(name) ? name : 'step';
+}
+
 /** Format a settled pipeline reply identically in the browser and on the server. */
 export function formatPipelineTagMarkup(invocations, finalText = '') {
     const escape = value => String(value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     return invocations.map((invocation, index) => {
-        const name = invocation?.pipeline?.tool ?? invocation?.name;
-        const tag = /^[a-zA-Z][a-zA-Z0-9_-]*$/.test(String(name)) ? name : 'step';
+        const tag = pipelineTag(invocation);
         let params = invocation?.parameters;
         if (typeof params === 'string') {
             try { params = JSON.parse(params); } catch { params = null; }
@@ -143,6 +147,35 @@ export function formatPipelineTagMarkup(invocations, finalText = '') {
         const chips = options.map(item => `<div data-respond-option="" role="button" tabindex="0">▸ ${escape(typeof item === 'string' ? item : JSON.stringify(item))}</div>`).join('');
         return `&lt;${tag}&gt;${text}${chips ? `<div data-respond-options="">${chips}</div>` : ''}&lt;/${tag}&gt;`;
     }).join('\n');
+}
+
+/** Strip intermediate step blocks without dropping the final text of earlier runs in a continued reply. */
+export function stripPipelineMarkup(content, invocations) {
+    if (typeof content !== 'string' || !Array.isArray(invocations) || !invocations.length) return content;
+    const blocks = new Map();
+    for (const [index, invocation] of invocations.entries()) {
+        const name = pipelineTag(invocation);
+        const next = invocations[index + 1];
+        const final = !next || invocation?.pipeline?.runId !== next?.pipeline?.runId;
+        if (!blocks.has(name)) blocks.set(name, []);
+        blocks.get(name).push(final);
+    }
+    if (blocks.size) {
+        const tags = [...blocks.keys()].join('|');
+        const pattern = new RegExp(`&lt;(${tags})&gt;([\\s\\S]*?)&lt;/\\1&gt;|<(${tags})>([\\s\\S]*?)</\\3>`, 'g');
+        // Align from the end: a manual edit can remove old tags without removing their invocations.
+        const reversed = [];
+        let end = content.length;
+        for (const { 0: block, 1: escaped, 2: escapedText, 3: raw, 4: rawText, index } of [...content.matchAll(pattern)].reverse()) {
+            const final = blocks.get(escaped ?? raw).pop();
+            reversed.push(content.slice(index + block.length, end), final === undefined ? block : final ? escapedText ?? rawText : '');
+            end = index;
+        }
+        content = content.slice(0, end) + reversed.reverse().join('');
+    }
+    return content.replace(/<div data-respond-options[^>]*>[\s\S]*?<\/div><\/div>/g, '')
+        .replace(/\s*<section data-pipeline-card\b[\s\S]*?<\/section>\s*/g, '')
+        .replace(/\s*<section data-pipeline-card\b[\s\S]*$/, '');
 }
 
 /** Create the same step-specific schema for request shaping and token budgeting. */

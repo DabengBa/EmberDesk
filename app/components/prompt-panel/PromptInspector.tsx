@@ -90,9 +90,11 @@ export interface PromptInspectorEmpty {
 }
 
 export type PromptInspectorSnapshot = PromptInspectorResult | PromptInspectorEmpty;
+type PreviewAction = 'send' | 'regenerate' | 'continue';
 
 export interface PromptInspectorBridge {
-    preview(round?: number): Promise<PromptInspectorSnapshot>;
+    actions?(): PreviewAction[];
+    preview(round?: number, action?: PreviewAction): Promise<PromptInspectorSnapshot>;
     close(): void;
 }
 
@@ -304,6 +306,8 @@ export function PromptInspector({ bridge }: { bridge: PromptInspectorBridge }) {
     const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
     const [errorText, setErrorText] = useState<string | null>(null);
     const [round, setRound] = useState(0);
+    const [action, setAction] = useState<PreviewAction>('send');
+    const actions = bridge.actions?.() ?? [];
     const [query, setQuery] = useState('');
     const [raw, setRaw] = useState(false);
     const [copied, setCopied] = useState<string | null>(null);
@@ -311,13 +315,13 @@ export function PromptInspector({ bridge }: { bridge: PromptInspectorBridge }) {
     const requestIdRef = useRef(0);
     const copyTimerRef = useRef<number | null>(null);
 
-    const load = useCallback(async (roundIndex: number) => {
+    const load = useCallback(async (roundIndex: number, previewAction: PreviewAction) => {
         const requestId = ++requestIdRef.current;
         setStatus('loading');
         setErrorText(null);
         setCopied(null);
         try {
-            const result = await bridge.preview(roundIndex);
+            const result = await bridge.preview(roundIndex, previewAction);
             if (requestId !== requestIdRef.current) {
                 return;
             }
@@ -334,9 +338,9 @@ export function PromptInspector({ bridge }: { bridge: PromptInspectorBridge }) {
     }, [bridge]);
 
     useEffect(() => {
-        void load(round);
+        void load(round, action);
         return () => { requestIdRef.current++; };
-    }, [load, round]);
+    }, [load, round, action]);
 
     useEffect(() => {
         const dialog = dialogRef.current;
@@ -408,7 +412,7 @@ export function PromptInspector({ bridge }: { bridge: PromptInspectorBridge }) {
                             type="button"
                             className="menu_button"
                             title={translate('Reassemble from the current state')}
-                            onClick={() => void load(round)}
+                            onClick={() => void load(round, action)}
                         >
                             <i className="fa-solid fa-rotate-right" aria-hidden="true" /> {translate('Refresh')}
                         </button>
@@ -432,8 +436,20 @@ export function PromptInspector({ bridge }: { bridge: PromptInspectorBridge }) {
                         </button>
                     </div>
                 </div>
-                {pipeline || result?.model ? (
+                {actions.length > 1 || pipeline || result?.model ? (
                     <div className="prompt-inspector-meta">
+                        {actions.length > 1 ? (
+                            <select className="text_pole prompt-inspector-round" value={action} aria-label={translate('Generation action')}
+                                onChange={event => {
+                                    setStatus('loading');
+                                    setSnapshot(null);
+                                    setRound(0);
+                                    setAction(event.target.value as PreviewAction);
+                                }}>
+                                {actions.map(value => <option key={value} value={value}>{value === 'send' ? translate('Send a message')
+                                    : value === 'regenerate' ? translate('Regenerate reply') : translate('Continue reply')}</option>)}
+                            </select>
+                        ) : null}
                         {pipeline && roundOptions.length > 1 ? (
                             <label>
                                 <span>{translate('Preview round')}</span>
@@ -459,7 +475,7 @@ export function PromptInspector({ bridge }: { bridge: PromptInspectorBridge }) {
                 {status === 'error' ? (
                     <div className="prompt-inspector-status prompt-inspector-status-error">
                         {translate('Preview failed:')}{errorText ?? translate('Unknown error')}
-                        <button type="button" className="menu_button" onClick={() => void load(round)}>{translate('Retry')}</button>
+                        <button type="button" className="menu_button" onClick={() => void load(round, action)}>{translate('Retry')}</button>
                     </div>
                 ) : null}
                 {empty ? (

@@ -1,12 +1,45 @@
 import { expect, jest, test } from '@jest/globals';
 import { captureWorkspaceWorldRuntime, createWorkspaceGeneration, createWorkspaceGenerationPreparation, getWorkspaceGenerationTargetSnapshot } from '../public/scripts/server-generation-workspace.js';
 
-test('temporary request target snapshots only non-system history and retained media', () => {
+test('temporary request target preserves system history and generation metadata', () => {
     const current = jest.fn();
     const target = getWorkspaceGenerationTargetSnapshot({ characterSelected: false, characterName: 'neutral', neutralName: 'neutral', preview: false,
-        hasDraft: () => false, current, history: [{ is_system: true }, { is_user: true, mes: 'hi', extra: { files: ['a'], ignored: 1 } }] });
-    expect(target).toEqual({ temporary: true, history: [{ is_user: true, mes: 'hi', extra: { files: ['a'], media: undefined, tool_invocations: undefined } }] });
+        hasDraft: () => false, current, history: [{ is_system: true, mes: null }, { is_user: true, mes: 'hi', extra: { api: 'openai', type: 'note', files: ['a'], ignored: 1 } }] });
+    expect(target).toEqual({ temporary: true, history: [
+        { is_user: false, is_system: true, mes: '', extra: { api: undefined, type: undefined, files: undefined, media: undefined, tool_invocations: undefined } },
+        { is_user: true, is_system: undefined, mes: 'hi', extra: { api: 'openai', type: 'note', files: ['a'], media: undefined, tool_invocations: undefined } },
+    ] });
     expect(current).not.toHaveBeenCalled();
+});
+
+test.each(['regenerate', 'continue'])('preview %s ignores the composer and stages no attachments', async action => {
+    const target = jest.fn(() => ({ version: 'v' }));
+    const stageAttachments = jest.fn();
+    const preview = jest.fn(async () => ({ connection: { model: 'm' }, messages: [], budget: { contextTokens: 100, responseTokens: 20, promptTokens: 30 } }));
+    const preparation = createWorkspaceGenerationPreparation({ generation: {}, target, text: () => 'draft',
+        snapshot: () => ({ contextKey: 'chat' }), hasAttachments: () => true, stageAttachments,
+        activations: () => [], captureWorld: async () => ({ worldInfo: [], scanPrompts: [] }), ownsComposer: () => true,
+        flushSettings: async () => {}, locale: () => 'en', preview });
+    const result = await preparation.preview(3, action);
+    expect(target).toHaveBeenCalledWith({ preview: false });
+    expect(stageAttachments).not.toHaveBeenCalled();
+    expect(preview).toHaveBeenCalledWith({ version: 'v', action, text: undefined, locale: 'en', round: 3, worldInfo: [], scanPrompts: [] });
+    expect(result).toMatchObject({ kind: 'prompt-preview', type: action, pendingMessage: null });
+});
+
+test('continue preparation is cancellable before creation', async () => {
+    const world = Promise.withResolvers();
+    const request = jest.fn();
+    const generation = createWorkspaceGeneration({ request, subscribe() {}, changed() {}, finished() {} });
+    const preparation = createWorkspaceGenerationPreparation({ generation, target: () => ({ version: 'v' }), snapshot: () => ({ contextKey: 'c' }),
+        ownsComposer: () => true, requestId: () => 'r', clearViewport() {}, beginViewport() {}, scrollForPreparation() {},
+        activations: () => [], captureWorld: () => world.promise, flushSettings: async () => {}, locale: () => 'en' });
+    const starting = preparation.start('continue');
+    expect(generation.canStop()).toBe(true);
+    await generation.cancel();
+    world.resolve({ worldInfo: [], scanPrompts: [] });
+    expect(await starting).toBe(false);
+    expect(request).not.toHaveBeenCalled();
 });
 
 test('send preparation preserves attachment, world, settings and creation order', async () => {
@@ -98,31 +131,31 @@ test.each(['fast', 'slow', 'stop'])('a prepared send only shows waiting after th
     }
 });
 
-test('stopping a prepared replacement releases the view before create', async () => {
+test.each(['regenerate', 'continue'])('stopping prepared %s releases the view before create', async action => {
     const requests = [];
     const workspace = createWorkspaceGeneration({
         request: route => requests.push(route), subscribe() {}, changed() {}, finished() {},
     });
-    const view = workspace.prepare({ file_name: 'one' }, { action: 'regenerate', requestId: 'request-one' });
+    const view = workspace.prepare({ file_name: 'one' }, { action, requestId: 'request-one' });
     expect(workspace.canStop()).toBe(true);
-    expect(workspace.display().kind).toBe('regenerate');
+    expect(workspace.display().kind).toBe(action);
     await workspace.cancel();
     expect(workspace.busy()).toBe(false);
     expect(workspace.display()).toBeNull();
-    expect(await workspace.create(view.target, { action: 'regenerate', requestId: 'request-one' }, view)).toBeUndefined();
+    expect(await workspace.create(view.target, { action, requestId: 'request-one' }, view)).toBeUndefined();
     expect(requests).toEqual([]);
 });
 
-test.each(['resolve', 'reject'])('releases the streamed replacement when reconciliation can %s', async settle => {
+test.each([['regenerate', 'resolve'], ['regenerate', 'reject'], ['continue', 'resolve']])('releases streamed %s when reconciliation can %s', async (kind, settle) => {
     const reload = Promise.withResolvers();
-    const run = { id: 'replacement', status: 'running', kind: 'regenerate' };
+    const run = { id: 'replacement', status: 'running', kind };
     let deliver;
     const workspace = createWorkspaceGeneration({
         async request() { return run; },
         subscribe(_id, listener) { deliver = listener; return () => {}; },
         changed() {}, finished: () => reload.promise,
     });
-    await workspace.create({ file_name: 'one' }, { action: 'regenerate', requestId: 'request-one' });
+    await workspace.create({ file_name: 'one' }, { action: kind, requestId: 'request-one' });
     deliver({ type: 'delta', text: 'new reply' });
     deliver({ type: 'terminal', run: { ...run, status: 'completed' } });
     expect(workspace.canStop()).toBe(false);

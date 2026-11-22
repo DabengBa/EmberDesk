@@ -4,6 +4,17 @@ async function importFreshCore() {
     return import(`../public/scripts/reply-pipeline-core.js?cacheBust=${Date.now()}-${Math.random()}`);
 }
 
+test('an edited pipeline reply does not hide a continued suffix using an old step name', async () => {
+    const { formatPipelineTagMarkup, stripPipelineMarkup } = await importFreshCore();
+    const step = (runId, tool) => ({ parameters: { content: 'internal' }, pipeline: { runId, tool } });
+    const old = [step('old', 'draft'), step('old', 'last')];
+    const appended = [step('new', '_plan'), step('new', 'draft')];
+    const original = formatPipelineTagMarkup(old, 'Original');
+    const suffix = formatPipelineTagMarkup(appended, ' continued');
+    expect(stripPipelineMarkup(original + suffix, [...old, ...appended]).trim()).toBe('Original\n continued');
+    expect(stripPipelineMarkup('Edited' + suffix, [...old, ...appended]).trim()).toBe('Edited\n continued');
+});
+
 describe('normalizeReplyPipeline', () => {
     test('retains a trimmed step model and treats blank or missing models as inherited', async () => {
         const { normalizeReplyPipeline } = await importFreshCore();

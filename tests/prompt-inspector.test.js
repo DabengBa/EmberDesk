@@ -192,13 +192,12 @@ describe('prompt inspector wiring (structure)', () => {
     test('sendMessageAsUser delegates message construction to buildUserMessage', () => {
         const script = read('public/script.js');
         expect(script).toContain('export async function buildUserMessage(');
-        const sendFn = script.slice(script.indexOf('export async function sendMessageAsUser'));
-        expect(sendFn).toContain('await buildUserMessage(messageText, messageBias, { compact, name })');
-        expect(sendFn).toContain('await populateFileAttachment(message, \'file_form_input\', { isCurrent })');
-        // Regex + macro semantics live in the shared builder only.
-        const buildFn = script.slice(script.indexOf('export async function buildUserMessage'));
-        expect(buildFn).toContain('getRegexedString(messageText, regex_placement.USER_INPUT)');
-        expect(buildFn).toContain('substituteParams(messageText)');
+        const service = read('public/scripts/user-message-service.js');
+        expect(script).toContain('userMessageService.sendMessageAsUser(messageText, messageBias, insertAt, compact, name, { signal })');
+        expect(service).toContain('await buildUserMessage(messageText, messageBias, { compact, name })');
+        expect(service).toContain('await deps.populateAttachment(message, isCurrent)');
+        expect(script).toContain('getRegexedString(text, regex_placement.USER_INPUT)');
+        expect(script).toContain('substitute: text => substituteParams(text)');
     });
 
     test('pipeline preview shaping never touches runState', () => {

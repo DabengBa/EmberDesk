@@ -173,6 +173,30 @@ test('pipeline projects ordinary history and settled cards, replays active/mixed
     await expect(assembleServerPrompt(base, { action: 'send' }, runtime)).rejects.toMatchObject({ code: 'budget_exceeded' });
 });
 
+test.each([['regenerate', false], ['regenerate', true], ['continue', false], ['continue', true]])(
+    '%s applies the action trigger in the base prompt and the step trigger in the follow-up (temporary: %s)', async (action, temporary) => {
+        const base = snapshot({ books: [] });
+        base.settings.oai_settings.openai_max_context = 1000;
+        base.preset.prompt_order = order('normalNote', 'regenerateNote', 'continueNote', 'chatHistory');
+        base.preset.prompts = [
+            { identifier: 'normalNote', role: 'system', content: 'Normal or second step.', injection_trigger: ['normal', 'pipeline:second'] },
+            { identifier: 'regenerateNote', role: 'system', content: 'Regenerate only.', injection_trigger: ['regenerate'] },
+            { identifier: 'continueNote', role: 'system', content: 'Continue only.', injection_trigger: ['continue'] },
+        ];
+        base.chat.splice(1, 0, { is_user: true, mes: 'Latest user input' });
+        const command = { action, temporary };
+        const first = await assembleServerPrompt(base, command, { pipeline: { step: { tool: 'first' }, index: 0, total: 2 } });
+        const firstMessages = JSON.stringify(first.messages);
+        expect(firstMessages).toContain(action === 'regenerate' ? 'Regenerate only.' : 'Continue only.');
+        expect(firstMessages).not.toContain(action === 'regenerate' ? 'Continue only.' : 'Regenerate only.');
+        expect(firstMessages).not.toContain('Normal or second step.');
+        const second = await assembleServerPipelineTail(base, { pipeline: { step: { tool: 'second' }, index: 1, total: 2 } },
+            first.messages, first.pipeline.mediaCosts, new Set(), command);
+        expect(JSON.stringify(second.tail)).toContain('Normal or second step.');
+        if (action === 'continue') expect(second.tail.at(-1).content).toContain('only the new suffix');
+    },
+);
+
 test('honors gallery selection and budgets media without tokenizing data URL contents', async () => {
     const base = snapshot({ books: [] });
     base.settings.oai_settings.inline_image_quality = 'low';

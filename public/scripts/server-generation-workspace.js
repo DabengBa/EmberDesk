@@ -70,8 +70,8 @@ export function getWorkspaceGenerationTargetSnapshot(ports
 
  ) {
     if (!ports.characterSelected && (ports.characterName === ports.neutralName || (ports.preview && ports.hasDraft()))) {
-        return { temporary: true, history: ports.history.filter(message => !message.is_system).map(({ is_user, mes, extra }) => ({
-            is_user, mes, extra: { files: extra?.files, media: extra?.media, tool_invocations: extra?.tool_invocations },
+        return { temporary: true, history: ports.history.map(({ is_user, is_system, mes, extra }) => ({
+            is_user: is_user === true, is_system, mes: String(mes ?? ''), extra: { api: extra?.api, type: extra?.type, files: extra?.files, media: extra?.media, tool_invocations: extra?.tool_invocations },
         })) };
     }
     return ports.current();
@@ -113,10 +113,10 @@ export function createWorkspaceGenerationPreparation(ports                  ) {
         const isCurrent = () => ports.ownsComposer(composer);
         const requestId = ports.requestId();
         ports.clearViewport();
-        const prepared = action === 'continue' ? undefined : generation.prepare(target, { action, text, requestId });
+        const prepared = generation.prepare(target, { action, text, requestId });
         ports.beginViewport(action, requestId, composer);
-        const ownsPreparation = () => Boolean(isCurrent() && (!prepared || generation.ownsPreparation(prepared)));
-        if (prepared && action !== 'send') ports.scrollForPreparation();
+        const ownsPreparation = () => Boolean(isCurrent() && generation.ownsPreparation(prepared));
+        if (action !== 'send') ports.scrollForPreparation();
         let creating = false;
         try {
             let attachmentCapture                               ;
@@ -128,7 +128,7 @@ export function createWorkspaceGenerationPreparation(ports                  ) {
             const worldRuntime = await ports.captureWorld(activations);
             if (!ownsPreparation()) return false;
             await ports.flushSettings();
-            if (!ownsPreparation() || (!prepared && generation.busy())) return false;
+            if (!ownsPreparation()) return false;
             creating = true;
             const run = await generation.create(target, { action, text, attachments: attachmentCapture?.attachments, ...worldRuntime, requestId, locale: ports.locale() }, prepared);
             if (!run) return false;
@@ -142,22 +142,23 @@ export function createWorkspaceGenerationPreparation(ports                  ) {
             generation.releasePreparation(prepared);
         }
     }
-    async function preview(round = 0) {
-        const target = ports.target({ preview: true });
+    async function preview(round = 0, action = 'send') {
+        const send = action === 'send';
+        const target = ports.target({ preview: send });
         if (!target) return { kind: 'prompt-preview-empty', reason: 'No chat selected', warnings: [] };
-        const text = ports.text();
+        const text = send ? ports.text() : '';
         const composer = ports.snapshot();
-        const draftAttachments = ports.hasAttachments() ? await ports.stageAttachments(() => ports.ownsComposer(composer)) : [];
+        const draftAttachments = send && ports.hasAttachments() ? await ports.stageAttachments(() => ports.ownsComposer(composer)) : [];
         const worldRuntime = await ports.captureWorld(ports.activations());
         if (!ports.ownsComposer(composer)) return { kind: 'prompt-preview-empty', reason: 'Selected chat changed', warnings: [] };
         await ports.flushSettings();
         if (!ports.ownsComposer(composer)) return { kind: 'prompt-preview-empty', reason: 'Selected chat changed', warnings: [] };
         const { connection, messages, budget, tools, toolChoice, maxTokens, reasoningEffort, previewPipeline } = await ports.preview({
-            ...target, action: 'send', text: text || undefined, locale: ports.locale(), round,
+            ...target, action, text: text || undefined, locale: ports.locale(), round,
             ...worldRuntime, ...(draftAttachments.length ? { draftAttachments } : {}),
         });
         return {
-            kind: 'prompt-preview', type: 'normal', model: connection.model, stream: true,
+            kind: 'prompt-preview', type: send ? 'normal' : action, model: connection.model, stream: true,
             request: { model: connection.model, messages, max_tokens: maxTokens ?? budget.responseTokens, stream: true,
                 ...(tools?.length ? { tools, tool_choice: toolChoice } : {}), ...(reasoningEffort ? { reasoning_effort: reasoningEffort } : {}) },
             entries: [], dropped: [], summarized: [], pipeline: previewPipeline ?? null, warnings: [],
@@ -236,7 +237,7 @@ export function createWorkspaceGeneration({ request, subscribe, changed, finishe
     };
 
     const current = () => selection?.run?.status === 'running' ? selection : null;
-    const pending = () => selection && selection.kind !== 'continue' && (selection.preparing || selection.creating) && !selection.run;
+    const pending = () => selection && (selection.preparing || selection.creating) && !selection.run;
 
     function startWaiting(view      ) {
         if (view.kind !== 'send' || view.waitTimer !== undefined || view.waiting) return;
@@ -254,7 +255,7 @@ export function createWorkspaceGeneration({ request, subscribe, changed, finishe
         clearTimeout(view.waitTimer);
         view.waiting = false;
         const reconcile = finished(view.run, discovery);
-        if (!discovery && !view.run.temporary && reconcile && (view.kind === 'send' || (view.kind === 'regenerate' && view.run.status === 'completed'))) {
+        if (!discovery && !view.run.temporary && reconcile && (view.kind === 'send' || view.run.status === 'completed')) {
             view.reconciling = true;
             const release = () => { if (selection === view) detach(); };
             void reconcile.then(release, release);

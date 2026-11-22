@@ -14,20 +14,6 @@ export type MediaResolver = (attachment: { url: string; type: 'image' | 'audio' 
 type HistoryRow = { row: RecordView; role: Role; text: string; name?: string; sourceKey: string; summaryText?: string };
 type HistoryGroup = { messages: ServerPromptMessage[]; summaryText?: string };
 
-export function stripPipelineMarkup(content: string, invocations: RecordView[]) {
-    if (!invocations.length) return content;
-    for (const [index, invocation] of invocations.entries()) {
-        const name = string(record(invocation.pipeline).tool ?? invocation.name);
-        if (!/^[a-zA-Z][a-zA-Z0-9_-]*$/.test(name)) continue;
-        content = index === invocations.length - 1
-            ? content.replace(new RegExp(`&lt;/?${name}&gt;|</?${name}>`, 'g'), '')
-            : content.replace(new RegExp(`&lt;${name}&gt;[\\s\\S]*?&lt;/${name}&gt;|<${name}>[\\s\\S]*?</${name}>`, 'g'), '');
-    }
-    return content.replace(/<div data-respond-options[^>]*>[\s\S]*?<\/div><\/div>/g, '')
-        .replace(/^\s*<section data-pipeline-card\b[\s\S]*?<\/section>\s*/, '')
-        .replace(/\s*<section data-pipeline-card\b[\s\S]*$/, '');
-}
-
 function mediaTokens(dataUrl: string, type: 'image' | 'audio', detail: string) {
     if (type === 'audio') return 9600; // Browser fallback when duration is unavailable.
     if (detail === 'low') return 85;
@@ -92,7 +78,8 @@ export async function projectHistory(history: HistoryRow[], options: {
             return { messages: [...messages, ...entry.messages] };
         };
         if (calls.length && !settled && tools) {
-            const structured = calls.filter(call => string(call.id) && string(call.name));
+            const structured = calls.filter(call => string(call.id) && string(call.name)
+                && (!call.pipeline || activeRunId && record(call.pipeline).runId === activeRunId));
             if (structured.length) {
                 const messages = replay(structured.map(call => ({ id: string(call.id), type: 'function', function: { name: string(call.name), arguments: string(call.parameters) } })),
                     structured.map(call => string(call.result) || '[No content]'));

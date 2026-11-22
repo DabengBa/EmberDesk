@@ -19,6 +19,7 @@ Recover visible main-chat generation failures through a bounded retry chain befo
 
 - The feature applies to visible main-chat send, continue, regenerate/retry, and swipe requests that produce or update an assistant row.
 - Recovery is bounded: the original request may be followed by one primary-provider retry and, when a fallback model is configured, one fallback-model retry on the same connection.
+- Server generation uses this bound for a plain reply or for the current pipeline round only. A completed step or browser action is not run again, and deterministic upstream client errors (such as HTTP 400) are not retried.
 - Recoverable failures keep the user message and assistant row identity stable; partial assistant text from an intermediate failed attempt is cleared before the next attempt continues.
 - The in-row retry and fallback notices use the same entrance and spinner as [Chat Turn Regenerate](feature.chat_regenerate), but describe what is happening (正在重试 or 正在使用备用服务商). Automatic recovery does not hide previous replies.
 - If automatic recovery succeeds, the user sees only the final assistant text in the existing row.
