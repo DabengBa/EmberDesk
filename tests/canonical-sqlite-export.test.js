@@ -12,7 +12,7 @@ import {
     auditCanonicalShadowImport,
     runCanonicalShadowImport,
 } from '../src/canonical-sqlite-shadow-import.ts';
-import { decideCanonicalBackendInitAction } from '../src/canonical-backend.js';
+import { decideCanonicalBackendInitAction } from '../src/canonical-backend.ts';
 import { runCanonicalChatShadowImport } from '../src/canonical-chat-shadow-import.ts';
 import {
     classifyImportCandidate,
@@ -20,9 +20,9 @@ import {
     hashImportLedgerContents,
     listImportLedgerEntries,
     recordImportLedgerEntry,
-} from '../src/canonical-import-ledger.js';
+} from '../src/canonical-import-ledger.ts';
 import { exportCanonicalStorageToFiles } from '../src/canonical-sqlite-export.ts';
-import { buildCharacterFileSnapshotRow } from '../src/endpoints/character-file-snapshot.js';
+import { buildCharacterFileSnapshotRow } from '../src/endpoints/character-file-snapshot.ts';
 import { writeCanonicalSecret } from '../src/endpoints/canonical-secrets-store.ts';
 import { upsertCanonicalSettingsDocument } from '../src/endpoints/settings-store.ts';
 import { listCanonicalWorldInfoBookRows, upsertCanonicalWorldInfoBook } from '../src/endpoints/world-info-store.ts';

@@ -14,7 +14,7 @@ import storage from 'node-persist';
 import { applyCanonicalPragmas } from '../src/canonical-sqlite.ts';
 import { runCanonicalMigrations } from '../src/canonical-sqlite-migrations.ts';
 import { write as writeCharacterCardPngData } from '../src/character-card-parser.ts';
-import { DEFAULT_USER, USER_DIRECTORY_TEMPLATE } from '../src/constants.js';
+import { DEFAULT_USER, USER_DIRECTORY_TEMPLATE } from '../src/constants.ts';
 import { ensureCanonicalPreset } from '../src/endpoints/presets-store.ts';
 import { upsertCanonicalSettingsDocument } from '../src/endpoints/settings-store.ts';
 

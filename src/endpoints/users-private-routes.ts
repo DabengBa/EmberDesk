@@ -4,11 +4,14 @@ import crypto from 'node:crypto';
 import storage from 'node-persist';
 import express from 'express';
 
-import { getUserAvatar, toKey, getPasswordHash, getPasswordSalt, createBackupArchive, ensurePublicDirectoriesExist, toAvatarKey, getAccountVersion } from '../users.js';
-import { checkForNewContent } from './content-manager.js';
+import { getUserAvatar, ensurePublicDirectoriesExist } from '../user-directories.ts';
+import { toKey, toAvatarKey, getAccountVersion } from '../user-storage.ts';
+import { getPasswordHash, getPasswordSalt } from '../user-auth.ts';
+import { createBackupArchive } from '../user-backup.ts';
+import { checkForNewContent } from './content-manager.ts';
 import { closeCanonicalDatabase } from '../canonical-sqlite.ts';
 import { ensureCanonicalSettingsForUser, resetCanonicalSettings } from './settings-routes.ts';
-import { color, Cache, getConfigValue } from '../util.js';
+import { color, Cache, getConfigValue } from '../util.ts';
 
 // Cache.set stores arbitrary values; its legacy JSDoc incorrectly restricts them to objects.
 const RESET_CACHE = new Cache(5 * 60 * 1000) as Cache & { set(key: string, value: string): void };
@@ -74,7 +77,7 @@ router.post('/change-avatar', async (request, response) => {
             return response.status(400).json({ error: 'Invalid data URL' });
         }
 
-        /** @type {import('../users.js').User} */
+        /** @type {import('../user-storage.ts').User} */
         const user = await storage.getItem(toKey(request.body.handle));
 
         if (!user) {
@@ -103,7 +106,7 @@ router.post('/change-password', async (request, response) => {
             return response.status(403).json({ error: 'Unauthorized' });
         }
 
-        /** @type {import('../users.js').User} */
+        /** @type {import('../user-storage.ts').User} */
         const user = await storage.getItem(toKey(request.body.handle));
 
         if (!user) {
@@ -209,7 +212,7 @@ router.post('/change-name', async (request, response) => {
             return response.status(403).json({ error: 'Unauthorized' });
         }
 
-        /** @type {import('../users.js').User} */
+        /** @type {import('../user-storage.ts').User} */
         const user = await storage.getItem(toKey(request.body.handle));
 
         if (!user) {

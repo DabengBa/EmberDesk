@@ -1,5 +1,5 @@
 import express from 'express';
-import { SecretManager } from './secrets.js';
+import { SecretManager } from './secrets.ts';
 
 // Pass the existing key list to avoid introducing a second exposure policy.
 export function createSecretsRouter(EXPORTABLE_KEYS: string[]) {

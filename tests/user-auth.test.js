@@ -2,7 +2,7 @@ import { describe, test, expect, beforeAll, afterAll } from '@jest/globals';
 import path from 'node:path';
 import os from 'node:os';
 import fs from 'node:fs';
-import { setConfigFilePath } from '../src/util.js';
+import { setConfigFilePath } from '../src/util.ts';
 
 // Set up config path before any module that calls getConfigValue at the top level
 const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'emberdesk-auth-test-'));

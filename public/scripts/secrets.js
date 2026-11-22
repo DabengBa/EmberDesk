@@ -97,7 +97,7 @@ export async function canViewSecrets() {
 
 
 /**
- * @type {import('../../src/endpoints/secrets.js').SecretStateMap}
+ * @type {import('../../src/endpoints/secrets.ts').SecretStateMap}
  */
 export let secret_state = {};
 

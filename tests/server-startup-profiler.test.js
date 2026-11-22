@@ -4,7 +4,7 @@ import path from 'node:path';
 
 import { describe, expect, test } from '@jest/globals';
 
-import { createServerStartupProfiler } from '../src/server-startup-profiler.js';
+import { createServerStartupProfiler } from '../src/server-startup-profiler.ts';
 
 describe('createServerStartupProfiler', () => {
     test('should record both the error message and stack trace for failed stages', async () => {

@@ -4,12 +4,12 @@ import path from 'node:path';
 
 import { afterEach, expect, test } from '@jest/globals';
 
-import { ensureCanonicalSliceBackend, resetCanonicalBackendsForTests } from '../src/canonical-backend.js';
+import { ensureCanonicalSliceBackend, resetCanonicalBackendsForTests } from '../src/canonical-backend.ts';
 import { canonicalSqliteManager } from '../src/canonical-sqlite.ts';
 import { getCanonicalSettingsDocument, upsertCanonicalSettingsDocument } from '../src/endpoints/settings-store.ts';
 import { invalidateCanonicalAuditStatus } from '../src/canonical-sqlite-shadow-import.ts';
 import { SETTINGS_AUDIT_SCOPE } from '../src/canonical-settings-shadow-import.ts';
-import { setConfigFilePath } from '../src/util.js';
+import { setConfigFilePath } from '../src/util.ts';
 
 const roots = [];
 afterEach(() => {

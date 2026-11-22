@@ -26,9 +26,9 @@ import {
     upsertCanonicalWorldInfoBook,
 } from '../src/endpoints/world-info-store.ts';
 import encodePngChunks from '../src/png/encode.ts';
-import { setConfigFilePath } from '../src/util.js';
+import { setConfigFilePath } from '../src/util.ts';
 import { getCanonicalSettingsDocument, upsertCanonicalSettingsDocument } from '../src/endpoints/settings-store.ts';
-import { buildCharacterFileSnapshotRow } from '../src/endpoints/character-file-snapshot.js';
+import { buildCharacterFileSnapshotRow } from '../src/endpoints/character-file-snapshot.ts';
 // These state helpers are exercised in Node; loading the browser i18n shell
 // would initialize window-dependent UI dependencies before the tests run.
 jest.unstable_mockModule('../public/scripts/i18n.js', () => ({ translate: text => text }));
@@ -776,8 +776,8 @@ beforeAll(async () => {
     sharedDataRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'emberdesk-character-route-cache-'));
     sharedGlobal.DATA_ROOT = sharedDataRoot;
     setConfigFilePath(fileURLToPath(new URL('../default/config.yaml', import.meta.url)));
-    ({ diskCache, router: charactersRouter } = await import('../src/endpoints/characters.js'));
-    ({ router: chatsRouter } = await import('../src/endpoints/chats.js'));
+    ({ diskCache, router: charactersRouter } = await import('../src/endpoints/characters.ts'));
+    ({ router: chatsRouter } = await import('../src/endpoints/chats.ts'));
 });
 
 afterEach(() => {

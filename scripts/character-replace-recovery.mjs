@@ -10,9 +10,9 @@ import sanitize from 'sanitize-filename';
 
 import { resolveCanonicalDatabasePath } from '../src/canonical-sqlite.ts';
 import { CANONICAL_SQLITE_MIGRATIONS } from '../src/canonical-sqlite-migrations.ts';
-import { getReplaceIntent, interruptWorkspaceWriteSessionOffline } from '../src/character-replace-write-coordinator.js';
+import { getReplaceIntent, interruptWorkspaceWriteSessionOffline } from '../src/character-replace-write-coordinator.ts';
 import { getUserDirectories } from '../src/user-directories.ts';
-import { isPathUnderParent } from '../src/util.js';
+import { isPathUnderParent } from '../src/util.ts';
 
 const usage = [
     'Usage: node scripts/character-replace-recovery.mjs preview --data-root <path> --handle <user>',

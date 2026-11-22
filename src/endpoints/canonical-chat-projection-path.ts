@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-import { isPathUnderParent } from '../util.js';
+import { isPathUnderParent } from '../util.ts';
 
 export type CanonicalChatProjectionPathInput = {
     directories: { root?: string; chats?: string } | null | undefined;

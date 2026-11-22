@@ -22,7 +22,7 @@ import {
     readRecentChatPayload,
     searchChatPayload,
 } from '../src/endpoints/chat-route-service.ts';
-import { setConfigFilePath } from '../src/util.js';
+import { setConfigFilePath } from '../src/util.ts';
 
 const configRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'emberdesk-group-historical-config-'));
 const configPath = path.join(configRoot, 'config.yaml');
@@ -50,7 +50,7 @@ fs.writeFileSync(configPath, [
 ].join('\n'), 'utf8');
 setConfigFilePath(configPath);
 
-const { getChatInfo } = await import('../src/endpoints/chats.js');
+const { getChatInfo } = await import('../src/endpoints/chats.ts');
 
 const tempRoots = [];
 const managers = [];

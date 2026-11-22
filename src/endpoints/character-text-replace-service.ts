@@ -14,10 +14,10 @@ import { getCanonicalWorldInfoWriteState } from './worldinfo-routes.ts';
 import {
     openCanonicalChatForTextReplace,
     writeCanonicalChatForTextReplace,
-} from './chats.js';
+} from './chats.ts';
 import { readCanonicalChatVersionedPayload } from './canonical-chat-read-service.ts';
 import type { Request } from 'express';
-import type { UserDirectoryList } from '../users.js';
+import type { UserDirectoryList } from '../user-types.ts';
 import type { CharacterWriteDependencies } from './character-write-service.ts';
 import type { DatabaseSync } from 'node:sqlite';
 import type { CanonicalChatLocator } from './canonical-chat-read-service.ts';
@@ -554,7 +554,7 @@ function errorResult(status: number, reason: string, extras: JsonObject = {}) {
 
 /**
  * @typedef {object} CharacterTextReplaceDependencies
- * @property {(handle: string | null, directories: import('../users.js').UserDirectoryList, avatar: string) => Promise<string | null>} [getCanonicalCharacterCardJson]
+ * @property {(handle: string | null, directories: import('../user-types.ts').UserDirectoryList, avatar: string) => Promise<string | null>} [getCanonicalCharacterCardJson]
  * @property {() => import('./character-write-service.ts').CharacterWriteDependencies} [getCharacterWriteDependencies]
  * @property {typeof editCharacterCard} [editCharacterCard]
  * @property {typeof getCanonicalWorldInfoWriteState} [getWorldInfoWriteState]

@@ -4,7 +4,7 @@ import path from 'node:path';
 import process from 'node:process';
 import type { DatabaseSync as SqliteDatabase } from 'node:sqlite';
 
-import { isPathUnderParent } from './util.js';
+import { isPathUnderParent } from './util.ts';
 
 const require = createRequire(import.meta.url);
 
@@ -13,7 +13,7 @@ export const DEFAULT_CANONICAL_SQLITE_FILENAME = 'emberdesk.sqlite';
 type StorageDirectories = { root: string; storage?: string };
 type FeatureFlags = { enabled?: boolean; strict?: boolean };
 type OpenOptions = {
-    handle?: string;
+    handle?: string | null;
     directories: StorageDirectories | undefined;
     filename?: string;
     featureFlags?: FeatureFlags;

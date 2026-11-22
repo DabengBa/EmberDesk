@@ -12,7 +12,7 @@ EmberDesk is a self-hosted browser LLM workspace forked from SillyTavern. The pr
 |---|---|
 | Runtime | Node.js 26.13.1 LTS (`>=26.13.1 <27`) |
 | Package manager / scripts | pnpm 12.21.0 (`packageManager`) |
-| Language | JavaScript ES modules with incremental native TypeScript (server `src/`) + TypeScript (frontend `app/`) |
+| Language | Native TypeScript (server `src/`) and JavaScript ES modules at entry/browser boundaries + TypeScript (frontend `app/`) |
 | Server | Express 5 |
 | Frontend | One Vite-built React 19 app with TanStack Router/Query/Form, Zustand and Zod; `public/` retains first-party controllers, styles and compatibility assets |
 | Build | Vite 8 for `/lib.js` and one React SPA |
@@ -71,7 +71,7 @@ For focused E2E runs, pass arguments directly: `pnpm --dir tests run test:e2e wo
 - `src/server-main.ts` owns boot orchestration: data initialization, middleware/public routes, private routes, cleanup hooks, request filter/proxy, Vite frontend library serve, error/404 handlers, listen, and post-listen tasks.
 - `src/server-startup.ts` owns HTTP/HTTPS server creation, IPv4/IPv6 behavior, SSL validation, and listen failures.
 - `src/command-line.ts` owns config resolution. Keep argv parsing, filesystem prep, and config merge separable and testable.
-- `src/users.js` is a compatibility barrel plus middleware/routes. Storage, directories, migrations, and auth live in `src/user-storage.ts`, `src/user-directories.ts`, `src/user-migrations.ts`, and `src/user-auth.ts`.
+- User storage, directories, migrations and auth live in `src/user-storage.ts`, `src/user-directories.ts`, `src/user-migrations.ts`, and `src/user-auth.ts`. Security, session middleware, auth pages, file routing and backup have separate `src/user-*.ts` owners; there is no `src/users.js` barrel.
 - Canonical user data lives in per-user `storage/emberdesk.sqlite` under `dataRoot`; PNG/JSON/JSONL compatibility files are projections and import/export surfaces, not runtime authority. `DiskCache` and `_cache/character-index.sqlite` are derived caches only.
 - `public/script.js` is the legacy browser shell and compatibility surface for not-yet-migrated surfaces. Treat `eventSource`, `event_types`, `globalThis.SillyTavern`, and startup ordering as shared contracts there. Migrated surfaces are owned by the TypeScript React app under `app/`.
 - `public/lib.js` is both source-import and bundled `/lib.js` compatibility boundary. Normalize package interop inside that file.

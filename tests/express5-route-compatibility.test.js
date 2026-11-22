@@ -8,18 +8,18 @@ import fs from 'node:fs';
 import http from 'node:http';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { setConfigFilePath } from '../src/util.js';
+import { setConfigFilePath } from '../src/util.ts';
 import corsProxyMiddleware from '../src/middleware/corsProxy.ts';
-import errorHandlerMiddleware from '../src/middleware/errorHandler.js';
+import errorHandlerMiddleware from '../src/middleware/errorHandler.ts';
 import {
     CORS_PROXY_ROUTE,
     OAUTH_CALLBACK_ROUTE,
     disabledCorsProxyMiddleware,
     oauthCallbackMiddleware,
-} from '../src/express-route-compat.js';
-import getViteLibServeMiddleware from '../src/middleware/vite-lib-serve.js';
-import userCssMiddleware from '../src/middleware/userCss.js';
-import multerMonkeyPatch from '../src/middleware/multerMonkeyPatch.js';
+} from '../src/express-route-compat.ts';
+import getViteLibServeMiddleware from '../src/middleware/vite-lib-serve.ts';
+import userCssMiddleware from '../src/middleware/userCss.ts';
+import multerMonkeyPatch from '../src/middleware/multerMonkeyPatch.ts';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -30,8 +30,9 @@ const configPath = path.join(configTmpDir, 'config.yaml');
 fs.writeFileSync(configPath, 'whitelistMode: false\n', 'utf8');
 setConfigFilePath(configPath);
 
-const { router: userDataRouter, requireLoginMiddleware } = await import('../src/users.js');
-const { router: imagesRouter } = await import('../src/endpoints/images.js');
+const { router: userDataRouter } = await import('../src/user-files.ts');
+const { requireLoginMiddleware } = await import('../src/user-session.ts');
+const { router: imagesRouter } = await import('../src/endpoints/images.ts');
 const { redirectDeprecatedEndpoints, setupPrivateEndpoints, setupPublicEndpoints } = await import('../src/server-startup.ts');
 
 function listen(app) {
@@ -470,14 +471,14 @@ describe('Express 5 route compatibility', () => {
             'import os from "node:os";',
             'import path from "node:path";',
             'import http from "node:http";',
-            'import { setConfigFilePath } from "./src/util.js";',
+            'import { setConfigFilePath } from "./src/util.ts";',
             'const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "emberdesk-express5-plugin-child-"));',
             'fs.writeFileSync(path.join(tmp, "config.yaml"), "enableServerPlugins: true\\n", "utf8");',
             'setConfigFilePath(path.join(tmp, "config.yaml"));',
             'const pluginsRoot = path.join(tmp, "plugins");',
             'fs.mkdirSync(pluginsRoot, { recursive: true });',
             'fs.writeFileSync(path.join(pluginsRoot, "mounted-plugin.mjs"), "export const info = { id: \\"mounted_plugin\\", name: \\"Mounted Plugin\\", description: \\"test\\" };\\nexport async function init(router) { router.get(\\"/status\\", (_req, res) => res.json({ ok: true })); }", "utf8");',
-            'const { loadPlugins } = await import("./src/plugin-loader.js");',
+            'const { loadPlugins } = await import("./src/plugin-loader.ts");',
             'const app = express();',
             'const cleanup = await loadPlugins(app, pluginsRoot);',
             'const server = http.createServer(app);',
@@ -543,7 +544,7 @@ describe('Express 5 route compatibility', () => {
 
     test('server startup owns no Webpack fallback or compiler path', () => {
         const serverMain = fs.readFileSync(path.join(repoRoot, 'src', 'server-main.ts'), 'utf8');
-        const viteMiddleware = fs.readFileSync(path.join(repoRoot, 'src', 'middleware', 'vite-lib-serve.js'), 'utf8');
+        const viteMiddleware = fs.readFileSync(path.join(repoRoot, 'src', 'middleware', 'vite-lib-serve.ts'), 'utf8');
 
         expect(serverMain).not.toContain('getWebpackServeMiddleware');
         expect(serverMain).not.toContain('runWebpackCompiler');

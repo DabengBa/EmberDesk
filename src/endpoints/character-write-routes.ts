@@ -1,6 +1,6 @@
 import type { RequestHandler } from 'express';
 import sanitize from 'sanitize-filename';
-import { tryParse } from '../util.js';
+import { tryParse } from '../util.ts';
 import { createCharacterCard, deleteCharacterCard, editCharacterCard, renameCharacterCard } from './character-write-service.ts';
 import type { DeleteCharacterOptions, CharacterWriteDependencies } from './character-write-service.ts';
 

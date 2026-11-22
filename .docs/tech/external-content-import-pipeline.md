@@ -23,7 +23,7 @@ It does not change import UI feedback, canonical file writes, asset category rul
 
 ## Architecture And Constraints
 
-`src/endpoints/external-content-import-service.ts` is the shared service. `src/endpoints/content-manager.js` retains the downloader table and exports the router created by `src/endpoints/content-import-routes.ts`; `src/endpoints/assets.js` owns the asset routes. These boundaries delegate source classification, allowlist checks, and external fetch behavior to the shared service while retaining route validation, headers, temp-file handling, stream copying, and legacy response shapes.
+`src/endpoints/external-content-import-service.ts` is the shared service. `src/endpoints/content-manager.ts` retains the downloader table and exports the router created by `src/endpoints/content-import-routes.ts`; `src/endpoints/assets.ts` owns the asset routes. These boundaries delegate source classification, allowlist checks, and external fetch behavior to the shared service while retaining route validation, headers, temp-file handling, stream copying, and legacy response shapes.
 
 Important constraints:
 
@@ -56,7 +56,7 @@ Focused proof:
 ```bash
 pnpm --dir tests run test:unit -- external-content-import-service.test.js private-request-filter.test.js express5-route-compatibility.test.js --runInBand
 pnpm --dir tests run test:integration -- external-content-import-native.test.js --runInBand
-rg -n "\bfetch\(" src/endpoints/content-manager.js src/endpoints/assets.js src/endpoints/external-content-import-service.ts
+rg -n "\bfetch\(" src/endpoints/content-manager.ts src/endpoints/assets.ts src/endpoints/external-content-import-service.ts
 ```
 
 The `rg` command should return no matches. Provider secondary-download proof lives in `tests/external-content-import-service.test.js`.
@@ -77,7 +77,7 @@ Stable binding points:
 - `whitelistImportDomains`
 - `src/private-request-filter.ts`
 - `src/endpoints/external-content-import-service.ts`
-- `EXTERNAL_CONTENT_DOWNLOADERS` in `src/endpoints/content-manager.js`
+- `EXTERNAL_CONTENT_DOWNLOADERS` in `src/endpoints/content-manager.ts`
 
 Related docs:
 

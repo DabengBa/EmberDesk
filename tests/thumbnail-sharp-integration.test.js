@@ -9,13 +9,13 @@ import encode from '../src/png/encode.ts';
 import { write as writeCard } from '../src/character-card-parser.ts';
 import { makeAnimatedImages, makeBmp } from './helpers/animated-image-fixtures.js';
 
-jest.unstable_mockModule('../src/util.js', () => ({
+jest.unstable_mockModule('../src/util.ts', () => ({
     getConfigValue: (_key, fallback) => fallback,
     invalidateFirefoxCache: () => {},
 }));
 jest.unstable_mockModule('../src/express-common.ts', () => ({ isFirefox: () => false }));
 
-const { generateThumbnail } = await import('../src/endpoints/thumbnails.js');
+const { generateThumbnail } = await import('../src/endpoints/thumbnails.ts');
 const roots = [];
 
 function directories() {

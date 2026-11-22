@@ -16,10 +16,10 @@ Primary files:
 
 - `src/server-main.ts` — coordinator: phase sequencing, cleanup wiring, signal handlers
 - `src/server-startup.ts` — transport: IP detection, HTTP/HTTPS creation, listen failure handling
-- `src/server-startup-profiler.js` — instrumentation: stage timing, event marks, JSON profile output
+- `src/server-startup-profiler.ts` — instrumentation: stage timing, event marks, JSON profile output
 - `src/command-line.ts` — config resolution pipeline (see [config-resolution.md](config-resolution.md))
-- `src/users.js` — barrel re-export plus middleware, routes, backup (see [user-module-split.md](user-module-split.md))
-- `src/plugin-loader.js` — plugin discovery, validation, init, cleanup (see [plugin-loader-lifecycle.md](plugin-loader-lifecycle.md))
+- `src/user-*.ts` — user storage, authentication, session and related responsibilities (see [user-module-split.md](user-module-split.md))
+- `src/plugin-loader.ts` — plugin discovery, validation, init, cleanup (see [plugin-loader-lifecycle.md](plugin-loader-lifecycle.md))
 
 ## Architecture And Constraints
 

@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import {
     formatValidationGateSelection,
     selectValidationGates,
-} from '../src/validation-gate-selector.js';
+} from '../src/validation-gate-selector.ts';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -20,6 +20,17 @@ describe('validation gate selector', () => {
     test('selects user validation for the TypeScript migration module', () => {
         expect(selectValidationGates(['src/user-migrations.ts']).commands.map(command => command.id))
             .toEqual(['user-auth-storage']);
+    });
+
+    test.each([
+        ['src/express-route-compat.ts', ['express-route-order']],
+        ['src/storage-feature-flags.ts', ['canonical-storage-rollout']],
+        ['src/canonical-sqlite-rollout-contract.ts', ['canonical-storage-rollout']],
+        ['src/endpoints/characters.ts', ['express-route-order', 'canonical-storage-rollout']],
+        ...['security', 'session', 'pages', 'files', 'backup', 'types'].map(name =>
+            [`src/user-${name}.ts`, ['user-auth-storage']]),
+    ])('preserves validation suggestions for %s after migration', (input, expected) => {
+        expect(selectValidationGates([input]).commands.map(command => command.id)).toEqual(expected);
     });
 
     test.each(['js', 'ts'])('keeps user storage validation after a .%s migration', extension => {
@@ -75,7 +86,7 @@ describe('validation gate selector', () => {
     test('maps high-risk touched paths to focused validation gates with local rule sources', () => {
         const result = selectValidationGates([
             'public/scripts/slash-commands.js',
-            'src/endpoints/characters.js',
+            'src/endpoints/characters.ts',
             'src/canonical-sqlite-operator.ts',
             'src/command-line.ts',
             'src/user-auth.ts',
@@ -174,7 +185,7 @@ describe('validation gate selector', () => {
 
     test('selects the canonical rollout gate for repair tooling surfaces', () => {
         const commands = commandsFor([
-            'src/canonical-sqlite-rollout-contract.js',
+            'src/canonical-sqlite-rollout-contract.ts',
             'scripts/canonical-sqlite-repair.mjs',
         ]);
 

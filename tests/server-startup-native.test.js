@@ -10,6 +10,12 @@ const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const cliUrl = pathToFileURL(path.join(repo, 'src/command-line.ts')).href;
 const startupUrl = pathToFileURL(path.join(repo, 'src/server-startup.ts')).href;
 
+test.each(['plugins', 'recover'])('native Node reaches the %s CLI usage without a loader', name => {
+    const child = spawnSync(process.execPath, [`${name}.js`], { cwd: repo, encoding: 'utf8' });
+    expect(child.status).toBe(1);
+    expect(child.stdout + child.stderr).toContain(`Usage: node ${name}.js`);
+});
+
 test('native Node parses CLI overrides without a loader', () => {
     const script = `const { parseArgv } = await import(${JSON.stringify(cliUrl)});
         const args = parseArgv(['node', 'server.js', '--port', '8123', '--enableIPv4', 'auto']);

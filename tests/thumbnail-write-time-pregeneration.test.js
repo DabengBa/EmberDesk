@@ -4,21 +4,21 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { afterEach, describe, expect, jest, test } from '@jest/globals';
-import { CharXParser } from '../src/charx.js';
+import { CharXParser } from '../src/charx.ts';
 import sharp from 'sharp';
 import extract from '../src/png/extract.ts';
 import * as PNGtext from '../src/png/text.ts';
-import * as realImageProcessing from '../src/image-processing.js';
+import * as realImageProcessing from '../src/image-processing.ts';
 import * as realCharacterCard from '../src/character-card-parser.ts';
 import * as realManagedMediaWrites from '../src/endpoints/canonical-managed-media-write-service.ts';
-import { setConfigFilePath } from '../src/util.js';
+import { setConfigFilePath } from '../src/util.ts';
 import { makeAnimatedImages, makeBmp } from './helpers/animated-image-fixtures.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const repoRoot = path.resolve(__dirname, '..');
 setConfigFilePath(path.join(repoRoot, 'default/config.yaml'));
-const { generateThumbnail: realGenerateThumbnail } = await import('../src/endpoints/thumbnails.js');
+const { generateThumbnail: realGenerateThumbnail } = await import('../src/endpoints/thumbnails.ts');
 
 const tempRoots = [];
 
@@ -50,7 +50,7 @@ async function importCharacterRoutes({ generateThumbnailImpl, thumbnailsEnabled 
     const mockWrite = jest.fn(realImages ? realCharacterCard.write : () => Buffer.from('character-png'));
     const mockParse = jest.fn(parseImpl ?? (realImages ? realCharacterCard.parse : async () => '{"spec":"chara_card_v2","data":{"name":"Character"}}'));
 
-    jest.unstable_mockModule('../src/util.js', () => ({
+    jest.unstable_mockModule('../src/util.ts', () => ({
         deepMerge: (target, source) => ({ ...target, ...source }),
         getConfig: () => ({}),
         hasConfigFilePath: () => true,
@@ -84,7 +84,7 @@ async function importCharacterRoutes({ generateThumbnailImpl, thumbnailsEnabled 
         uuidv4: () => 'test-managed-media-id',
     }));
 
-    jest.unstable_mockModule('../src/image-processing.js', () => ({
+    jest.unstable_mockModule('../src/image-processing.ts', () => ({
         avatarToPng: realImages ? realImageProcessing.avatarToPng : async () => Buffer.from('cropped'),
     }));
 
@@ -95,14 +95,14 @@ async function importCharacterRoutes({ generateThumbnailImpl, thumbnailsEnabled 
         extractImageData: realImages ? realCharacterCard.extractImageData : image => image,
     }));
 
-    jest.unstable_mockModule('../src/constants.js', () => ({
+    jest.unstable_mockModule('../src/constants.ts', () => ({
         AVATAR_WIDTH: 400,
         AVATAR_HEIGHT: 600,
         DEFAULT_AVATAR_PATH: path.join(repoRoot, 'public/img/ai4.png'),
         MEDIA_REQUEST_TYPE: { IMAGE: 0b001, VIDEO: 0b010, AUDIO: 0b100 },
     }));
 
-    jest.unstable_mockModule('../src/middleware/validateFileName.js', () => ({
+    jest.unstable_mockModule('../src/middleware/validateFileName.ts', () => ({
         default: (_request, _response, next) => next(),
         getFileNameValidationFunction: () => (_request, _response, next) => next(),
         forbiddenRegExp: /[<>:"|?*]/,
@@ -126,32 +126,32 @@ async function importCharacterRoutes({ generateThumbnailImpl, thumbnailsEnabled 
         writeWorldInfoProjectionFile: () => {},
     }));
 
-    jest.unstable_mockModule('../src/endpoints/thumbnails.js', () => ({
+    jest.unstable_mockModule('../src/endpoints/thumbnails.ts', () => ({
         areThumbnailsEnabled: () => thumbnailsEnabled,
         invalidateThumbnail: mockInvalidateThumbnail,
         generateThumbnail: mockGenerateThumbnail,
     }));
 
-    jest.unstable_mockModule('../src/users.js', () => ({
+    jest.unstable_mockModule('../src/user-directories.ts', () => ({
         getUserDirectories: () => ({}),
     }));
 
-    jest.unstable_mockModule('../src/endpoints/chats.js', () => ({
+    jest.unstable_mockModule('../src/endpoints/chats.ts', () => ({
         getChatInfo: async () => ({}),
         openCanonicalChatForTextReplace: async () => ({ ok: false }),
         writeCanonicalChatForTextReplace: async () => ({ ok: false }),
     }));
 
-    jest.unstable_mockModule('../src/byaf.js', () => ({
+    jest.unstable_mockModule('../src/byaf.ts', () => ({
         ByafParser: class {},
     }));
 
-    jest.unstable_mockModule('../src/charx.js', () => ({
+    jest.unstable_mockModule('../src/charx.ts', () => ({
         CharXParser: class {},
         persistCharXAssets: () => ({}),
     }));
 
-    jest.unstable_mockModule('../src/middleware/cacheBuster.js', () => ({
+    jest.unstable_mockModule('../src/middleware/cacheBuster.ts', () => ({
         default: { bust: jest.fn() },
     }));
 
@@ -169,7 +169,7 @@ async function importCharacterRoutes({ generateThumbnailImpl, thumbnailsEnabled 
         sync: (targetPath, data) => fs.writeFileSync(targetPath, data),
     }));
 
-    const module = await import('../src/endpoints/characters.js');
+    const module = await import('../src/endpoints/characters.ts');
     return {
         router: module.router,
         mocks: {

@@ -5,7 +5,7 @@ import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { setConfigFilePath } from '../src/util.js';
+import { setConfigFilePath } from '../src/util.ts';
 import { rebaseChatCompletionSettings } from '../app/lib/settings-helpers.js';
 
 describe('provider settings revision rebase', () => {
@@ -98,9 +98,9 @@ function createRequestContext(isLoggedIn = true) {
 async function createSettingsRouteApp({ isLoggedIn = true, reactLoginDistRoot } = {}) {
     globalThis.COMMAND_LINE_ARGS = { basicAuthMode: false };
 
-    const usersModule = await import(`../src/users.js?settingsRoute=${Date.now()}-${Math.random()}`);
-    const middlewareModule = await import(`../src/middleware/react-login-serve.js?settingsRoute=${Date.now()}-${Math.random()}`);
-    const basePathModule = await import(`../src/react-login-feature.js?settingsRoute=${Date.now()}-${Math.random()}`);
+    const usersModule = await import(`../src/user-pages.ts?settingsRoute=${Date.now()}-${Math.random()}`);
+    const middlewareModule = await import(`../src/middleware/react-login-serve.ts?settingsRoute=${Date.now()}-${Math.random()}`);
+    const basePathModule = await import(`../src/react-login-feature.ts?settingsRoute=${Date.now()}-${Math.random()}`);
 
     const app = express();
     app.use((request, _response, next) => {

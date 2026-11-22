@@ -16,7 +16,7 @@ jest.unstable_mockModule('node:dns', () => ({
     default: { promises: { lookup: mockLookup } },
 }));
 
-jest.unstable_mockModule('../src/util.js', () => ({
+jest.unstable_mockModule('../src/util.ts', () => ({
     color: {
         red: text => text,
         green: text => text,

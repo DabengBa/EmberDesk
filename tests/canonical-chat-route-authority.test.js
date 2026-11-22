@@ -5,7 +5,7 @@ import path from 'node:path';
 import { afterEach, describe, expect, jest, test } from '@jest/globals';
 import { createChatImportOperation } from '../public/scripts/chat-import-protocol.js';
 
-import { setConfigFilePath } from '../src/util.js';
+import { setConfigFilePath } from '../src/util.ts';
 import { canonicalSqliteManager } from '../src/canonical-sqlite.ts';
 import { runCanonicalMigrations } from '../src/canonical-sqlite-migrations.ts';
 import {
@@ -41,7 +41,7 @@ fs.writeFileSync(configPath, [
 ].join('\n'), 'utf8');
 setConfigFilePath(configPath);
 
-const { getChatData, router, writeCanonicalChatForTextReplace } = await import('../src/endpoints/chats.js');
+const { getChatData, router, writeCanonicalChatForTextReplace } = await import('../src/endpoints/chats.ts');
 
 function makeResponse() {
     return {

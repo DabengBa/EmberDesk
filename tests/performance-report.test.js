@@ -1,6 +1,6 @@
 import { describe, expect, test } from '@jest/globals';
 
-import { summarizeStartupPerformance } from '../src/performance-report.js';
+import { summarizeStartupPerformance } from '../src/performance-report.ts';
 
 describe('summarizeStartupPerformance', () => {
     test('should summarize startup phases, heavy resources, and likely causes', () => {

@@ -6,7 +6,7 @@ import { afterEach, describe, expect, jest, test } from '@jest/globals';
 
 import { createCanonicalSqliteManager } from '../src/canonical-sqlite.ts';
 import { runCanonicalMigrations } from '../src/canonical-sqlite-migrations.ts';
-import { getCanonicalSliceProjectionMode } from '../src/storage-feature-flags.js';
+import { getCanonicalSliceProjectionMode } from '../src/storage-feature-flags.ts';
 import {
     buildCanonicalBackupManifest,
     createCanonicalStorageSliceRegistry,
@@ -21,7 +21,7 @@ import {
     buildCanonicalSliceRollbackBlockers,
     getCanonicalFlagContractStatus,
     getCanonicalSliceFlagContractStatus,
-} from '../src/canonical-sqlite-rollout-contract.js';
+} from '../src/canonical-sqlite-rollout-contract.ts';
 import { recordProjectionRepair } from '../src/endpoints/character-store.ts';
 import { recordCanonicalChatProjectionRepair } from '../src/endpoints/canonical-chat-store.ts';
 import { recordCanonicalManagedMediaRepair } from '../src/endpoints/canonical-managed-media-store.ts';

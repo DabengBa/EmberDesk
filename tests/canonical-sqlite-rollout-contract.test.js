@@ -10,7 +10,7 @@ import {
     buildCanonicalRollbackBlockers,
     getCanonicalFlagContractStatus,
     listOpenProjectionRepairs,
-} from '../src/canonical-sqlite-rollout-contract.js';
+} from '../src/canonical-sqlite-rollout-contract.ts';
 import { recordProjectionRepair, resolveProjectionRepair } from '../src/endpoints/character-store.ts';
 
 const tempRoots = [];

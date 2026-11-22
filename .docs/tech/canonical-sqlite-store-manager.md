@@ -13,10 +13,10 @@ topic: canonical-sqlite-store-manager
 Primary files:
 
 - `src/canonical-sqlite.ts`
-- `src/storage-feature-flags.js`
-- `src/constants.js`
+- `src/storage-feature-flags.ts`
+- `src/constants.ts`
 - `src/user-directories.ts`
-- `src/users.js`
+- `src/user-directories.ts`
 - `default/config.yaml`
 - `tests/canonical-sqlite.test.js`
 - `tests/user-directories.test.js`
@@ -72,7 +72,7 @@ Only the manager slice currently uses the master gate and strict gate directly. 
 
 ### Path ownership
 
-`src/constants.js` adds `USER_DIRECTORY_TEMPLATE.storage = 'storage'`.
+`src/constants.ts` adds `USER_DIRECTORY_TEMPLATE.storage = 'storage'`.
 
 `src/user-directories.ts` now returns `directories.storage` alongside the existing per-user directories. This keeps canonical storage rooted in the same `DATA_ROOT/<handle>/` ownership model as the rest of EmberDesk user data without mixing it into account metadata under `DATA_ROOT/_storage`.
 
@@ -134,7 +134,7 @@ Code binding points:
 
 - `getUserDirectories(handle)` remains the per-user root resolver
 - `src/canonical-sqlite.ts` owns canonical DB lifecycle
-- `src/storage-feature-flags.js` owns the storage rollout flag snapshot for this slice
+- `src/storage-feature-flags.ts` owns the storage rollout flag snapshot for this slice
 
 ## Validation
 
@@ -170,7 +170,7 @@ Per-user DB open/close remains owned by this manager. Slice rollout, audit/repai
 operator status, and backup/restore readiness are owned by:
 
 - `src/canonical-storage-slice-registry.ts`
-- `src/canonical-sqlite-rollout-contract.js`
+- `src/canonical-sqlite-rollout-contract.ts`
 - `src/canonical-sqlite-operator.ts`
 
 The control plane does not open databases itself; it consumes manager handles and migration

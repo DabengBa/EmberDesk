@@ -13,8 +13,8 @@ import {
 import {
     getCanonicalSqliteFeatureFlags,
     getCanonicalStorageSliceFeatureFlagSnapshot,
-} from '../src/storage-feature-flags.js';
-import { setConfigFilePath } from '../src/util.js';
+} from '../src/storage-feature-flags.ts';
+import { setConfigFilePath } from '../src/util.ts';
 
 const tempRoots = [];
 const managers = [];

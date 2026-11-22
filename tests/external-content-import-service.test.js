@@ -8,7 +8,7 @@ import { read as readCharacterCard } from '../src/character-card-parser.ts';
 
 import { describe, expect, jest, test } from '@jest/globals';
 
-import { setConfigFilePath } from '../src/util.js';
+import { setConfigFilePath } from '../src/util.ts';
 import {
     classifyExternalContentId,
     classifyExternalContentUrl,
@@ -22,7 +22,7 @@ import {
 
 async function getExternalContentDownloaders() {
     setConfigFilePath(fileURLToPath(new URL('../default/config.yaml', import.meta.url)));
-    return (await import('../src/endpoints/content-manager.js')).EXTERNAL_CONTENT_DOWNLOADERS;
+    return (await import('../src/endpoints/content-manager.ts')).EXTERNAL_CONTENT_DOWNLOADERS;
 }
 
 function toArrayBuffer(buffer) {

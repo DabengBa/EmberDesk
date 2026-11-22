@@ -14,7 +14,7 @@ jest.unstable_mockModule('node-persist', () => ({
     default: storageMock,
 }));
 
-jest.unstable_mockModule('../src/util.js', () => ({
+jest.unstable_mockModule('../src/util.ts', () => ({
     getConfigValue: getConfigValueMock,
 }));
 

@@ -5,18 +5,18 @@ import path from 'node:path';
 import express from 'express';
 import type { Request, Response } from 'express';
 import type { DatabaseSync } from 'node:sqlite';
-import type { UserDirectoryList } from '../users.js';
+import type { UserDirectoryList } from '../user-types.ts';
 import sanitize from 'sanitize-filename';
 import { sync as writeFileAtomicSync } from 'write-file-atomic';
 import { setImportedWorldInfoPositions } from '../../public/scripts/world-info-import-placement.js';
-import { invalidateDirectory } from './settings-cache.js';
+import { invalidateDirectory } from './settings-cache.ts';
 import { canonicalSqliteManager, withCanonicalTransaction } from '../canonical-sqlite.ts';
 import { runCanonicalMigrations } from '../canonical-sqlite-migrations.ts';
 import { getPersistedCanonicalAuditStatus } from '../canonical-sqlite-shadow-import.ts';
-import { recordImportLedgerEntry } from '../canonical-import-ledger.js';
+import { recordImportLedgerEntry } from '../canonical-import-ledger.ts';
 import { getCanonicalStorageSlice } from '../canonical-storage-slice-registry.ts';
-import { ensureCanonicalSliceBackend } from '../canonical-backend.js';
-import { coordinateWorkspaceWrite } from './coordinate-workspace-write.js';
+import { ensureCanonicalSliceBackend } from '../canonical-backend.ts';
+import { coordinateWorkspaceWrite } from './coordinate-workspace-write.ts';
 import { recordWorldProjectionIntent, replayWorldProjection } from '../canonical-world-info-projection.ts';
 import {
     getCanonicalWorldInfoBook,
@@ -161,7 +161,7 @@ function sendCanonicalWorldInfoUnavailable(response: Response, state: { reason?:
 
 /**
  * Reads a World Info file and returns its contents
- * @param {import('../users.js').UserDirectoryList} directories User directories
+ * @param {import('../user-types.ts').UserDirectoryList} directories User directories
  * @param {string} worldInfoName Name of the World Info file
  * @param {boolean} allowDummy If true, returns an empty object if the file doesn't exist
  * @returns {object} World Info file contents

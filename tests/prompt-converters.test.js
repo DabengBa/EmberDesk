@@ -1,15 +1,15 @@
 import { describe, test, expect, jest, beforeAll } from '@jest/globals';
 
-jest.unstable_mockModule('../src/util.js', () => ({
+jest.unstable_mockModule('../src/util.ts', () => ({
     getConfigValue: jest.fn((_key, defaultValue) => defaultValue),
     tryParse: (str) => { try { return JSON.parse(str); } catch { return undefined; } },
 }));
 
-/** @type {import('../src/prompt-converters.js')} */
+/** @type {import('../src/prompt-converters.ts')} */
 let mod;
 
 beforeAll(async () => {
-    mod = await import('../src/prompt-converters.js');
+    mod = await import('../src/prompt-converters.ts');
 });
 
 function makeNames(charName = '', userName = '') {

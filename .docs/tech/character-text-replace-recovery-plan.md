@@ -14,11 +14,11 @@ code:
     - public/scripts/feature-settings.js
     - public/scripts/world-info.js
     - public/scripts/world-info-workbench-service.js
-    - src/endpoints/characters.js
+    - src/endpoints/characters.ts
     - src/endpoints/character-replace-routes.ts
     - src/endpoints/character-text-replace-service.ts
     - src/endpoints/character-write-service.ts
-    - src/endpoints/canonical-chat-write-service.js
+    - src/endpoints/canonical-chat-write-service.ts
     - src/canonical-sqlite-migrations.ts
     - tests/character-text-replace.e2e.js
     - tests/character-text-replace-service.test.js
@@ -50,8 +50,8 @@ code:
 | `public/scripts/chat-ops-service.js`、`public/scripts/feature-settings.js` | 聊天与 metadata 有独立 debounce。`saveChatConditional()` 的等待、取消和布尔结果不足以证明一个失败请求在服务端已结束。`getChat({ strictReload: true })` 仍会在空响应时清空状态。 |
 | `public/scripts/world-info.js` | `saveWorldDebounced` 是独立定时器；`saveWorldInfo(..., false)` 安排保存后即返回，不能把其 Promise 完成当作写入完成。`_save()` 对 `WORLDINFO_UPDATED` 使用 fire-and-forget，写请求结束也不证明订阅者已结束。React 世界书工作台也调用这一保存路径。 |
 | `src/endpoints/character-text-replace-service.ts` | `runCharacterTextReplace()` 按世界书、角色卡、聊天顺序异步处理，各区域独立提交；世界书成功后可刷新卡的嵌入快照。卡和聊天写入结果以 `writeResult?.ok` 或 `writeResult?.authorityCommitted === true` 判定。 |
-| `src/endpoints/character-write-service.ts`、`src/endpoints/canonical-chat-write-service.js` | 兼容文件投影失败时，可能返回 `authorityCommitted: true`；这不是 canonical 写入失败。 |
-| `src/endpoints/characters.js`、`src/endpoints/character-replace-routes.ts` | 前者注册 `/text-replace/apply`，后者的处理器捕获异常后返回通用 500；不能据此推断此前各区域没有提交。 |
+| `src/endpoints/character-write-service.ts`、`src/endpoints/canonical-chat-write-service.ts` | 兼容文件投影失败时，可能返回 `authorityCommitted: true`；这不是 canonical 写入失败。 |
+| `src/endpoints/characters.ts`、`src/endpoints/character-replace-routes.ts` | 前者注册 `/text-replace/apply`，后者的处理器捕获异常后返回通用 500；不能据此推断此前各区域没有提交。 |
 | `src/canonical-sqlite.ts` | `withCanonicalTransaction(db, fn)` 只接受同步回调。不能把现有跨 `await` 的替换过程直接包进该事务并宣称所有区域原子。 |
 
 ## 3. 决策与不变量
@@ -140,7 +140,7 @@ code:
 每一步先增加能稳定复现的测试，确保失败原因是目标行为，再实现；不把“测试通过”当作对未覆盖并发的证明。实现应放在 PR #30 工作树，避免修改或暂存其他人的未跟踪文件。
 
 1. **写入盘点和结果语义**：核对全部客户端/服务端实际写入口和同步/异步边界，包括 fire-and-forget 事件订阅者及刷新时触发的副作用；对可能稍后写入目标的订阅者，纳入保护期跟踪直至结束，或使其旧任务失效，不能在解除保护后让旧事件发出保存。在 `src/endpoints/character-text-replace-service.ts` 及对应 service tests 区分 canonical 提交、投影失败、异常未知和快照不同步。为既有投影修复路径增加故障注入。
-2. **持久操作协议**：通过 `src/canonical-sqlite-migrations.ts` 及相邻存储服务实现会话、意图、原子认领/fence、终态与清理；在 `src/endpoints/characters.js`、`src/endpoints/chats.js`、`src/endpoints/worldinfo.js` 的相应入口接入，保持现有安全中间件顺序。按实际调用清单补齐其他入口。实现离线查询/中断工具和权限检查；不得将同步事务跨 `await`。
+2. **持久操作协议**：通过 `src/canonical-sqlite-migrations.ts` 及相邻存储服务实现会话、意图、原子认领/fence、终态与清理；在 `src/endpoints/characters.ts`、`src/endpoints/chats.ts`、`src/endpoints/worldinfo.js` 的相应入口接入，保持现有安全中间件顺序。按实际调用清单补齐其他入口。实现离线查询/中断工具和权限检查；不得将同步事务跨 `await`。
 3. **客户端协调**：在 `public/script.js`、`public/scripts/character-lifecycle-service.js`、`public/scripts/chat-ops-service.js`、`public/scripts/feature-settings.js`、`public/scripts/world-info.js` 与 `public/scripts/world-info-workbench-service.js` 接入写入跟踪、暂停、flush 和恢复；`app/workspace-panels.tsx` 只负责保护态 UI 与命令调用，不能以 React remount 代替数据协调。
 4. **严格读取和安装**：拆分聊天读取/校验与状态安装，覆盖角色和世界书的失效/重读；必要时调整 `public/scripts/workspace-panel-host-controller.js` 和 `public/scripts/workspace-panels-react-bridge.js` 的 remount 边界。保留已有聊天、metadata 和角色草稿，处理目标切换和安装失败。
 5. **验收和合并**：通过第 9 节的针对性测试、相关构建及 `pnpm run test:compat`；实际用户行为确定后同步 `.docs/db/features/character-text-replace.md` 并运行 `pnpm run docs:check`。核查 PR 的 merge 冲突、完整 diff、未跟踪文件和远端最新 head 后，再决定是否 squash 合并和清理其分支/worktree。

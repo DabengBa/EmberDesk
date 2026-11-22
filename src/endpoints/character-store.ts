@@ -335,7 +335,7 @@ export function recordProjectionRepair(db: DatabaseSync, {
     reason,
     details = {},
     nowMs = Date.now(),
-}: { repairKey: string; repairType: string; characterId?: SQLInputValue; avatarFilename?: string; reason: string; details?: object; nowMs?: number }): void {
+}: { repairKey: string | null; repairType: string; characterId?: SQLInputValue; avatarFilename?: string; reason: string; details?: object; nowMs?: number }): void {
     db.prepare(`
         INSERT INTO projection_repairs (
             repair_key,

@@ -1,5 +1,5 @@
 import process from 'node:process';
-import { setConfigFilePath } from './src/util.js';
+import { setConfigFilePath } from './src/util.ts';
 
 const userAccount = process.argv[2];
 const userPassword = process.argv[3];
@@ -14,7 +14,7 @@ if (!userAccount) {
 
 async function main() {
     setConfigFilePath(configPath);
-    const { recoverPassword } = await import('./src/recover-password.js');
+    const { recoverPassword } = await import('./src/recover-password.ts');
     await recoverPassword(configPath, userAccount, userPassword);
 }
 

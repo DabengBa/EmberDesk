@@ -3,7 +3,7 @@ import path from 'node:path';
 import sanitize from 'sanitize-filename';
 
 import type { Request, Response } from 'express';
-import type { UserDirectoryList } from '../users.js';
+import type { UserDirectoryList } from '../user-types.ts';
 
 type MaybePromise<T> = T | Promise<T>;
 type UploadFile = { destination: string; filename: string };
@@ -30,14 +30,16 @@ export type CharacterWriteDependencies = FileOperations & {
     sanitizeName: (name: string) => string;
     formatCharacterData: (body: CharacterBody, directories: UserDirectoryList) => FormattedCharacter;
     getPngName: (name: string, directories: UserDirectoryList) => string;
+    readCharacterData?: (inputFile: string, inputFormat?: string) => Promise<string | undefined>;
     readCanonicalCharacterData?: (avatarName: string, directories: UserDirectoryList) => MaybePromise<string | undefined>;
     characterExists?: (directories: UserDirectoryList, avatarName: string) => MaybePromise<boolean>;
-    getCharaCardV2: (data: object, directories: UserDirectoryList) => object;
+    getCharaCardV2: typeof import('./character-card-v2.ts').getCharaCardV2;
     setValue: (target: object, key: string, value: unknown) => unknown;
 
     joinPath?: (...parts: string[]) => string;
     parsePath?: (target: string) => Pick<import('node:path').ParsedPath, 'name'>;
     writeCharacterData: (input: string | Buffer, data: string, output: string, request: Request, crop?: CharacterCrop, options?: ProjectionOptions) => MaybePromise<unknown>;
+    invalidateCanonicalAudit?: (handle: string | null, directories: UserDirectoryList, source: string) => unknown;
     performCanonicalWrite?: (operation: CanonicalWriteOperation, payload: CanonicalWritePayload) => MaybePromise<CanonicalWriteResult | null | undefined>;
     recordProjectionRepair?: (repair: ProjectionRepair) => MaybePromise<unknown>;
     removeCompatibilityLedgerEntry?: (target: string, directories: UserDirectoryList, handle: string | null) => unknown;
@@ -230,7 +232,7 @@ async function createPreparedRenameData(body: RenameBody, directories: UserDirec
 
 /**
  * @param {object} options
- * @param {import('../users.js').UserDirectoryList} options.directories
+ * @param {import('../user-types.ts').UserDirectoryList} options.directories
  * @param {string} options.internalName
  * @param {string} options.characterData
  * @param {import('express').Request} options.request
@@ -321,7 +323,7 @@ export async function createCharacterCard({
 
 /**
  * @param {object} options
- * @param {import('../users.js').UserDirectoryList} options.directories
+ * @param {import('../user-types.ts').UserDirectoryList} options.directories
  * @param {string} options.avatarUrl
  * @param {string} options.targetFile
  * @param {string} options.characterData
@@ -453,7 +455,7 @@ export async function editCharacterCard({
 
 /**
  * @param {object} options
- * @param {import('../users.js').UserDirectoryList} options.directories
+ * @param {import('../user-types.ts').UserDirectoryList} options.directories
  * @param {string} options.oldAvatarName
  * @param {string} options.oldInternalName
  * @param {string} options.newAvatarName
@@ -551,7 +553,7 @@ export async function renameCharacterCard(options: RenameCharacterOptions): Prom
 
 /**
  * @param {object} options
- * @param {import('../users.js').UserDirectoryList} [options.directories]
+ * @param {import('../user-types.ts').UserDirectoryList} [options.directories]
  * @param {string} [options.avatarName]
  * @param {import('express').Request} options.request
  * @param {boolean} [options.deleteChats]

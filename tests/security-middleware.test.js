@@ -12,7 +12,7 @@ const settings = {
     'hostWhitelist.scan': false,
 };
 
-jest.unstable_mockModule('../src/util.js', () => ({
+jest.unstable_mockModule('../src/util.ts', () => ({
     color: { red: value => value, yellow: value => value, green: value => value },
     getConfigValue: (key, fallback) => settings[key] ?? fallback,
     safeReadFileSync: () => '',

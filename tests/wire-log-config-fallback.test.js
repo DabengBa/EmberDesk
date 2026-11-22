@@ -6,7 +6,7 @@ import os from 'node:os';
 import fs from 'node:fs';
 import path from 'node:path';
 
-import { setConfigFilePath } from '../src/util.js';
+import { setConfigFilePath } from '../src/util.ts';
 
 /**
  * The config route's fallback branch only runs when canonical storage is

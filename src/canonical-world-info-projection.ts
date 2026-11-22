@@ -5,7 +5,7 @@ import type { DatabaseSync } from 'node:sqlite';
 import sanitize from 'sanitize-filename';
 import { sync as writeFileAtomicSync } from 'write-file-atomic';
 import { withCanonicalTransaction } from './canonical-sqlite.ts';
-import { recordImportLedgerEntry, removeImportLedgerEntry } from './canonical-import-ledger.js';
+import { recordImportLedgerEntry, removeImportLedgerEntry } from './canonical-import-ledger.ts';
 import {
     normalizeCanonicalWorldInfoName,
     getCanonicalWorldInfoBook,

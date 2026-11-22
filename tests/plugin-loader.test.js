@@ -2,7 +2,7 @@ import { describe, test, expect, beforeAll, afterAll, afterEach } from '@jest/gl
 import path from 'node:path';
 import os from 'node:os';
 import fs from 'node:fs';
-import { setConfigFilePath } from '../src/util.js';
+import { setConfigFilePath } from '../src/util.ts';
 
 // Set up config before any module that calls getConfigValue
 const configTmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'emberdesk-plugloader-test-'));
@@ -10,7 +10,7 @@ const tmpConfig = path.join(configTmpDir, 'config.yaml');
 fs.writeFileSync(tmpConfig, 'enableServerPlugins: true\nport: 8000\n', 'utf8');
 setConfigFilePath(tmpConfig);
 
-const { loadPlugins, clearLoadedPlugins } = await import('../src/plugin-loader.js');
+const { loadPlugins, clearLoadedPlugins } = await import('../src/plugin-loader.ts');
 
 afterAll(() => {
     fs.rmSync(configTmpDir, { recursive: true, force: true });

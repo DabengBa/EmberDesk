@@ -75,10 +75,10 @@ describe('single-endpoint OpenAI-compatible chat completions backend', () => {
         fetchMock.mockReset();
         readSecretMock.mockReset();
 
-        const { setConfigFilePath } = await import('../src/util.js');
+        const { setConfigFilePath } = await import('../src/util.ts');
         setConfigFilePath(fileURLToPath(new URL('../default/config.yaml', import.meta.url)));
 
-        jest.unstable_mockModule('../src/endpoints/secrets.js', () => ({
+        jest.unstable_mockModule('../src/endpoints/secrets.ts', () => ({
             SECRET_KEYS: {
                 OPENAI: 'api_key_openai',
             },

@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { execFileSync } from 'node:child_process';
-import { createCharacterLibraryChangeObserver } from '../src/character-library-change-observer.js';
+import { createCharacterLibraryChangeObserver } from '../src/character-library-change-observer.ts';
 
 const cleanup = [];
 afterEach(() => { for (const close of cleanup.splice(0).reverse()) close(); });

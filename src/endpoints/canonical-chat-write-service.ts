@@ -6,7 +6,7 @@ import { withCanonicalTransaction } from '../canonical-sqlite.ts';
 import {
     recordImportLedgerEntry,
     removeImportLedgerEntry,
-} from '../canonical-import-ledger.js';
+} from '../canonical-import-ledger.ts';
 import {
     createCanonicalChatSessionRecord,
     createCanonicalChatSession,

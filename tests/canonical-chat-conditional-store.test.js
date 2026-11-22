@@ -135,7 +135,7 @@ test('text replacement does not overwrite a concurrent chat edit', async () => {
     const { a, b, record, directories } = fixture();
     store.createCanonicalChatSession(a, record(a, 'old text'));
     const { runCharacterTextReplace } = await import('../src/endpoints/character-text-replace-service.ts');
-    const { writeCanonicalChatForTextReplace } = await import('../src/endpoints/chats.js');
+    const { writeCanonicalChatForTextReplace } = await import('../src/endpoints/chats.ts');
     const request = {
         body: { avatar_url: 'alice.png', areas: { chats: 'current' }, chatFileName: 'one', query: 'old', replacement: 'new' },
         user: { profile: { handle: 'alice' }, directories },

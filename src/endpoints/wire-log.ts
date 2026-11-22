@@ -21,9 +21,9 @@ import { normalizeWireLogOptions } from '../wire-log-recorder.ts';
 import { canonicalSqliteManager } from '../canonical-sqlite.ts';
 import { getCanonicalStorageSlice } from '../canonical-storage-slice-registry.ts';
 import { runCanonicalMigrations } from '../canonical-sqlite-migrations.ts';
-import { ensureCanonicalSliceBackend } from '../canonical-backend.js';
+import { ensureCanonicalSliceBackend } from '../canonical-backend.ts';
 import { getPersistedCanonicalAuditStatus } from '../canonical-sqlite-shadow-import.ts';
-import { getDefaultTemplateFile } from './content-manager.js';
+import { getDefaultTemplateFile } from './content-manager.ts';
 import {
     ensureCanonicalSettingsDocument,
     getCanonicalSettingsDocument,

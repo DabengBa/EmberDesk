@@ -23,7 +23,7 @@ test.each([false, true])('native Node preserves config and account behavior (acc
             const user = await import(moduleUrl('user-storage.ts'));
             const config = await import(moduleUrl('config-init.ts'));
             const cli = await import(moduleUrl('command-line.ts'));
-            const { getConfig, getConfigValue } = await import(moduleUrl('util.js'));
+            const { getConfig, getConfigValue } = await import(moduleUrl('util.ts'));
             const configPath = path.join(root, 'config.yaml');
             cli.prepareConfigFilesystem(configPath, false);
             assert.equal(typeof config.initConfig, 'function');
@@ -56,17 +56,14 @@ test.each([false, true])('native Node preserves config and account behavior (acc
                 assert.equal(user.toAvatarKey('alice'), 'avatar:alice');
                 assert.equal(user.getAccountVersion({ handle: 'alice', password: 'hash123', salt: 'salt456' }), 'c3bee938b0ed248b');
                 assert.ok(!(await user.getAllUserHandles()).some(handle => handle.startsWith('avatar:')));
-                const barrel = await import(moduleUrl('users.js'));
                 const auth = await import(moduleUrl('user-auth.ts'));
                 const directories = await import(moduleUrl('user-directories.ts'));
                 const migrations = await import(moduleUrl('user-migrations.ts'));
-                const constants = await import(moduleUrl('constants.js'));
-                assert.equal(barrel.getAccountVersion, user.getAccountVersion);
-                assert.equal(barrel.getCsrfSecret, auth.getCsrfSecret);
-                assert.equal(barrel.migrateUserData, migrations.migrateUserData);
-                assert.equal(barrel.migratePublicOverrides, migrations.migratePublicOverrides);
+                const constants = await import(moduleUrl('constants.ts'));
+                assert.equal(typeof migrations.migrateUserData, 'function');
+                assert.equal(typeof migrations.migratePublicOverrides, 'function');
                 for (const name of ['getUserDirectories', 'getUserDirectoriesList', 'ensurePublicDirectoriesExist', 'cleanUploads', 'getUserAvatar']) {
-                    assert.equal(barrel[name], directories[name]);
+                    assert.equal(typeof directories[name], 'function');
                 }
                 assert.equal(typeof auth.getPasswordHash('password', 'salt'), 'string');
                 assert.equal(directories.getUserDirectories('alice').root, path.join(globalThis.DATA_ROOT, 'alice'));
@@ -113,7 +110,7 @@ test.each([false, true])('native Node preserves config and account behavior (acc
                     assert.equal(trusted.session.handle, 'alice');
                     assert.equal(trusted.session.version, user.getAccountVersion(alice));
                 }
-                await import(moduleUrl('server-init.js'));
+                await import(moduleUrl('server-init.ts'));
                 assert.equal(fs.existsSync(configPath), true);
                 console.log('native-user-config-ok:' + enabled);
             } finally {

@@ -1,5 +1,5 @@
 ---
-description: "This document covers the split of src/users.js (~1244 lines, ~40 exports) into four focused modules for identity, filesystem layout, migrations, and auth. src/users.js is retained as a re-export barrel plus middleware/routes."
+description: "User responsibilities are split into directly imported native TypeScript modules for storage, authentication, session, routes, files and backup."
 kind: technical
 topic: user-module-split
 ---
@@ -8,11 +8,12 @@ topic: user-module-split
 
 ## Module Responsibility
 
-This document covers the split of `src/users.js` (~1244 lines, ~40 exports) into four focused modules for identity, filesystem layout, migrations, and auth. `src/users.js` is retained as a re-export barrel plus middleware/routes.
+The original `src/users.js` was first split into four focused modules while retaining a barrel. The remaining middleware, routes, security and backup have since moved to native TypeScript modules; the barrel is removed and callers import their owners directly.
 
 Primary files:
 
-- `src/users.js` — re-export barrel, middleware, routes, backup, security verification
+- `src/user-security.ts`, `src/user-session.ts`, `src/user-pages.ts` — security checks, session middleware, auth page middleware
+- `src/user-files.ts`, `src/user-backup.ts`, `src/user-types.ts` — user file router, backup export, shared types
 - `src/user-storage.ts` — `node-persist` CRUD and user record queries
 - `src/user-directories.ts` — per-user filesystem layout and directory creation
 - `src/user-migrations.ts` — startup data migrations
@@ -20,10 +21,10 @@ Primary files:
 
 ## Architecture And Constraints
 
-The split follows a layered dependency graph with no back-edges:
+The user-facing owners import the existing shared modules directly:
 
 ```
-users.js (barrel + middleware + routes)
+user-security.ts / user-session.ts / user-pages.ts / user-files.ts / user-backup.ts
   ├── user-auth.ts
   │     └── user-storage.ts
   ├── user-directories.ts
@@ -35,8 +36,8 @@ users.js (barrel + middleware + routes)
 
 Constraints:
 
-- `src/users.js` re-exports the shared symbols from the four modules. Account route implementations import their shared helpers from `src/users.js`. `src/server-main.ts` imports `src/endpoints/users-public-routes.ts` directly; `src/server-startup.ts` imports `src/endpoints/users-private-routes.ts` and `src/endpoints/users-admin-routes.ts` directly.
-- Path traversal protection (`isPathUnderParent` + `path.resolve`) remains in `createRouteHandler` and `createExtensionsRouteHandler` in `users.js`.
+- Account route implementations import their shared helpers directly. `src/server-main.ts` imports `src/endpoints/users-public-routes.ts` directly; `src/server-startup.ts` imports `src/endpoints/users-private-routes.ts` and `src/endpoints/users-admin-routes.ts` directly.
+- Path traversal protection (`isPathUnderParent` + `path.resolve`) remains in the file handlers in `src/user-files.ts`.
 - `node-persist` storage is initialized once via `initUserStorage()` in `user-storage.ts`. SSO login functions in `user-auth.ts` access `storage.getItem()` directly.
 
 ### Lazy config reads

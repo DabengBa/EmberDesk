@@ -28,7 +28,7 @@ test('native Node executes the security modules and their real call chain', () =
             import path from 'node:path';
             import express from 'express';
             globalThis.DATA_ROOT = process.env.SECURITY_TEST_ROOT;
-            const { setConfigFilePath } = await import('./src/util.js');
+            const { setConfigFilePath } = await import('./src/util.ts');
             setConfigFilePath(path.join(globalThis.DATA_ROOT, 'config.yaml'));
             const { default: whitelist } = await import('./src/middleware/whitelist.ts');
             const { default: hostWhitelist } = await import('./src/middleware/hostWhitelist.ts');

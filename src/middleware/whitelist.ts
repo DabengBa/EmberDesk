@@ -8,7 +8,7 @@ import isDocker from 'is-docker';
 
 import { filterValidIpPatterns, getIpFromRequest, getRealOrForwardedIp } from '../express-common.ts';
 import type { RequestHandler } from 'express';
-import { color, getConfigValue, safeReadFileSync } from '../util.js';
+import { color, getConfigValue, safeReadFileSync } from '../util.ts';
 
 const whitelistPath = path.join(process.cwd(), './whitelist.txt');
 const enableForwardedWhitelist = !!getConfigValue('enableForwardedWhitelist', false, 'boolean');

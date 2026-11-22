@@ -1,0 +1,294 @@
+import path from 'node:path';
+
+import { canonicalSqliteManager } from './canonical-sqlite.ts';
+import { runCanonicalMigrations } from './canonical-sqlite-migrations.ts';
+import {
+    auditCanonicalShadowImport,
+    getPersistedCanonicalAuditStatus,
+    runCanonicalShadowImport,
+} from './canonical-sqlite-shadow-import.ts';
+import {
+    auditCanonicalWorldInfoShadowImport,
+    runCanonicalWorldInfoShadowImport,
+} from './canonical-world-info-shadow-import.ts';
+import {
+    auditCanonicalSettingsShadowImport,
+    runCanonicalSettingsShadowImport,
+} from './canonical-settings-shadow-import.ts';
+import {
+    auditCanonicalSecretsShadowImport,
+    runCanonicalSecretsShadowImport,
+} from './canonical-secrets-shadow-import.ts';
+import {
+    auditCanonicalManagedMediaShadowImport,
+    backfillCanonicalManagedMediaContents,
+    runCanonicalManagedMediaShadowImport,
+} from './canonical-managed-media-shadow-import.ts';
+import {
+    auditCanonicalChatShadowImport,
+    runCanonicalChatShadowImport,
+} from './canonical-chat-shadow-import.ts';
+import {
+    auditCanonicalPresetsShadowImport,
+    runCanonicalPresetsShadowImport,
+} from './canonical-presets-shadow-import.ts';
+import { getCanonicalStorageSlice } from './canonical-storage-slice-registry.ts';
+import { buildCharacterFileSnapshotRow } from './endpoints/character-file-snapshot.ts';
+import { parse as parseCharacterCard } from './character-card-parser.ts';
+import { getCharaCardV2 } from './endpoints/character-card-v2.ts';
+import { backfillCharacterAvatarBlobs } from './canonical-avatar-blob-service.ts';
+import type { DatabaseSync } from 'node:sqlite';
+import type { UserDirectoryList } from './user-types.ts';
+
+type Directories = UserDirectoryList & { handle?: string };
+type Slice = ReturnType<typeof getCanonicalStorageSlice>;
+type FeatureFlags = ReturnType<Slice['getFeatureFlags']>;
+type SnapshotBuilder = Parameters<typeof runCanonicalShadowImport>[0]['buildSnapshotRow'];
+type Options = { buildSnapshotRow?: SnapshotBuilder };
+type RunnerArgs = { handle: string; directories: Directories; db: DatabaseSync; featureFlags: FeatureFlags; manager: typeof canonicalSqliteManager; buildSnapshotRow?: SnapshotBuilder; projection?: string; bootstrap?: boolean; importResult?: unknown };
+type Runner = { runImport: (args: RunnerArgs) => unknown; runAudit: (args: Omit<RunnerArgs, 'featureFlags' | 'manager'>) => unknown; postInit?: (args: Pick<RunnerArgs, 'handle' | 'directories' | 'db' | 'featureFlags'>) => unknown };
+type InitResult = { ok: boolean; reason?: string; db?: DatabaseSync; handle?: string; featureFlags: FeatureFlags; migrationStatus?: ReturnType<typeof runCanonicalMigrations>; importResult?: unknown; auditResult?: unknown; postInitResult?: unknown };
+
+/**
+ * Default canonical character snapshot builder: real PNG card decoding and
+ * V2 normalization so stored card_json matches what the runtime serves.
+ * @param {string} avatar Avatar filename
+ * @param {import('./user-types.ts').UserDirectoryList} directories User directories
+ */
+function buildCharacterSnapshotRow(avatar: string, directories: import('./user-types.ts').UserDirectoryList) {
+    return buildCharacterFileSnapshotRow({
+        avatar,
+        directories,
+        readCharacterData: (filePath: string) => parseCharacterCard(filePath, 'png'),
+        getCharaCardV2,
+    } as unknown as Parameters<typeof buildCharacterFileSnapshotRow>[0]);
+}
+
+const SLICE_RUNNERS = {
+    characters: {
+        runImport: ({ handle, directories, featureFlags, manager, buildSnapshotRow }: RunnerArgs) => runCanonicalShadowImport({
+            handle,
+            directories,
+            featureFlags,
+            manager,
+            buildSnapshotRow: buildSnapshotRow ?? (buildCharacterSnapshotRow as unknown as SnapshotBuilder),
+        }),
+        runAudit: ({ handle, directories, db, buildSnapshotRow, projection }: RunnerArgs) => auditCanonicalShadowImport({
+            handle,
+            directories,
+            db,
+            buildSnapshotRow: buildSnapshotRow ?? (buildCharacterSnapshotRow as unknown as SnapshotBuilder),
+            projection,
+        }),
+        // Avatar blobs are registered lazily on every init so already-clean
+        // installs still get their one-time backfill (idempotent scan).
+        postInit: ({ handle, directories, db }: RunnerArgs) => backfillCharacterAvatarBlobs({ handle, directories, db }),
+    },
+    world_info: {
+        runImport: runCanonicalWorldInfoShadowImport,
+        runAudit: auditCanonicalWorldInfoShadowImport,
+    },
+    settings: {
+        runImport: runCanonicalSettingsShadowImport,
+        runAudit: auditCanonicalSettingsShadowImport,
+    },
+    secrets: {
+        runImport: runCanonicalSecretsShadowImport,
+        runAudit: auditCanonicalSecretsShadowImport,
+    },
+    managed_media: {
+        runImport: runCanonicalManagedMediaShadowImport,
+        runAudit: auditCanonicalManagedMediaShadowImport,
+        postInit: backfillCanonicalManagedMediaContents,
+    },
+    chats: {
+        runImport: runCanonicalChatShadowImport,
+        runAudit: auditCanonicalChatShadowImport,
+    },
+    presets: {
+        runImport: runCanonicalPresetsShadowImport,
+        runAudit: auditCanonicalPresetsShadowImport,
+    },
+};
+
+const initializedBackends = new Map<string, Map<string, Promise<InitResult>>>();
+
+const DB_AHEAD_STALE_PATTERN = /projection_failure|projection_repair/;
+
+/**
+ * Decides what a lazy init pass may do with the persisted audit verdict:
+ *  - 'import': file side is (or may be) ahead — shadow-import, then audit.
+ *  - 'audit' : DB is ahead of the file (projection failure/repair marks) —
+ *              re-verify only; re-importing would regress committed revisions.
+ *  - 'skip'  : a completed audit already governs the slice — trust it. Real
+ *              drift/error verdicts stay blocking until repair tooling runs.
+ * @param {object} auditStatus Persisted audit state for the slice
+ * @returns {'import'|'audit'|'skip'}
+ */
+export function decideCanonicalBackendInitAction(auditStatus: { status: string; reason?: string | null; blocking: boolean }) {
+    if (auditStatus.status === 'missing' || auditStatus.reason === 'audit_not_run') {
+        return 'import';
+    }
+    if (!auditStatus.blocking) {
+        return 'skip';
+    }
+    const reason = String(auditStatus.reason ?? '');
+    if (DB_AHEAD_STALE_PATTERN.test(reason)) {
+        return 'audit';
+    }
+    if (reason.startsWith('audit_stale')) {
+        return 'import';
+    }
+    return 'skip';
+}
+
+function getHandle(directories: Directories) {
+    return directories?.handle ?? path.basename(path.resolve(directories?.root ?? 'default-user'));
+}
+
+async function initializeSlice(slice: Slice, handle: string, directories: Directories, featureFlags: FeatureFlags, options: Options = {}): Promise<InitResult> {
+    const db = canonicalSqliteManager.open({
+        handle,
+        directories,
+        featureFlags: {
+            enabled: true,
+            strict: !!featureFlags.strict,
+        },
+    });
+    if (!db) {
+        return { ok: false, reason: 'canonical_storage_unavailable', featureFlags };
+    }
+
+    const migrationStatus = runCanonicalMigrations(db, {
+        strict: !!featureFlags.strict,
+    });
+    if (!migrationStatus.ok) {
+        return { ok: false, reason: 'migration_blocked', featureFlags, migrationStatus };
+    }
+
+    // Every registered runner receives the same superset of slice-specific
+    // options; the individual import/audit functions consume their own fields.
+    const runners = (SLICE_RUNNERS as unknown as Record<string, Runner>)[slice.key];
+    if (!runners) {
+        return { ok: false, reason: 'canonical_slice_unknown', featureFlags };
+    }
+
+    const persistedAudit = getPersistedCanonicalAuditStatus(db, { scope: slice.auditScope });
+    let action = decideCanonicalBackendInitAction(persistedAudit);
+    if (action === 'import' && featureFlags.shadowImport === false) {
+        // Without shadow import the file side cannot heal drift — audit only.
+        action = 'audit';
+    }
+    const runPostInit = async () => {
+        if (!runners.postInit) {
+            return null;
+        }
+        try {
+            return await runners.postInit({ handle, directories, db, featureFlags });
+        } catch (error) {
+            console.warn(`Canonical ${slice.key} postInit skipped:`, error);
+            return { error: String((error as { message?: unknown } | null)?.message ?? error ?? '') };
+        }
+    };
+
+    if (action === 'skip') {
+        const postInitResult = await runPostInit();
+        return { ok: true, db, handle, featureFlags, migrationStatus, auditResult: persistedAudit, postInitResult };
+    }
+
+    if (action === 'import' && slice.key === 'characters') {
+        // The character library may be opened before chats. Seed canonical
+        // sessions through their own import gate before deriving chat stats.
+        await ensureCanonicalSliceBackend('chats', directories, handle);
+    }
+
+    const importResult = action === 'import'
+        ? await runners.runImport({
+            handle,
+            directories,
+            db,
+            featureFlags,
+            manager: canonicalSqliteManager,
+            buildSnapshotRow: options.buildSnapshotRow,
+            bootstrap: persistedAudit.status === 'missing' || persistedAudit.reason === 'audit_not_run',
+        })
+        : null;
+    const auditResult = await runners.runAudit({
+        handle,
+        directories,
+        db,
+
+        buildSnapshotRow: options.buildSnapshotRow,
+        projection: typeof slice.getProjectionMode === 'function' ? slice.getProjectionMode() : 'sync',
+        importResult,
+    });
+    const postInitResult = await runPostInit();
+    return {
+        ok: true,
+        db,
+        handle,
+        featureFlags,
+        migrationStatus,
+        importResult,
+        auditResult,
+        postInitResult,
+    };
+}
+
+/**
+ * Lazily runs the per-user shadow import and audit for one storage slice so
+ * DB-first gates see a persisted audit status instead of `audit_not_run`.
+ * The initializer is idempotent, runs at most once per (user root, slice)
+ * per process, and a slice failure never poisons unrelated slices.
+ *
+ * @param {string} sliceKey Registry slice key (e.g. 'settings')
+ * @param {import('./user-types.ts').UserDirectoryList} directories User directories
+ * @param {string} [handle] User handle; defaults to the directory basename
+ * @param {{ buildSnapshotRow?: Function }} [options] Slice-specific hooks (character card decoding)
+ * @returns {Promise<{ok: boolean, reason?: string, db?: object}>}
+ */
+export function ensureCanonicalSliceBackend(sliceKey: string, directories: Directories, handle: string | null = null, options: Options = {}): Promise<InitResult> {
+    const slice = getCanonicalStorageSlice(sliceKey);
+    const featureFlags = slice.getFeatureFlags();
+    if (!featureFlags.enabled) {
+        return Promise.resolve({ ok: false, reason: 'canonical_storage_disabled', featureFlags });
+    }
+
+    const rootKey = path.resolve(directories.root);
+    let perSlice = initializedBackends.get(rootKey);
+    if (!perSlice) {
+        perSlice = new Map();
+        initializedBackends.set(rootKey, perSlice);
+    }
+
+    const prior = perSlice.get(sliceKey);
+    const resolvedHandle = handle ?? getHandle(directories);
+    const initPromise = Promise.resolve(prior)
+        .then(async prev => {
+            // A handle closed under the cache (e.g. reset-step2) must not be
+            // reused: re-initialize so the manager opens a fresh connection.
+            if (prev?.ok && prev.db && prev.db.isOpen !== false) {
+                const freshAudit = getPersistedCanonicalAuditStatus(prev.db, { scope: slice.auditScope });
+                if (decideCanonicalBackendInitAction(freshAudit) === 'skip') {
+                    return prev;
+                }
+            }
+            if (slice.key === 'chats') {
+                await ensureCanonicalSliceBackend('managed_media', directories, resolvedHandle);
+            }
+            return initializeSlice(slice, resolvedHandle, directories, featureFlags, options);
+        });
+    // A rejected init must not poison the slice for the rest of the process:
+    // evict it so the next call retries instead of replaying the failure.
+    initPromise.catch(() => {
+        if (perSlice.get(sliceKey) === initPromise) {
+            perSlice.delete(sliceKey);
+        }
+    });
+    perSlice.set(sliceKey, initPromise);
+    return initPromise;
+}
+
+export function resetCanonicalBackendsForTests() {
+    initializedBackends.clear();
+}

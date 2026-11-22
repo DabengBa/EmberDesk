@@ -4,9 +4,9 @@ import type { Request, Response } from 'express';
 import type { DatabaseSync } from 'node:sqlite';
 import mime from 'mime-types';
 import { resolveUiLocale } from '../../public/scripts/ui-locale.js';
-import { isPathUnderParent } from '../util.js';
+import { isPathUnderParent } from '../util.ts';
 import { canonicalSqliteManager, withCanonicalTransaction } from '../canonical-sqlite.ts';
-import { MEDIA_EXTENSIONS } from '../constants.js';
+import { MEDIA_EXTENSIONS } from '../constants.ts';
 import { createServerGenerationService, ServerGenerationExecutionError, type GenerationChat, type GenerationEvent } from '../server-generation-service.ts';
 import { ChatGenerationBusyError } from '../server-generation-lock.ts';
 
@@ -18,7 +18,7 @@ import { getCanonicalCharacter } from './character-store.ts';
 
 import { readManagedMediaContent } from './canonical-managed-media-read-service.ts';
 import { getCanonicalManagedMediaReference } from './canonical-managed-media-store.ts';
-import { readSecret, SECRET_KEYS } from './secrets.js';
+import { readSecret, SECRET_KEYS } from './secrets.ts';
 import type { ChatRouteContext } from './chat-route-context.ts';
 
 type Action = ServerPromptCommand['action'];

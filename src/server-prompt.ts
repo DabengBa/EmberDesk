@@ -4,7 +4,7 @@ import { createPromptManagerDomain, type PromptData, type PromptSettings } from 
 import { createChatMemoryCore } from '../public/scripts/chat-memory-shared.js';
 import { PIPELINE_FALLBACK_PROMPT, buildStepPrompt, pipelineModelRemovesTools, pipelineStepTool, pipelineTriggerTag, stripPipelineMarkup } from '../public/scripts/reply-pipeline-core.js';
 import { escapeRegex } from '../public/scripts/util/primitives.js';
-import { countWebTokenizerTokens, getSentencepiceTokenizer, getTiktokenTokenizer, getTokenizerModel, getWebTokenizer } from './endpoints/tokenizers.js';
+import { countWebTokenizerTokens, getSentencepiceTokenizer, getTiktokenTokenizer, getTokenizerModel, getWebTokenizer } from './endpoints/tokenizers.ts';
 import { getRegenerateChatPrefix } from './server-generation-service.ts';
 import { createStoryProjection, projectHistory, type MediaResolver, type ServerPromptMessage } from './server-prompt/history.ts';
 import { array, record, ServerPromptError, string, type RecordView, type ServerPromptSnapshot } from './server-prompt/snapshot.ts';

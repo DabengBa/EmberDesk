@@ -12,21 +12,21 @@ import {
     OPENAI_REASONING_EFFORT_MAP,
     OPENAI_REASONING_EFFORT_MODELS,
     OPENAI_VERBOSITY_MODELS,
-} from '../../constants.js';
+} from '../../constants.ts';
 import {
     forwardFetchResponse,
     getConfigValue,
     tryParse,
     uuidv4,
     flattenSchema,
-} from '../../util.js';
+} from '../../util.ts';
 import {
     getPromptNames,
     embedOpenRouterMedia,
     postProcessPrompt,
-} from '../../prompt-converters.js';
+} from '../../prompt-converters.ts';
 
-import { readSecret, SECRET_KEYS } from '../secrets.js';
+import { readSecret, SECRET_KEYS } from '../secrets.ts';
 import { normalizeWireLogOptions, createWireLogRecorder } from '../../wire-log-recorder.ts';
 import { readWireLogSettings } from '../wire-log.ts';
 

@@ -4,7 +4,7 @@ import path from 'node:path';
 import yargs from 'yargs/yargs';
 import { hideBin } from 'yargs/helpers';
 import envPaths from 'env-paths';
-import { color, getConfigValue, stringToBool } from './util.js';
+import { color, getConfigValue, stringToBool } from './util.ts';
 import { initConfig } from './config-init.ts';
 
 import type { ServerStartupResult } from './server-startup.ts';

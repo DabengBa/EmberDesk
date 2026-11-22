@@ -3,20 +3,20 @@ import path from 'node:path';
 import type { DatabaseSync } from 'node:sqlite';
 
 import { extractImageData } from './character-card-parser.ts';
-import { ensureCanonicalSliceBackend } from './canonical-backend.js';
+import { ensureCanonicalSliceBackend } from './canonical-backend.ts';
 import {
     CHARACTER_AVATAR_OWNER_TYPE,
     CHARACTER_AVATAR_ROLE,
     getCharacterAvatarBlobPath,
     listCharacterRowsMissingAvatarBlob,
-} from './canonical-avatar-blobs.js';
+} from './canonical-avatar-blobs.ts';
 import { writeCanonicalManagedMedia } from './endpoints/canonical-managed-media-write-service.ts';
 import {
     getCanonicalManagedMediaReadState,
     readManagedMediaContent,
 } from './endpoints/canonical-managed-media-read-service.ts';
 
-type Directories = import('./users.js').UserDirectoryList;
+type Directories = import('./user-types.ts').UserDirectoryList;
 type AvatarOptions = { handle?: string; directories: Directories; avatarFilename: string };
 
 /**

@@ -4,7 +4,7 @@ import type { DatabaseSync } from 'node:sqlite';
 
 import mime from 'mime-types';
 
-import { MEDIA_REQUEST_TYPE } from '../constants.js';
+import { MEDIA_REQUEST_TYPE } from '../constants.ts';
 import { canonicalSqliteManager } from '../canonical-sqlite.ts';
 import { runCanonicalMigrations } from '../canonical-sqlite-migrations.ts';
 import { getPersistedCanonicalAuditStatus } from '../canonical-sqlite-shadow-import.ts';
@@ -16,7 +16,7 @@ import {
 
 type Reference = Pick<NonNullable<ReturnType<typeof getCanonicalManagedMediaReference>>, 'lifecycleState' | 'managedRelativePath'>
     & Partial<Pick<NonNullable<ReturnType<typeof getCanonicalManagedMediaReference>>, 'deletedAtMs' | 'mediaType' | 'contentHash'>>;
-type Directories = import('../users.js').UserDirectoryList;
+type Directories = import('../user-types.ts').UserDirectoryList;
 type Flags = ReturnType<ReturnType<typeof getCanonicalStorageSlice>['getFeatureFlags']>;
 type OpenOptions = { handle: string | undefined; directories: Directories | undefined; featureFlags: { enabled: boolean; strict: boolean } };
 type MigrationOptions = Parameters<typeof runCanonicalMigrations>[1];

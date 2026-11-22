@@ -12,8 +12,8 @@ This document covers the plugin loading pipeline that discovers, updates, valida
 
 Primary files:
 
-- `src/plugin-loader.js` — orchestrator: discovery, validation, initialization, cleanup collection
-- `src/plugin-updater.js` — git auto-update for repo-backed plugins
+- `src/plugin-loader.ts` — orchestrator: discovery, validation, initialization, cleanup collection
+- `src/plugin-updater.ts` — git auto-update for repo-backed plugins
 
 ## Architecture And Constraints
 

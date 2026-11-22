@@ -12,7 +12,7 @@ start_emberdesk() {
     fi
 
     # Execute init script to auto-populate config.yaml with missing values
-    $PREFIX node src/server-init.js
+    $PREFIX node src/server-init.ts
 
     # Start the server
     exec $PREFIX node server.js --listen "$@"

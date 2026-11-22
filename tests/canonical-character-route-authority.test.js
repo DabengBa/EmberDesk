@@ -11,9 +11,9 @@ import multer from 'multer';
 import extractPngChunks from '../src/png/extract.ts';
 import { afterEach, describe, expect, jest, test } from '@jest/globals';
 
-import { humanizedDateTime, setConfigFilePath } from '../src/util.js';
+import { humanizedDateTime, setConfigFilePath } from '../src/util.ts';
 import { canonicalSqliteManager } from '../src/canonical-sqlite.ts';
-import { ensureCanonicalSliceBackend } from '../src/canonical-backend.js';
+import { ensureCanonicalSliceBackend } from '../src/canonical-backend.ts';
 import { runCanonicalMigrations } from '../src/canonical-sqlite-migrations.ts';
 import { auditCanonicalShadowImport, persistCanonicalAuditStatus } from '../src/canonical-sqlite-shadow-import.ts';
 import { auditCanonicalChatShadowImport } from '../src/canonical-chat-shadow-import.ts';
@@ -28,7 +28,7 @@ import { readManagedMediaContent } from '../src/endpoints/canonical-managed-medi
 import { writeCanonicalManagedMedia } from '../src/endpoints/canonical-managed-media-write-service.ts';
 import { getCanonicalSettingsDocument, upsertCanonicalSettingsDocument } from '../src/endpoints/settings-store.ts';
 import { read } from '../src/character-card-parser.ts';
-import { router as userFileRouter } from '../src/users.js';
+import { router as userFileRouter } from '../src/user-files.ts';
 
 const __filename = fileURLToPath(import.meta.url);
 const repoRoot = path.resolve(path.dirname(__filename), '..');
@@ -85,9 +85,9 @@ fs.writeFileSync(configPath, [
 ].join('\n'), 'utf8');
 setConfigFilePath(configPath);
 
-const { applyAvatarCropResize, router } = await import('../src/endpoints/characters.js');
+const { applyAvatarCropResize, router } = await import('../src/endpoints/characters.ts');
 const { router: settingsRouter } = await import('../src/endpoints/settings-routes.ts');
-const { router: chatRouter } = await import('../src/endpoints/chats.js');
+const { router: chatRouter } = await import('../src/endpoints/chats.ts');
 const { router: worldRouter } = await import('../src/endpoints/worldinfo-routes.ts');
 
 function makeResponse() {

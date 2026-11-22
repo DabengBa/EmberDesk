@@ -4,8 +4,8 @@ kind: technical
 topic: character-library-realtime
 code:
   paths:
-    - src/character-library-change-observer.js
-    - src/endpoints/character-library-events.js
+    - src/character-library-change-observer.ts
+    - src/endpoints/character-library-events.ts
     - src/endpoints/character-read-service.ts
     - public/script.js
     - public/scripts/BulkEditOverlay.js
@@ -29,4 +29,4 @@ On `ready` (including reconnect) and `invalidate`, the client reads the full lis
 
 ## Evidence
 
-Implementation: `src/character-library-change-observer.js`, `src/endpoints/character-library-events.js`, `src/endpoints/characters.js`, `src/endpoints/character-read-service.ts`, `public/script.js`, and `public/scripts/BulkEditOverlay.js`. Focused regression coverage is in `tests/character-library-change-observer.test.js`, `tests/character-library-events.test.js`, `tests/character-library-read-availability.test.js`, and `tests/character-library-realtime.e2e.js`.
+Implementation: `src/character-library-change-observer.ts`, `src/endpoints/character-library-events.ts`, `src/endpoints/characters.ts`, `src/endpoints/character-read-service.ts`, `public/script.js`, and `public/scripts/BulkEditOverlay.js`. Focused regression coverage is in `tests/character-library-change-observer.test.js`, `tests/character-library-events.test.js`, `tests/character-library-read-availability.test.js`, and `tests/character-library-realtime.e2e.js`.

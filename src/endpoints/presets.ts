@@ -6,10 +6,10 @@ import sanitize from 'sanitize-filename';
 import { canonicalSqliteManager } from '../canonical-sqlite.ts';
 import { runCanonicalMigrations } from '../canonical-sqlite-migrations.ts';
 import { getPersistedCanonicalAuditStatus } from '../canonical-sqlite-shadow-import.ts';
-import { ensureCanonicalSliceBackend } from '../canonical-backend.js';
+import { ensureCanonicalSliceBackend } from '../canonical-backend.ts';
 import { getCanonicalStorageSlice } from '../canonical-storage-slice-registry.ts';
-import { getDefaultPresetFile, getDefaultPresets } from './content-manager.js';
-import type { ContentItem } from './content-manager.js';
+import { getDefaultPresetFile, getDefaultPresets } from './content-manager.ts';
+import type { ContentItem } from './content-manager.ts';
 import {
     deleteCanonicalPreset,
     listCanonicalPresets,

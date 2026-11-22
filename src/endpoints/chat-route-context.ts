@@ -1,6 +1,6 @@
 import type { DatabaseSync } from 'node:sqlite';
 import type { Request } from 'express';
-import type { UserDirectoryList } from '../users.js';
+import type { UserDirectoryList } from '../user-types.ts';
 
 // JS state gates return an actual database only on the successful branch.
 type WriteState =
@@ -9,7 +9,7 @@ type WriteState =
 type ReadState =
     | { ok: true; db: DatabaseSync }
     | { ok: false; reason?: string };
-type LegacyContext = typeof import('./chats.js').chatRouteContext;
+type LegacyContext = typeof import('./chats.ts').chatRouteContext;
 
 // Type-only dependency view; no runtime import of the compatibility router.
 export type ChatRouteContext = Omit<LegacyContext, 'getCanonicalChatWriteState' | 'getCanonicalChatReadState' | 'getBackupFunction' | 'reconcileCanonicalChatSources'> & {

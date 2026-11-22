@@ -6,7 +6,7 @@ import dns from 'node:dns';
 import ipMatch from 'ip-matching';
 import { Agent } from 'agent-base';
 import type { AgentConnectOpts } from 'agent-base';
-import { color } from './util.js';
+import { color } from './util.ts';
 import { filterValidIpPatterns } from './express-common.ts';
 
 type PrivateRequestAgentOptions = {

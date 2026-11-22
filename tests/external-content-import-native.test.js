@@ -30,8 +30,8 @@ test('native Node imports the service and production callers without a loader or
             assert.equal(fetched.ok, true);
             assert.equal(fetched.failure.kind, 'provider_non_2xx');
             console.log('external-content:native');
-        `, moduleUrl('util.js'), config, root, moduleUrl('endpoints/external-content-import-service.ts'),
-        moduleUrl('endpoints/content-manager.js'), moduleUrl('endpoints/assets.js')], { encoding: 'utf8', timeout: 10_000 });
+        `, moduleUrl('util.ts'), config, root, moduleUrl('endpoints/external-content-import-service.ts'),
+        moduleUrl('endpoints/content-manager.ts'), moduleUrl('endpoints/assets.ts')], { encoding: 'utf8', timeout: 10_000 });
         expect({ status: result.status, stderr: result.status === 0 ? '' : result.stderr })
             .toEqual({ status: 0, stderr: '' });
         expect(result.stdout).toContain('external-content:native');

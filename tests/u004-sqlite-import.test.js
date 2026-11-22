@@ -4,11 +4,11 @@ import path from 'node:path';
 
 import { expect, test } from '@jest/globals';
 
-import { ensureCanonicalSliceBackend, resetCanonicalBackendsForTests } from '../src/canonical-backend.js';
+import { ensureCanonicalSliceBackend, resetCanonicalBackendsForTests } from '../src/canonical-backend.ts';
 import { canonicalSqliteManager } from '../src/canonical-sqlite.ts';
-import { buildCharacterFileSnapshotRow } from '../src/endpoints/character-file-snapshot.js';
+import { buildCharacterFileSnapshotRow } from '../src/endpoints/character-file-snapshot.ts';
 import { auditCanonicalShadowImport, getPersistedCanonicalAuditStatus, runCanonicalShadowImport } from '../src/canonical-sqlite-shadow-import.ts';
-import { setConfigFilePath } from '../src/util.js';
+import { setConfigFilePath } from '../src/util.ts';
 
 test('character shadow import preserves ids, chat statistics and persisted drift audit on retry', async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'u004-sqlite-'));

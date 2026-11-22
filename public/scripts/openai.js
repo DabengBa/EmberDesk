@@ -1153,7 +1153,7 @@ function collectPipelineStepPrompts(pipelineStepTag, type, model) {
 
 /**
  * Projects a wire message onto the shape the count route can encode.
- * src/endpoints/tokenizers.js encodes every value it receives and drops the
+ * src/endpoints/tokenizers.ts encodes every value it receives and drops the
  * rest of a message when one throws, so null content and object/array fields
  * (tool_calls, refusal, reasoning_details, content parts) must become strings.
  * The wire history itself is never rewritten.

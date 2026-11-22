@@ -8,7 +8,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, test } from '@jest/gl
 import { createCanonicalSqliteManager, canonicalSqliteManager } from '../src/canonical-sqlite.ts';
 import { CANONICAL_SQLITE_MIGRATIONS, runCanonicalMigrations } from '../src/canonical-sqlite-migrations.ts';
 import { getPersistedCanonicalAuditStatus } from '../src/canonical-sqlite-shadow-import.ts';
-import { setConfigFilePath } from '../src/util.js';
+import { setConfigFilePath } from '../src/util.ts';
 
 // canReadCanonicalFeatureFlags() requires runtime args; without them the
 // routers would return 503 instead of serving canonical data.

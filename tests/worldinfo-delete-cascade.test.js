@@ -15,12 +15,12 @@ jest.unstable_mockModule('../src/character-card-parser.ts', () => ({
     extractImageData: image => image,
 }));
 
-jest.unstable_mockModule('../src/endpoints/settings-cache.js', () => ({
+jest.unstable_mockModule('../src/endpoints/settings-cache.ts', () => ({
     invalidateDirectory: invalidateDirectoryMock,
 }));
 
 const { router } = await import('../src/endpoints/worldinfo-routes.ts');
-const { ensureCanonicalSliceBackend, resetCanonicalBackendsForTests } = await import('../src/canonical-backend.js');
+const { ensureCanonicalSliceBackend, resetCanonicalBackendsForTests } = await import('../src/canonical-backend.ts');
 
 function createResponse() {
     return {

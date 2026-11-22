@@ -4,7 +4,7 @@ import type { DatabaseSync } from 'node:sqlite';
 
 import { sync as writeFileAtomicSync } from 'write-file-atomic';
 
-import { recordImportLedgerEntry } from './canonical-import-ledger.js';
+import { recordImportLedgerEntry } from './canonical-import-ledger.ts';
 import { canonicalSqliteManager } from './canonical-sqlite.ts';
 import { runCanonicalMigrations } from './canonical-sqlite-migrations.ts';
 import {
@@ -18,7 +18,7 @@ import {
     runCanonicalSecretsShadowImport,
 } from './canonical-secrets-shadow-import.ts';
 import { getCanonicalStorageSlice } from './canonical-storage-slice-registry.ts';
-import { decideCanonicalBackendInitAction } from './canonical-backend.js';
+import { decideCanonicalBackendInitAction } from './canonical-backend.ts';
 import {
     listOpenSecretProjectionRepairs,
     recordSecretProjectionRepair,

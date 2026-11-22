@@ -1,5 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite';
-import type { UserDirectoryList } from '../users.js';
+import type { UserDirectoryList } from '../user-types.ts';
 
 type MaybePromise<T> = T | Promise<T>;
 export type CharacterReadFilter = { query?: string; tags?: string[]; sort?: string };
@@ -183,7 +183,7 @@ function maybeThrowCanonicalFallback(canonicalState: CanonicalReadState): void {
  * and ignored in this behavior-equivalent slice.
  *
  * @param {object} options
- * @param {import('../users.js').UserDirectoryList} options.directories
+ * @param {import('../user-types.ts').UserDirectoryList} options.directories
  * @param {boolean} options.shallow
  * @param {CharacterReadFilter} [options.filter]
  * @param {CharacterReadPagination} [options.pagination]
@@ -239,7 +239,7 @@ export async function readCharacterListPayload({
  * and ignored in this behavior-equivalent slice.
  *
  * @param {object} options
- * @param {import('../users.js').UserDirectoryList} options.directories
+ * @param {import('../user-types.ts').UserDirectoryList} options.directories
  * @param {CharacterReadFilter} [options.filter]
  * @param {CharacterReadPagination} [options.pagination]
  * @param {object} options.dependencies
@@ -276,7 +276,7 @@ export async function readCharacterSummaryPayload({
  * Reads the full character payload used by `/api/characters/get`.
  *
  * @param {object} options
- * @param {import('../users.js').UserDirectoryList} options.directories
+ * @param {import('../user-types.ts').UserDirectoryList} options.directories
  * @param {string} options.avatarUrl
  * @param {object} options.dependencies
  * @returns {Promise<{

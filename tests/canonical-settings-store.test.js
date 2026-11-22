@@ -440,7 +440,7 @@ describe('canonical settings route integration', () => {
 
     async function loadSettingsRouter() {
         jest.resetModules();
-        const { setConfigFilePath } = await import('../src/util.js');
+        const { setConfigFilePath } = await import('../src/util.ts');
         const configRoot = makeRoot();
         const configPath = path.join(configRoot, 'config.yaml');
         fs.writeFileSync(configPath, 'port: 8000\n', 'utf8');
@@ -967,7 +967,7 @@ describe('canonical settings snapshots and rollback', () => {
 
     async function loadSettingsRouter() {
         jest.resetModules();
-        const { setConfigFilePath } = await import('../src/util.js');
+        const { setConfigFilePath } = await import('../src/util.ts');
         const configRoot = makeRoot();
         const configPath = path.join(configRoot, 'config.yaml');
         fs.writeFileSync(configPath, 'port: 8000\n', 'utf8');

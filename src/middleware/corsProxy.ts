@@ -1,6 +1,6 @@
 import http from 'node:http';
 import https from 'node:https';
-import { getConfigValue } from '../util.js';
+import { getConfigValue } from '../util.ts';
 import { PrivateRequestAgent } from '../private-request-filter.ts';
 import type { Request, Response } from 'express';
 

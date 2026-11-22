@@ -2,7 +2,7 @@ import process from 'node:process';
 import http from 'node:http';
 import https from 'node:https';
 import { ProxyAgent } from 'proxy-agent';
-import { isValidUrl, color } from './util.js';
+import { isValidUrl, color } from './util.ts';
 
 const LOG_HEADER = '[Request Proxy]';
 

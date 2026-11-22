@@ -22,7 +22,7 @@ test('Node loads the native TypeScript World Info router without a loader', () =
 
             }
             assert.ok(entry.router.stack.some(layer => layer.route?.path === '/edit' && layer.route.methods.post));
-        `, url('util.js'), config, root, url('endpoints/worldinfo-routes.ts')], {
+        `, url('util.ts'), config, root, url('endpoints/worldinfo-routes.ts')], {
             encoding: 'utf8', timeout: 10_000,
         });
         expect({ status: result.status, stderr: result.status === 0 ? '' : result.stderr })

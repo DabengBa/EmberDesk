@@ -5,8 +5,8 @@ import { randomUUID } from 'node:crypto';
 
 import { afterEach, describe, expect, test } from '@jest/globals';
 
-import { setConfigFilePath } from '../src/util.js';
-import { resetCanonicalBackendsForTests } from '../src/canonical-backend.js';
+import { setConfigFilePath } from '../src/util.ts';
+import { resetCanonicalBackendsForTests } from '../src/canonical-backend.ts';
 import { canonicalSqliteManager, disposeCanonicalDatabases } from '../src/canonical-sqlite.ts';
 import { runCanonicalMigrations } from '../src/canonical-sqlite-migrations.ts';
 import {
@@ -42,7 +42,7 @@ fs.writeFileSync(configPath, [
 ].join('\n'), 'utf8');
 setConfigFilePath(configPath);
 
-const { router } = await import('../src/endpoints/chats.js');
+const { router } = await import('../src/endpoints/chats.ts');
 
 /** Chat memory metadata as the client writes it into the chat header. */
 function makeChatMemoryMetadata() {

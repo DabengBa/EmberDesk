@@ -1,7 +1,7 @@
 import { test, expect } from '@jest/globals';
 import http from 'node:http';
 import fetch from 'node-fetch';
-import { forwardFetchResponse } from '../src/util.js';
+import { forwardFetchResponse } from '../src/util.ts';
 
 test('throwing observers cannot interrupt real HTTP forwarding and listeners are removed', async () => {
     const upstream = http.createServer((_req, res) => res.end('data: hello\n\n'));

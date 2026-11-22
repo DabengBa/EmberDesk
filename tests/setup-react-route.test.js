@@ -5,7 +5,7 @@ import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { setConfigFilePath } from '../src/util.js';
+import { setConfigFilePath } from '../src/util.ts';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -87,9 +87,9 @@ function writeReactDist() {
 async function createSetupRouteApp({ reactLoginDistRoot } = {}) {
     globalThis.COMMAND_LINE_ARGS = { basicAuthMode: false };
 
-    const usersModule = await import(`../src/users.js?setupRoute=${Date.now()}-${Math.random()}`);
-    const middlewareModule = await import(`../src/middleware/react-login-serve.js?setupRoute=${Date.now()}-${Math.random()}`);
-    const basePathModule = await import(`../src/react-login-feature.js?setupRoute=${Date.now()}-${Math.random()}`);
+    const usersModule = await import(`../src/user-pages.ts?setupRoute=${Date.now()}-${Math.random()}`);
+    const middlewareModule = await import(`../src/middleware/react-login-serve.ts?setupRoute=${Date.now()}-${Math.random()}`);
+    const basePathModule = await import(`../src/react-login-feature.ts?setupRoute=${Date.now()}-${Math.random()}`);
 
     const app = express();
     app.use((request, _response, next) => {
@@ -174,7 +174,7 @@ describe('setup React sole owner route', () => {
         expect(fs.existsSync(path.join(repoRoot, 'public', 'setup.html'))).toBe(false);
         expect(fs.existsSync(path.join(repoRoot, 'public', 'scripts', 'setup.js'))).toBe(false);
         expect(fs.existsSync(path.join(repoRoot, 'src', 'react-setup-feature.js'))).toBe(false);
-        const usersSource = fs.readFileSync(path.join(repoRoot, 'src', 'users.js'), 'utf8');
+        const usersSource = fs.readFileSync(path.join(repoRoot, 'src', 'user-pages.ts'), 'utf8');
         expect(usersSource).not.toContain('isReactSetupEnabled');
         expect(usersSource).not.toContain("sendFile('setup.html'");
     });

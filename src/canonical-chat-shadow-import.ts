@@ -7,7 +7,7 @@ import {
     classifyImportCandidate,
     recordImportLedgerEntry,
     resolveAuditDriftReason,
-} from './canonical-import-ledger.js';
+} from './canonical-import-ledger.ts';
 import { getCanonicalMigrationStatus, runCanonicalMigrations } from './canonical-sqlite-migrations.ts';
 import { persistCanonicalAuditStatus } from './canonical-sqlite-shadow-import.ts';
 import {
@@ -39,7 +39,7 @@ function hashIdentity(...parts: unknown[]) {
     return hash.digest('hex');
 }
 
-function toSourcePath(directories: ChatDirectories, filePath: string) {
+function toSourcePath(directories: Pick<ChatDirectories, 'root'>, filePath: string) {
     return path.relative(directories.root, filePath).split(path.sep).join('/');
 }
 
@@ -348,7 +348,7 @@ export function reconcileCanonicalChatSources({
     ownerId,
     filePaths = null,
     nowMs = Date.now(),
-}: { db: DatabaseSync; directories: ChatDirectories; ownerType: 'character' | 'group'; ownerId: string; filePaths?: string[] | null; nowMs?: number } = {} as { db: DatabaseSync; directories: ChatDirectories; ownerType: 'character' | 'group'; ownerId: string; filePaths?: string[] | null; nowMs?: number }) {
+}: { db: DatabaseSync; directories: Pick<ChatDirectories, 'root' | 'chats'>; ownerType: 'character' | 'group'; ownerId: string; filePaths?: string[] | null; nowMs?: number } = {} as { db: DatabaseSync; directories: Pick<ChatDirectories, 'root' | 'chats'>; ownerType: 'character' | 'group'; ownerId: string; filePaths?: string[] | null; nowMs?: number }) {
     const result: { imported: number; errors: { sourcePath: string; message: string }[] } = { imported: 0, errors: [] };
     if (!db || !directories) {
         return result;

@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 
 import { afterEach, describe, expect, jest, test } from '@jest/globals';
 
-import { USER_DIRECTORY_TEMPLATE } from '../src/constants.js';
+import { USER_DIRECTORY_TEMPLATE } from '../src/constants.ts';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -46,7 +46,7 @@ async function runGenerationScenario({ type = 'avatar', format = 'jpg', quality 
         buffer: Buffer.from(JSON.stringify(options)),
     }));
 
-    jest.unstable_mockModule('../src/util.js', () => ({
+    jest.unstable_mockModule('../src/util.ts', () => ({
         getConfigValue: (key, defaultValue = null) => {
             switch (key) {
                 case 'thumbnails.enabled':
@@ -66,13 +66,13 @@ async function runGenerationScenario({ type = 'avatar', format = 'jpg', quality 
         isFirefox: () => false,
     }));
 
-    jest.unstable_mockModule('../src/image-processing.js', () => ({ thumbnailImage: mockThumbnailImage }));
+    jest.unstable_mockModule('../src/image-processing.ts', () => ({ thumbnailImage: mockThumbnailImage }));
 
     jest.unstable_mockModule('write-file-atomic', () => ({
         sync: (targetPath, buffer) => fs.writeFileSync(targetPath, buffer),
     }));
 
-    const { generateThumbnail } = await import('../src/endpoints/thumbnails.js');
+    const { generateThumbnail } = await import('../src/endpoints/thumbnails.ts');
 
     const directories = makeDirectories('emberdesk-thumbnail-quality-');
     const originalDirectory = getOriginalDirectory(directories, type);

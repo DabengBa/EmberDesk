@@ -7,8 +7,8 @@ import { fileURLToPath } from 'node:url';
 import express from 'express';
 import { afterAll, beforeAll, describe, expect, test } from '@jest/globals';
 
-import { USER_DIRECTORY_TEMPLATE } from '../src/constants.js';
-import { setConfigFilePath } from '../src/util.js';
+import { USER_DIRECTORY_TEMPLATE } from '../src/constants.ts';
+import { setConfigFilePath } from '../src/util.ts';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -69,7 +69,7 @@ async function requestThumbnailRaw(targetPath, { headers } = {}) {
 
 beforeAll(async () => {
     setConfigFilePath(path.resolve(__dirname, '../default/config.yaml'));
-    ({ router: thumbnailRouter } = await import('../src/endpoints/thumbnails.js'));
+    ({ router: thumbnailRouter } = await import('../src/endpoints/thumbnails.ts'));
 
     const directories = makeDirectories('emberdesk-thumbnail-cache-');
     writeFixtureFile(directories.characters, 'cached.png');
