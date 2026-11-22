@@ -1,13 +1,186 @@
-/** Owns only the currently selected chat's transient subscription. */
-export function createWorkspaceGeneration({ request, subscribe, changed, finished, executeStep, stepFailed, lockStep = (_id, run) => run() }) {
-    let selection;
-    const results = new Map();
+/* eslint-disable */
+// Generated from app/lib/generation/workspace.ts; run pnpm run build:generation-state.
 
-    async function runTemporaryStep(view, route, step) {
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+/** Capture the active world entries and scan-enabled extension prompts for a request. */
+export async function captureWorkspaceWorldRuntime(
+    activations                                               ,
+    extensionPrompts                                    ,
+    getPrompt                                                                               ,
+) {
+    const worldInfo = Array.from(activations, ([, { world, uid, content, position, depth, role, order, useProbability, probability }]) =>
+        ({ world, uid, content, position, depth, role, order, useProbability, probability }));
+    const promptMap = { ...extensionPrompts };
+    const scanPrompts           = [];
+    for (const key of Object.keys(promptMap)) {
+        if (!promptMap[key].scan) continue;
+        const text = await getPrompt(key, promptMap);
+        if (text) scanPrompts.push(text);
+    }
+    return { worldInfo, scanPrompts };
+}
+
+/** Transport for workspace generation; the shell supplies its current request headers. */
+export function createWorkspaceGenerationRequest(getRequestHeaders                   ) {
+    return async function workspaceGenerationRequest(route        , body          , { keepalive = false } = {}) {
+        const response = await fetch(`/api/chats/generation${route}`, {
+            method: body === undefined ? 'GET' : 'POST', headers: getRequestHeaders(), body: JSON.stringify(body), keepalive,
+        });
+        if (response.status === 204) return;
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error ?? 'Generation request failed');
+        return result;
+    };
+}
+
+
+
+
+
+
+
+
+
+
+
+/** Snapshot the temporary-chat history while leaving persistent target lookup in the shell. */
+export function getWorkspaceGenerationTargetSnapshot(ports
+
+
+ ) {
+    if (!ports.characterSelected && (ports.characterName === ports.neutralName || (ports.preview && ports.hasDraft()))) {
+        return { temporary: true, history: ports.history.filter(message => !message.is_system).map(({ is_user, mes, extra }) => ({
+            is_user, mes, extra: { files: extra?.files, media: extra?.media, tool_invocations: extra?.tool_invocations },
+        })) };
+    }
+    return ports.current();
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+/** Prepare sends and previews against shell state without owning it. */
+export function createWorkspaceGenerationPreparation(ports                  ) {
+    const { generation } = ports;
+    async function start(action        , text         ) {
+        if (generation.busy()) return false;
+        const target = ports.target();
+        if (!target) { ports.missingTarget(); return false; }
+        const activations = ports.activations();
+        const composer = ports.snapshot();
+        const isCurrent = () => ports.ownsComposer(composer);
+        const requestId = ports.requestId();
+        ports.clearViewport();
+        const prepared = action === 'continue' ? undefined : generation.prepare(target, { action, text, requestId });
+        ports.beginViewport(action, requestId, composer);
+        const ownsPreparation = () => Boolean(isCurrent() && (!prepared || generation.ownsPreparation(prepared)));
+        if (prepared && action !== 'send') ports.scrollForPreparation();
+        let creating = false;
+        try {
+            let attachmentCapture                               ;
+            if (action === 'send' && ports.hasAttachments()) {
+                const captured = await ports.captureAttachments(ownsPreparation, isCurrent);
+                if (!captured) return false;
+                attachmentCapture = captured;
+            }
+            const worldRuntime = await ports.captureWorld(activations);
+            if (!ownsPreparation()) return false;
+            await ports.flushSettings();
+            if (!ownsPreparation() || (!prepared && generation.busy())) return false;
+            creating = true;
+            const run = await generation.create(target, { action, text, attachments: attachmentCapture?.attachments, ...worldRuntime, requestId, locale: ports.locale() }, prepared);
+            if (!run) return false;
+            attachmentCapture?.clearFiles();
+            ports.consumeActivations(activations);
+            return true;
+        } catch (error) {
+            if (ownsPreparation() || (creating && isCurrent())) ports.error(error);
+            return false;
+        } finally {
+            generation.releasePreparation(prepared);
+        }
+    }
+    async function preview(round = 0) {
+        const target = ports.target({ preview: true });
+        if (!target) return { kind: 'prompt-preview-empty', reason: 'No chat selected', warnings: [] };
+        const text = ports.text();
+        const composer = ports.snapshot();
+        const draftAttachments = ports.hasAttachments() ? await ports.stageAttachments(() => ports.ownsComposer(composer)) : [];
+        const worldRuntime = await ports.captureWorld(ports.activations());
+        if (!ports.ownsComposer(composer)) return { kind: 'prompt-preview-empty', reason: 'Selected chat changed', warnings: [] };
+        await ports.flushSettings();
+        if (!ports.ownsComposer(composer)) return { kind: 'prompt-preview-empty', reason: 'Selected chat changed', warnings: [] };
+        const { connection, messages, budget, tools, toolChoice, maxTokens, reasoningEffort, previewPipeline } = await ports.preview({
+            ...target, action: 'send', text: text || undefined, locale: ports.locale(), round,
+            ...worldRuntime, ...(draftAttachments.length ? { draftAttachments } : {}),
+        });
+        return {
+            kind: 'prompt-preview', type: 'normal', model: connection.model, stream: true,
+            request: { model: connection.model, messages, max_tokens: maxTokens ?? budget.responseTokens, stream: true,
+                ...(tools?.length ? { tools, tool_choice: toolChoice } : {}), ...(reasoningEffort ? { reasoning_effort: reasoningEffort } : {}) },
+            entries: [], dropped: [], summarized: [], pipeline: previewPipeline ?? null, warnings: [],
+            pendingMessage: text ? { name: ports.userName(), mes: text } : null, pendingEntryIdentifier: null,
+            messagesInContext: messages.filter(message => ['user', 'assistant'].includes(message.role)).length,
+            budget: { context: budget.contextTokens, response: budget.responseTokens, used: budget.promptTokens,
+                remaining: budget.contextTokens - budget.responseTokens - budget.promptTokens, totalTokens: budget.promptTokens + budget.responseTokens },
+        };
+    }
+    return { start, preview };
+}
+
+/** Owns only the currently selected chat's transient subscription. */
+export function createWorkspaceGeneration({ request, subscribe, changed, finished, executeStep, stepFailed, lockStep = (_id, run) => run() }       ) {
+    let selection                  ;
+    const results = new Map                                      ();
+
+    async function runTemporaryStep(view             , route        , step      ) {
         if (view.stepId === step.id) return;
         view.stepId = step.id;
         try {
-            const result = await executeStep(step);
+            // handleStep only dispatches temporary steps when executeStep is installed.
+            const result = await (executeStep                                   )(step);
             if (selection === view) await request(`${route}/step`, { stepId: step.id, result });
         } catch (error) {
             if (selection !== view || view.run.status !== 'running') return;
@@ -19,12 +192,13 @@ export function createWorkspaceGeneration({ request, subscribe, changed, finishe
         }
     }
 
-    async function handleStep(view, step) {
+    async function handleStep(view             , step                  ) {
         if (!step || !executeStep) return;
         await lockStep(step.id, async () => {
             if (selection !== view) return;
             const route = `/${view.run.id}`;
-            const current = await request(route, undefined);
+            // The run-detail endpoint returns the current run, including its pending step.
+            const current = await request(route, undefined)       ;
             if (selection !== view || current.step?.id !== step.id) {
                 if (current.step?.id !== step.id) results.delete(step.id);
                 return;
@@ -64,7 +238,7 @@ export function createWorkspaceGeneration({ request, subscribe, changed, finishe
     const current = () => selection?.run?.status === 'running' ? selection : null;
     const pending = () => selection && selection.kind !== 'continue' && (selection.preparing || selection.creating) && !selection.run;
 
-    function startWaiting(view) {
+    function startWaiting(view      ) {
         if (view.kind !== 'send' || view.waitTimer !== undefined || view.waiting) return;
         view.waitTimer = setTimeout(() => {
             if (selection !== view || view.text) return;
@@ -73,7 +247,7 @@ export function createWorkspaceGeneration({ request, subscribe, changed, finishe
         }, 250);
     }
 
-    function settle(view, discovery) {
+    function settle(view             , discovery            ) {
         results.delete(view.stepId);
         view.detach?.();
         view.detach = undefined;
@@ -90,12 +264,13 @@ export function createWorkspaceGeneration({ request, subscribe, changed, finishe
         changed();
     }
 
-    function attach(view, run, discovery) {
+    function attach(view      , run     , discovery            ) {
         view.run = run;
+        const runningView = view               ;
         view.kind = run.kind ?? view.kind;
         view.discovered = Boolean(discovery);
         if (run.status !== 'running') {
-            settle(view, discovery);
+            settle(runningView, discovery);
             return;
         }
         startWaiting(view);
@@ -112,32 +287,33 @@ export function createWorkspaceGeneration({ request, subscribe, changed, finishe
                 (view.invocations ??= []).push(event.invocation);
             } else if (event.type === 'terminal') {
                 view.run = event.run;
-            } else if (event.type === 'disconnected' && view.run.temporary) {
-                view.run = { ...view.run, status: 'interrupted' };
+            } else if (event.type === 'disconnected' && runningView.run.temporary) {
+                runningView.run = { ...runningView.run, status: 'interrupted' };
             }
-            if (view.run.status !== 'running') {
-                settle(view);
+            if (runningView.run.status !== 'running') {
+                settle(runningView);
                 return;
             }
             if (view.text) clearTimeout(view.waitTimer);
-            if (view.run.status === 'running' && (event.type === 'step' || event.type === 'snapshot')) {
+            if (runningView.run.status === 'running' && (event.type === 'step' || event.type === 'snapshot')) {
                 // A reconnect repeats the pending step but never an accepted result.
-                void handleStep(view, event.step).catch(() => {});
+                void handleStep(runningView, event.step).catch(() => {});
             }
             changed();
         });
     }
 
-    function begin(target, { action, text = '', requestId }) {
+    function begin(target        , { action, text = '', requestId }         ) {
         close();
-        const view = { target, kind: action, text: '', pendingText: text, requestId };
+        const view       = { target, kind: action, text: '', pendingText: text, requestId };
         selection = view;
         return view;
     }
 
-    function cancelRun(view, run) {
+    function cancelRun(view      , run     ) {
         if (run.status !== 'running') return run;
-        return view.cancellation ??= request(`/${run.id}/cancel`, {}).catch(error => {
+        // The per-run cancellation endpoint returns the resulting run.
+        return view.cancellation ??= (request(`/${run.id}/cancel`, {})                ).catch(error => {
             view.cancellation = undefined;
             throw error;
         });
@@ -151,33 +327,34 @@ export function createWorkspaceGeneration({ request, subscribe, changed, finishe
         busy: () => Boolean(selection?.preparing || selection?.creating || selection?.reconciling || current()),
         close,
         leaveTemporary,
-        prepare(target, command) {
+        prepare(target        , command         ) {
             const view = begin(target, command);
             view.preparing = true;
             startWaiting(view);
             changed();
             return view;
         },
-        ownsPreparation: view => selection === view && view.preparing,
-        releasePreparation(view) {
+        ownsPreparation: (view      ) => selection === view && view.preparing,
+        releasePreparation(view       ) {
             if (view && selection === view && view.preparing) detach();
         },
-        async select(target, reconciledChatVersion) {
+        async select(target                           , reconciledChatVersion          ) {
             close();
             if (!target) return;
-            const view = { target, text: '', pendingText: '' };
+            const view       = { target, text: '', pendingText: '' };
             selection = view;
             const run = await request('/find', target);
             if (selection === view && run) attach(view, run, { discovered: true, reconciledChatVersion });
         },
-        async create(target, command, prepared) {
+        async create(target        , command         , prepared       ) {
             if (prepared && selection !== prepared) return;
             const view = prepared ?? begin(target, command);
             view.preparing = false;
             view.creating = true;
             changed();
             try {
-                let run = await request('/create', { ...target, ...command });
+                // The create endpoint returns the created run.
+                let run = await request('/create', { ...target, ...command })       ;
                 if (view.stopRequested) {
                     try {
                         run = await cancelRun(view, run);
@@ -198,9 +375,10 @@ export function createWorkspaceGeneration({ request, subscribe, changed, finishe
             }
         },
         async cancel() {
-            const view = selection;
+            // Both branches below are entered only when the selected view exists.
+            const view = selection        ;
             if (current()) {
-                await cancelRun(view, view.run);
+                await cancelRun(view, (view               ).run);
             } else if (pending()) {
                 if (view.preparing) return detach();
                 if (view.stopRequested) return;
@@ -212,7 +390,8 @@ export function createWorkspaceGeneration({ request, subscribe, changed, finishe
                     }
                     const run = await request('/find', view.target);
                     if (run?.requestId !== view.requestId) return;
-                    const terminal = await cancelRun(view, run);
+                    // Keep the existing request-ID comparison and cancellation behavior.
+                    const terminal = await cancelRun(view, run       );
                     if (selection === view && !view.run) {
                         view.creating = false;
                         attach(view, terminal);

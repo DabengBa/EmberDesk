@@ -452,7 +452,11 @@ jest.unstable_mockModule('../public/scripts/tool-bindings.js', () => ({ syncPipe
 // Generation tests exercise the real service; notification rendering needs a browser.
 jest.unstable_mockModule('../public/scripts/notifications.js', () => ({ default: { info: jest.fn(), warning: jest.fn(), error: jest.fn(), success: jest.fn() } }));
 
-const { registerGenerationShellContext, installGenerationLifecycleService } = await import('../public/scripts/generation-shell-context.js');
+const { registerGenerationShellContext: registerContext, installGenerationLifecycleService } = await import('../public/scripts/generation-shell-context.js');
+const generationEvents = await import('../public/scripts/events.js');
+const registerGenerationShellContext = context => registerContext(Object.assign(context, {
+    emitGenerationEvent: (type, ...args) => generationEvents.eventSource.emit(generationEvents.event_types[type], ...args),
+}));
 const { GenerationStreamSession, executeGenerationRequestInShell, getCurrentGenerationContextIdentity } = await import('../public/scripts/generation-service.js');
 let installedLifecycle;
 beforeAll(async () => {

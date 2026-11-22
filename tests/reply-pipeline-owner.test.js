@@ -16,7 +16,11 @@ jest.unstable_mockModule('../public/scripts/openai.js', () => ({ oai_settings: {
 
 jest.unstable_mockModule('../public/scripts/feature-settings.js', () => ({ feature_settings: { tool_bindings: [{ name: 'analyze', enabled: true }] } }));
 jest.unstable_mockModule('../public/scripts/tool-bindings.js', () => ({ syncPipelineToolBindings: jest.fn() }));
-const { registerGenerationShellContext, installGenerationLifecycleService } = await import('../public/scripts/generation-shell-context.js');
+const { registerGenerationShellContext: registerContext, installGenerationLifecycleService } = await import('../public/scripts/generation-shell-context.js');
+const generationEvents = await import('../public/scripts/events.js');
+const registerGenerationShellContext = context => registerContext(Object.assign(context, {
+    emitGenerationEvent: (type, ...args) => generationEvents.eventSource.emit(generationEvents.event_types[type], ...args),
+}));
 const { getPipelineRunState } = await import('../public/scripts/reply-pipeline-core.js');
 const runtime = await import('../public/scripts/reply-pipeline.js');
 const { executeGenerationRequestInShell, getCurrentGenerationContextIdentity, GenerationStreamSession } = await import('../public/scripts/generation-service.js');

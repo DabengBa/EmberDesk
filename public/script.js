@@ -370,7 +370,7 @@ export {
 import { createGenerationBootstrapAdmission, createGenerationRuntimeBootstrap, getGenerationLifecycleService, installGenerationLifecycleService, registerGenerationShellContext } from './scripts/generation-shell-context.js';
 import { registerCharacterLifecycleShellContext } from './scripts/character-lifecycle-shell-context.js';
 import { registerCharacterTagsShellContext } from './scripts/character-tags-shell-context.js';
-import { createWorkspaceGeneration } from './scripts/server-generation-workspace.js';
+import { captureWorkspaceWorldRuntime as captureWorkspaceWorldRuntimeWithPorts, createWorkspaceGeneration, createWorkspaceGenerationPreparation, createWorkspaceGenerationRequest, getWorkspaceGenerationTargetSnapshot } from './scripts/server-generation-workspace.js';
 import { readStoredUiLocale } from './scripts/ui-locale.js';
 import {
     clearChat,
@@ -570,6 +570,7 @@ registerWorldInfoShellContext({
 });
 
 registerGenerationShellContext({
+    emitGenerationEvent: (type, ...args) => eventSource.emit(event_types[type], ...args),
     state: {
         get generatingAttemptModel() { return generatingAttemptModel; },
         set generatingAttemptModel(value) { setGeneratingAttemptModel(value); },
@@ -6181,22 +6182,13 @@ function usesWorkspaceGeneration() {
 }
 
 function getWorkspaceGenerationTarget({ preview = false } = {}) {
-    return this_chid === undefined && (name2 === neutralCharacterName || (preview && (getComposerValue().trim() || hasPendingFileAttachment())))
-        ? { temporary: true, history: chat.filter(message => !message.is_system).map(({ is_user, mes, extra }) => ({
-            is_user, mes, extra: { files: extra?.files, media: extra?.media, tool_invocations: extra?.tool_invocations },
-        })) }
-        : getCurrentChatGenerationTarget();
+    return getWorkspaceGenerationTargetSnapshot({
+        characterSelected: this_chid !== undefined, characterName: name2, neutralName: neutralCharacterName, preview,
+        hasDraft: () => Boolean(getComposerValue().trim() || hasPendingFileAttachment()), history: chat, current: getCurrentChatGenerationTarget,
+    });
 }
 
-async function workspaceGenerationRequest(route, body, { keepalive = false } = {}) {
-    const response = await fetch(`/api/chats/generation${route}`, {
-        method: body === undefined ? 'GET' : 'POST', headers: getRequestHeaders(), body: JSON.stringify(body), keepalive,
-    });
-    if (response.status === 204) return;
-    const result = await response.json();
-    if (!response.ok) throw new Error(result.error ?? 'Generation request failed');
-    return result;
-}
+const workspaceGenerationRequest = createWorkspaceGenerationRequest(getRequestHeaders);
 
 let workspaceGenerationScroll = null;
 let workspaceSendFailureToast = null;
@@ -6314,18 +6306,7 @@ eventSource.on(event_types.CHAT_LOADED, event => {
     }
 });
 
-async function captureWorkspaceWorldRuntime(activations) {
-    const worldInfo = activations.map(([, { world, uid, content, position, depth, role, order, useProbability, probability }]) =>
-        ({ world, uid, content, position, depth, role, order, useProbability, probability }));
-    const promptMap = { ...extension_prompts };
-    const scanPrompts = [];
-    for (const key of Object.keys(promptMap)) {
-        if (!promptMap[key].scan) continue;
-        const text = await getExtensionPromptByName(key, promptMap);
-        if (text) scanPrompts.push(text);
-    }
-    return { worldInfo, scanPrompts };
-}
+const captureWorkspaceWorldRuntime = activations => captureWorkspaceWorldRuntimeWithPorts(activations, extension_prompts, getExtensionPromptByName);
 
 function ownsWorkspaceComposer(snapshot) {
     const current = getComposerSnapshot();
@@ -6337,94 +6318,59 @@ function flushWorkspaceGenerationSettings() {
     return saveSettings(0, { strict: true });
 }
 
-async function startWorkspaceGeneration(action, text) {
-    if (workspaceGeneration.busy()) return false;
-    const target = getWorkspaceGenerationTarget();
-    if (!target) {
-        toastr.warning('Load or finish saving this chat before generating.');
-        return false;
-    }
-    const activations = [...WorldInfoBuffer.externalActivations.entries()];
-    const composer = getComposerSnapshot();
-    const isCurrent = () => ownsWorkspaceComposer(composer);
-    const requestId = crypto.randomUUID();
-    workspaceSendViewport = null;
-    const prepared = action === 'continue' ? undefined : workspaceGeneration.prepare(target, { action, text, requestId });
-    workspaceSendViewport = action === 'send'
-        ? { requestId, contextKey: composer.contextKey, questionIndex: chat.length, completed: null }
-        : null;
-    if (workspaceSendViewport) workspaceGenerationScroll = null;
-    const ownsPreparation = () => isCurrent() && (!prepared || workspaceGeneration.ownsPreparation(prepared));
-    if (prepared && action !== 'send') queueWorkspaceGenerationScroll(true);
-    let creating = false;
-    try {
-        let attachments;
-        let clearFiles;
-        if (action === 'send' && hasPendingFileAttachment()) {
-            const input = document.getElementById('file_form_input');
-            const selected = Array.from(input.files);
-            const message = { extra: {} };
-            await populateFileAttachment(message, 'file_form_input', { isCurrent: ownsPreparation, reset: false });
-            if (!ownsPreparation()) return false;
-            attachments = message.extra;
-            if ((attachments.files?.length ?? 0) + (attachments.media?.length ?? 0) !== selected.length) return false;
-            clearFiles = () => {
-                if (isCurrent() && selected.length === input.files.length && selected.every((file, index) => file === input.files[index])) {
-                    document.getElementById('file_form')?.reset();
-                }
-            };
-        }
-        const worldRuntime = await captureWorkspaceWorldRuntime(activations);
-        if (!ownsPreparation()) return false;
-        await flushWorkspaceGenerationSettings();
-        if (!ownsPreparation() || (!prepared && workspaceGeneration.busy())) return false;
-        creating = true;
-        const run = await workspaceGeneration.create(target, { action, text, attachments, ...worldRuntime, requestId, locale: readStoredUiLocale() }, prepared);
-        if (!run) return false;
-        clearFiles?.();
+const workspacePreparation = createWorkspaceGenerationPreparation({
+    generation: workspaceGeneration,
+    target: getWorkspaceGenerationTarget,
+    snapshot: getComposerSnapshot,
+    ownsComposer: ownsWorkspaceComposer,
+    text: getComposerValue,
+    requestId: () => crypto.randomUUID(),
+    activations: () => [...WorldInfoBuffer.externalActivations.entries()],
+    captureWorld: captureWorkspaceWorldRuntime,
+    consumeActivations(activations) {
         for (const [key, entry] of activations) {
             if (WorldInfoBuffer.externalActivations.get(key) === entry) WorldInfoBuffer.externalActivations.delete(key);
         }
-        return true;
-    } catch (error) {
-        if (ownsPreparation() || (creating && isCurrent())) toastr.error(error.message);
-        return false;
-    } finally {
-        workspaceGeneration.releasePreparation(prepared);
-    }
-}
-
-async function previewWorkspaceGeneration(round = 0) {
-    const target = getWorkspaceGenerationTarget({ preview: true });
-    if (!target) return { kind: 'prompt-preview-empty', reason: 'No chat selected', warnings: [] };
-    const text = getComposerValue();
-    const composer = getComposerSnapshot();
-    const draftAttachments = [];
-    if (hasPendingFileAttachment()) {
+    },
+    hasAttachments: hasPendingFileAttachment,
+    async captureAttachments(ownsPreparation, isCurrent) {
+        const input = document.getElementById('file_form_input');
+        const selected = Array.from(input.files);
+        const message = { extra: {} };
+        await populateFileAttachment(message, 'file_form_input', { isCurrent: ownsPreparation, reset: false });
+        if (!ownsPreparation()) return null;
+        const attachments = message.extra;
+        if ((attachments.files?.length ?? 0) + (attachments.media?.length ?? 0) !== selected.length) return null;
+        return { attachments, clearFiles() {
+            if (isCurrent() && selected.length === input.files.length && selected.every((file, index) => file === input.files[index])) {
+                document.getElementById('file_form')?.reset();
+            }
+        } };
+    },
+    async stageAttachments(isCurrent) {
+        const files = [];
         await populateFileAttachment({ extra: {} }, 'file_form_input', {
-            reset: false, isCurrent: () => ownsWorkspaceComposer(composer),
-            stageFile: file => String(draftAttachments.push(file)),
+            reset: false, isCurrent, stageFile: file => String(files.push(file)),
         });
-    }
-    const worldRuntime = await captureWorkspaceWorldRuntime([...WorldInfoBuffer.externalActivations.entries()]);
-    if (!ownsWorkspaceComposer(composer)) return { kind: 'prompt-preview-empty', reason: 'Selected chat changed', warnings: [] };
-    await flushWorkspaceGenerationSettings();
-    if (!ownsWorkspaceComposer(composer)) return { kind: 'prompt-preview-empty', reason: 'Selected chat changed', warnings: [] };
-    const { connection, messages, budget, tools, toolChoice, maxTokens, reasoningEffort, previewPipeline } = await workspaceGenerationRequest('/preview', {
-        ...target, action: 'send', text: text || undefined, locale: readStoredUiLocale(), round,
-        ...worldRuntime, ...(draftAttachments.length ? { draftAttachments } : {}),
-    });
-    return {
-        kind: 'prompt-preview', type: 'normal', model: connection.model, stream: true,
-        request: { model: connection.model, messages, max_tokens: maxTokens ?? budget.responseTokens, stream: true,
-            ...(tools?.length ? { tools, tool_choice: toolChoice } : {}), ...(reasoningEffort ? { reasoning_effort: reasoningEffort } : {}) },
-        entries: [], dropped: [], summarized: [], pipeline: previewPipeline ?? null, warnings: [],
-        pendingMessage: text ? { name: name1, mes: text } : null, pendingEntryIdentifier: null,
-        messagesInContext: messages.filter(message => ['user', 'assistant'].includes(message.role)).length,
-        budget: { context: budget.contextTokens, response: budget.responseTokens, used: budget.promptTokens,
-            remaining: budget.contextTokens - budget.responseTokens - budget.promptTokens, totalTokens: budget.promptTokens + budget.responseTokens },
-    };
-}
+        return files;
+    },
+    flushSettings: flushWorkspaceGenerationSettings,
+    locale: readStoredUiLocale,
+    preview: body => workspaceGenerationRequest('/preview', body),
+    userName: () => name1,
+    clearViewport: () => { workspaceSendViewport = null; },
+    beginViewport(action, requestId, composer) {
+        workspaceSendViewport = action === 'send'
+            ? { requestId, contextKey: composer.contextKey, questionIndex: chat.length, completed: null }
+            : null;
+        if (workspaceSendViewport) workspaceGenerationScroll = null;
+    },
+    scrollForPreparation: () => queueWorkspaceGenerationScroll(true),
+    missingTarget: () => toastr.warning('Load or finish saving this chat before generating.'),
+    error: error => toastr.error(error.message),
+});
+const startWorkspaceGeneration = workspacePreparation.start;
+const previewWorkspaceGeneration = workspacePreparation.preview;
 
 const generationBootstrapAdmission = createGenerationBootstrapAdmission();
 const ensureGenerationRuntime = createGenerationRuntimeBootstrap({

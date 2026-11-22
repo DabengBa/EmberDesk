@@ -10,7 +10,7 @@ topic: workspace-composition-root
 
 `app/client.tsx` creates the single React root used by `/`, `/login`, `/setup`, and `/settings`. The authenticated workspace route commits `WorkspaceHost` and its compatibility DOM, then `app/components/workspace/workspace-entry.ts` prepares the same app's panel module and loads the native controller. `app/compat/workspace-portals.tsx` renders workspace panels and popups under that root and its providers. There is no separate workspace document or panel build.
 
-`public/script.js` is the native controller's composition root and compatibility entry, not a second UI. It installs browser contracts, preserves first-party exports, and invokes the workspace bootstrap. It still owns domain state, DOM handlers, and generation coordination not yet extracted from the controller.
+`public/script.js` is the native controller's composition root and compatibility entry, not a second UI. It installs browser contracts, preserves first-party exports, and invokes the workspace bootstrap. It still owns shell state, DOM handlers, and generation integration adapters.
 
 The frontend migration gap slice moves the following responsibilities to their domain owners. The roots keep explicit wiring and stable exports; no domain imports either root to use these extracted capabilities.
 
@@ -23,7 +23,8 @@ The frontend migration gap slice moves the following responsibilities to their d
 | Main-chat list and shortcuts | `app/components/main-chat/MainChatMessageListWorkspacePanel.tsx`, `useMainChatHotkeys.ts` | One stable list owner subscribes to the existing store, including an empty chat |
 | Panel shell layout | `app/components/panels/WorkspacePanelShell.tsx` | Workspace entry supplies each panel's content |
 | Popup lifecycle and cropping | `app/components/local-dialogs/PopupRuntime.tsx` | Cached workspace bundle exports `createPopupRuntime`; bootstrap installs it into the thin JS `Popup` bridge |
-| Generation callers and session coordination | One `createGenerationCallerService(ports)` instance from `public/scripts/generation-caller-service.js` | Stable `Generate`, quiet/raw, regenerate and synchronous stop exports delegate to that instance; the existing generation executor remains the only execution owner |
+| Generation callers and session coordination | `app/lib/generation/caller.ts`, `app/lib/generation/service.ts` and shared state in `app/lib/generation/shared-state.ts` | The bridge emits the existing public modules; one caller instance and the existing executor retain the stable `Generate`, quiet/raw, regenerate and synchronous stop contracts |
+| Workspace generation request, subscription and preparation state | `app/lib/generation/workspace.ts` | `scripts/build-generation-state.mjs` emits `public/scripts/server-generation-workspace.js`; typed ports coordinate target snapshots, send and preview preparation while the root supplies live shell state, file/DOM adapters, subscription and UI effects |
 | Reasoning message access and formatting | `public/scripts/reasoning.js`, existing `message-service.js` and `message-shell-context.js` | Reasoning reads current chat/API/substitution/save capabilities lazily through the existing message context; formatter and message updater are imported from their domain owner, not the root |
 | Legacy message-action motion, dialogue masks and chat scrolling | `public/scripts/chat-ui-motion.js`, used by existing controllers | Native opacity animations and scrolling replace the FE3 jQuery/transit calls without taking ownership of React message rows |
 | Character selection and duplication | `public/scripts/character-lifecycle-service.js` | `/script.js` retains thin compatibility delegates and wires the existing live shell state and specific commands |

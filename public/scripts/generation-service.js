@@ -1,5 +1,6 @@
+/* eslint-disable */
+// Generated from app/lib/generation/service.ts; run pnpm run build:generation-state.
 import toastr from './notifications.js';
-import { eventSource, event_types } from './events.js';
 import { TOKEN_PADDING, inject_ids } from './constants.js';
 import { executeGenerationAttempts, createGenerationCommandPlan, createGenerationRequestEnvelope } from './chat-generation-command-service.js';
 import * as generationCommandService from './chat-generation-command-service.js';
@@ -9,7 +10,8 @@ import {
     hasFallbackProviderForGeneration,
 } from './chat-generation-lifecycle.js';
 import { getWorldInfoPrompt } from './world-info-service.js';
-import { getGenerationLifecycleService, requireGenerationShellContext } from './generation-shell-context.js';
+import { getGenerationLifecycleService as getLegacyGenerationLifecycleService, requireGenerationShellContext } from './generation-shell-context.js';
+
 import { getComposerSnapshot, clearComposerValue } from './main-chat-composer-service.js';
 import { applyChatMemoryToCoreChat } from './chat-memory-service.js';
 import {
@@ -38,88 +40,107 @@ function shell() {
     return requireGenerationShellContext();
 }
 
+// The lifecycle is installed from the typed workspace bundle through a legacy JS registry.
+function getGenerationLifecycleService()                                                      {
+    return getLegacyGenerationLifecycleService()                                                       ;
+}
+
+// Generation options are populated by the legacy shell and provider extensions.
+
+
 /**
  * Whether a generation exception is a deliberate user stop rather than a
  * failure worth rolling a regenerate snapshot back for.
  * @param {Error|object} exception Error or response JSON
  * @returns {boolean}
  */
-export function isUserStoppedGeneration(exception) {
+export function isUserStoppedGeneration(exception         ) {
     return isUserStoppedGenerationError(exception, Boolean(shell().state.abortController?.signal?.aborted));
 }
 
 
-const addChatsSeparator = (...args) => shell().addChatsSeparator(...args);
-const cleanUpMessage = (...args) => shell().cleanUpMessage(...args);
-const clearGenerationAttemptMessage = (...args) => shell().clearGenerationAttemptMessage(...args);
-const clearGenerationAutoRecoveryStatus = (...args) => shell().clearGenerationAutoRecoveryStatus(...args);
-const deactivateSendButtons = (...args) => shell().deactivateSendButtons(...args);
-const deleteLastMessage = (...args) => shell().deleteLastMessage(...args);
-const doChatInject = (...args) => shell().doChatInject(...args);
-const extractImagesFromData = (...args) => shell().extractImagesFromData(...args);
-const extractJsonFromData = (...args) => shell().extractJsonFromData(...args);
-const extractMessageFromData = (...args) => shell().extractMessageFromData(...args);
-const extractTitleFromData = (...args) => shell().extractTitleFromData(...args);
-const flushWIInjections = (...args) => shell().flushWIInjections(...args);
-const formatMessageHistoryItem = (...args) => shell().formatMessageHistoryItem(...args);
-const getBiasStrings = (...args) => shell().getBiasStrings(...args);
-const getCharacterCardFields = (...args) => shell().getCharacterCardFields(...args);
-const getExtensionPrompt = (...args) => shell().getExtensionPrompt(...args);
-const getExtensionPromptRoleByName = (...args) => shell().getExtensionPromptRoleByName(...args);
-const getGenerationLifecycleStatusLabels = (...args) => shell().getGenerationLifecycleStatusLabels(...args);
-const getMaxPromptTokens = (...args) => shell().getMaxPromptTokens(...args);
-const isAssistantRecoveryMessageId = (...args) => shell().isAssistantRecoveryMessageId(...args);
-const isStreamingEnabled = (...args) => shell().isStreamingEnabled(...args);
+const addChatsSeparator = (...args       ) => shell().addChatsSeparator(...args);
+const cleanUpMessage = (...args       ) => shell().cleanUpMessage(...args);
+const clearGenerationAttemptMessage = (...args       ) => shell().clearGenerationAttemptMessage(...args);
+const clearGenerationAutoRecoveryStatus = (...args       ) => shell().clearGenerationAutoRecoveryStatus(...args);
+const deactivateSendButtons = (...args       ) => shell().deactivateSendButtons(...args);
+const deleteLastMessage = (...args       ) => shell().deleteLastMessage(...args);
+const doChatInject = (...args       ) => shell().doChatInject(...args);
+const extractImagesFromData = (...args       ) => shell().extractImagesFromData(...args);
+const extractJsonFromData = (...args       ) => shell().extractJsonFromData(...args);
+const extractMessageFromData = (...args       ) => shell().extractMessageFromData(...args);
+const extractTitleFromData = (...args       ) => shell().extractTitleFromData(...args);
+const flushWIInjections = (...args       ) => shell().flushWIInjections(...args);
+const formatMessageHistoryItem = (...args       ) => shell().formatMessageHistoryItem(...args);
+const getBiasStrings = (...args       ) => shell().getBiasStrings(...args);
+const getCharacterCardFields = (...args       ) => shell().getCharacterCardFields(...args);
+const getExtensionPrompt = (...args       ) => shell().getExtensionPrompt(...args);
+const getExtensionPromptRoleByName = (...args       ) => shell().getExtensionPromptRoleByName(...args);
+const getGenerationLifecycleStatusLabels = (...args       ) => shell().getGenerationLifecycleStatusLabels(...args);
+const getMaxPromptTokens = (...args       ) => shell().getMaxPromptTokens(...args);
+const isAssistantRecoveryMessageId = (...args       ) => shell().isAssistantRecoveryMessageId(...args);
+const isStreamingEnabled = (...args       ) => shell().isStreamingEnabled(...args);
 
-const pingServer = (...args) => shell().pingServer(...args);
-const rememberMainChatStreamingTransportProcessorTerminal = (...args) => shell().rememberMainChatStreamingTransportProcessorTerminal(...args);
-const removeDepthPrompts = (...args) => shell().removeDepthPrompts(...args);
-const removeMacros = (...args) => shell().removeMacros(...args);
-const removeRegenerateTurnTail = (...args) => shell().removeRegenerateTurnTail(...args);
-const restoreRegenerateTurnTail = (...args) => shell().restoreRegenerateTurnTail(...args);
-const replaceAssistantRecoveryMessage = (...args) => shell().replaceAssistantRecoveryMessage(...args);
-const saveChatConditional = (...args) => shell().saveChatConditional(...args);
-const saveReply = (...args) => shell().saveReply(...args);
-const scheduleMainChatMessageListPanelRefresh = (...args) => shell().scheduleMainChatMessageListPanelRefresh(...args);
-const sendGenerationRequest = (...args) => shell().sendGenerationRequest(...args);
-const sendMessageAsUser = (...args) => shell().sendMessageAsUser(...args);
-const sendStreamingRequest = (...args) => shell().sendStreamingRequest(...args);
-const setExtensionPrompt = (...args) => shell().setExtensionPrompt(...args);
-const setGenerationProgress = (...args) => shell().setGenerationProgress(...args);
-const setInContextMessages = (...args) => shell().setInContextMessages(...args);
-const showGenerationAutoRecoveryStatus = (...args) => shell().showGenerationAutoRecoveryStatus(...args);
-const showGenerationFailureRecovery = (...args) => shell().showGenerationFailureRecovery(...args);
-const showStopButton = (...args) => shell().showStopButton(...args);
-const substituteParams = (...args) => shell().substituteParams(...args);
-const unblockGeneration = (...args) => shell().unblockGeneration(...args);
-const unshallowCharacter = (...args) => shell().unshallowCharacter(...args);
-const Generate = (...args) => shell().Generate(...args);
+const pingServer = (...args       ) => shell().pingServer(...args);
+const rememberMainChatStreamingTransportProcessorTerminal = (...args       ) => shell().rememberMainChatStreamingTransportProcessorTerminal(...args);
+const removeDepthPrompts = (...args       ) => shell().removeDepthPrompts(...args);
+const removeMacros = (...args       ) => shell().removeMacros(...args);
+const removeRegenerateTurnTail = (...args       ) => shell().removeRegenerateTurnTail(...args);
+const restoreRegenerateTurnTail = (...args       ) => shell().restoreRegenerateTurnTail(...args);
+const replaceAssistantRecoveryMessage = (...args       ) => shell().replaceAssistantRecoveryMessage(...args);
+const saveChatConditional = (...args       ) => shell().saveChatConditional(...args);
+const saveReply = (...args       ) => shell().saveReply(...args);
+const scheduleMainChatMessageListPanelRefresh = (...args       ) => shell().scheduleMainChatMessageListPanelRefresh(...args);
+const sendGenerationRequest = (...args       ) => shell().sendGenerationRequest(...args);
+const sendMessageAsUser = (...args       ) => shell().sendMessageAsUser(...args);
+const sendStreamingRequest = (...args       ) => shell().sendStreamingRequest(...args);
+const setExtensionPrompt = (...args       ) => shell().setExtensionPrompt(...args);
+const setGenerationProgress = (...args       ) => shell().setGenerationProgress(...args);
+const setInContextMessages = (...args       ) => shell().setInContextMessages(...args);
+const showGenerationAutoRecoveryStatus = (...args       ) => shell().showGenerationAutoRecoveryStatus(...args);
+const showGenerationFailureRecovery = (...args       ) => shell().showGenerationFailureRecovery(...args);
+const showStopButton = (...args       ) => shell().showStopButton(...args);
+const substituteParams = (...args       ) => shell().substituteParams(...args);
+const unblockGeneration = (...args       ) => shell().unblockGeneration(...args);
+const unshallowCharacter = (...args       ) => shell().unshallowCharacter(...args);
+const Generate = (...args       ) => shell().Generate(...args);
 
-const getStoppingStrings = (...args) => shell().getStoppingStrings(...args);
+const getStoppingStrings = (...args       ) => shell().getStoppingStrings(...args);
 
-const mountReactMainChatMessageListPanel = (...args) => shell().mountReactMainChatMessageListPanel(...args);
-const processImageAttachment = (...args) => shell().processImageAttachment(...args);
-const scrollChatToBottom = (...args) => shell().scrollChatToBottom(...args);
-const appendFileContent = (...args) => shell().appendFileContent(...args);
-const extractReasoningFromData = (...args) => shell().extractReasoningFromData(...args);
-const extractReasoningSignatureFromData = (...args) => shell().extractReasoningSignatureFromData(...args);
-const getRegexedString = (...args) => shell().getRegexedString(...args);
-const getTokenCountAsync = (...args) => shell().getTokenCountAsync(...args);
-const hasPendingFileAttachment = (...args) => shell().hasPendingFileAttachment(...args);
+const mountReactMainChatMessageListPanel = (...args       ) => shell().mountReactMainChatMessageListPanel(...args);
+const processImageAttachment = (...args       ) => shell().processImageAttachment(...args);
+const scrollChatToBottom = (...args       ) => shell().scrollChatToBottom(...args);
+const appendFileContent = (...args       ) => shell().appendFileContent(...args);
+const extractReasoningFromData = (...args       ) => shell().extractReasoningFromData(...args);
+const extractReasoningSignatureFromData = (...args       ) => shell().extractReasoningSignatureFromData(...args);
+const getRegexedString = (...args       ) => shell().getRegexedString(...args);
+const getTokenCountAsync = (...args       ) => shell().getTokenCountAsync(...args);
+const hasPendingFileAttachment = (...args       ) => shell().hasPendingFileAttachment(...args);
 const STREAMING_FPS = 30;
 
-const sendSystemMessage = (...args) => shell().sendSystemMessage(...args);
-const buildUserMessage = (...args) => shell().buildUserMessage(...args);
-const buildChatCompletionRequest = (...args) => shell().buildChatCompletionRequest(...args);
-const prepareOpenAIMessages = (...args) => shell().prepareOpenAIMessages(...args);
-const renderStoryString = (...args) => shell().renderStoryString(...args);
-const setOpenAIMessages = (...args) => shell().setOpenAIMessages(...args);
-const countOccurrences = (...args) => shell().countOccurrences(...args);
-const isOdd = (...args) => shell().isOdd(...args);
-const delay = (...args) => shell().delay(...args);
+const sendSystemMessage = (...args       ) => shell().sendSystemMessage(...args);
+const buildUserMessage = (...args       ) => shell().buildUserMessage(...args);
+const buildChatCompletionRequest = (...args       ) => shell().buildChatCompletionRequest(...args);
+const prepareOpenAIMessages = (...args       ) => shell().prepareOpenAIMessages(...args);
+const renderStoryString = (...args       ) => shell().renderStoryString(...args);
+const setOpenAIMessages = (...args       ) => shell().setOpenAIMessages(...args);
+const countOccurrences = (...args       ) => shell().countOccurrences(...args);
+const isOdd = (...args       ) => shell().isOdd(...args);
+const delay = (...args       ) => shell().delay(...args);
+
 
 export class GenerationStreamSession {
     #streamState;
+
+
+
+
+
+
+
+
+
+
     /**
      * Creates a new streaming processor.
      * @param {string} type Generation type
@@ -127,15 +148,15 @@ export class GenerationStreamSession {
      * @param {Date} timeStarted Date when generation was started
      * @param {PromptReasoning} promptReasoning Prompt reasoning instance
      */
-    constructor(type, forceName2, timeStarted, promptReasoning, ownsRun = () => true) {
+    constructor(type        , forceName2         , timeStarted      , promptReasoning         , ownsRun = () => true) {
         this.#streamState = getGenerationLifecycleService().createStreamState(timeStarted);
         // Keep the existing session API while the installed typed lifecycle owns the mutable stream data.
-        for (const key of Object.keys(this.#streamState)) {
+        for (const key of Object.keys(this.#streamState)                                           ) {
             Object.defineProperty(this, key, {
                 enumerable: true,
                 configurable: true,
                 get: () => this.#streamState[key],
-                set: value => { this.#streamState[key] = value; },
+                set: value => { (this.#streamState       )[key] = value; },
             });
         }
         /** @type {HTMLElement} */
@@ -164,7 +185,7 @@ export class GenerationStreamSession {
     }
 
     /** Browser effects for the installed typed stream message lifecycle. */
-    #messagePorts() {
+    #messagePorts()                     {
         return {
             getMessage: id => shell().state.chat[id],
             indexOfMessage: message => shell().state.chat.indexOf(message),
@@ -184,26 +205,26 @@ export class GenerationStreamSession {
             addCopyButtons: () => {},
             processImages: (message, imageUrls, ownsRun) => processImageAttachment(message, { imageUrls, ownsRun }),
             renderImages: () => scheduleMainChatMessageListPanelRefresh(),
-            emitReceived: (id, type) => eventSource.emit(event_types.MESSAGE_RECEIVED, id, type),
-            emitRendered: (id, type) => eventSource.emit(event_types.CHARACTER_MESSAGE_RENDERED, id, type),
+            emitReceived: (id, type) => shell().emitGenerationEvent('MESSAGE_RECEIVED', id, type),
+            emitRendered: (id, type) => shell().emitGenerationEvent('CHARACTER_MESSAGE_RENDERED', id, type),
             saveChat: ownsRun => saveChatConditional(ownsRun),
             showFailure: id => showGenerationFailureRecovery(id),
         };
     }
 
-    async onStartStreaming(text) {
+    async onStartStreaming(text        ) {
         return getGenerationLifecycleService().startStreamMessage(this, this.#messagePorts(), text);
     }
 
-    async onProgressStreaming(messageId, text, isFinal) {
-        return getGenerationLifecycleService().progressStreamMessage(this, this.#messagePorts(), messageId, text, isFinal);
+    async onProgressStreaming(messageId        , text        , isFinal          ) {
+        return getGenerationLifecycleService().progressStreamMessage(this, this.#messagePorts(), messageId, text, isFinal           );
     }
 
-    async finalizeIntermediaryMessage(messageId, text, { unlockUI = true }) {
+    async finalizeIntermediaryMessage(messageId        , text        , { unlockUI = true }                        ) {
         return getGenerationLifecycleService().finalizeStreamMessage(this, this.#messagePorts(), messageId, text, unlockUI);
     }
 
-    async onFinishStreaming(messageId, text) {
+    async onFinishStreaming(messageId        , text        ) {
         return getGenerationLifecycleService().finishStreamMessage(this, this.#messagePorts(), messageId, text);
     }
 
@@ -232,7 +253,7 @@ export class GenerationStreamSession {
             stoppingStrings: () => getStoppingStrings(shell().state.main_api),
             createStopwatch: () => new (shell().state.Stopwatch)(1000 / STREAMING_FPS),
             refresh: () => scheduleMainChatMessageListPanelRefresh(),
-            emitToken: text => eventSource.emit(event_types.STREAM_TOKEN_RECEIVED, text),
+            emitToken: text => shell().emitGenerationEvent('STREAM_TOKEN_RECEIVED', text),
             mount: () => { void mountReactMainChatMessageListPanel(); },
         });
     }
@@ -242,7 +263,7 @@ export function getCurrentGenerationContextIdentity() {
     return { chatId: shell().state.characters?.[shell().state.this_chid]?.chat ?? null, chatReference: shell().state.chat, contextRevision: getComposerSnapshot().contextRevision };
 }
 
-export async function executeGenerationRequestInShell(generationEnvelope) {
+export async function executeGenerationRequestInShell(generationEnvelope               ) {
     const { type, options, dryRun } = generationEnvelope;
     const lifecycle = getGenerationLifecycleService();
     return lifecycle.run({
@@ -255,7 +276,7 @@ export async function executeGenerationRequestInShell(generationEnvelope) {
     });
 }
 
-async function executeOwnedGenerationRequestInShell(generationEnvelope, lease) {
+async function executeOwnedGenerationRequestInShell(generationEnvelope               , lease                 ) {
     let {
         type,
         options,
@@ -300,9 +321,9 @@ async function executeOwnedGenerationRequestInShell(generationEnvelope, lease) {
                 start: () => { setGenerationProgress(0); shell().state.generation_started = new Date(); },
                 preparation: (entry, promptContext, isStale) => ({
                     unshallow: () => unshallowCharacter(shell().state.this_chid),
-                    emitStarted: () => eventSource.emit(event_types.GENERATION_STARTED, type, { automatic_trigger, force_name2, quiet_prompt, quietToLoud, skipWIAN, signal, quietImage, depth, regenerate: entry.isRegenerate, promptContext }, entry.dryRun),
+                    emitStarted: () => shell().emitGenerationEvent('GENERATION_STARTED', type, { automatic_trigger, force_name2, quiet_prompt, quietToLoud, skipWIAN, signal, quietImage, depth, regenerate: entry.isRegenerate, promptContext }, entry.dryRun),
                     commands: async () => false,
-                    emitAfterCommands: () => eventSource.emit(event_types.GENERATION_AFTER_COMMANDS, type, { automatic_trigger, force_name2, quiet_prompt, quietToLoud, skipWIAN, signal, quietImage, regenerate: entry.isRegenerate, promptContext }, entry.dryRun),
+                    emitAfterCommands: () => shell().emitGenerationEvent('GENERATION_AFTER_COMMANDS', type, { automatic_trigger, force_name2, quiet_prompt, quietToLoud, skipWIAN, signal, quietImage, regenerate: entry.isRegenerate, promptContext }, entry.dryRun),
                     ping: pingServer, isStale, unblock: () => unblockGeneration(type),
                     serverUnreachable: () => {
                         toastr.error(t`Verify that the server is running and accessible.`, t`ST Server cannot be reached`);
@@ -409,11 +430,11 @@ async function executeOwnedGenerationRequestInShell(generationEnvelope, lease) {
                         },
                         currentQuiet: () => (promptContext.requestPrompts() ?? shell().state.extension_prompts)[inject_ids.QUIET_PROMPT],
                         clearQuiet: () => setExtensionPrompt(inject_ids.QUIET_PROMPT, '', shell().state.extension_prompt_types.IN_PROMPT, 0, true, undefined, null, promptContext.requestPrompts()),
-                        scan: (...args) => getWorldInfoPrompt(...args, { ownsRun: () => lease.owns(), promptMap: promptContext.scanPrompts() }),
+                        scan: (...args) => (getWorldInfoPrompt                                    )(...args, { ownsRun: () => lease.owns(), promptMap: promptContext.scanPrompts() }),
                         flush: () => flushWIInjections(promptContext.requestPrompts()),
                         inject: (text, depth, role) => setExtensionPrompt(inject_ids.CUSTOM_WI_DEPTH_ROLE(depth, role), text, shell().state.extension_prompt_types.IN_CHAT, depth, false, role, null, promptContext.requestPrompts()),
                         anchor: kind => getExtensionPrompt(kind === 'before' ? shell().state.extension_prompt_types.BEFORE_PROMPT : shell().state.extension_prompt_types.IN_PROMPT, undefined, undefined, undefined, undefined, promptContext.requestPrompts()),
-                        render: (params, options) => renderStoryString(params, { ...options, promptMap: promptContext.requestPrompts() }),
+                        render: (params, options         ) => renderStoryString(params, { ...options, promptMap: promptContext.requestPrompts() }),
                         clearStory: () => setExtensionPrompt(inject_ids.STORY_STRING, '', shell().state.extension_prompt_types.IN_CHAT, 0, false, undefined, null, promptContext.requestPrompts()),
                     });
                 },
@@ -439,8 +460,8 @@ async function executeOwnedGenerationRequestInShell(generationEnvelope, lease) {
                         countHistory: text => getTokenCountAsync(text),
                         setContext: count => setInContextMessages(count, type),
                         setSending: () => { shell().state.is_send_press = true; },
-                        before: data => eventSource.emit(event_types.GENERATE_BEFORE_COMBINE_PROMPTS, data, { promptContext }),
-                        after: data => eventSource.emit(event_types.GENERATE_AFTER_COMBINE_PROMPTS, data, { promptContext }),
+                        before: data => shell().emitGenerationEvent('GENERATE_BEFORE_COMBINE_PROMPTS', data, { promptContext }),
+                        after: data => shell().emitGenerationEvent('GENERATE_AFTER_COMBINE_PROMPTS', data, { promptContext }),
                         extensionPrompts: () => promptContext.requestPrompts() ?? shell().state.extension_prompts,
                         openAI: {
                             getRunnablePipeline,
@@ -456,7 +477,7 @@ async function executeOwnedGenerationRequestInShell(generationEnvelope, lease) {
                 },
                 publish: data => getGenerationLifecycleService().publishGenerationData(data, dryRun, {
                     ownsRun: () => lease.owns(),
-                    emit: (value, isDryRun) => eventSource.emit(event_types.GENERATE_AFTER_DATA, value, isDryRun, { promptContext }),
+                    emit: (value, isDryRun) => shell().emitGenerationEvent('GENERATE_AFTER_DATA', value, isDryRun, { promptContext }),
                 }),
                 preview: (data, chatCompletion, summarized) => buildPreviewRequestResult({
                     type,
@@ -478,10 +499,12 @@ async function executeOwnedGenerationRequestInShell(generationEnvelope, lease) {
         dispatch: async (prepared, assembly) => {
             const { entry, requestIdentity, requestTrace, regenerateSnapshot, policy } = prepared;
             const { submissionSignal } = entry;
-            const { stages, promptReasoning } = assembly;
+            const { stages: stageResult, promptReasoning } = assembly;
+            // runOwnedRequest dispatches only after it has excluded terminal/null stages.
+            const stages = stageResult                                                                  ;
             const generate_data = stages.data;
             force_name2 = stages.forceName;
-            async function finalizePipelineReply(input) {
+            async function finalizePipelineReply(input                    ) {
                 return getGenerationLifecycleService().finalizePipelineReply(input, {
                     ownsRun: () => lease.owns(),
                     chat: shell().state.chat,
@@ -489,7 +512,7 @@ async function executeOwnedGenerationRequestInShell(generationEnvelope, lease) {
                     formatTags: (invocations, text) => shell().state.ToolManager.formatPipelineTagMarkup(invocations, text),
                     regexOutput: text => getRegexedString(text, shell().state.regex_placement.AI_OUTPUT),
                     removeCardView: () => { void mountReactMainChatMessageListPanel(); },
-                    emitDeleted: length => eventSource.emit(event_types.MESSAGE_DELETED, length),
+                    emitDeleted: length => shell().emitGenerationEvent('MESSAGE_DELETED', length),
                     saveReply: reply => saveReply(reply),
                     endPipeline: () => endPipelineRun(),
                     saveChat: ownsRun => saveChatConditional(ownsRun),
@@ -499,7 +522,7 @@ async function executeOwnedGenerationRequestInShell(generationEnvelope, lease) {
                 });
             }
 
-            const deleteRecoveryPlaceholder = async recovery => {
+            const deleteRecoveryPlaceholder = async (recovery                                                    ) => {
                 const chat = shell().state.chat;
                 if (recovery.hasIdentity && recovery.messageId !== chat.length - 1) {
                     throw new Error('Generation recovery message is no longer available.');
@@ -514,7 +537,7 @@ async function executeOwnedGenerationRequestInShell(generationEnvelope, lease) {
             return getGenerationLifecycleService().runGenerationDispatch({
                 type, depth, canPerformTools: policy.canPerformTools, pipeline: getPipelineRunState(),
                 isOpenAI: shell().state.main_api === 'openai', command: generationEnvelope.command,
-                trace: requestTrace, signal: submissionSignal, cancelSignal: signal, jsonSchema, quietToLoud,
+                trace: requestTrace                                                                           , signal: submissionSignal, cancelSignal: signal, jsonSchema, quietToLoud,
             }, {
                 ownsRun: () => lease.owns(),
                 currentProcessor: () => shell().state.streamingProcessor,
@@ -525,10 +548,10 @@ async function executeOwnedGenerationRequestInShell(generationEnvelope, lease) {
                 createRecoveryMessage: async () => {
                     const chat = shell().state.chat;
                     let message;
-                    await saveReply({ type, getMessage: '', fromStreaming: true, ownsRun: () => lease.owns(), onMessageCreated: created => { message = created; } });
+                    await saveReply({ type, getMessage: '', fromStreaming: true, ownsRun: () => lease.owns(), onMessageCreated: (created        ) => { message = created; } });
                     const messageId = message ? chat.indexOf(message) : -1;
                     if (!lease.owns() || shell().state.chat !== chat || messageId < 0) throw new Error('Generation recovery message is no longer available.');
-                    return { messageId, identity: message };
+                    return { messageId, identity: message                      };
                 },
                 getModel: () => shell().state.generatingAttemptModel,
                 setModel: model => { shell().state.generatingAttemptModel = model; },
@@ -536,7 +559,7 @@ async function executeOwnedGenerationRequestInShell(generationEnvelope, lease) {
                 transport: (dispatchState, recovery) => ({
                     presetModel: () => getChatCompletionModelFromSettings(shell().state.oai_settings),
                     fallbackModel: () => getFallbackOpenAIModel(shell().state.oai_settings),
-                    pipelineModel: resolvePipelineModel,
+                    pipelineModel: resolvePipelineModel                                                                        ,
                     setAttemptModel: model => { shell().state.generatingAttemptModel = model; },
                     canPerformTools: model => shell().state.ToolManager.canPerformToolCalls(dispatchState.type, shell().state.oai_settings, model),
                     recurseLimit: () => shell().state.ToolManager.RECURSE_LIMIT,
@@ -574,7 +597,7 @@ async function executeOwnedGenerationRequestInShell(generationEnvelope, lease) {
                     assertAllowed: count => assertPipelineResponseAllowed(count, { canPerformToolCalls: dispatchState.canPerformTools }),
                     lastMessage: () => shell().state.chat[shell().state.chat.length - 1],
                     hasToolCalls: calls => shell().state.ToolManager.hasToolCalls(calls),
-                    textInvocations: (text, reasoning, assistant) => dispatchState.type === 'normal' ? pipelineTextInvocations(text, reasoning, assistant) : null,
+                    textInvocations: (text, reasoning, assistant) => dispatchState.type === 'normal' ? (pipelineTextInvocations                                                                )(text, reasoning, assistant) : null,
                     deleteLast: () => deleteRecoveryPlaceholder(recovery),
                     setModel: (id, model) => {
                         if (shell().state.chat[id]) {
@@ -588,10 +611,10 @@ async function executeOwnedGenerationRequestInShell(generationEnvelope, lease) {
                     endPipeline: endPipelineRun,
                     unblock: unblockGeneration,
                     clearProcessor: () => { shell().state.streamingProcessor = null; },
-                    prepareRound: preparePipelineRound,
+                    prepareRound: preparePipelineRound                                   ,
                     saveInvocations: invocations => shell().state.ToolManager.saveFunctionToolInvocations(invocations, { ownsRun: () => dispatchState.ownsCleanup() && (!recovery.hasIdentity || recovery.messageId !== null) }),
                     markComplete: current => rememberMainChatStreamingTransportProcessorTerminal(current, 'completed'),
-                    finalizePipeline: finalizePipelineReply,
+                    finalizePipeline: finalizePipelineReply                                    ,
                     hasPipeline: () => Boolean(getPipelineRunState()),
 
                     finishMessage: (id, message) => processor.onFinishStreaming(id, message),
@@ -605,7 +628,7 @@ async function executeOwnedGenerationRequestInShell(generationEnvelope, lease) {
                     }),
                     activeRunId: getActivePipelineRunId,
                     meta: getPipelineStepMeta,
-                    step: getCurrentPipelineStep,
+                    step: getCurrentPipelineStep                                  ,
                     isFallback: isPipelineFallbackRound,
                     execute: executeGenerationAttempts,
                     successfulMessageId: () => shell().state.chat.length - 1,
@@ -641,13 +664,13 @@ async function executeOwnedGenerationRequestInShell(generationEnvelope, lease) {
                     setType: value => { dispatchState.type = value; },
                     hasToolCalls: response => shell().state.ToolManager.hasToolCalls(response),
                     hasPipeline: () => Boolean(getPipelineRunState()),
-                    textInvocations: (text, reasoning, assistant) => dispatchState.type === 'normal' ? pipelineTextInvocations(text, reasoning, assistant) : null,
+                    textInvocations: (text, reasoning, assistant) => dispatchState.type === 'normal' ? (pipelineTextInvocations                                                                )(text, reasoning, assistant) : null,
                     deleteLastMessage: () => deleteRecoveryPlaceholder(recovery),
                     invokeTools: (response, reasoningText, ownsRun) => shell().state.ToolManager.invokeFunctionTools(response, { reasoningText, ownsRun }),
                     showToolErrors: errors => shell().state.ToolManager.showToolCallError(errors),
-                    preparePipeline: invocations => preparePipelineRound(invocations),
+                    preparePipeline: invocations => (preparePipelineRound                                   )(invocations),
                     saveTools: (invocations, ownsRun) => shell().state.ToolManager.saveFunctionToolInvocations(invocations, { ownsRun }),
-                    finalizePipeline: input => finalizePipelineReply(input),
+                    finalizePipeline: input => finalizePipelineReply(input                      ),
                     logSave: () => console.debug('/api/chats/save called by /Generate'),
                     endPipeline: () => endPipelineRun(),
                     saveChat: ownsRun => saveChatConditional(ownsRun),
@@ -701,7 +724,10 @@ async function executeOwnedGenerationRequestInShell(generationEnvelope, lease) {
  * @param {object[]} [args.summarized] Turn-summary projection entries applied to this assembly
  * @returns {Promise<object>} Serializable preview result for the inspector UI
  */
-async function buildPreviewRequestResult({ type, generateData, chatCompletion, round, warnings, pendingMessage, pendingEntryIdentifier = null, summarized = [], ownsRun }) {
+async function buildPreviewRequestResult({ type, generateData, chatCompletion, round, warnings, pendingMessage, pendingEntryIdentifier = null, summarized = [], ownsRun }
+
+
+ ) {
     return getGenerationLifecycleService().buildPreviewResult({
         type, isOpenAI: shell().state.main_api === 'openai', data: generateData, round, warnings,
         pending: pendingMessage, pendingIdentifier: pendingEntryIdentifier, summarized, completion: chatCompletion,
@@ -713,18 +739,11 @@ async function buildPreviewRequestResult({ type, generateData, chatCompletion, r
         canUseTools: model => shell().state.ToolManager.canPerformToolCalls(type, shell().state.oai_settings, model),
         responseTokens: () => Number(shell().state.oai_settings?.openai_max_tokens) || 0,
         maxPromptTokens: () => getMaxPromptTokens(),
-        budget: (completion, contextTokens, responseTokens) => derivePreviewBudget({ chatCompletion: completion, contextTokens, responseTokens }),
+        budget: (completion, contextTokens, responseTokens) => derivePreviewBudget({ chatCompletion: completion                                                               , contextTokens, responseTokens }),
     });
 }
 
-/**
- * Preview the request a normal generation would produce right now, without
- * sending it and without mutating chat shell().state. Runs the full assembly path of
- * executeGenerationRequestInShell and stops before the fetch.
- * @param {object} [options] Options
- * @param {number} [options.round] Pipeline round index to preview (0 = first step)
- * @returns {Promise<object>} Serializable preview result
- */
+/** Preview the next normal request without sending it. */
 export async function previewNextGenerationRequest({ round = 0 } = {}) {
     await shell().ensureGenerationRuntime?.();
     return executeGenerationRequestInShell(createGenerationRequestEnvelope({
@@ -732,9 +751,8 @@ export async function previewNextGenerationRequest({ round = 0 } = {}) {
         options: { preview: { round: Number(round) || 0 } },
         dryRun: true,
         mainApi: shell().state.main_api,
-    }));
+    })                 );
 }
 
 export function updateEditArrowClasses() {
 }
-
