@@ -1,4 +1,4 @@
-import libs from './lib';
+
 
 import getContext from './scripts/st-context';
 import { getThemeObject } from './scripts/power-user';
@@ -152,8 +152,7 @@ declare global {
 
     var SillyTavern: {
         getContext(): ReturnType<typeof getContext>;
-        llm: any;
-        libs: typeof libs;
+
     };
 
     // Jquery plugins

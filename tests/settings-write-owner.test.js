@@ -1,9 +1,9 @@
 import { describe, expect, jest, test } from '@jest/globals';
 import { loadTsModule } from './helpers/load-ts-module.mjs';
 import { readFileSync } from 'node:fs';
-import { stripTypeScriptTypes } from 'node:module';
+
 import { createReactRuntimeProvider } from '../public/scripts/react-runtime-provider.js';
-import { createSettingsWriteOwner } from '../public/scripts/settings-write-owner.js';
+import { createSettingsWriteOwner } from '../app/lib/settings-write-owner.ts';
 
 describe('settings write owner', () => {
     test('rejects overlapping form conflicts and preserves a rebased provider otherwise', async () => {
@@ -20,13 +20,7 @@ describe('settings write owner', () => {
         expect(owner.rebaseForm({ ...ports, formConflict: () => true })).toBeNull();
         expect(owner.rebaseForm({ ...ports, rebaseProvider: () => null })).toBeNull();
     });
-    test('shell uses a synchronous artifact and exposes the same owner without reading boot state', () => {
-        const source = readFileSync(new URL('../app/lib/settings-write-owner.ts', import.meta.url), 'utf8');
-        const artifact = readFileSync(new URL('../public/scripts/settings-write-owner.js', import.meta.url), 'utf8');
-        const normalized = stripTypeScriptTypes(source).replace(/[\t ]+$/gm, '').replace(/\n+$/, '\n');
-        expect(artifact).toBe(`/* eslint-disable */\n// Generated from app/lib/settings-write-owner.ts; run node scripts/build-settings-write-owner.mjs.\n${normalized}`);
-        expect(artifact).not.toMatch(/[\t ]+$/m);
-        expect(artifact).not.toMatch(/\n\n$/);
+    test('shell exposes the same settings owner without reading boot state', () => {
         const shell = readFileSync(new URL('../public/script.js', import.meta.url), 'utf8');
         expect(shell).toContain('const runtimeSettingsConflict = createSettingsWriteOwner();');
         expect(shell).toContain('settingsWriteOwner: runtimeSettingsConflict');

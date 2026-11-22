@@ -1,6 +1,6 @@
 import { describe, expect, test } from '@jest/globals';
 import fs from 'node:fs';
-import { execFileSync } from 'node:child_process';
+
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -42,19 +42,11 @@ describe('workspace React shell retirement', () => {
         expect(seedSource).not.toContain('    shell:');
     });
 
-    test('generates workspace dependencies before the single React build', () => {
+    test('builds workspace dependencies with the single React build', () => {
         const scripts = JSON.parse(read('package.json')).scripts;
 
-        expect(scripts['build:react'].split(/\s*&&\s*/)).toEqual([
-            'pnpm run build:generation-state',
-            'pnpm run build:workspace-drawer-domain',
-            'node scripts/build-settings-write-owner.mjs',
-            'vite build --mode login',
-        ]);
+        expect(scripts['build:react']).toBe('vite build --mode login');
         expect(scripts['build:react:workspace-panels']).toBe('pnpm run build:react');
-        expect(scripts['build:generation-state']).toBe('node scripts/build-generation-state.mjs');
-        // Check the real generator output, rather than only the package command.
-        execFileSync(process.execPath, ['scripts/build-generation-state.mjs', '--check'], { cwd: repoRoot });
 
     });
 });

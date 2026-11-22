@@ -618,7 +618,7 @@ test.describe('tool bindings', () => {
         });
         await page.locator('#send_textarea').fill('reply pipeline e2e message');
         const previews = await page.evaluate(async () => {
-            const { previewNextGenerationRequest } = await import('/scripts/generation-service.js');
+            const { previewNextGenerationRequest } = await import('/react/login/workspace/generation-service.js');
             const { getPipelineRunState } = await import('/scripts/reply-pipeline-core.js');
             const first = window.SillyTavern.getContext().chatCompletionSettings.reply_pipeline.steps[0];
             const model = first.model;
@@ -761,7 +761,7 @@ test.describe('tool bindings', () => {
         });
         await page.locator('#send_textarea').fill('enabled follow-up message');
         const enabledPreview = await page.evaluate(async () => {
-            const { previewNextGenerationRequest } = await import('/scripts/generation-service.js');
+            const { previewNextGenerationRequest } = await import('/react/login/workspace/generation-service.js');
             return await previewNextGenerationRequest();
         });
         await page.evaluate(() => {

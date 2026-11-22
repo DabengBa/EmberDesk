@@ -24,7 +24,7 @@ The frontend migration gap slice moves the following responsibilities to their d
 | Panel shell layout | `app/components/panels/WorkspacePanelShell.tsx` | Workspace entry supplies each panel's content |
 | Popup lifecycle and cropping | `app/components/local-dialogs/PopupRuntime.tsx` | Cached workspace bundle exports `createPopupRuntime`; bootstrap installs it into the thin JS `Popup` bridge |
 | Generation callers and session coordination | `app/lib/generation/caller.ts`, `app/lib/generation/service.ts` and shared state in `app/lib/generation/shared-state.ts` | The bridge emits the existing public modules; one caller instance and the existing executor retain the stable `Generate`, quiet/raw, regenerate and synchronous stop contracts |
-| Workspace generation request, subscription and preparation state | `app/lib/generation/workspace.ts` | `scripts/build-generation-state.mjs` emits `public/scripts/server-generation-workspace.js`; typed ports coordinate target snapshots, send and preview preparation while the root supplies live shell state, file/DOM adapters, subscription and UI effects |
+| Workspace generation request, subscription and preparation state | `app/lib/generation/workspace.ts` | The Vite workspace runtime entry exports the owner; typed ports coordinate target snapshots, send and preview preparation while the root supplies live shell state, file/DOM adapters, subscription and UI effects |
 | Reasoning message access and formatting | `public/scripts/reasoning.js`, existing `message-service.js` and `message-shell-context.js` | Reasoning reads current chat/API/substitution/save capabilities lazily through the existing message context; formatter and message updater are imported from their domain owner, not the root |
 | Legacy message-action motion, dialogue masks and chat scrolling | `public/scripts/chat-ui-motion.js`, used by existing controllers | Native opacity animations and scrolling replace the FE3 jQuery/transit calls without taking ownership of React message rows |
 | Character selection and duplication | `public/scripts/character-lifecycle-service.js` | `/script.js` retains thin compatibility delegates and wires the existing live shell state and specific commands |
@@ -61,9 +61,13 @@ The first extracted contract modules are:
 During `public/script.js` evaluation:
 
 1. The root imports `eventSource` / `event_types`, request-context helpers, and the browser library.
-2. `installPublicBrowserApi({ libs, getContext })` explicitly assigns the supported `globalThis.SillyTavern` object.
+2. `installPublicBrowserApi({ getContext })` explicitly assigns the first-party compatibility object `globalThis.SillyTavern`.
 3. `registerWorldInfoShellContext(...)` registers callable shell capabilities and a lazy `extensionPromptRoles` accessor. It does not cause `world-info.js` to import the root.
-4. After React commits the workspace hosts and native imports settle, `app/components/workspace/workspace-entry.ts` mounts the composer, then the initial panels using the existing React root. It calls `startWorkspaceRuntime(revealWorkspace)`, which awaits the remaining native bindings and bootstrap via `bindLegacyShellHandlers()`. It does not wait for `window.load`.
+4. `app/components/workspace/workspace-entry.ts` loads the original browser module URLs for the event emitter, i18n and `/script.js` in that order. It passes the native i18n exports and a narrow live frontend-frame port to their React adapters before mounting the composer and initial panels. React does not read `SillyTavern.getContext()` for these capabilities. The entry calls `startWorkspaceRuntime(revealWorkspace)`, which awaits the remaining native bindings and bootstrap via `bindLegacyShellHandlers()`. It does not wait for `window.load`.
+
+The native graph keeps its original URLs. It imports TypeScript owners from three ES-module entries in the same Vite app build, served under `/react/login/workspace/`: `runtime.js` for shared generation state, callers, workspace generation, settings writes and drawers; `generation-service.js` for the generation service; and `generation-attempt.js` loaded only when the lifecycle is needed. The service imports native dependencies by their original `/scripts/` URLs, sharing the registries and event state used by the shell. In development, Vite serves those same three entry URLs from source before the backend proxy. No prebuild writes source files into `public/`.
+
+The same-entry browser target has native `structuredClone`; the classic `public/lib/polyfill.js` is retained because the target includes Firefox 114, which does not provide `Array.prototype.toSorted`.
 
 ### Bootstrap order
 
@@ -71,7 +75,7 @@ During `public/script.js` evaluation:
 
 1. Fetch the CSRF token. A failure shows a persistent error and rejects initialization before the main bootstrap stages continue.
 2. Load the cached workspace bundle and install its React popup factory so synchronous dialog references are available to existing callers. React renders local startup placeholders independently of popup creation.
-3. Install the Provider and preset live contexts and synchronous Prompt Manager domain; register DOM/browser compatibility helpers, library shims, Markdown/DOMPurify patches, and browser fixes.
+3. Install the Provider and preset live contexts and synchronous Prompt Manager domain; register DOM/browser compatibility helpers, Markdown/DOMPurify patches, and browser fixes.
 4. Initialize secrets, locale, core chat and OpenAI modules, presets, and system messages.
 5. Load settings and apply post-settings UI bindings.
 6. Load user avatars and characters, then initialize tokenizers.
@@ -108,9 +112,8 @@ failed counts keep their existing fallback and are not cached as successful
 OpenAI results. `tests/tokenizers-async.test.js` covers these contracts.
 
 `public/scripts/notifications.js` is the single stateful notification owner.
-First-party modules import it; its `globalThis.toastr` and
-`globalThis.emberDeskNotifications` aliases point to the same instance used by
-the React bridge. Notification methods return native elements, and `getContainer`
+First-party modules import it, and `globalThis.emberDeskNotifications` points
+to the same instance for the React bridge. Notification methods return native elements, and `getContainer`
 returns a native container when present or created. HTML strings are sanitized with DOMPurify; DOM nodes are trusted and
 moved intact, including their existing listeners. This
 does not establish a third-party extension runtime.

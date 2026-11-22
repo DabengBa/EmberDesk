@@ -20,4 +20,4 @@ export {
     executeGenerationAttempts,
     simulateGenerationCommandOutcome,
     prepareGenerationEnvelope,
-} from './generation-shared-state.js';
+} from '/react/login/workspace/runtime.js';

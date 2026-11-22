@@ -42,8 +42,9 @@ The composition root discovers its dependencies through static ES-module imports
 |---|---|---|
 | `eventSource`, `event_types` | `public/scripts/events.js` | import and use; expose approved compatibility names |
 | CSRF token and request headers | `public/scripts/request-context.js` | install the Ajax prefilter, load the token during bootstrap, use headers |
-| `globalThis.SillyTavern` | `public/scripts/public-api.js` | explicitly install `{ libs, getContext }` |
+| `globalThis.SillyTavern` | `public/scripts/public-api.js` | explicitly install `{ getContext }` |
 | World Info shell capabilities | `public/scripts/world-info-shell-context.js` | register callable capabilities and lazy values |
+| Generation, settings writes and drawers | Vite workspace entries under `/react/login/workspace/` | import TypeScript owners; load the attempt lifecycle on demand |
 | legacy domain modules | `public/scripts/**` plus remaining root code | import and initialize in the existing sequence |
 
 The reverse-import scanner recursively examines first-party `public/scripts/**/*.js`, skips `extensions/third-party/**`, tokenizes static and dynamic import forms, and compares the exact `(file, kind, specifier, names)` records with the current 70-entry snapshot.
@@ -52,7 +53,7 @@ The reverse-import scanner recursively examines first-party `public/scripts/**/*
 
 The processing outputs are:
 
-- an installed `globalThis.SillyTavern` object with `libs` and `getContext`;
+- an installed `globalThis.SillyTavern` object with `getContext`;
 - a request-context module containing the current CSRF token and header builder;
 - the initialized `eventSource` / `event_types` contract;
 - a registered World Info shell context;
@@ -65,7 +66,7 @@ The processing outputs are:
 ### Module composition
 
 1. `public/script.js` imports the extracted owners and the remaining workspace modules.
-2. The root calls `installPublicBrowserApi({ libs, getContext })`.
+2. The root calls `installPublicBrowserApi({ getContext })`.
 3. The root registers the World Info shell context. The `extensionPromptRoles` value is read through a getter after the root has initialized that value.
 4. After the workspace hosts are committed and imports settle, the React entry calls `startWorkspaceRuntime(revealWorkspace)`.
 5. `bindLegacyShellHandlers()` binds the workspace hosts and calls `bootstrapWorkspace()` without waiting for `window.load`.

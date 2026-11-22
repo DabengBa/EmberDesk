@@ -253,11 +253,10 @@ describe('public browser API runtime contract', () => {
 
         expect(globalThis.SillyTavern).toBeUndefined();
 
-        const libs = { jquery: {} };
         const getContext = jest.fn();
-        module.installPublicBrowserApi({ libs, getContext });
+        module.installPublicBrowserApi({ getContext });
 
-        expect(globalThis.SillyTavern).toEqual({ libs, getContext });
+        expect(globalThis.SillyTavern).toEqual({ getContext });
     });
 });
 
@@ -269,7 +268,7 @@ describe('workspace bootstrap contract', () => {
         expect(source).toContain('export async function startWorkspaceRuntime(revealWorkspace)');
         expect(read('public/scripts/dom-handlers.js')).toContain('await bootstrapWorkspace();');
         expect(source).toContain('export { getRequestHeaders } from \'./scripts/request-context.js\';');
-        expect(source).toContain('installPublicBrowserApi({ libs, getContext });');
+        expect(source).toContain('installPublicBrowserApi({ getContext });');
         expect(source).not.toContain('firstLoadInit');
     });
 });

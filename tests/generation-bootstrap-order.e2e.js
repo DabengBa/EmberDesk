@@ -3,6 +3,7 @@ import { test, expect } from '@playwright/test';
 import { testSetup } from './frontend/frontent-test-utils.js';
 
 const workspacePanelEntry = '**/react/login/assets/workspace-panels-entry-*.js';
+const generationAttemptEntry = '**/react/login/workspace/generation-attempt.js';
 
 test('synchronous stop is available while SPA panel preparation is waiting for its entry', async ({ page }) => {
     await testSetup.awaitST({ page });
@@ -25,7 +26,7 @@ test('synchronous stop is available while SPA panel preparation is waiting for i
             // Exercise the native runtime independently, keeping its normal module-graph entry order.
             await import('/scripts/i18n.js');
             const script = await import('/script.js');
-            const state = await import('/scripts/generation-shared-state.js');
+            const state = await import('/react/login/workspace/runtime.js');
             const context = await import('/scripts/generation-shell-context.js');
             const extension = await import('/scripts/st-context.js');
             const commands = await import('/scripts/chat-generation-command-service.js');
@@ -66,13 +67,23 @@ test('synchronous stop is available while SPA panel preparation is waiting for i
 test('generation runtime remains usable independently when SPA panel preparation fails', async ({ page }) => {
     await testSetup.awaitST({ page });
     await page.route(workspacePanelEntry, route => route.abort());
+    let attemptRequests = 0;
+    await page.route(generationAttemptEntry, route => {
+        attemptRequests++;
+        return route.continue();
+    });
     await page.reload({ waitUntil: 'commit' });
     await expect(page.locator('#workspace-startup').getByRole('alert')).toBeVisible();
+    await page.evaluate(async () => {
+        await import('/scripts/i18n.js');
+        await import('/script.js');
+    });
+    expect(attemptRequests).toBe(0);
     const result = await page.evaluate(async () => {
         await import('/scripts/i18n.js');
         const script = await import('/script.js');
         const context = await import('/scripts/generation-shell-context.js');
-        const state = await import('/scripts/generation-shared-state.js');
+        const state = await import('/react/login/workspace/runtime.js');
         await context.getGenerationShellContext().ensureGenerationRuntime();
         const service = context.getGenerationLifecycleService();
         const controller = new AbortController();
@@ -83,6 +94,7 @@ test('generation runtime remains usable independently when SPA panel preparation
         return { signalMatches, completed, stopped, aborted: controller.signal.aborted };
     });
     expect(result).toEqual({ signalMatches: true, completed: true, stopped: true, aborted: true });
+    expect(attemptRequests).toBe(1);
 });
 
 test('request-scoped prompt injection resolves outlet macros without changing the shared map', async ({ page }) => {

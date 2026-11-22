@@ -521,7 +521,7 @@ describe('React workspace panels bridge helpers', () => {
 
     test('routes quiet/background requests through the generation service without owner markers', () => {
         const scriptSource = read('public/script.js');
-        const callerSource = read('public/scripts/generation-caller-service.js');
+        const callerSource = read('app/lib/generation/caller.ts');
         const generationOwner = read('app/lib/generation/shared-state.ts');
         const workspacePanelSource = read('app/workspace-panels.tsx');
 
@@ -1061,8 +1061,9 @@ describe('React workspace panels bridge helpers', () => {
         // Depth eligibility is computed before any iframe exists
         expect(compatSource).toContain('computeDepthEligible');
         // Host lifecycle notifications still resolve through the shell event source.
-        expect(compatSource).toContain('SillyTavern?.getContext?.()');
-        expect(compatSource).toContain('shell?.eventSource?.emit?.(eventName, frameId)');
+        expect(compatSource).not.toContain('SillyTavern');
+        expect(compatSource).toContain('runtime?.emit(eventName, frameId)');
+        expect(read('app/components/workspace/workspace-entry.ts')).toContain('installFrontendFrameRuntime(workspaceFrontendFrames)');
         // Finalized frame scripts run in an isolated document; the retired child bridge does not return.
         expect(frameModuleSource).toContain('FRONTEND_FRAME_MARKERS');
         expect(frameModuleSource).toContain('iframe.srcdoc');

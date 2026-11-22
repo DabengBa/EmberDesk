@@ -102,25 +102,18 @@ describe('frontend shared library boundary', () => {
 
         expect(lib).not.toHaveProperty('sha256');
         expect(Object.keys(lib.default).sort()).toEqual(expectedExportNames.toSorted());
-        expect(Object.keys(lib).sort()).toEqual([...expectedExportNames, 'default', 'initLibraryShims'].sort());
+        expect(Object.keys(lib).sort()).toEqual([...expectedExportNames, 'default'].sort());
         for (const exportName of expectedExportNames) {
             expect(lib).toHaveProperty(exportName);
             expect(lib.default[exportName]).toBe(lib[exportName]);
         }
     });
 
-    test('installs documented legacy globals without clobbering existing values', async () => {
-        const lib = await importFreshLib();
-        const sentinel = { providedByExtension: true };
-        window.DOMPurify = sentinel;
-
-        lib.initLibraryShims();
-        lib.initLibraryShims();
-
+    test('does not install legacy library globals on import', async () => {
+        await importFreshLib();
         for (const globalName of legacyGlobalNames) {
-            expect(window).toHaveProperty(globalName);
+            expect(window).not.toHaveProperty(globalName);
         }
-        expect(window.DOMPurify).toBe(sentinel);
     });
 
     test('vite output remains importable as a module', async () => {
@@ -130,10 +123,9 @@ describe('frontend shared library boundary', () => {
         expect(fs.existsSync(viteOutputFile)).toBe(true);
 
         const builtLib = await import(`${pathToFileURL(viteOutputFile).href}?cacheBust=${Date.now()}`);
-        expect(builtLib).toHaveProperty('initLibraryShims');
         expect(builtLib).not.toHaveProperty('sha256');
         expect(Object.keys(builtLib.default).sort()).toEqual(expectedExportNames.toSorted());
-        expect(Object.keys(builtLib).sort()).toEqual([...expectedExportNames, 'default', 'initLibraryShims'].sort());
+        expect(Object.keys(builtLib).sort()).toEqual([...expectedExportNames, 'default'].sort());
     });
 
 });

@@ -1,7 +1,7 @@
 import { expect, jest, test } from '@jest/globals';
 import { readFileSync } from 'node:fs';
 import { createRuntimeSettingsPersistence, withStrictSettingsSaveFailureHandler } from '../public/scripts/runtime-settings-persistence.js';
-import { createSettingsWriteOwner } from '../public/scripts/settings-write-owner.js';
+import { createSettingsWriteOwner } from '../app/lib/settings-write-owner.ts';
 
 function fixture() {
     const calls = [];

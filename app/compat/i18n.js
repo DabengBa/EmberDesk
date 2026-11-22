@@ -5,9 +5,9 @@
  *
  * - Workspace pages load the legacy shell. It owns the locale data
  *   (public/scripts/i18n.js), translates `data-i18n` markup, and exposes
- *   t/translate/getCurrentLocale through SillyTavern.getContext(). React
- *   resolves those live functions through the global context — importing
- *   i18n.js here would inline a second module instance with empty localeData.
+ *   t/translate/getCurrentLocale through the workspace entry. That entry
+ *   passes the original native module; bundling it here would create a second
+ *   instance with empty locale data.
  * - Standalone pages (/login, /setup, /settings) never load the shell, so
  *   nothing else would provide that context. For those entry points
  *   `initializeUiLocale()` installs the same contract (translate/t/
@@ -74,22 +74,13 @@ export async function initializeUiLocale() {
     }
 }
 
-/** @type {{ t: Function, translate: Function, getCurrentLocale: Function } | null} */
-let cached = null;
+/** @typedef {Pick<typeof import('../../public/scripts/i18n.js'), 't' | 'translate' | 'getCurrentLocale'>} WorkspaceI18n */
+/** @type {WorkspaceI18n | null} */
+let workspaceI18n = null;
 
-function resolveI18n() {
-    if (cached) {
-        return cached;
-    }
-    const ctx = globalThis.SillyTavern?.getContext?.();
-    if (typeof ctx?.translate === 'function' && typeof ctx?.t === 'function' && typeof ctx?.getCurrentLocale === 'function') {
-        cached = {
-            t: ctx.t.bind(ctx),
-            translate: ctx.translate.bind(ctx),
-            getCurrentLocale: ctx.getCurrentLocale.bind(ctx),
-        };
-    }
-    return cached;
+/** @param {WorkspaceI18n} i18n */
+export function installWorkspaceI18n(i18n) {
+    workspaceI18n = i18n;
 }
 
 /**
@@ -100,9 +91,8 @@ function resolveI18n() {
  * @returns {string}
  */
 export function translate(text, key = null) {
-    const i18n = resolveI18n();
-    if (i18n) {
-        return i18n.translate(text, key);
+    if (workspaceI18n) {
+        return workspaceI18n.translate(text, key);
     }
     return translateWith(standaloneLocaleData, text, key);
 }
@@ -115,17 +105,15 @@ export function translate(text, key = null) {
  * @returns {string}
  */
 export function t(strings, ...values) {
-    const i18n = resolveI18n();
-    if (i18n) {
-        return i18n.t(strings, ...values);
+    if (workspaceI18n) {
+        return workspaceI18n.t(strings, ...values);
     }
     return tWith(standaloneLocaleData, strings, values);
 }
 
 /** Current locale id: the shell's when loaded, otherwise the saved selection. */
 export function getCurrentLocale() {
-    const i18n = resolveI18n();
-    return i18n ? i18n.getCurrentLocale() : standaloneLocale;
+    return workspaceI18n ? workspaceI18n.getCurrentLocale() : standaloneLocale;
 }
 
 /**
@@ -152,9 +140,9 @@ export function useTranslated(text, key = null) {
     return translate(text, key);
 }
 
-/** Test hook: drop the cached function refs. */
+/** Test hook: restore the uninitialized locale. */
 export function resetI18nBridgeForTests() {
-    cached = null;
+    workspaceI18n = null;
     standaloneLocaleData = null;
     standaloneLocale = DEFAULT_UI_LOCALE;
 }

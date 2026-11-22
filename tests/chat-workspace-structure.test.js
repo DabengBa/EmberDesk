@@ -372,15 +372,15 @@ describe('chat workspace structure', () => {
     });
 
     test('routes visible main chat generation through bounded auto recovery attempts', () => {
-        const generationServiceSource = readRepoFile('public/scripts/generation-service.js');
+        const generationServiceSource = readRepoFile('app/lib/generation/service.ts');
         const commandServiceSource = readRepoFile('public/scripts/chat-generation-command-service.js');
         const lifecycleSource = readRepoFile('public/scripts/chat-generation-lifecycle.js');
         const policySource = readRepoFile('app/lib/generation/shared-state.ts');
         const typedGenerationSource = readRepoFile('app/lib/generation/attempt-executor.ts');
 
         // Compatibility modules forward to the synchronous typed policy owner.
-        expect(commandServiceSource).toContain("from './generation-shared-state.js'");
-        expect(lifecycleSource).toContain("from './generation-shared-state.js'");
+        expect(commandServiceSource).toContain("from '/react/login/workspace/runtime.js'");
+        expect(lifecycleSource).toContain("from '/react/login/workspace/runtime.js'");
         expect(policySource).toContain('createGenerationLifecyclePlan({');
         expect(policySource).toContain('getGenerationFailureDecision({');
         // The shell wraps the typed policy to suppress recovery after a user stop.

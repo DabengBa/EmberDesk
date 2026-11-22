@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import vm from 'node:vm';
 import { createRequire } from 'node:module';
 import { createRuntimeSettingsPersistence } from '../public/scripts/runtime-settings-persistence.js';
-import { createSettingsWriteOwner } from '../public/scripts/settings-write-owner.js';
+import { createSettingsWriteOwner } from '../app/lib/settings-write-owner.ts';
 
 globalThis.$ = jest.fn(() => ({ children: () => ({ each: jest.fn() }) }));
 jest.unstable_mockModule('../public/scripts/notifications.js', () => ({ default: { success: jest.fn(), error: jest.fn(), warning: jest.fn() } }));

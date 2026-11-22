@@ -1,4 +1,4 @@
-import { createSettingsWriteOwner } from './settings-write-owner.js';
+import { createSettingsWriteOwner } from '/react/login/workspace/runtime.js';
 
 const RUNTIME_EVENT_KEYS = Object.freeze([
     'CHAT_CHANGED',

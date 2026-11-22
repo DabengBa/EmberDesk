@@ -35,12 +35,12 @@ test.each([
 });
 test('the synchronous browser facade and installed lifecycle share the entry policy', async () => {
     const facade = await import('../public/scripts/chat-generation-command-service.js');
-    const runtime = await import('../public/scripts/generation-typed-runtime.js');
+    const runtime = await import('../app/lib/generation/attempt-executor.ts');
     const lifecycle = runtime.createGenerationLifecycleService(() => ({ chatId: 'chat', contextRevision: 0 }));
     expect(lifecycle.prepareGenerationEnvelope).toBe(facade.prepareGenerationEnvelope);
 });
 test('synchronous compatibility facades expose the same typed generation policies', async () => {
-    const shared = await import('../public/scripts/generation-shared-state.js');
+    const shared = await import('../app/lib/generation/shared-state.ts');
     const command = await import('../public/scripts/chat-generation-command-service.js');
     const lifecycle = await import('../public/scripts/chat-generation-lifecycle.js');
     const recovery = await import('../public/scripts/chat-generation-auto-recovery.js');

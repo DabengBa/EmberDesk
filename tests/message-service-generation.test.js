@@ -22,7 +22,7 @@ const { registerMessageShellContext } = await import('../public/scripts/message-
 const { addCopyToCodeBlocks, addOneMessage, appendMediaToMessage, saveReply } = await import('../public/scripts/message-service.js');
 const { createUserMessageService } = await import('../public/scripts/user-message-service.js');
 const { registerGenerationShellContext, installGenerationLifecycleService } = await import('../public/scripts/generation-shell-context.js');
-const { GenerationStreamSession, getCurrentGenerationContextIdentity, updateEditArrowClasses } = await import('../public/scripts/generation-service.js');
+const { GenerationStreamSession, getCurrentGenerationContextIdentity, updateEditArrowClasses } = await import('../app/lib/generation/service.ts');
 const { createGenerationLifecycleService } = await loadTsModule('app/lib/generation/attempt-executor.ts');
 installGenerationLifecycleService(createGenerationLifecycleService(getCurrentGenerationContextIdentity));
 

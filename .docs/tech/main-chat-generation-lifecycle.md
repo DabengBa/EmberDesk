@@ -22,7 +22,7 @@ It does not replace provider-specific payload builders, the compatibility-visibl
 
 ## Architecture And Constraints
 
-`public/scripts/generation-service.js` is the browser-facing generation service. It uses the installed typed lifecycle in `app/lib/generation/attempt-executor.ts`, while `public/scripts/chat-generation-command-service.js`, `public/scripts/chat-generation-lifecycle.js`, and `public/scripts/chat-generation-auto-recovery.js` provide command classification and bounded recovery decisions. There is no second React transport owner.
+`app/lib/generation/service.ts` is the browser-facing generation service, served through the Vite workspace entry. It uses the installed typed lifecycle in `app/lib/generation/attempt-executor.ts`, while `public/scripts/chat-generation-command-service.js`, `public/scripts/chat-generation-lifecycle.js`, and `public/scripts/chat-generation-auto-recovery.js` provide command classification and bounded recovery decisions. There is no second React transport owner.
 
 Important constraints:
 
@@ -55,7 +55,7 @@ Listener audit for this path: the reply-pipeline and generation-type macro start
 - `getGenerationSuccessFinalization()` describes successful finalization state
 - `hasFallbackProviderForGeneration()` delegates fallback readiness to `hasFallbackProviderSettings()`
 
-`public/script.js` keeps thin compatibility entry points backed by one `createGenerationCallerService(ports)` instance from `public/scripts/generation-caller-service.js`. That caller owns request-envelope admission, quiet/raw orchestration, temporary response length and its event cleanup, regenerate admission/restore state, and synchronous stop. Ports read current chat, API and abort state rather than capturing a stale session. The caller still delegates visible execution to the same service-owned attempt loop and raw requests to the existing provider transport; it is not another executor.
+`public/script.js` keeps thin compatibility entry points backed by one `createGenerationCallerService(ports)` instance from `app/lib/generation/caller.ts`. That caller owns request-envelope admission, quiet/raw orchestration, temporary response length and its event cleanup, regenerate admission/restore state, and synchronous stop. Ports read current chat, API and abort state rather than capturing a stale session. The caller still delegates visible execution to the same service-owned attempt loop and raw requests to the existing provider transport; it is not another executor.
 
 The React composer and message actions use the server workspace for eligible OpenAI-compatible send, regenerate, and continue actions. The browser compatibility service still handles its supported commands, including quiet, background, dry-run and nested calls. Slash-prefixed input is ordinary message text. The React composer calls the synchronous `stopGeneration()` compatibility entry, including before the workspace bundle finishes loading. Swipe is retired.
 
@@ -69,7 +69,7 @@ Submission captures text and draft identity synchronously, passes `composerSubmi
 
 The shell continues to reuse the existing provider payload builders and stable row/event behavior. `GenerationStreamSession` is the internal streaming implementation for request execution; it keeps token append and final row completion compatible with the current renderer. React does not own a second transport executor, and visible/quiet owner markers or fallback handoffs no longer exist. Quiet/background requests use their non-visible contract: no assistant row, return generated text, and no automatic recovery.
 
-For an active reply pipeline, `public/scripts/generation-service.js` plans recovery per continuation round, so a failed later round does not replay completed tool actions. The attempt model is resolved before request construction and stream selection: fallback-provider recovery takes precedence over the active step model, then the preset model. `public/scripts/reply-pipeline.js` retains the captured prefix and `public/scripts/openai.js` retains the step prompt tail for retries; the tail's macros use the initial attempt model even if a retry switches models. See [Reply Pipeline](../db/features/reply-pipeline.md) for the user-facing boundary.
+For an active reply pipeline, `app/lib/generation/service.ts` plans recovery per continuation round, so a failed later round does not replay completed tool actions. The attempt model is resolved before request construction and stream selection: fallback-provider recovery takes precedence over the active step model, then the preset model. `public/scripts/reply-pipeline.js` retains the captured prefix and `public/scripts/openai.js` retains the step prompt tail for retries; the tail's macros use the initial attempt model even if a retry switches models. See [Reply Pipeline](../db/features/reply-pipeline.md) for the user-facing boundary.
 
 ## Scope Boundary
 
@@ -104,7 +104,7 @@ Stable binding points:
 - `public/scripts/chat-generation-auto-recovery.js`
 - `public/scripts/chat-generation-command-service.js`
 - `Generate()` in `public/script.js`
-- `GenerationStreamSession` in `public/scripts/generation-service.js`
+- `GenerationStreamSession` in `app/lib/generation/service.ts`
 - `.generation_auto_recovery_status`
 - `#chat > .mes`
 - `.mes_text`

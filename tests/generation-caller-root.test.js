@@ -1,7 +1,7 @@
 import { expect, jest, test } from '@jest/globals';
 import { readFileSync } from 'node:fs';
 import { runInNewContext } from 'node:vm';
-import { buildRawGenerationPrompt, createGenerationCallerService } from '../public/scripts/generation-caller-service.js';
+import { buildRawGenerationPrompt, createGenerationCallerService } from '../app/lib/generation/caller.ts';
 
 const source = readFileSync(new URL('../public/script.js', import.meta.url), 'utf8');
 

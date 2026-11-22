@@ -19,7 +19,7 @@ test('startup uses the native singleton without requesting the legacy toastr scr
         const initialToastr = window.toastr;
         const initialBridge = window.emberDeskNotifications;
         const notifications = (await import('/scripts/notifications.js')).default;
-        return initialToastr === notifications && initialBridge === notifications
+        return initialToastr === undefined && initialBridge === notifications
             && typeof notifications.info === 'function';
     });
     expect(singleton).toBe(true);
@@ -98,7 +98,7 @@ test('the application uses the native notification singleton and preserves conte
     await testSetup.awaitST({ page });
     const result = await page.evaluate(async () => {
         const notifications = (await import('/scripts/notifications.js')).default;
-        const shared = window.toastr === notifications;
+        const shared = window.emberDeskNotifications === notifications && window.toastr === undefined;
         notifications.clear();
         const safe = notifications.info('<img src=x onerror="window.toastXss=1">', '<b>title</b>', { timeOut: 0 });
         const escaped = !safe.querySelector('.toast-message img') && safe.querySelector('.toast-message').textContent.includes('<img');

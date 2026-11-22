@@ -1,7 +1,7 @@
 import { describe, expect, jest, test } from '@jest/globals';
 
 import { loadTsModule } from './helpers/load-ts-module.mjs';
-import { createGenerationCallerService } from '../public/scripts/generation-caller-service.js';
+import { createGenerationCallerService } from '../app/lib/generation/caller.ts';
 
 async function importFreshCore() {
     return import(`../public/scripts/chat-regenerate.js?cacheBust=${Date.now()}-${Math.random()}`);

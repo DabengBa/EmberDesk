@@ -470,7 +470,7 @@ test('history import retries a committed upload with the same operation id', asy
 test('partial import failure offers a retry with the same operation id', async ({ page }) => {
     await openCharacterHistory(page);
     // Exercise container recreation while the history dialog is open.
-    await page.evaluate(() => window.toastr.remove());
+    await page.evaluate(async () => (await import('/scripts/notifications.js')).default.remove());
     const ids = [];
     await page.route('**/api/chats/import', async route => {
         ids.push(route.request().postDataBuffer().toString('utf8').match(/name="operationId"\r\n\r\n([^\r]+)/)?.[1]);

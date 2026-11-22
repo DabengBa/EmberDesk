@@ -246,10 +246,7 @@ notifications.native = {
     warning(message, title, options) { return show('warning', message, title, options); },
 };
 
-// Third-party extensions and the tokenizer boundary still use the public
-// toastr global. React panels use the named bridge to avoid bundling a second
-// copy of this stateful module.
-globalThis.toastr = notifications;
+// React panels use the named bridge to avoid bundling a second singleton.
 globalThis.emberDeskNotifications = notifications;
 
 export { notifications };

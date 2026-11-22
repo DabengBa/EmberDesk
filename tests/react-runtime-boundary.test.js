@@ -74,7 +74,7 @@ describe('React runtime boundary', () => {
         expect(scriptSource).toContain('mainChatMessageUiState');
 
         const generationServiceSource = fs.readFileSync(
-            path.join(repoRoot, 'public', 'scripts', 'generation-service.js'),
+            path.join(repoRoot, 'app', 'lib', 'generation', 'service.ts'),
             'utf8',
         );
         const typedGenerationSource = fs.readFileSync(

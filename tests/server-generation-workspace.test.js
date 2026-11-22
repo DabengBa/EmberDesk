@@ -1,5 +1,5 @@
 import { expect, jest, test } from '@jest/globals';
-import { captureWorkspaceWorldRuntime, createWorkspaceGeneration, createWorkspaceGenerationPreparation, getWorkspaceGenerationTargetSnapshot } from '../public/scripts/server-generation-workspace.js';
+import { captureWorkspaceWorldRuntime, createWorkspaceGeneration, createWorkspaceGenerationPreparation, getWorkspaceGenerationTargetSnapshot } from '../app/lib/generation/workspace.ts';
 
 test('temporary request target preserves system history and generation metadata', () => {
     const current = jest.fn();

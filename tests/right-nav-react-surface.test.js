@@ -81,7 +81,7 @@ describe('right navigation panel React surface', () => {
         expect(captureIdx).toBeGreaterThan(initIdx);
         expect(bindIdx).toBeGreaterThan(initIdx);
         expect(rossMods).toContain('drawerService.initializePins({ mobile: isMobile(), width: window.innerWidth })');
-        expect(script).toContain("import { createWorkspaceDrawerService } from './scripts/workspace-drawer-domain.js'");
+        expect(script).toMatch(/import \{[^}]*\bcreateWorkspaceDrawerService\b[^}]*\} from '\/react\/login\/workspace\/runtime\.js'/);
         const installIdx = script.indexOf('installWorkspaceDrawerService(createWorkspaceDrawerService);');
         expect(installIdx).toBeGreaterThan(-1);
         expect(installIdx).toBeLessThan(script.indexOf("measureStartupStage('mountRightNavPanel'"));

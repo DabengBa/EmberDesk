@@ -51,7 +51,7 @@ Let users verify what the model is actually about to see — resolved prompt ord
 ## Feature-Specific Evidence
 
 - The `.prompt-inspector-overlay` / `.prompt-inspector-panel` modal with the `预览（未发送）` badge, searchable message rows, collapsed request details, raw JSON, and reported dropped-messages section are primary evidence.
-- `previewNextGenerationRequest()` in `generation-service.js` returning `{ kind: 'prompt-preview', request, entries, dropped, budget, pipeline, warnings }` is data-contract evidence; an end-to-end comparison asserting the preview body deep-equals the real POST body is parity evidence.
+- `previewNextGenerationRequest()` in `app/lib/generation/service.ts` returning `{ kind: 'prompt-preview', request, entries, dropped, budget, pipeline, warnings }` is data-contract evidence; an end-to-end comparison asserting the preview body deep-equals the real POST body is parity evidence.
 - `CHAT_COMPLETION_SETTINGS_READY` not being emitted during preview and the request-scoped prompt map are evidence for the preview boundary; concurrent preview/background browser coverage verifies the isolation rather than assuming event listeners have no side effects.
 
 ## Failure Signals
