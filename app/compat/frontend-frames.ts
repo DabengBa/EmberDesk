@@ -2,9 +2,8 @@
  * Frontend-frame lifecycle adapter for React main-chat rows.
  *
  * The DOM algorithm lives in public/scripts/frontend-frame.js (framework-free,
- * DOM-marker state). This adapter resolves shell facts through
- * SillyTavern.getContext() — React code outside app/compat may not touch the
- * global directly — and owns the row-level lifecycle effect:
+ * DOM-marker state). The workspace entry supplies live settings and event
+ * emission; this adapter owns the row-level lifecycle effect:
  *
  *   finalized non-streaming row → inline frames inside `.mes_text`
  *   streaming row               → nothing mounts; `.mes_text` innerHTML is
@@ -36,31 +35,19 @@ import { translate } from './i18n.js';
 import { getMainChatSnapshot } from '../stores/main-chat-store';
 import type { MainChatMessageRecord } from '../stores/main-chat-store';
 
-interface ShellEventSource {
-    emit?: (eventName: string, payload?: unknown) => void;
+export interface FrontendFrameRuntime {
+    getSettings(): unknown;
+    emit(eventName: string, frameId: string): void;
 }
 
-interface ShellFrameContext {
-    powerUserSettings?: { frontend_frames?: unknown };
-    eventSource?: ShellEventSource;
-}
+let runtime: FrontendFrameRuntime | undefined;
 
-let cachedShellContext: ShellFrameContext | null = null;
-
-function resolveShellContext(): ShellFrameContext | null {
-    if (cachedShellContext) {
-        return cachedShellContext;
-    }
-    const ctx = (globalThis as { SillyTavern?: { getContext?: () => ShellFrameContext } }).SillyTavern?.getContext?.();
-    if (ctx) {
-        cachedShellContext = ctx;
-    }
-    return cachedShellContext ?? null;
+export function installFrontendFrameRuntime(port: FrontendFrameRuntime): void {
+    runtime = port;
 }
 
 function buildFrameContext(messageId: string, frameIdSeed?: string) {
-    const shell = resolveShellContext();
-    const settings = normalizeFrontendFramesSettings(shell?.powerUserSettings?.frontend_frames);
+    const settings = normalizeFrontendFramesSettings(runtime?.getSettings());
     const snapshot = getMainChatSnapshot();
     const renderedIds: readonly (string | number)[] = snapshot.window.visibleMessageIds.length > 0
         ? snapshot.window.visibleMessageIds
@@ -89,7 +76,7 @@ function buildFrameContext(messageId: string, frameIdSeed?: string) {
         frameIdSeed: frameIdSeed || messageId,
         emit: (eventName: string, frameId: string) => {
             try {
-                shell?.eventSource?.emit?.(eventName, frameId);
+                runtime?.emit(eventName, frameId);
             } catch {
                 // event emission is best-effort
             }

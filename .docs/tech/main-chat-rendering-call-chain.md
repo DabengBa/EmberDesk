@@ -27,7 +27,7 @@ code:
     - public/scripts/dom-handlers.js
     - public/scripts/import-confirm-dialog.js
     - public/scripts/character-external-media-authorization.js
-    - public/scripts/generation-service.js
+    - app/lib/generation/service.ts
     - app/workspace-panels.tsx
     - app/components/main-chat/
 ---
@@ -117,10 +117,10 @@ Scrolling: `queueMainChatMessageListScrollRestore()` / `getMainChatMessageListSc
 
 ### Streaming Token Path
 
-1. `Generate()` wraps the request in a generation envelope and delegates to `executeGenerationRequestInShell()` (`public/scripts/generation-service.js:418`); attempt planning and recovery decisions belong to [main-chat-generation-lifecycle.md](main-chat-generation-lifecycle.md).
-2. When streaming is enabled and the type is not `quiet`, the attempt loop creates `GenerationStreamSession` (`public/scripts/generation-service.js:127`, instantiated at `:1278`) and assigns it to `state.streamingProcessor`.
+1. `Generate()` wraps the request in a generation envelope and delegates to `executeGenerationRequestInShell()` in `app/lib/generation/service.ts`; attempt planning and recovery decisions belong to [main-chat-generation-lifecycle.md](main-chat-generation-lifecycle.md).
+2. When streaming is enabled and the type is not `quiet`, the attempt loop creates `GenerationStreamSession` in `app/lib/generation/service.ts` and assigns it to `state.streamingProcessor`.
 3. `onStartStreaming()` (`:208`) persists the placeholder reply via `saveReply()`, resolves the row id, and marks the UI as generating.
-4. `onProgressStreaming()` (`:217`) cleans the partial text and balances one unclosed trailing Markdown marker — the list is `*`, `"`, a triple-backtick fence, and `~~~` (`public/scripts/generation-service.js:224`) — writes it into `state.chat[messageId]`, updates reasoning, and then branches: on the legacy host it writes `messageFormatting()` output into `.mes_text` and updates the timer; on the React host it only calls `scheduleMainChatMessageListPanelRefresh()` (`public/script.js:1663`) and lets React re-render the row.
+4. `GenerationStreamSession.onProgressStreaming()` delegates to `progressStreamMessage()` in `app/lib/generation/attempt-executor.ts`. The lifecycle updates the message and reasoning, then schedules the main-chat list refresh through its shell ports so React re-renders the row.
 5. `finalizeIntermediaryMessage()` (`:285`) mounts the panel, runs the final progress pass, finishes reasoning, attaches images, emits `MESSAGE_RECEIVED` / `CHARACTER_MESSAGE_RENDERED`, and remounts; `onFinishStreaming()` (`:323`) then saves the chat. `onErrorStreaming()` (`:329`) and `onStopStreaming()` (`:348`) keep the partial text, restore controls, and remount without entering the streaming path again.
 6. Streaming transport phase facts are produced by `getMainChatStreamingTransportState()` (`public/scripts/main-chat-streaming-transport-state.js:33`) and published as `data-main-chat-streaming-transport-*` diagnostics; that helper explicitly owns no provider request, token append, or DOM.
 

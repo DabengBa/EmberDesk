@@ -1,5 +1,5 @@
 import { beforeAll, expect, jest, test } from '@jest/globals';
-import { execFileSync } from 'node:child_process';
+
 import { readFileSync } from 'node:fs';
 import { loadTsModule } from './helpers/load-ts-module.mjs';
 
@@ -457,7 +457,7 @@ const generationEvents = await import('../public/scripts/events.js');
 const registerGenerationShellContext = context => registerContext(Object.assign(context, {
     emitGenerationEvent: (type, ...args) => generationEvents.eventSource.emit(generationEvents.event_types[type], ...args),
 }));
-const { GenerationStreamSession, executeGenerationRequestInShell, getCurrentGenerationContextIdentity } = await import('../public/scripts/generation-service.js');
+const { GenerationStreamSession, executeGenerationRequestInShell, getCurrentGenerationContextIdentity } = await import('../app/lib/generation/service.ts');
 let installedLifecycle;
 beforeAll(async () => {
     const { createGenerationLifecycleService } = await loadTsModule('app/lib/generation/attempt-executor.ts');
@@ -486,11 +486,6 @@ test('typed shared state exposes live bindings and restores nested model scopes'
     expect(state.generatingAttemptModel).toBeNull();
 });
 
-test('served generation artifacts match the typed sources', () => {
-    expect(() => execFileSync(process.execPath, ['scripts/build-generation-state.mjs', '--check'], {
-        cwd: new URL('..', import.meta.url), stdio: 'pipe',
-    })).not.toThrow();
-});
 
 test('shell entry requires the installed typed lifecycle and does not create a fallback', async () => {
     const shell = await import('../public/scripts/generation-shell-context.js?uninitialized-test');

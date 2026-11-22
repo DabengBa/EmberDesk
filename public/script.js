@@ -3,7 +3,11 @@ import {
     generation_started, generatingAttemptModel, scrollLock, streamingProcessor, is_send_press, abortController, extension_prompts,
     setGenerationStarted, setGeneratingAttemptModel, setScrollLock, setStreamingProcessor, setSending, setAbortController,
     withGeneratingModel, findRegenerateTurnStart, setExtensionPrompts,
-} from './scripts/generation-shared-state.js';
+    buildRawGenerationPrompt, createGenerationCallerService,
+    captureWorkspaceWorldRuntime as captureWorkspaceWorldRuntimeWithPorts, createWorkspaceGeneration,
+    createWorkspaceGenerationPreparation, createWorkspaceGenerationRequest, getWorkspaceGenerationTargetSnapshot,
+    createSettingsWriteOwner, createWorkspaceDrawerService,
+} from '/react/login/workspace/runtime.js';
 export { streamingProcessor, is_send_press, withGeneratingModel, extension_prompts };
 
 import {
@@ -14,9 +18,7 @@ import {
     Handlebars,
     SVGInject,
     Popper,
-    initLibraryShims,
     localforage,
-    default as libs,
 
 } from './lib.js';
 
@@ -202,7 +204,7 @@ import {
     createGenerationRequestEnvelope,
     installGenerationAttemptExecutor,
 } from './scripts/chat-generation-command-service.js';
-import { buildRawGenerationPrompt, createGenerationCallerService } from './scripts/generation-caller-service.js';
+
 import { markdownUnderscoreExt } from './scripts/showdown-underscore.js';
 
 import { installPromptManagerDomain, registerPromptManagerMigration } from './scripts/PromptManager.js';
@@ -289,7 +291,7 @@ import {
     isUserStoppedGeneration,
     previewNextGenerationRequest,
     updateEditArrowClasses,
-} from './scripts/generation-service.js';
+} from '/react/login/workspace/generation-service.js';
 import {
     acknowledgeLegacyCharacterWrite,
     createOrEditCharacter,
@@ -373,7 +375,7 @@ export {
 import { createGenerationBootstrapAdmission, createGenerationRuntimeBootstrap, getGenerationLifecycleService, installGenerationLifecycleService, registerGenerationShellContext } from './scripts/generation-shell-context.js';
 import { registerCharacterLifecycleShellContext } from './scripts/character-lifecycle-shell-context.js';
 import { registerCharacterTagsShellContext } from './scripts/character-tags-shell-context.js';
-import { captureWorkspaceWorldRuntime as captureWorkspaceWorldRuntimeWithPorts, createWorkspaceGeneration, createWorkspaceGenerationPreparation, createWorkspaceGenerationRequest, getWorkspaceGenerationTargetSnapshot } from './scripts/server-generation-workspace.js';
+
 import { readStoredUiLocale } from './scripts/ui-locale.js';
 import {
     clearChat,
@@ -422,11 +424,10 @@ import { getRequestHeaders, loadCsrfToken } from './scripts/request-context.js';
 import { getCharacterPatchVersion } from './scripts/character-version.js';
 import { installPublicBrowserApi } from './scripts/public-api.js';
 import { createReactRuntimeProvider } from './scripts/react-runtime-provider.js';
-import { createSettingsWriteOwner } from './scripts/settings-write-owner.js';
-import { createWorkspaceDrawerService } from './scripts/workspace-drawer-domain.js';
+
 
 // API OBJECT FOR EXTERNAL WIRING
-installPublicBrowserApi({ libs, getContext });
+installPublicBrowserApi({ getContext });
 
 const runtimeSettingsConflict = createSettingsWriteOwner();
 
@@ -4480,7 +4481,7 @@ async function bootstrapWorkspace() {
         registerPromptManagerMigration();
         initDomHandlers();
         initStandaloneMode();
-        initLibraryShims();
+
         addShowdownPatch(showdown);
         addDOMPurifyHooks();
         reloadMarkdownProcessor();
@@ -4552,6 +4553,12 @@ async function bootstrapWorkspace() {
 export const workspaceInitialPanelMounts = {
     mountChatComposer, mountCharacterPopup, mountRightNavPanel, mountSelectChatPopup,
     mountCharacterContextMenu, mountOptionsMenu, mountExportFormatPopup, mountDialogueDelMesControls,
+};
+
+/** @satisfies {import('../app/compat/frontend-frames').FrontendFrameRuntime} */
+export const workspaceFrontendFrames = {
+    getSettings: () => power_user.frontend_frames,
+    emit: (eventName, frameId) => eventSource.emit(eventName, frameId),
 };
 
 export async function startWorkspaceRuntime(revealWorkspace) {
@@ -6376,7 +6383,7 @@ const previewWorkspaceGeneration = workspacePreparation.preview;
 
 const generationBootstrapAdmission = createGenerationBootstrapAdmission();
 const ensureGenerationRuntime = createGenerationRuntimeBootstrap({
-    load: () => import('./scripts/generation-typed-runtime.js'),
+    load: () => import('/react/login/workspace/generation-attempt.js'),
     readIdentity: getCurrentGenerationContextIdentity,
     installLifecycle: installGenerationLifecycleService,
     installAttempt: installGenerationAttemptExecutor,

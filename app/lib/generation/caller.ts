@@ -1,5 +1,4 @@
-import { runGenerationEntry, runQuietGeneration, createStopGeneration, createTemporaryResponseLength, canRegenerateLastReply as canRegenerateFromState } from './shared-state';
-import { collectRegenerateTurn } from '../../../public/scripts/chat-regenerate.js';
+import { runGenerationEntry, runQuietGeneration, createStopGeneration, createTemporaryResponseLength, collectRegenerateTurn, canRegenerateLastReply as canRegenerateFromState } from './shared-state';
 import type { createGenerationLifecycleService } from './attempt-executor';
 
 export { buildRawGenerationPrompt } from './shared-state';

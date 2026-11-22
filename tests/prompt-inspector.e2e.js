@@ -73,7 +73,7 @@ async function installGenerateStub(page, { story = false } = {}) {
 
 async function runPreview(page, round = 0) {
     return await page.evaluate(async (pipelineRound) => {
-        const mod = await import('/scripts/generation-service.js');
+        const mod = await import('/react/login/workspace/generation-service.js');
         return await mod.previewNextGenerationRequest({ round: pipelineRound });
     }, round);
 }
@@ -114,7 +114,7 @@ test.describe('prompt inspector (request preview)', () => {
             };
             eventSource.on(event_types.GENERATION_STARTED, window.__attempt44Start);
             eventSource.on(event_types.WORLDINFO_SCAN_DONE, window.__attempt44Scan);
-            const generation = await import('/scripts/generation-service.js');
+            const generation = await import('/react/login/workspace/generation-service.js');
             window.__attempt44Preview = generation.previewNextGenerationRequest();
         });
         await expect.poll(() => page.evaluate(() => window.__attempt44Entered), { timeout: 20_000 }).toBe(true);
@@ -558,7 +558,7 @@ test.describe('prompt inspector (request preview)', () => {
 
         // The fixture seeds browser-only history; use its real browser preview.
         await page.evaluate(async () => {
-            const { previewNextGenerationRequest } = await import('/scripts/generation-service.js');
+            const { previewNextGenerationRequest } = await import('/react/login/workspace/generation-service.js');
             window.__emberDeskPromptInspectorBridge.preview = (round = 0) => previewNextGenerationRequest({ round });
         });
         await open.click();

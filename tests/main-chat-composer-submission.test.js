@@ -18,7 +18,7 @@ const generationEvents = await import('../public/scripts/events.js');
 const registerGenerationShellContext = context => registerContext(Object.assign(context, {
     emitGenerationEvent: (type, ...args) => generationEvents.eventSource.emit(generationEvents.event_types[type], ...args),
 }));
-const { executeGenerationRequestInShell, previewNextGenerationRequest, GenerationStreamSession, getCurrentGenerationContextIdentity } = await import('../public/scripts/generation-service.js');
+const { executeGenerationRequestInShell, previewNextGenerationRequest, GenerationStreamSession, getCurrentGenerationContextIdentity } = await import('../app/lib/generation/service.ts');
 const { createGenerationLifecycleService } = await loadTsModule('app/lib/generation/attempt-executor.ts');
 const lifecycle = createGenerationLifecycleService(getCurrentGenerationContextIdentity);
 installGenerationLifecycleService(lifecycle);

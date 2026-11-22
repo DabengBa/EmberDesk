@@ -287,7 +287,7 @@ describe('native notifications compatibility', () => {
         notifications.clear(first, { force: true });
         expect(legacy.parentNode).toBeNull();
         expect(first.parentNode).toBeNull();
-        expect(globalThis.toastr).toBe(notifications);
+        expect(globalThis.toastr).toBeUndefined();
         expect(globalThis.emberDeskNotifications).toBe(notifications);
     });
 

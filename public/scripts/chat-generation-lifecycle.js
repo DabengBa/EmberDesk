@@ -6,4 +6,4 @@ export {
     createQuietGenerationLifecycleContract,
     getGenerationFailureDecision,
     getGenerationSuccessFinalization,
-} from './generation-shared-state.js';
+} from '/react/login/workspace/runtime.js';

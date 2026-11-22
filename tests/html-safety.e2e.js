@@ -3,7 +3,8 @@ import { testSetup } from './frontend/frontent-test-utils.js';
 
 test('message sanitization does not reparse unknown elements', async ({ page }) => {
     await testSetup.awaitST({ page });
-    const result = await page.evaluate(() => {
+    const result = await page.evaluate(async () => {
+        const { DOMPurify } = await import('/lib.js');
         const descriptor = Object.getOwnPropertyDescriptor(Element.prototype, 'innerHTML');
         let reparses = 0;
         Object.defineProperty(Element.prototype, 'innerHTML', {
@@ -14,7 +15,7 @@ test('message sanitization does not reparse unknown elements', async ({ page }) 
             },
         });
         try {
-            const html = window.DOMPurify.sanitize('<unsafewidget>  first\nsecond<img src=x onerror="window.__xss=1"><pre> a\nb </pre>&nbsp;  </unsafewidget>', {
+            const html = DOMPurify.sanitize('<unsafewidget>  first\nsecond<img src=x onerror="window.__xss=1"><pre> a\nb </pre>&nbsp;  </unsafewidget>', {
                 MESSAGE_SANITIZE: true,
                 ADD_TAGS: ['unsafewidget'],
             });

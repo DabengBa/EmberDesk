@@ -134,7 +134,7 @@ export default [
                 globalThis: 'readonly',
                 ePub: 'readonly',
                 pdfjsLib: 'readonly',
-                toastr: 'readonly',
+
                 SillyTavern: 'readonly',
             },
         },

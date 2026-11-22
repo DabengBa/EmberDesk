@@ -92,6 +92,18 @@ try {
     await vite.listen();
     const origin = `http://127.0.0.1:${vite.httpServer.address().port}`;
 
+    const runtime = await fetch(`${origin}/react/login/workspace/runtime.js`);
+    assert.match(runtime.headers.get('content-type'), /javascript/);
+    assert.match(await runtime.text(), /\/app\/lib\/generation\/shared-state\.ts/);
+    const generationService = await fetch(`${origin}/react/login/workspace/generation-service.js`);
+    assert.match(generationService.headers.get('content-type'), /javascript/);
+    const generationSource = await generationService.text();
+    assert.match(generationSource, /from ["']\/scripts\/generation-shell-context\.js["']/);
+    assert.match(generationSource, /\/app\/lib\/generation\/shared-state\.ts/);
+    const generationAttempt = await fetch(`${origin}/react/login/workspace/generation-attempt.js`);
+    assert.match(generationAttempt.headers.get('content-type'), /javascript/);
+    assert.match(await generationAttempt.text(), /createGenerationLifecycleService/);
+
     const csrf = await fetch(`${origin}/csrf-token`);
     assert.deepEqual(await csrf.json(), { token: 'fixture-token' });
     const cookie = csrf.headers.get('set-cookie').split(';')[0];
@@ -161,13 +173,9 @@ try {
         assert.equal(response.headers.get('location'), redirect);
     }
     for (const panel of ['workspace-panels', 'character-library-panel']) {
-        const module = await fetch(`${origin}/react/login/assets/${panel}.js?v=fixture`);
+        const module = await fetch(`${origin}/app/${panel}.tsx`);
         assert.equal(module.status, 200);
-        assert.match(module.url, new RegExp(`/app/${panel}\\.tsx`));
         assert.match(await module.text(), /export function mount/);
-        const stylesheet = await fetch(`${origin}/react/login/assets/${panel}.css`);
-        assert.equal(stylesheet.status, 200);
-        assert.match(stylesheet.headers.get('content-type'), /^text\/css/);
     }
     const stylex = await fetch(`${origin}/virtual:stylex.css`);
     assert.equal(stylex.status, 200);

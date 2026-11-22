@@ -1,8 +1,8 @@
 import { expect, jest, test } from '@jest/globals';
-import { createGenerationCallerService } from '../public/scripts/generation-caller-service.js';
+import { createGenerationCallerService } from '../app/lib/generation/caller.ts';
 
 async function fixture() {
-    const shared = await import('../public/scripts/generation-shared-state.js');
+    const shared = await import('../app/lib/generation/shared-state.ts');
     const env = {
         ...shared,
         greetingSelectionPending: false, main_api: 'openai', generationEntryPending: false,
@@ -148,13 +148,13 @@ test('real Generate drops a stopped bootstrap or replacement chat before dispatc
 });
 
 test('entry owner is the same function in the synchronous facade and installed typed runtime', async () => {
-    const shared = await import('../public/scripts/generation-shared-state.js');
-    const runtime = await import('../public/scripts/generation-typed-runtime.js');
+    const shared = await import('../app/lib/generation/shared-state.ts');
+    const runtime = await import('../app/lib/generation/attempt-executor.ts');
     expect(runtime.createGenerationLifecycleService(() => ({ chatId: 'chat' })).runGenerationEntry).toBe(shared.runGenerationEntry);
 });
 
 test('extension prompts are a live shared binding, including replacement and in-place updates', async () => {
-    const shared = await import('../public/scripts/generation-shared-state.js');
+    const shared = await import('../app/lib/generation/shared-state.ts');
     const initial = shared.extension_prompts;
     const replacement = { first: { value: 'initial' } };
     try {
@@ -168,14 +168,14 @@ test('extension prompts are a live shared binding, including replacement and in-
 });
 
 test('quiet orchestration is owned by the synchronous typed lifecycle', async () => {
-    const shared = await import('../public/scripts/generation-shared-state.js');
-    const runtime = await import('../public/scripts/generation-typed-runtime.js');
+    const shared = await import('../app/lib/generation/shared-state.ts');
+    const runtime = await import('../app/lib/generation/attempt-executor.ts');
     expect(typeof shared.runQuietGeneration).toBe('function');
     expect(runtime.createGenerationLifecycleService(() => ({ chatId: 'chat' })).runQuietGeneration).toBe(shared.runQuietGeneration);
 });
 
 async function quietFixture() {
-    const shared = await import('../public/scripts/generation-shared-state.js');
+    const shared = await import('../app/lib/generation/shared-state.ts');
     const hook = () => {};
     const env = {
         ...shared, main_api: 'openai', console,

@@ -1,7 +1,7 @@
 import { expect, jest, test } from '@jest/globals';
 import { readFileSync } from 'node:fs';
 
-const source = readFileSync(new URL('../public/scripts/generation-service.js', import.meta.url), 'utf8');
+const source = readFileSync(new URL('../app/lib/generation/service.ts', import.meta.url), 'utf8');
 const start = source.indexOf('removeCardView: () => {');
 const end = source.indexOf('\n                    emitDeleted:', start);
 const entry = source.slice(start, end);

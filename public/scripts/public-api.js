@@ -1,6 +1,3 @@
-export function installPublicBrowserApi({ libs, getContext }) {
-    globalThis.SillyTavern = {
-        libs,
-        getContext,
-    };
+export function installPublicBrowserApi({ getContext }) {
+    globalThis.SillyTavern = { getContext };
 }

@@ -1,6 +1,6 @@
 import { localforage } from '../lib.js';
 import { characters, main_api, this_chid } from '../script.js';
-import { registerDebugFunction } from './power-user.js';
+
 import { oai_settings } from './openai.js';
 import { TOKEN_PADDING } from './constants.js';
 import { getRequestHeaders } from './request-context.js';
@@ -149,16 +149,6 @@ export async function saveTokenCache() {
     }
 }
 
-async function resetTokenCache() {
-    try {
-        console.debug('Chat Completions: resetting token cache');
-        Object.keys(tokenCache).forEach(key => delete tokenCache[key]);
-        await objectStore.removeItem('tokenCache');
-        toastr.success('Token cache cleared. Please reload the chat to re-tokenize it.');
-    } catch (e) {
-        console.warn('Chat Completions: unable to reset token cache', e);
-    }
-}
 
 /**
  * @typedef {object} Tokenizer
@@ -602,5 +592,4 @@ async function decodeTextTokensFromServer(endpoint, ids) {
 
 export async function initTokenizers() {
     await loadTokenCache();
-    registerDebugFunction('resetTokenCache', 'Reset token cache', 'Purges the calculated token counts. Use this if you want to force a full re-tokenization of all chats or suspect the token counts are wrong.', resetTokenCache);
 }

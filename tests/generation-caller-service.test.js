@@ -1,5 +1,5 @@
 import { expect, jest, test } from '@jest/globals';
-import { buildRawGenerationPrompt, createGenerationCallerService } from '../public/scripts/generation-caller-service.js';
+import { buildRawGenerationPrompt, createGenerationCallerService } from '../app/lib/generation/caller.ts';
 
 test('raw prompt keeps substitution, ordering, and existing message mutation', () => {
     const messages = [{ role: 'user', content: 'hello' }];

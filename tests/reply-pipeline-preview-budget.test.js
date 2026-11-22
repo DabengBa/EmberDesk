@@ -13,7 +13,7 @@ jest.unstable_mockModule('../public/scripts/i18n.js', () => ({ t: strings => str
 jest.unstable_mockModule('../public/scripts/openai.js', () => ({ oai_settings: { reply_pipeline: { enabled: true, steps: [{ tool: 'analyze' }] } } }));
 jest.unstable_mockModule('../public/scripts/feature-settings.js', () => ({ feature_settings: { tool_bindings: [{ name: 'analyze', enabled: true }] } }));
 jest.unstable_mockModule('../public/scripts/tool-bindings.js', () => ({ syncPipelineToolBindings: jest.fn() }));
-const { derivePreviewBudget } = await import('../public/scripts/generation-service.js');
+const { derivePreviewBudget } = await import('../app/lib/generation/service.ts');
 const { createGenerationLifecycleService } = await loadTsModule('app/lib/generation/attempt-executor.ts');
 
 /**
@@ -60,7 +60,7 @@ test('assembly failures keep their own warning and unassembled previews have no 
 });
 
 test('the synchronous preview budget facade is the installed typed lifecycle policy', async () => {
-    const { createGenerationLifecycleService: createBrowserLifecycle } = await import('../public/scripts/generation-typed-runtime.js');
+    const { createGenerationLifecycleService: createBrowserLifecycle } = await import('../app/lib/generation/attempt-executor.ts');
     const lifecycle = createBrowserLifecycle(() => ({ chatId: 'chat', contextRevision: 0 }));
     expect(lifecycle.derivePreviewBudget).toBe(derivePreviewBudget);
 });

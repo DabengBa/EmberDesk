@@ -79,8 +79,7 @@ try {
     const result = await page.evaluate(async ({ common, rust, auto, expectedCommon, expectedRust, expectedAuto }) => {
         const lib = await import('/lib.js');
         const { highlightCodeBlock } = await import('/highlight-helper.js');
-        lib.initLibraryShims();
-        const identity = lib.hljs === lib.default.hljs && lib.hljs === window.hljs;
+        const identity = lib.hljs === lib.default.hljs && window.hljs === undefined;
         const initialLanguages = lib.hljs.listLanguages();
         const create = (label, text) => {
             const pre = document.createElement('pre'), code = document.createElement('code'), button = document.createElement('i');

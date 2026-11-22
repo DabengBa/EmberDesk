@@ -23,7 +23,7 @@ const registerGenerationShellContext = context => registerContext(Object.assign(
 }));
 const { getPipelineRunState } = await import('../public/scripts/reply-pipeline-core.js');
 const runtime = await import('../public/scripts/reply-pipeline.js');
-const { executeGenerationRequestInShell, getCurrentGenerationContextIdentity, GenerationStreamSession } = await import('../public/scripts/generation-service.js');
+const { executeGenerationRequestInShell, getCurrentGenerationContextIdentity, GenerationStreamSession } = await import('../app/lib/generation/service.ts');
 const { eventSource, event_types } = await import('../public/scripts/events.js');
 const { createGenerationLifecycleService, executeGenerationAttempts } = await loadTsModule('app/lib/generation/attempt-executor.ts');
 const actualLifecycle = createGenerationLifecycleService(getCurrentGenerationContextIdentity);

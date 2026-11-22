@@ -4,4 +4,4 @@ export {
     hasFallbackProviderSettings,
     isRecoverableGenerationFailure,
     isMainChatVisibleGeneration,
-} from './generation-shared-state.js';
+} from '/react/login/workspace/runtime.js';

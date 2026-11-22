@@ -1,4 +1,5 @@
 import { useLayoutEffect } from 'react';
+import { installWorkspaceI18n } from '../../compat/i18n.js';
 
 const stylesheetGroups = [
     ['/style.css', ['/css/brands.min.css', '/css/bright.min.css', '/css/notifications.css']],
@@ -56,11 +57,15 @@ export function startWorkspace(revealWorkspace: () => void): Promise<void> {
         await loadClassicScript('/lib/polyfill.js');
         // Use original URLs so dependencies and the browser entry share module state.
         // Preserve the original graph root: importing /script.js first breaks its i18n/power-user cycle.
-        for (const path of ['/lib/structured-clone/monkey-patch.js', '/lib/eventemitter.js', '/scripts/i18n.js']) {
-            await import(/* @vite-ignore */ path);
-        }
-        const runtimePath = '/script.js';
-        const { startWorkspaceRuntime, workspaceInitialPanelMounts: mounts } = await import(/* @vite-ignore */ runtimePath);
+        // Absolute URLs also prevent Vite dev from appending ?import to native module identities.
+        const eventsPath = new URL('/lib/eventemitter.js', location.href).href;
+        await import(/* @vite-ignore */ eventsPath);
+        const i18nPath = new URL('/scripts/i18n.js', location.href).href;
+        installWorkspaceI18n(await import(/* @vite-ignore */ i18nPath));
+        const runtimePath = new URL('/script.js', location.href).href;
+        const { startWorkspaceRuntime, workspaceFrontendFrames, workspaceInitialPanelMounts: mounts } = await import(/* @vite-ignore */ runtimePath);
+        const { installFrontendFrameRuntime } = await import('../../compat/frontend-frames');
+        installFrontendFrameRuntime(workspaceFrontendFrames);
         await mounts.mountChatComposer();
         await Promise.all([
             mounts.mountCharacterPopup(), mounts.mountRightNavPanel(), mounts.mountSelectChatPopup(),

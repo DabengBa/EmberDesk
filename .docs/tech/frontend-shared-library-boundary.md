@@ -1,5 +1,5 @@
 ---
-description: "This document covers EmberDesk's browser shared-library boundary at public/lib.js. The file is the compatibility layer between modern ES module imports and legacy extension globals. It is distinct from the Workspace Composition Root at..."
+description: "How public/lib.js exposes shared browser dependencies through the same ES module exports in source and in the Vite build."
 kind: technical
 topic: frontend-shared-library-boundary
 ---
@@ -8,24 +8,18 @@ topic: frontend-shared-library-boundary
 
 ## Module Responsibility
 
-This document covers EmberDesk's browser shared-library boundary at `public/lib.js`. The file is the compatibility layer between modern ES module imports and legacy extension globals. It is distinct from the Workspace Composition Root at `public/script.js`: `/lib.js` owns shared dependency exports and library shims, while `script.js` owns workspace assembly, extracted runtime-contract installation, and the public `/script.js` compatibility entry.
+`public/lib.js` owns shared browser dependency exports. The separate workspace composition root at `public/script.js` assembles the workspace and installs its runtime contracts.
 
 Primary files:
 
-- `public/lib.js` - shared browser-library entrypoint and legacy shim installer
+- `public/lib.js` - shared browser-library entrypoint
 - `vite.config.ts` - Vite library-mode build for `/lib.js`
 - `src/middleware/vite-lib-serve.ts` - Vite-built `/lib.js` serving middleware
-- `tests/frontend-shared-library-boundary.test.js` - regression proof for exports, shims, and built output
-- `public/script.js` - separate workspace composition root; it calls `initLibraryShims()` during `bootstrapWorkspace()` but does not own the library export resolver
+- `tests/frontend-shared-library-boundary.test.js` - regression proof for exports and built output
 
 ## Architecture And Constraints
 
-`public/lib.js` exposes two deliberate surfaces:
-
-1. **Module surface** - first-party browser modules and new extension code should import named exports from `/lib.js` or a stable relative path to `lib.js`.
-2. **Legacy global surface** - `initLibraryShims()` installs selected `window.*` names for old extensions that still read shared libraries from the global object.
-
-Browser ES modules do not automatically leak imported names to `window`. Any global exposed by this boundary must be installed intentionally by `initLibraryShims()` and covered by tests.
+First-party browser modules import dependencies explicitly; `/lib.js` does not install `window.*` aliases. There is no third-party extension runtime.
 
 **Build Tool:** Vite 8 builds the ES module output at `dist/lib/lib.js`.
 
@@ -34,8 +28,8 @@ their embedded-language dependencies. Message code blocks with other explicit
 languages or requiring autodetection load the full highlight.js registry on
 demand; its original registration order is restored for autodetection. The copy
 control is available while loading, remains available on failure, and is not
-duplicated on a repeated visit. The named export, default export and installed
-legacy global retain the same instance. See `public/lib.js`,
+duplicated on a repeated visit. The named and default exports share one
+instance. See `public/lib.js`,
 `public/scripts/highlight-code-block.js` and `public/scripts/message-service.js`.
 
 Vite emits its library chunks under `/highlight-chunks/`. The existing library
@@ -87,37 +81,6 @@ import { DOMPurify, Fuse, gzip } from '../lib.js';
 
 Use absolute `/lib.js` imports only where the existing module location already follows that style or where relative paths would be brittle.
 
-## Legacy Global Shim Contract
-
-`initLibraryShims()` installs the following globals when they are absent:
-
-- `window.Fuse`
-- `window.DOMPurify`
-- `window.hljs`
-- `window.localforage`
-- `window.Handlebars`
-- `window.diff_match_patch`
-- `window.SVGInject`
-- `window.showdown`
-- `window.moment`
-- `window.Popper`
-- `window.droll`
-
-The shim is idempotent and must not overwrite an existing value. This protects extensions that pre-seed or wrap a shared global before EmberDesk startup completes.
-
-The workspace composition root installs other browser contracts separately. `globalThis.SillyTavern` is installed explicitly by `installPublicBrowserApi()` from `public/scripts/public-api.js`; `eventSource` / `event_types` are owned by `public/scripts/events.js`; and CSRF/request headers are owned by `public/scripts/request-context.js`. These are related compatibility surfaces, not additional `/lib.js` exports.
-
-## Extension Guidance
-
-New extension code should import from `/lib.js` when it is authored as an ES module. Legacy extensions may continue to read the documented `window.*` globals.
-
-Do not add new global shims for convenience. A new global requires:
-
-- a compatibility reason,
-- a documented entry in this file,
-- focused coverage in `tests/frontend-shared-library-boundary.test.js`.
-
-Removing a global requires a deprecation cycle and extension-facing migration notes. It is not allowed as incidental cleanup.
 
 ## Validation
 
@@ -133,11 +96,6 @@ Touched-file lint:
 pnpm exec eslint public/lib.js tests/frontend-shared-library-boundary.test.js
 ```
 
-Logic-description proof:
-
-```bash
-uv run python .docs/logic-description/frontend_shared_library_boundary_sandbox_proof.py
-```
 
 Docs check:
 
@@ -147,18 +105,15 @@ pnpm run docs:check
 
 ## Related Semantic IDs And Code Binding Points
 
-This boundary supports the browser shell and extension surfaces described by:
+This boundary supports the browser shell described by:
 
 - `page.chat_workspace`
-- `feature.extension_panel_open`
+
 - `term.shared_browser_library`
 
 Stability-sensitive binding points:
 
-- `initLibraryShims()` in `public/lib.js`
-- `initLibraryShims()` call during `public/script.js` startup
-- `installPublicBrowserApi()` call during `public/script.js` module composition
-- `public/scripts/events.js` and `public/scripts/request-context.js` as separate extracted contract owners
+- Named and default exports in `public/lib.js`
 - Vite library config in `vite.config.ts`
 - `getViteLibServeMiddleware()` in `src/middleware/vite-lib-serve.ts`
 

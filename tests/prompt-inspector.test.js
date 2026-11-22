@@ -67,7 +67,7 @@ describe('pipeline request shaping shared by live send and preview', () => {
 
 describe('prompt inspector wiring (structure)', () => {
     test('live attempts and preview resolve model before request assembly', () => {
-        const service = read('public/scripts/generation-service.js');
+        const service = read('app/lib/generation/service.ts');
         const openai = read('public/scripts/openai.js');
         expect(service).toContain('resolvePipelineModel(');
         expect(service).toContain('resolvePreviewPipelineModel(');
@@ -79,7 +79,7 @@ describe('prompt inspector wiring (structure)', () => {
         expect(openai).toContain('model: requestedModel');
     });
     test('attempt model is used for message provenance and not attributed to pipeline progress cards', () => {
-        const service = read('public/scripts/generation-service.js');
+        const service = read('app/lib/generation/service.ts');
         const script = read('public/script.js');
         const tools = read('public/scripts/tool-calling.js');
         expect(service).toContain('setAttemptModel: model => { shell().state.generatingAttemptModel = model; }');
@@ -89,14 +89,14 @@ describe('prompt inspector wiring (structure)', () => {
         expect(tools).toContain('model: pipelineMeta ? null : getGeneratingModel()');
     });
     test('non-chat-completion streaming keeps the existing consumer decision', () => {
-        const service = read('public/scripts/generation-service.js');
+        const service = read('app/lib/generation/service.ts');
         expect(service).toContain('isStreaming: isStreamingEnabled');
         expect(service).toContain('getGenerationLifecycleService().runGenerationDispatch({');
         const typed = read('app/lib/generation/attempt-executor.ts');
         expect(typed).toContain('ports.isStreaming() && input.type !== \'quiet\'');
     });
     test('preview validates provider tool metadata against its resolved step model', () => {
-        const service = read('public/scripts/generation-service.js');
+        const service = read('app/lib/generation/service.ts');
         expect(read('app/lib/generation/attempt-executor.ts')).toContain('pipeline && !pipeline.fallback && !ports.canUseTools(requestBody.model)');
         expect(service).toContain('canUseTools: model => shell().state.ToolManager.canPerformToolCalls(type, shell().state.oai_settings, model)');
     });
@@ -138,7 +138,7 @@ describe('prompt inspector wiring (structure)', () => {
     });
 
     test('preview mode assembles the pending message without writing chat state', () => {
-        const service = read('public/scripts/generation-service.js');
+        const service = read('app/lib/generation/service.ts');
         expect(service).toContain('preview = null');
         const typed = read('app/lib/generation/attempt-executor.ts');
         expect(service).toContain('getGenerationLifecycleService().prepareOwnedGeneration({');
@@ -160,7 +160,7 @@ describe('prompt inspector wiring (structure)', () => {
     });
 
     test('preview disables prompt bookkeeping and forces squashing', () => {
-        const service = read('public/scripts/generation-service.js');
+        const service = read('app/lib/generation/service.ts');
         const typed = read('app/lib/generation/attempt-executor.ts');
         expect(service).toContain('getGenerationLifecycleService().assemblePromptContent({');
         expect(typed).toContain('assembleOpenAI: messages => assembleOpenAIRequest({');
@@ -172,7 +172,7 @@ describe('prompt inspector wiring (structure)', () => {
     });
 
     test('preview never emits CHAT_COMPLETION_SETTINGS_READY', () => {
-        const service = read('public/scripts/generation-service.js');
+        const service = read('app/lib/generation/service.ts');
         // SETTINGS_READY listeners (TempResponseLength, live pipeline shaping)
         // mutate settings — the preview builds the body with emitSettingsReady: false.
         expect(service).not.toContain('event_types.CHAT_COMPLETION_SETTINGS_READY');
@@ -180,7 +180,7 @@ describe('prompt inspector wiring (structure)', () => {
     });
 
     test('preview prompt writes use the typed request-local map without a global snapshot', () => {
-        const service = read('public/scripts/generation-service.js');
+        const service = read('app/lib/generation/service.ts');
         const typed = read('app/lib/generation/attempt-executor.ts');
         expect(service).toContain('getGenerationLifecycleService().prepareOwnedGeneration({');
         expect(typed).toContain('createPromptContext({ ...ports.promptContext, isolated: entry.isPreview })');

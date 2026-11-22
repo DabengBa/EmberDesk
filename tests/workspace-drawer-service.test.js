@@ -1,17 +1,9 @@
 import { strict as assert } from 'node:assert';
 import { test } from '@jest/globals';
 import { readFileSync } from 'node:fs';
-import { stripTypeScriptTypes } from 'node:module';
+
 import { loadTsModule } from './helpers/load-ts-module.mjs';
 
-test('synchronous shell drawer artifact matches its typed source', () => {
-    const source = readFileSync(new URL('../app/lib/workspace-drawer-domain.ts', import.meta.url), 'utf8');
-    const artifact = readFileSync(new URL('../public/scripts/workspace-drawer-domain.js', import.meta.url), 'utf8');
-    const normalized = stripTypeScriptTypes(source).replace(/[\t ]+$/gm, '').replace(/\n+$/, '\n');
-    assert.equal(artifact, `/* eslint-disable */\n// Generated from app/lib/workspace-drawer-domain.ts; run node scripts/build-workspace-drawer-domain.mjs.\n${normalized}`);
-    assert.doesNotMatch(artifact, /[\t ]+$/m);
-    assert.doesNotMatch(artifact, /\n\n$/);
-});
 
 test('retired shell controls are not registered when their markup is absent', () => {
     const handlers = readFileSync(new URL('../public/scripts/dom-handlers.js', import.meta.url), 'utf8');
@@ -181,7 +173,7 @@ test('workspace bootstrap installs drawer service and restores through it', () =
 
 test('drawer commands have one synchronous owner before workspace bootstrap', () => {
     const shell = readFileSync(new URL('../public/script.js', import.meta.url), 'utf8');
-    assert.match(shell, /import \{ createWorkspaceDrawerService \} from '\.\/scripts\/workspace-drawer-domain\.js'/);
+    assert.match(shell, /import \{[^}]*\bcreateWorkspaceDrawerService\b[^}]*\} from '\/react\/login\/workspace\/runtime\.js'/);
     assert.match(shell, /installWorkspaceDrawerService\(createWorkspaceDrawerService\)/);
     assert.doesNotMatch(shell, /function openWorkspaceChildSlotHostImmediate\(/);
     assert.doesNotMatch(shell, /if \(workspaceDrawerService\) return workspaceDrawerService\.(?:open|close)/);

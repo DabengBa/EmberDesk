@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import { stripTypeScriptTypes } from 'node:module';
 import { afterAll, afterEach, beforeAll, expect, jest, test } from '@jest/globals';
 import lodash from 'lodash';
-import { createSettingsWriteOwner } from '../public/scripts/settings-write-owner.js';
+import { createSettingsWriteOwner } from '../app/lib/settings-write-owner.ts';
 import { createRuntimeSettingsPersistence } from '../public/scripts/runtime-settings-persistence.js';
 
 const read = path => readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');

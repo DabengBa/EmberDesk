@@ -1,7 +1,7 @@
 import { test, expect } from '@jest/globals';
 import { readFile } from 'node:fs/promises';
 import { loadTsModule } from './helpers/load-ts-module.mjs';
-import { createGenerationCallerService } from '../public/scripts/generation-caller-service.js';
+import { createGenerationCallerService } from '../app/lib/generation/caller.ts';
 
 const { createGenerationLifecycleService } = await loadTsModule('app/lib/generation/attempt-executor.ts');
 const lifecycle = createGenerationLifecycleService(() => ({}));
