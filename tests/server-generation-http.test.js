@@ -490,6 +490,36 @@ test.each(['draft', 'legacy'])('server send applies each regex only in its own p
     expect(history.messages.at(-1)).toMatchObject({ role: 'assistant', content: 'model reply to User' });
 });
 
+test('preview removes plot options only when the prompt rule targets the AI reply', async () => {
+    const userId = 'alice';
+    const db = canonicalSqliteManager.open({ handle: userId, directories: users.get(userId).directories, featureFlags: { enabled: true } });
+    const { payload } = getCanonicalSettingsDocument(db, { userId });
+    const set = next => upsertCanonicalSettingsDocument(db, { userId, expectedRevision: getCanonicalSettingsDocument(db, { userId }).revision, payload: next });
+    const target = { avatar_url: 'mira.png', file_name: 'preview-regex-source' };
+    const original = 'The ship sails.\n<plot-options>\n1. Explore\n</plot-options>';
+    const saved = await call('/save', { ...target, create: true, operationId: 'seed-regex-source', chat: [
+        { user_name: 'User' },
+        { is_user: true, name: 'User', mes: 'Set sail' },
+        { is_user: false, name: 'Mira', mes: original },
+    ] });
+    expect(saved.status).toBe(200);
+    const before = await (await call('/get', target)).json();
+    const start = calls.length;
+    try {
+        for (const [source, expected] of [[1, original], [2, 'The ship sails.']]) {
+            set({ ...payload, extension_settings: { regex: [{
+                findRegex: '/\\s*<plot-options>\\s*([\\s\\S]*?)\\s*<\\/plot-options>/gmi',
+                replaceString: '', placement: [source], promptOnly: true, markdownOnly: false,
+            }] } });
+            const response = await call('/generation/preview', { ...target, action: 'send' });
+            expect(response.status).toBe(200);
+            expect((await response.json()).messages.at(-1)).toMatchObject({ role: 'assistant', content: expected });
+        }
+        expect(calls).toHaveLength(start);
+        expect(await (await call('/get', target)).json()).toEqual(before);
+    } finally { set(payload); }
+});
+
 test('regenerate preview and upstream see the same prefix that a successful reply retains', async () => {
     const target = { avatar_url: 'mira.png', file_name: 'regenerate-turn' };
     const retained = [
