@@ -3,9 +3,10 @@ import { readFileSync } from 'node:fs';
 import { runInNewContext } from 'node:vm';
 
 // Component-level proof with actual production functions. DOM and persistence
-// boundaries are isolated; the delegate test uses a controlled native event.
+// boundaries are isolated; selection uses the rendered element's native event.
 class Node {
-    constructor(tag = 'div') { this.tag = tag; this.nodeType = 1; this.attributes = {}; this.children = []; this.parent = null; this.innerHTML = ''; this.classes = new Set(); this.classList = { add: name => this.classes.add(name), toggle: (name, force) => (force ?? !this.classes.has(name)) ? this.classes.add(name) : this.classes.delete(name), contains: name => this.classes.has(name) }; }
+    constructor(tag = 'div') { this.tag = tag; this.nodeType = 1; this.attributes = {}; this.children = []; this.parent = null; this.innerHTML = ''; this.classes = new Set(); this.listeners = {}; this.classList = { add: name => this.classes.add(name), toggle: (name, force) => (force ?? !this.classes.has(name)) ? this.classes.add(name) : this.classes.delete(name), contains: name => this.classes.has(name) }; }
+    addEventListener(type, handler) { this.listeners[type] = handler; }
     setAttribute(name, value) { this.attributes[name] = String(value); }
     getAttribute(name) { return this.attributes[name] ?? null; }
     append(...nodes) { nodes.forEach(node => { node.parent = this; this.children.push(node); }); }
@@ -29,7 +30,7 @@ function setup(entities) {
     const document = { querySelectorAll: selector => selector === '#right-nav-panel .hotswap' ? [container] : selector === '#inline_avatar_template .avatar' ? [avatar] : [] };
     const context = { document, default_avatar: 'img/ai4.png', INTERACTABLE_CONTROL_CLASS: 'interactable',
         getThumbnailUrl: (type, file) => `${type}:${file}`, getEntitiesList: () => entities,
-        DOMPurify: { sanitize: value => `clean:${value}` } };
+        DOMPurify: { sanitize: value => `clean:${value}` }, selectCharacterById: jest.fn(), setActiveCharacter: jest.fn(), saveSettingsDebounced: jest.fn() };
     context.buildAvatarList = jest.fn(extract('public/script.js', 'export function buildAvatarList(', '\n/**', context));
     const refresh = extract('public/scripts/RossAscends-mods.js', 'export async function favsToHotswap()', '\n//changes input bar', context);
     return { refresh, context, container, avatar };
@@ -91,25 +92,14 @@ test('real entity builder and favourite caller preserve order and the 25-charact
     expect(s.context.entitiesFilter.clearFuzzySearchCaches).toHaveBeenCalledTimes(1);
 });
 
-test('rendered character routes through the actual delegated selection handler', async () => {
+test('rendered hotswap character selects and persists directly', async () => {
     const s = setup([{ id: 7, type: 'character', item: { fav: true, name: 'Seven' } }]);
     await s.refresh();
-    const source = readFileSync(new URL('../public/scripts/dom-handlers.js', import.meta.url), 'utf8');
-    const start = source.indexOf("document.addEventListener('click', async function onCharacterSelect(");
-    const end = source.indexOf('\n    });', start) + '\n    });'.length;
-    const selectCharacterById = jest.fn(async () => {});
-    let handler;
-    s.context.document.addEventListener = (_event, callback) => { handler = callback; };
-    Node.prototype.closest = function (selector) { return selector === '.character_select' && this.classes.has('character_select') ? this : null; };
-    runInNewContext(source.slice(start, end), { Element: Node, document: s.context.document, selectCharacterById });
-    await handler({ target: s.container.children[0], button: 0 });
-    expect(selectCharacterById).toHaveBeenCalledWith(7);
-    const ross = readFileSync(new URL('../public/scripts/RossAscends-mods.js', import.meta.url), 'utf8');
-    const secondStart = ross.indexOf("document.addEventListener('click', function onCharacterSelectSave(");
-    const secondEnd = ross.indexOf('\n    });', secondStart) + '\n    });'.length;
-    const setActiveCharacter = jest.fn(), saveSettingsDebounced = jest.fn();
-    runInNewContext(ross.slice(secondStart, secondEnd), { Element: Node, document: s.context.document, setActiveCharacter, saveSettingsDebounced });
-    handler({ target: s.container.children[0], button: 0 });
-    expect(setActiveCharacter).toHaveBeenCalledWith('7');
-    expect(saveSettingsDebounced).toHaveBeenCalledTimes(1);
+    const character = s.container.children[0];
+    character.listeners.click({ button: 1 });
+    expect(s.context.selectCharacterById).not.toHaveBeenCalled();
+    character.listeners.click({ button: 0 });
+    expect(s.context.selectCharacterById).toHaveBeenCalledWith(7);
+    expect(s.context.setActiveCharacter).toHaveBeenCalledWith('7');
+    expect(s.context.saveSettingsDebounced).toHaveBeenCalledTimes(1);
 });

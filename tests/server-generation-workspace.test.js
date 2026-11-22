@@ -1,5 +1,98 @@
 import { expect, jest, test } from '@jest/globals';
-import { createWorkspaceGeneration } from '../public/scripts/server-generation-workspace.js';
+import { captureWorkspaceWorldRuntime, createWorkspaceGeneration, createWorkspaceGenerationPreparation, getWorkspaceGenerationTargetSnapshot } from '../public/scripts/server-generation-workspace.js';
+
+test('temporary request target preserves system history and generation metadata', () => {
+    const current = jest.fn();
+    const target = getWorkspaceGenerationTargetSnapshot({ characterSelected: false, characterName: 'neutral', neutralName: 'neutral', preview: false,
+        hasDraft: () => false, current, history: [{ is_system: true, mes: null }, { is_user: true, mes: 'hi', extra: { api: 'openai', type: 'note', files: ['a'], ignored: 1 } }] });
+    expect(target).toEqual({ temporary: true, history: [
+        { is_user: false, is_system: true, mes: '', extra: { api: undefined, type: undefined, files: undefined, media: undefined, tool_invocations: undefined } },
+        { is_user: true, is_system: undefined, mes: 'hi', extra: { api: 'openai', type: 'note', files: ['a'], media: undefined, tool_invocations: undefined } },
+    ] });
+    expect(current).not.toHaveBeenCalled();
+});
+
+test.each(['regenerate', 'continue'])('preview %s ignores the composer and stages no attachments', async action => {
+    const target = jest.fn(() => ({ version: 'v' }));
+    const stageAttachments = jest.fn();
+    const preview = jest.fn(async () => ({ connection: { model: 'm' }, messages: [], budget: { contextTokens: 100, responseTokens: 20, promptTokens: 30 } }));
+    const preparation = createWorkspaceGenerationPreparation({ generation: {}, target, text: () => 'draft',
+        snapshot: () => ({ contextKey: 'chat' }), hasAttachments: () => true, stageAttachments,
+        activations: () => [], captureWorld: async () => ({ worldInfo: [], scanPrompts: [] }), ownsComposer: () => true,
+        flushSettings: async () => {}, locale: () => 'en', preview });
+    const result = await preparation.preview(3, action);
+    expect(target).toHaveBeenCalledWith({ preview: false });
+    expect(stageAttachments).not.toHaveBeenCalled();
+    expect(preview).toHaveBeenCalledWith({ version: 'v', action, text: undefined, locale: 'en', round: 3, worldInfo: [], scanPrompts: [] });
+    expect(result).toMatchObject({ kind: 'prompt-preview', type: action, pendingMessage: null });
+});
+
+test('continue preparation is cancellable before creation', async () => {
+    const world = Promise.withResolvers();
+    const request = jest.fn();
+    const generation = createWorkspaceGeneration({ request, subscribe() {}, changed() {}, finished() {} });
+    const preparation = createWorkspaceGenerationPreparation({ generation, target: () => ({ version: 'v' }), snapshot: () => ({ contextKey: 'c' }),
+        ownsComposer: () => true, requestId: () => 'r', clearViewport() {}, beginViewport() {}, scrollForPreparation() {},
+        activations: () => [], captureWorld: () => world.promise, flushSettings: async () => {}, locale: () => 'en' });
+    const starting = preparation.start('continue');
+    expect(generation.canStop()).toBe(true);
+    await generation.cancel();
+    world.resolve({ worldInfo: [], scanPrompts: [] });
+    expect(await starting).toBe(false);
+    expect(request).not.toHaveBeenCalled();
+});
+
+test('send preparation preserves attachment, world, settings and creation order', async () => {
+    const calls = [];
+    const prepared = {};
+    const generation = { busy: () => false, prepare: () => prepared, ownsPreparation: () => true,
+        create: async (_target, command, view) => { calls.push('create'); expect(view).toBe(prepared); expect(command.attachments).toEqual({ files: ['a'] }); return {}; },
+        releasePreparation: () => calls.push('release') };
+    const preparation = createWorkspaceGenerationPreparation({ generation, target: () => ({ version: 'v' }), snapshot: () => ({ contextKey: 'c' }),
+        ownsComposer: () => true, requestId: () => 'r', clearViewport() {}, beginViewport() {}, hasAttachments: () => true,
+        activations: () => [['key', {}]], captureAttachments: async () => { calls.push('attachment'); return { attachments: { files: ['a'] }, clearFiles: () => calls.push('clear') }; },
+        captureWorld: async () => { calls.push('world'); return { worldInfo: [], scanPrompts: [] }; },
+        flushSettings: async () => calls.push('flush'), locale: () => 'en', consumeActivations: () => calls.push('consume') });
+    expect(await preparation.start('send', 'hello')).toBe(true);
+    expect(calls).toEqual(['attachment', 'world', 'flush', 'create', 'clear', 'consume', 'release']);
+});
+
+test('preview stops after a changed composer and does not issue a request', async () => {
+    const preview = jest.fn();
+    const preparation = createWorkspaceGenerationPreparation({ generation: {}, target: () => ({ temporary: true }), text: () => 'draft',
+        snapshot: () => ({ contextKey: 'old' }), hasAttachments: () => false, activations: () => [],
+        captureWorld: async () => ({ worldInfo: [], scanPrompts: [] }), ownsComposer: () => false, preview });
+    expect(await preparation.preview()).toEqual({ kind: 'prompt-preview-empty', reason: 'Selected chat changed', warnings: [] });
+    expect(preview).not.toHaveBeenCalled();
+});
+
+test('preview carries staged files and world snapshot into the request and maps its budget', async () => {
+    const preview = jest.fn(async () => ({ connection: { model: 'm' }, messages: [{ role: 'user' }, { role: 'system' }],
+        budget: { contextTokens: 100, responseTokens: 20, promptTokens: 30 }, tools: [{ name: 't' }], toolChoice: 'auto' }));
+    const preparation = createWorkspaceGenerationPreparation({ generation: {}, target: () => ({ temporary: true }), text: () => 'draft',
+        snapshot: () => ({ contextKey: 'chat' }), hasAttachments: () => true, stageAttachments: async () => ['file'],
+        activations: () => [], captureWorld: async () => ({ worldInfo: [], scanPrompts: ['world'] }), ownsComposer: () => true,
+        flushSettings: async () => {}, locale: () => 'en', preview, userName: () => 'User' });
+    const result = await preparation.preview(2);
+    expect(preview).toHaveBeenCalledWith({ temporary: true, action: 'send', text: 'draft', locale: 'en', round: 2,
+        worldInfo: [], scanPrompts: ['world'], draftAttachments: ['file'] });
+    expect(result).toMatchObject({ kind: 'prompt-preview', pendingMessage: { name: 'User', mes: 'draft' }, messagesInContext: 1,
+        request: { model: 'm', max_tokens: 20, tool_choice: 'auto' }, budget: { remaining: 50, totalTokens: 50 } });
+});
+
+test('world runtime captures active entries and only non-empty scan prompts in order', async () => {
+    const activations = [['id', { world: 'book', uid: 4, content: 'entry', ignored: true }]];
+    const prompts = { first: { scan: true }, skipped: { scan: false }, empty: { scan: true }, last: { scan: true } };
+    const seen = [];
+    const result = await captureWorkspaceWorldRuntime(activations, prompts, async (key, snapshot) => {
+        seen.push(key);
+        expect(snapshot).not.toBe(prompts);
+        return key === 'empty' ? '' : key;
+    });
+    expect(seen).toEqual(['first', 'empty', 'last']);
+    expect(result.scanPrompts).toEqual(['first', 'last']);
+    expect(result.worldInfo).toEqual([{ world: 'book', uid: 4, content: 'entry', position: undefined, depth: undefined, role: undefined, order: undefined, useProbability: undefined, probability: undefined }]);
+});
 
 test.each(['fast', 'slow', 'stop'])('a prepared send only shows waiting after the delay (%s)', async outcome => {
     jest.useFakeTimers();

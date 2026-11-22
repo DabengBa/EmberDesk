@@ -979,4 +979,10 @@ class BulkEditOverlay {
     };
 }
 
+export let characterGroupOverlay;
+
+export function initializeCharacterGroupOverlay() {
+    return characterGroupOverlay ??= new BulkEditOverlay();
+}
+
 export { BulkEditOverlayState, CharacterContextMenu, BulkEditOverlay };

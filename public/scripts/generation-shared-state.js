@@ -7,6 +7,7 @@ export let scrollLock = false;
 export let streamingProcessor          = null;
 export let is_send_press = false;
 export let abortController                         = new AbortController();
+export let extension_prompts                          = {};
 
 export function setGenerationStarted(value      )       { generation_started = value; }
 export function setGeneratingAttemptModel(value               )       { generatingAttemptModel = value; }
@@ -14,6 +15,95 @@ export function setScrollLock(value         )       { scrollLock = value; }
 export function setStreamingProcessor(value         )       { streamingProcessor = value; }
 export function setSending(value         )       { is_send_press = value; }
 export function setAbortController(value                        )       { abortController = value; }
+export function setExtensionPrompts(value                         )       { extension_prompts = value; }
+
+
+
+/** Format raw requests without owning shell state or changing the transport. */
+export function buildRawGenerationPrompt(prompt                             , systemPrompt        , prefill        , substitute                           )                     {
+    if (typeof prompt === 'string') {
+        prompt = [{ role: 'user', content: prompt.trim() }];
+    } else if (prompt.length === 0 && !systemPrompt) {
+        throw Error('No messages provided');
+    }
+    prefill = substitute(prefill ?? '');
+    for (const message of prompt) message.content = substitute(message.content ?? '');
+    if (systemPrompt) prompt.unshift({ role: 'system', content: substitute(systemPrompt).trim() });
+    if (prefill) prompt.push({ role: 'assistant', content: prefill });
+    return prompt;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+/** Temporary response settings remain local to their caller instance. */
+export function createTemporaryResponseLength(ports                     ) {
+    let originalResponseLength = -1;
+    let lastApi                = null;
+    const responseLength = {
+        isCustomized: () => originalResponseLength > -1,
+        save(api        , length        ) {
+            originalResponseLength = ports.getResponseLength(api);
+            ports.setResponseLength(api, length);
+            lastApi = api;
+            console.log('[TempResponseLength] Saved original response length:', originalResponseLength);
+        },
+        restore(api                ) {
+            if (originalResponseLength === -1) return;
+            api ||= lastApi;
+            ports.setResponseLength(api, originalResponseLength);
+            console.log('[TempResponseLength] Restored original response length:', originalResponseLength);
+            originalResponseLength = -1;
+            lastApi = null;
+        },
+        setupEventHook(api        ) {
+            const hook = () => { if (responseLength.isCustomized()) responseLength.restore(api); };
+            ports.onceEvent(api === 'openai' ? ports.events.CHAT_COMPLETION_SETTINGS_READY : ports.events.GENERATE_AFTER_DATA, hook);
+            return hook;
+        },
+        removeEventHook(api        , hook            ) {
+            ports.removeEventListener(api === 'openai' ? ports.events.CHAT_COMPLETION_SETTINGS_READY : ports.events.GENERATE_AFTER_DATA, hook);
+        },
+    };
+    return responseLength;
+}
+
+/** Stop immediately, before any asynchronous projection is scheduled. */
+export function createStopGeneration(ports                     )                {
+    return function stopGeneration() {
+        const bootstrapStopped = ports.stopBootstrap();
+        let stopped = false;
+        const processor = ports.getStreamingProcessor();
+        if (processor) { ports.rememberProcessorTerminal(processor, 'stopped'); processor.onStopStreaming(); stopped = true; }
+        const controller = ports.getAbortController();
+        if (controller) {
+            controller.abort('Clicked stop button'); ports.hideStopButton();
+            if (!stopped) ports.rememberVisibleTerminal('stopped', { activeMessageId: null, observedTokenCount: 0, observedChunkCount: 0 });
+            stopped = true;
+        }
+        stopped ||= bootstrapStopped;
+        if (stopped) void ports.mountMessageList();
+        ports.emitEvent(ports.events.GENERATION_STOPPED);
+        return stopped;
+    };
+}
 
 /** Synchronous stop classification is also needed before the lifecycle bundle loads. */
 export function isUserStoppedGenerationError(exception         , aborted         )          {

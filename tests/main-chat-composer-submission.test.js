@@ -13,7 +13,11 @@ jest.unstable_mockModule('../public/scripts/openai.js', () => ({ oai_settings: {
 jest.unstable_mockModule('../public/scripts/feature-settings.js', () => ({ feature_settings: { tool_bindings: [] } }));
 jest.unstable_mockModule('../public/scripts/tool-bindings.js', () => ({ syncPipelineToolBindings: jest.fn() }));
 const composer = await import('../public/scripts/main-chat-composer-service.js');
-const { registerGenerationShellContext, installGenerationLifecycleService } = await import('../public/scripts/generation-shell-context.js');
+const { registerGenerationShellContext: registerContext, installGenerationLifecycleService } = await import('../public/scripts/generation-shell-context.js');
+const generationEvents = await import('../public/scripts/events.js');
+const registerGenerationShellContext = context => registerContext(Object.assign(context, {
+    emitGenerationEvent: (type, ...args) => generationEvents.eventSource.emit(generationEvents.event_types[type], ...args),
+}));
 const { executeGenerationRequestInShell, previewNextGenerationRequest, GenerationStreamSession, getCurrentGenerationContextIdentity } = await import('../public/scripts/generation-service.js');
 const { createGenerationLifecycleService } = await loadTsModule('app/lib/generation/attempt-executor.ts');
 const lifecycle = createGenerationLifecycleService(getCurrentGenerationContextIdentity);
@@ -44,29 +48,24 @@ function generate() {
     return executeGenerationRequestInShell({ type: 'normal', options: { composerSubmission: submission }, dryRun: false });
 }
 
-test('streaming message ports use native rows for media and copy controls', async () => {
-    const row = {};
-    const querySelector = jest.fn(() => row);
-    const oldDollar = globalThis.$;
-    globalThis.$ = () => { throw new Error('streaming rows must not be wrapped in jQuery'); };
+test('streaming media refreshes the React projection without mutating native rows', async () => {
     context.state.ReasoningHandler = class {};
-    context.state.chatElement = { jquery: 'test', 0: { querySelector }, find: () => { throw new Error('copy controls must use native DOM'); } };
-    context.isReactMainChatOwner = jest.fn(() => false);
+    const querySelector = jest.fn();
+    context.state.chatElement = { querySelector };
     context.appendMediaToMessage = jest.fn();
     context.addCopyToCodeBlocks = jest.fn();
-    const message = {};
-    const spy = jest.spyOn(lifecycle, 'startStreamMessage').mockImplementation((session, ports) => {
-        session.messageDom = row;
-        ports.renderImages(message);
+    context.scheduleMainChatMessageListPanelRefresh = jest.fn();
+    const spy = jest.spyOn(lifecycle, 'startStreamMessage').mockImplementation((_session, ports) => {
+        ports.renderImages({});
         ports.addCopyButtons(7);
     });
     try {
         await new GenerationStreamSession('normal', false, new Date(), null).onStartStreaming('');
-        expect(context.appendMediaToMessage).toHaveBeenCalledWith(message, row);
-        expect(querySelector).toHaveBeenCalledWith('.mes[mesid="7"]');
-        expect(context.addCopyToCodeBlocks).toHaveBeenCalledWith(row);
+        expect(context.scheduleMainChatMessageListPanelRefresh).toHaveBeenCalledTimes(1);
+        expect(context.appendMediaToMessage).not.toHaveBeenCalled();
+        expect(querySelector).not.toHaveBeenCalled();
+        expect(context.addCopyToCodeBlocks).not.toHaveBeenCalled();
     } finally {
-        globalThis.$ = oldDollar;
         spy.mockRestore();
     }
 });

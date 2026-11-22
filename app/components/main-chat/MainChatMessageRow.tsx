@@ -12,9 +12,9 @@ type MessageTagRuntime = {
     getSnapshot: () => number;
     getAttributes: (avatarSrc: string) => Record<string, string>;
 };
-const messageTagRuntime = (globalThis as typeof globalThis & { [key: symbol]: MessageTagRuntime | undefined })[Symbol.for('emberdesk.messageTagRuntime')];
-const subscribeMessageTags = (listener: () => void) => messageTagRuntime?.subscribe(listener) ?? (() => {});
-const getMessageTagRevision = () => messageTagRuntime?.getSnapshot() ?? 0;
+const getMessageTagRuntime = () => (globalThis as typeof globalThis & { [key: symbol]: MessageTagRuntime | undefined })[Symbol.for('emberdesk.messageTagRuntime')];
+const subscribeMessageTags = (listener: () => void) => getMessageTagRuntime()?.subscribe(listener) ?? (() => {});
+const getMessageTagRevision = () => getMessageTagRuntime()?.getSnapshot() ?? 0;
 
 const EMPTY_RENDER = {
     messageHtml: '',
@@ -347,7 +347,7 @@ export const MainChatMessageRow = memo(function MainChatMessageRow({
     const [failedAvatarSrc, setFailedAvatarSrc] = useState<string | null>(null);
     const avatarFailed = failedAvatarSrc === avatarSrc;
     useSyncExternalStore(subscribeMessageTags, getMessageTagRevision, getMessageTagRevision);
-    const messageTagAttributes = avatarFailed ? {} : messageTagRuntime?.getAttributes(avatarSrc) ?? {};
+    const messageTagAttributes = avatarFailed ? {} : getMessageTagRuntime()?.getAttributes(avatarSrc) ?? {};
     const setReasoningOpen = (open: boolean) => {
         if (canAddressMessage && hasReasoning) {
             void commands?.setMessageReasoningOpen(messageUid, open);
@@ -393,9 +393,9 @@ export const MainChatMessageRow = memo(function MainChatMessageRow({
             data-reasoning-state={message.reasoningState ?? undefined}
             data-media-display={message.mediaDisplay ?? undefined}
             onClick={event => {
-                if (!bulk.active || !canSelectBulkMessage) return;
+                if (!bulk.active || bulk.busy || !canSelectBulkMessage) return;
                 event.stopPropagation();
-                bulkController.choose(numericMessageId);
+                commands?.selectBulkMessage?.(numericMessageId);
             }}
             onClickCapture={event => {
                 if (message.actionsExpanded

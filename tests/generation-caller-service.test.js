@@ -1,5 +1,13 @@
 import { expect, jest, test } from '@jest/globals';
-import { createGenerationCallerService } from '../public/scripts/generation-caller-service.js';
+import { buildRawGenerationPrompt, createGenerationCallerService } from '../public/scripts/generation-caller-service.js';
+
+test('raw prompt keeps substitution, ordering, and existing message mutation', () => {
+    const messages = [{ role: 'user', content: 'hello' }];
+    const result = buildRawGenerationPrompt(messages, 'sys', 'prefill', text => ` ${text} `);
+    expect(result).toBe(messages);
+    expect(result).toEqual([{ role: 'system', content: 'sys' }, { role: 'user', content: ' hello ' }, { role: 'assistant', content: ' prefill ' }]);
+    expect(() => buildRawGenerationPrompt([], '', '', text => text)).toThrow('No messages provided');
+});
 
 function fixture() {
     const listeners = new Map();

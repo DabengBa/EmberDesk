@@ -49,15 +49,15 @@ export interface BulkDeleteEffectPorts {
     chat: { length: number };
     metadata: { tainted?: boolean };
     prepare(): void;
-    isReactOwner(): boolean;
+
     getIdentity(): unknown;
-    removeLegacyRows(index: number): void;
+
     truncateUi(index: number): void;
     save(): Promise<unknown>;
-    scrollLegacy(): void;
+
     emitDeleted(index: number): Promise<unknown>;
     refreshReact(identity: unknown): Promise<unknown>;
-    markLegacyLast(): void;
+
     invalidSelection(): void;
     cleanup(): void;
 }
@@ -69,17 +69,14 @@ export async function runBulkDeleteEffects(deletedFrom: number, ports: BulkDelet
             ports.invalidSelection();
             return;
         }
-        const reactOwner = ports.isReactOwner();
-        const identity = reactOwner ? ports.getIdentity() : null;
-        if (!reactOwner) ports.removeLegacyRows(deletedFrom);
+        const identity = ports.getIdentity();
         ports.chat.length = deletedFrom;
-        if (reactOwner) ports.truncateUi(deletedFrom);
+        ports.truncateUi(deletedFrom);
         ports.metadata.tainted = true;
         await ports.save();
-        if (!reactOwner) ports.scrollLegacy();
+
         await ports.emitDeleted(deletedFrom);
-        if (reactOwner) await ports.refreshReact(identity);
-        else ports.markLegacyLast();
+        await ports.refreshReact(identity);
     } finally {
         ports.cleanup();
     }

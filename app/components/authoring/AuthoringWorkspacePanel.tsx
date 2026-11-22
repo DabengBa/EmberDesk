@@ -567,16 +567,12 @@ export function AuthoringWorkspacePanel({
                                     type="file"
                                     accept="image/*"
                                     aria-label={translate("Upload character avatar")}
-                                    onChange={(event) => {
+                                    onChange={async (event) => {
                                         const file = event.target.files?.[0];
-                                        const legacyInput = document.getElementById('add_avatar_button');
-                                        if (file && legacyInput instanceof HTMLInputElement) {
-                                            const transfer = new DataTransfer();
-                                            transfer.items.add(file);
-                                            legacyInput.files = transfer.files;
-                                        }
                                         if (file) {
-                                            setAvatarPreviewOverride(URL.createObjectURL(file));
+                                            const preview = await commands?.processAvatarFile?.(file);
+                                            if (!preview) return;
+                                            setAvatarPreviewOverride(preview);
                                             updateDraft({ avatar: file.name });
                                         }
                                     }}

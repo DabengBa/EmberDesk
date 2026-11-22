@@ -1,10 +1,10 @@
 import toastr from './scripts/notifications.js';
 import {
-    generation_started, generatingAttemptModel, scrollLock, streamingProcessor, is_send_press, abortController,
+    generation_started, generatingAttemptModel, scrollLock, streamingProcessor, is_send_press, abortController, extension_prompts,
     setGenerationStarted, setGeneratingAttemptModel, setScrollLock, setStreamingProcessor, setSending, setAbortController,
-    withGeneratingModel, findRegenerateTurnStart,
+    withGeneratingModel, findRegenerateTurnStart, setExtensionPrompts,
 } from './scripts/generation-shared-state.js';
-export { streamingProcessor, is_send_press, withGeneratingModel };
+export { streamingProcessor, is_send_press, withGeneratingModel, extension_prompts };
 
 import {
     showdown,
@@ -17,7 +17,7 @@ import {
     initLibraryShims,
     localforage,
     default as libs,
-    lodash,
+
 } from './lib.js';
 
 import { humanizedDateTime, favsToHotswap, getMessageTimeStamp, dragElement, isMobile, initRossMods, shouldSendOnEnter } from './scripts/RossAscends-mods.js';
@@ -106,7 +106,9 @@ import {
     installOpenAIPresetService,
     refreshOpenAIPresetService,
     installProviderConnectionService,
+    amount_gen, max_context, main_api, setAmountGen, setMaxContext, setMainApi,
 } from './scripts/openai.js';
+export { amount_gen, max_context, main_api };
 
 import {
     backToMainChat,
@@ -152,7 +154,7 @@ import {
     createTimeout,
     cancelDebounce,
 } from './scripts/utils.js';
-import { CHAT_TRUNCATION, debounce_timeout, IGNORE_SYMBOL, inject_ids, MEDIA_SOURCE, MEDIA_TYPE, SCROLL_BEHAVIOR } from './scripts/constants.js';
+import { CHAT_TRUNCATION, debounce_timeout, IGNORE_SYMBOL, inject_ids, MEDIA_SOURCE, MEDIA_TYPE } from './scripts/constants.js';
 
 import {
     cancelDebouncedMetadataSave,
@@ -209,7 +211,7 @@ import { endPipelineRun } from './scripts/reply-pipeline.js';
 import { createToolAction, normalizeToolBindings } from './scripts/tool-bindings-core.js';
 import { installToolBindingsServiceFactory, syncPipelineToolBindings } from './scripts/tool-bindings.js';
 import { getRegexedString, regex_placement } from './scripts/extensions/regex/engine.js';
-import { FILTER_STATES, FILTER_TYPES, FilterHelper, isFilterState } from './scripts/filters.js';
+import { FILTER_STATES, FILTER_TYPES, entitiesFilter, initializeEntitiesFilter, isFilterState } from './scripts/filters.js';
 import { initLocales, t, translate } from './scripts/i18n.js';
 import { countTokensOpenAIAsync, getFriendlyTokenizerName, getTokenCountAsync, initTokenizers, saveTokenCache } from './scripts/tokenizers.js';
 import { loader } from './scripts/action-loader.js';
@@ -218,7 +220,8 @@ import { setSettingsValue } from './scripts/settings-document-changes.js';
 import { setSelectedWorldInfo } from './scripts/world-info-state.js';
 import { ensurePanel, registerPanelHook } from './scripts/deferred-panels.js';
 import { getCharacterCardTagId } from './scripts/deferred-panel-replays.js';
-import { BulkEditOverlay } from './scripts/BulkEditOverlay.js';
+import { characterGroupOverlay, initializeCharacterGroupOverlay } from './scripts/BulkEditOverlay.js';
+export { characterGroupOverlay, entitiesFilter };
 import { beginSettingsSaveSnapshot, finishSettingsSaveSnapshot } from './scripts/character-sort-save-guard.js';
 import { appendFileContent, hasPendingFileAttachment, populateFileAttachment, decodeStyleTags, encodeStyleTags, normalizeStyleTagsForMarkdown, preserveNeutralChat, restoreNeutralChat, formatCreatorNotes, initChatUtilities, openFileAttachmentPicker, addDOMPurifyHooks } from './scripts/chats.js';
 import {
@@ -370,7 +373,7 @@ export {
 import { createGenerationBootstrapAdmission, createGenerationRuntimeBootstrap, getGenerationLifecycleService, installGenerationLifecycleService, registerGenerationShellContext } from './scripts/generation-shell-context.js';
 import { registerCharacterLifecycleShellContext } from './scripts/character-lifecycle-shell-context.js';
 import { registerCharacterTagsShellContext } from './scripts/character-tags-shell-context.js';
-import { createWorkspaceGeneration } from './scripts/server-generation-workspace.js';
+import { captureWorkspaceWorldRuntime as captureWorkspaceWorldRuntimeWithPorts, createWorkspaceGeneration, createWorkspaceGenerationPreparation, createWorkspaceGenerationRequest, getWorkspaceGenerationTargetSnapshot } from './scripts/server-generation-workspace.js';
 import { readStoredUiLocale } from './scripts/ui-locale.js';
 import {
     clearChat,
@@ -570,6 +573,7 @@ registerWorldInfoShellContext({
 });
 
 registerGenerationShellContext({
+    emitGenerationEvent: (type, ...args) => eventSource.emit(event_types[type], ...args),
     state: {
         get generatingAttemptModel() { return generatingAttemptModel; },
         set generatingAttemptModel(value) { setGeneratingAttemptModel(value); },
@@ -671,7 +675,7 @@ registerGenerationShellContext({
     appendMediaToMessage: (...args) => appendMediaToMessage(...args),
     formatGenerationTimer: (...args) => formatGenerationTimer(...args),
     getStoppingStrings: (...args) => getStoppingStrings(...args),
-    isReactMainChatOwner: (...args) => isReactMainChatOwner(...args),
+
     messageFormatting: (...args) => messageFormatting(...args),
     mountReactMainChatMessageListPanel: (...args) => mountReactMainChatMessageListPanel(...args),
     processImageAttachment: (...args) => processImageAttachment(...args),
@@ -715,7 +719,7 @@ registerGenerationShellContext({
 registerChatOpsShellContext({
     state: {
         set chat_metadata(value) { chat_metadata = value; },
-        set extension_prompts(value) { extension_prompts = value; },
+        set extension_prompts(value) { setExtensionPrompts(value); },
         set selected_button(value) { selected_button = value; },
         set this_edit_mes_id(value) { this_edit_mes_id = value; },
         get characters() { return characters; },
@@ -742,8 +746,7 @@ registerChatOpsShellContext({
         get isChatSaving() { return isChatSaving; },
         set isChatSaving(value) { isChatSaving = value; },
         get generationPending() { return generationCaller.generationEntryPending || generationCaller.regenerateRequestInFlight; },
-        get mainChatMessageRenderGeneration() { return mainChatMessageRenderGeneration; },
-        set mainChatMessageRenderGeneration(value) { mainChatMessageRenderGeneration = value; },
+
         get reactMainChatProjectionCleared() { return reactMainChatProjectionCleared; },
         set reactMainChatProjectionCleared(value) { reactMainChatProjectionCleared = value; },
     },
@@ -760,7 +763,7 @@ registerChatOpsShellContext({
     clamp: (...args) => clamp(...args),
     closeMessageEditor: (...args) => closeMessageEditor(...args),
     compressRequest: (...args) => compressRequest(...args),
-    consumeMainChatMessageListScrollRestore: (...args) => consumeMainChatMessageListScrollRestore(...args),
+
     delay: (...args) => delay(...args),
     deleteMainChatMessageListScrollSnapshot: (...args) => deleteMainChatMessageListScrollSnapshot(...args),
     equalsIgnoreCaseAndAccents: (...args) => equalsIgnoreCaseAndAccents(...args),
@@ -773,7 +776,7 @@ registerChatOpsShellContext({
     hasMainChatMessageListScrollRestore: (...args) => hasMainChatMessageListScrollRestore(...args),
     humanizedDateTime: (...args) => humanizedDateTime(...args),
     isElementInViewport: (...args) => isElementInViewport(...args),
-    isReactMainChatOwner: (...args) => isReactMainChatOwner(...args),
+
     mountReactMainChatMessageListPanel: (...args) => mountReactMainChatMessageListPanel(...args),
     persistMainChatMessageListScrollSnapshotBeforeClear: (...args) => persistMainChatMessageListScrollSnapshotBeforeClear(...args),
     queueMainChatMessageListScrollRestore: (...args) => queueMainChatMessageListScrollRestore(...args),
@@ -782,7 +785,7 @@ registerChatOpsShellContext({
     renderSelectChatListReact: (...args) => renderSelectChatListReact(...args),
     displayHistoryCompat: (...args) => displayHistoryCompat(...args),
     saveTokenCache: (...args) => saveTokenCache(...args),
-    scrollOnMediaLoad: (...args) => scrollOnMediaLoad(...args),
+
     select_rm_characters: (...args) => select_rm_characters(...args),
     setActiveCharacter: (...args) => setActiveCharacter(...args),
     setCharacterId: (...args) => setCharacterId(...args),
@@ -933,7 +936,7 @@ registerMessageShellContext({
         get main_api() { return main_api; },
         get mesForShowdownParse() { return mesForShowdownParse; },
         set mesForShowdownParse(value) { mesForShowdownParse = value; },
-        get messageTemplate() { return messageTemplate; },
+
         get name1() { return name1; },
         get name2() { return name2; },
         get systemUserName() { return systemUserName; },
@@ -970,7 +973,7 @@ registerMessageShellContext({
     getTokenCountAsync: (...args) => getTokenCountAsync(...args),
     humanFileSize: (...args) => humanFileSize(...args),
     isDataURL: (...args) => isDataURL(...args),
-    isReactMainChatOwner: (...args) => isReactMainChatOwner(...args),
+
     mountReactMainChatMessageListPanel: (...args) => mountReactMainChatMessageListPanel(...args),
     onlyUnique: (...args) => onlyUnique(...args),
     saveBase64AsFile: (...args) => saveBase64AsFile(...args),
@@ -988,7 +991,7 @@ registerDomHandlersShellContext({
     getChatMessageCommands: () => getChatMessageCommands(),
     state: {
         get amount_gen() { return amount_gen; },
-        set amount_gen(value) { amount_gen = value; },
+        set amount_gen(value) { setAmountGen(value); },
         get animation_duration() { return animation_duration; },
         get animation_easing() { return animation_easing; },
         get characters() { return characters; },
@@ -1018,7 +1021,7 @@ registerDomHandlersShellContext({
         get mainChatMessageActionsController() { return mainChatMessageActionsController; },
         set mainChatMessageActionsController(value) { mainChatMessageActionsController = value; },
         get max_context() { return max_context; },
-        set max_context(value) { max_context = value; },
+        set max_context(value) { setMaxContext(value); },
         get menu_type() { return menu_type; },
         get name1() { return name1; },
         get name2() { return name2; },
@@ -1048,7 +1051,6 @@ registerDomHandlersShellContext({
     cancelTtsPlay: (...args) => cancelTtsPlay(...args),
     canRegenerateLastReply: (...args) => canRegenerateLastReply(...args),
     continueLastReply,
-    chooseBogusFolder: (...args) => chooseBogusFolder(...args),
     closeCharacterExportPopup: (...args) => closeCharacterExportPopup(...args),
     closeCurrentChat: (...args) => closeCurrentChat(...args),
     closeMessageEditor: (...args) => closeMessageEditor(...args),
@@ -1088,7 +1090,7 @@ registerDomHandlersShellContext({
     importTags: (...args) => importTags(...args),
     initCharacterSearch: (...args) => initCharacterSearch(...args),
     isDataURL: (...args) => isDataURL(...args),
-    isReactMainChatOwner: (...args) => isReactMainChatOwner(...args),
+
     isValidUrl: (...args) => isValidUrl(...args),
     loadEarlierChatMessages: (...args) => loadEarlierChatMessages(...args),
     loadMovingUIState: (...args) => loadMovingUIState(...args),
@@ -1097,13 +1099,7 @@ registerDomHandlersShellContext({
     messageEditCancel: (...args) => messageEditCancel(...args),
     messageEditDone: (...args) => messageEditDone(...args),
     messageEditMove: (...args) => messageEditMove(...args),
-    mountCharacterContextMenu: (...args) => mountCharacterContextMenu(...args),
-    mountCharacterPopup: (...args) => mountCharacterPopup(...args),
-    mountChatComposer: (...args) => mountChatComposer(...args),
-    mountDialogueDelMesControls: (...args) => mountDialogueDelMesControls(...args),
     mountDialoguePopupControls: (...args) => mountDialoguePopupControls(...args),
-    mountExportFormatPopup: (...args) => mountExportFormatPopup(...args),
-    mountOptionsMenu: (...args) => mountOptionsMenu(...args),
     mountReactMainChatMessageListPanel: (...args) => mountReactMainChatMessageListPanel(...args),
     getMainChatIdentity: () => ({ character: characters[this_chid]?.avatar, chat: getCurrentChatId(), metadata: chat_metadata }),
     truncateMainChatUiState: (startIndex) => {
@@ -1126,8 +1122,7 @@ registerDomHandlersShellContext({
         });
     },
     mountReactWorkspaceShellChromeHost: (...args) => mountReactWorkspaceShellChromeHost(...args),
-    mountRightNavPanel: (...args) => mountRightNavPanel(...args),
-    mountSelectChatPopup: (...args) => mountSelectChatPopup(...args),
+
     newAssistantChat: (...args) => newAssistantChat(...args),
     openAlternateGreetings: (...args) => openAlternateGreetings(...args),
     openCharacterLibrary: () => openWorkspaceShellCharacterLibrary(),
@@ -1139,7 +1134,6 @@ registerDomHandlersShellContext({
 
     processDroppedFiles: (...args) => processDroppedFiles(...args),
     queueReactCharacterAuthoringRemount: (...args) => queueReactCharacterAuthoringRemount(...args),
-    read_avatar_load: (...args) => read_avatar_load(...args),
     regenerateLastReply: (...args) => regenerateLastReply(...args),
     renameCharacter: (...args) => renameCharacter(...args),
     renameChat: (...args) => renameChat(...args),
@@ -1151,7 +1145,6 @@ registerDomHandlersShellContext({
     isAuthoringMirrorWrite: () => authoringMirrorWriteDepth > 0,
     saveChatConditional: (...args) => saveChatConditional(...args),
     saveSettingsDebounced: (...args) => saveSettingsDebounced(...args),
-    selectCharacterById: (...args) => selectCharacterById(...args),
     selectImportedChar: (...args) => selectImportedChar(...args),
     selectRightMenuWithAnimation: (...args) => selectRightMenuWithAnimation(...args),
     select_rm_characters: (...args) => select_rm_characters(...args),
@@ -1601,16 +1594,6 @@ function queueMainChatMessageListScrollRestore(chatId) {
         : null;
 }
 
-function consumeMainChatMessageListScrollRestore(chatId = getCurrentChatId()) {
-    const normalizedChatId = typeof chatId === 'string' ? chatId.trim() : '';
-    const shouldRestore = normalizedChatId !== '' && mainChatMessageListPendingRestoreChatId === normalizedChatId;
-
-    if (shouldRestore) {
-        mainChatMessageListPendingRestoreChatId = null;
-    }
-
-    return shouldRestore;
-}
 
 function hasMainChatMessageListScrollRestore(chatId = getCurrentChatId()) {
     const normalizedChatId = typeof chatId === 'string' ? chatId.trim() : '';
@@ -1851,12 +1834,6 @@ function getMainChatRecoveryUiState() {
     return { recovery, failure };
 }
 
-function getMainChatGenerationControlMessageId(element) {
-    const candidateRow = element instanceof HTMLElement ? element.closest('.mes[mesid]') : null;
-    const messageRow = candidateRow?.closest('#chat') ? candidateRow : null;
-    const messageId = Number(messageRow?.getAttribute('mesid'));
-    return Number.isInteger(messageId) && messageId >= 0 ? messageId : null;
-}
 
 function getMainChatComposerActiveContext() {
     if (this_chid !== undefined) {
@@ -1895,19 +1872,14 @@ function getMainChatGenerationControlBridgeState() {
             ? findRegenerateTurnStart(chat) + Number(Boolean(runView.invocations?.length))
             : chat.length + Number(Boolean(runView?.pendingText)),
     });
-    const reactOwner = isReactMainChatOwner();
-    const recoveryUi = reactOwner ? getMainChatRecoveryUiState() : null;
-    const recoveryStatus = reactOwner ? null : document.querySelector('#chat > .mes .generation_auto_recovery_status');
-    const recoveryStatusText = reactOwner ? recoveryUi?.recovery?.status ?? '' : recoveryStatus?.textContent?.trim() ?? '';
-    const failureNotice = reactOwner ? null : document.querySelector('#chat > .mes .generation_failure_notice');
-    const hasFailure = reactOwner
-        ? recoveryUi?.failure?.noticeVisible === true
-        : Boolean(failureNotice);
+    const recoveryUi = getMainChatRecoveryUiState();
+    const recoveryStatusText = recoveryUi?.recovery?.status ?? '';
+    const hasFailure = recoveryUi?.failure?.noticeVisible === true;
     const shouldPreferStoppedTerminal = shouldPreferStoppedMainChatTerminalSnapshot(
         hasFailure ? 'error' : streamingProcessor?.isStopped ? 'stopped' : null,
     );
-    const activeMessageId = (reactOwner ? recoveryUi?.recovery?.messageId : getMainChatGenerationControlMessageId(recoveryStatus))
-        ?? (reactOwner ? recoveryUi?.failure?.messageId : getMainChatGenerationControlMessageId(failureNotice))
+    const activeMessageId = recoveryUi?.recovery?.messageId
+        ?? recoveryUi?.failure?.messageId
         ?? (Number.isInteger(streamingProcessor?.messageId) && streamingProcessor.messageId >= 0 ? streamingProcessor.messageId : null);
 
     return {
@@ -1917,15 +1889,11 @@ function getMainChatGenerationControlBridgeState() {
             isStopped: shouldPreferStoppedTerminal || Boolean(streamingProcessor?.isStopped),
             isFinished: Boolean(streamingProcessor?.isFinished),
             hasError: !shouldPreferStoppedTerminal && hasFailure,
-            isRecovering: reactOwner ? Boolean(recoveryUi?.recovery) : Boolean(recoveryStatus),
-            recoveryStage: reactOwner
-                ? recoveryUi?.recovery?.stage ?? 'primary'
-                : recoveryStatus?.dataset?.recoveryStage === 'fallback' ? 'fallback' : 'primary',
+            isRecovering: Boolean(recoveryUi?.recovery),
+            recoveryStage: recoveryUi?.recovery?.stage ?? 'primary',
             activeMessageId,
             recoveryStatusLabel: recoveryStatusText || null,
-            failureNoticeVisible: reactOwner
-                ? recoveryUi?.failure?.noticeVisible === true
-                : Boolean(failureNotice),
+            failureNoticeVisible: recoveryUi?.failure?.noticeVisible === true,
         }),
     };
 }
@@ -2030,19 +1998,8 @@ function rememberMainChatStreamingTransportVisibleTerminal(phase, {
         return;
     }
 
-    const reactOwner = isReactMainChatOwner();
-    const assistantMessageId = reactOwner
-        ? chat.findLastIndex(message => !message?.is_user && !message?.is_system)
-        : null;
-    const assistantRow = reactOwner
-        ? null
-        : Array.from(document.querySelectorAll('#chat > .mes[is_user="false"][is_system="false"][mesid]')).at(-1);
-    const messageId = reactOwner
-        ? assistantMessageId
-        : Number(assistantRow?.getAttribute('mesid'));
-    const messageText = reactOwner
-        ? String(chat[assistantMessageId]?.mes ?? '').trim()
-        : assistantRow?.querySelector('.mes_text')?.textContent?.trim() ?? '';
+    const messageId = chat.findLastIndex(message => !message?.is_user && !message?.is_system);
+    const messageText = String(chat[messageId]?.mes ?? '').trim();
     const normalizedMessageId = activeMessageId === null
         ? null
         : Number.isInteger(activeMessageId) && activeMessageId >= 0
@@ -2082,15 +2039,10 @@ function shouldPreferStoppedMainChatTerminalSnapshot(currentPhase = null) {
 }
 
 function getMainChatStreamingTransportBridgeState() {
-    const reactOwner = isReactMainChatOwner();
-    const recoveryUi = reactOwner ? getMainChatRecoveryUiState() : null;
-    const recoveryStatus = reactOwner ? null : document.querySelector('#chat > .mes .generation_auto_recovery_status');
-    const failureNotice = reactOwner ? null : document.querySelector('#chat > .mes .generation_failure_notice');
-    const hasFailure = reactOwner
-        ? recoveryUi?.failure?.noticeVisible === true
-        : Boolean(failureNotice);
-    const activeMessageId = (reactOwner ? recoveryUi?.recovery?.messageId : getMainChatGenerationControlMessageId(recoveryStatus))
-        ?? (reactOwner ? recoveryUi?.failure?.messageId : getMainChatGenerationControlMessageId(failureNotice))
+    const recoveryUi = getMainChatRecoveryUiState();
+    const hasFailure = recoveryUi?.failure?.noticeVisible === true;
+    const activeMessageId = recoveryUi?.recovery?.messageId
+        ?? recoveryUi?.failure?.messageId
         ?? (Number.isInteger(streamingProcessor?.messageId) && streamingProcessor.messageId >= 0 ? streamingProcessor.messageId : null);
     const hasActiveStreamingProcessor = Boolean(streamingProcessor && !streamingProcessor.isStopped && !streamingProcessor.isFinished);
     const snapshot = getMainChatStreamingTransportState({
@@ -2103,11 +2055,9 @@ function getMainChatStreamingTransportBridgeState() {
         activeMessageId,
         observedTokenCount: streamingProcessor?.observedTokenCount ?? 0,
         observedChunkCount: streamingProcessor?.observedChunkCount ?? 0,
-        fromFallbackAttempt: Boolean(streamingProcessor?.fromFallbackAttempt || (reactOwner
-            ? recoveryUi?.recovery?.stage === 'fallback'
-            : recoveryStatus?.dataset?.recoveryStage === 'fallback')),
-        recoverable: hasFailure || (reactOwner ? Boolean(recoveryUi?.recovery) : Boolean(recoveryStatus)),
-        errorLabel: reactOwner ? null : failureNotice?.textContent?.trim() || null,
+        fromFallbackAttempt: Boolean(streamingProcessor?.fromFallbackAttempt || recoveryUi?.recovery?.stage === 'fallback'),
+        recoverable: hasFailure || Boolean(recoveryUi?.recovery),
+        errorLabel: null,
     });
     const store = getMainChatStreamingTransportStore();
     const shouldPreferStoppedTerminal = shouldPreferStoppedMainChatTerminalSnapshot(snapshot.phase);
@@ -2626,6 +2576,14 @@ function getCharacterAuthoringReactCommands() {
     return createWorkspacePanelCommandPort({
         commands: {
             saveCharacterAuthoring: payload => saveCharacterAuthoringFromPayload(payload),
+            processAvatarFile: async file => {
+                const input = document.getElementById('add_avatar_button');
+                if (!(input instanceof HTMLInputElement)) return;
+                const transfer = new DataTransfer();
+                transfer.items.add(file);
+                input.files = transfer.files;
+                return read_avatar_load(input);
+            },
             setExternalMediaAllowed: ({ characterId, allowed }) => setCharacterExternalMediaAuthorization({
                 settings: power_user,
                 characterId,
@@ -2888,7 +2846,7 @@ function getCharacterAuthoringReactCommands() {
         },
         shouldRemount(commandResult, commandName) {
             // queryReplaceIntentOutcome does not affect the panel; never remount.
-            if (commandName === 'queryReplaceIntentOutcome' || commandName === 'setExternalMediaAllowed') {
+            if (commandName === 'queryReplaceIntentOutcome' || commandName === 'setExternalMediaAllowed' || commandName === 'processAvatarFile') {
                 return false;
             }
             // Edit-mode saves rebase the React session client-side; remounting on
@@ -3060,10 +3018,6 @@ function cleanupMainChatMessageListReactHost() {
     }
     document.getElementById('send_form')?.removeAttribute('data-main-chat-composer-owner');
     document.getElementById('nonQRFormItems')?.removeAttribute('data-main-chat-composer-owner');
-}
-
-function isReactMainChatOwner() {
-    return document.getElementById('chat')?.dataset.reactMainChatOwner === 'react';
 }
 
 async function runMainChatVisibleGenerationAction({ kind, messageId: _messageId } = {}) {
@@ -3340,6 +3294,12 @@ function getMainChatMessageListReactCommands() {
     });
     return createWorkspacePanelCommandPort({
         commands: {
+            setScrollLock: locked => { setScrollLock(locked); return false; },
+            selectBulkMessage: index => {
+                const count = chat.length - index;
+                globalThis.__emberDeskBulkDeleteController.select(index, t`Delete ${count} messages, from message ${index + 1} through the end of this chat.`, t`Delete ${count} messages`);
+                return false;
+            },
             openCharacterLibrary: async () => {
                 await openWorkspaceShellCharacterLibrary();
                 return true;
@@ -4042,7 +4002,7 @@ toastr.subscribe(function (args) {
     }
 });
 
-export const characterGroupOverlay = new BulkEditOverlay();
+initializeCharacterGroupOverlay();
 
 // Markdown converter
 export let mesForShowdownParse; //intended to be used as a context to compare showdown strings against
@@ -4162,7 +4122,7 @@ function getVisibleCharacterExportTrigger() {
 }
 
 // Saved here for performance reasons
-const messageTemplate = document.querySelector('#message_template .mes');
+
 const chatRoot = document.getElementById('chat');
 export const chatElement = chatRoot;
 
@@ -4201,7 +4161,7 @@ export const DEFAULT_SAVE_EDIT_TIMEOUT = debounce_timeout.relaxed;
 export const DEFAULT_PRINT_TIMEOUT = debounce_timeout.quick;
 
 export const saveSettingsDebounced = debounce((loopCounter = 0) => saveSettings(loopCounter), DEFAULT_SAVE_EDIT_TIMEOUT);
-export const saveCharacterDebounced = debounce(() => document.getElementById('create_button')?.click(), DEFAULT_SAVE_EDIT_TIMEOUT);
+export const saveCharacterDebounced = debounce(() => createOrEditCharacter(), DEFAULT_SAVE_EDIT_TIMEOUT);
 
 /**
  * Prints the character list in a debounced fashion without blocking, with a delay of 100 milliseconds.
@@ -4435,14 +4395,6 @@ export function loadBackgroundSettings(settings) {
     applyActiveBackground();
 }
 
-export let amount_gen = 80; //default max length of AI generated responses
-export let max_context = 2048;
-
-export let extension_prompts = {};
-
-export let main_api;// = "kobold";
-
-
 //css
 var css_send_form_display = '';
 
@@ -4452,7 +4404,7 @@ export { getRequestHeaders } from './scripts/request-context.js';
 /** The tag of the active character. (NOT the id) */
 export let active_character = '';
 
-export const entitiesFilter = new FilterHelper(printCharactersDebounced);
+initializeEntitiesFilter(printCharactersDebounced);
 
 export function getSlideToggleOptions() {
     return {
@@ -4597,6 +4549,11 @@ async function bootstrapWorkspace() {
 }
 
 /** Starts the workspace after the SPA has committed its native hosts. */
+export const workspaceInitialPanelMounts = {
+    mountChatComposer, mountCharacterPopup, mountRightNavPanel, mountSelectChatPopup,
+    mountCharacterContextMenu, mountOptionsMenu, mountExportFormatPopup, mountDialogueDelMesControls,
+};
+
 export async function startWorkspaceRuntime(revealWorkspace) {
     await bindLegacyShellHandlers();
     revealWorkspace();
@@ -5463,52 +5420,19 @@ export async function showMoreMessages(messagesToLoad = null) {
 }
 
 function clearGenerationAutoRecoveryStatus(messageId) {
-    if (isReactMainChatOwner()) {
-        setMainChatMessageUiState(messageId, {
-            recoveryStatus: null,
-            recoveryStage: null,
-            failureNoticeVisible: false,
-        });
-        return;
-    }
-
-    const messageElements = chatRoot.querySelectorAll(`.mes[mesid="${messageId}"]`);
-    messageElements.forEach(row => row.querySelectorAll('.generation_auto_recovery_status').forEach(status => status.remove()));
-    void mountReactMainChatMessageListPanel();
+    setMainChatMessageUiState(messageId, {
+        recoveryStatus: null,
+        recoveryStage: null,
+        failureNoticeVisible: false,
+    });
 }
 
 function showGenerationAutoRecoveryStatus(messageId, status, recoveryStage = 'primary') {
-    if (isReactMainChatOwner()) {
-        setMainChatMessageUiState(messageId, {
-            recoveryStatus: String(status ?? ''),
-            recoveryStage: recoveryStage === 'fallback' ? 'fallback' : 'primary',
-            failureNoticeVisible: false,
-        });
-        return;
-    }
-
-    const messageElements = chatRoot.querySelectorAll(`.mes[mesid="${messageId}"]`);
-    if (!messageElements.length) {
-        return;
-    }
-
-    messageElements.forEach(row => {
-        row.querySelectorAll('.generation_auto_recovery_status').forEach(element => element.remove());
-        row.querySelectorAll('.mes_text').forEach(text => {
-            const statusRow = document.createElement('div');
-            statusRow.className = 'generation_auto_recovery_status';
-            statusRow.setAttribute('role', 'status');
-            statusRow.setAttribute('aria-live', 'polite');
-            statusRow.setAttribute('data-recovery-stage', recoveryStage === 'fallback' ? 'fallback' : 'primary');
-            const icon = document.createElement('i');
-            icon.className = 'fa-solid fa-circle-notch';
-            const label = document.createElement('span');
-            if (status !== undefined) label.textContent = status == null ? '' : String(status);
-            statusRow.append(icon, label);
-            text.after(statusRow);
-        });
+    setMainChatMessageUiState(messageId, {
+        recoveryStatus: String(status ?? ''),
+        recoveryStage: recoveryStage === 'fallback' ? 'fallback' : 'primary',
+        failureNoticeVisible: false,
     });
-    void mountReactMainChatMessageListPanel();
 }
 
 function clearGenerationAttemptMessage(messageId) {
@@ -5523,17 +5447,7 @@ function clearGenerationAttemptMessage(messageId) {
         }
     }
 
-    if (isReactMainChatOwner()) {
-        clearMainChatMessageUiState(messageId);
-        void mountReactMainChatMessageListPanel();
-        return;
-    }
-
-    const messageElements = chatRoot.querySelectorAll(`.mes[mesid="${messageId}"]`);
-    messageElements.forEach(row => {
-        row.querySelectorAll('.mes_text, .mes_reasoning').forEach(element => { element.innerHTML = ''; });
-        row.querySelectorAll('.generation_failure_notice').forEach(notice => notice.remove());
-    });
+    clearMainChatMessageUiState(messageId);
     void mountReactMainChatMessageListPanel();
 }
 
@@ -5545,18 +5459,8 @@ function isAssistantRecoveryMessageId(messageId) {
 async function replaceAssistantRecoveryMessage(messageId, options) {
     return replaceGenerationRecoveryMessage(messageId, {
         ...options,
-        render(message, id) {
-            if (!isReactMainChatOwner()) {
-                updateMessageElement(message, {
-                    messageId: id,
-                    messageElement: Array.from(chatRoot.querySelectorAll(`.mes[mesid="${id}"]`)),
-                    adjustMediaScroll: SCROLL_BEHAVIOR.ADJUST,
-                });
-                return;
-            }
-            if (isReactMainChatOwner()) {
-                scheduleMainChatMessageListPanelRefresh();
-            }
+        render() {
+            scheduleMainChatMessageListPanelRefresh();
         },
     });
 }
@@ -5569,31 +5473,11 @@ function getGenerationLifecycleStatusLabels() {
 }
 
 function showGenerationFailureRecovery(messageId) {
-    if (isReactMainChatOwner()) {
-        setMainChatMessageUiState(messageId, {
-            recoveryStatus: null,
-            recoveryStage: null,
-            failureNoticeVisible: true,
-        });
-        return;
-    }
-
-    const messageElements = chatRoot.querySelectorAll(`.mes[mesid="${messageId}"]`);
-
-    if (!messageElements.length || Array.from(messageElements).some(row => row.querySelectorAll('.generation_failure_notice').length)) {
-        void mountReactMainChatMessageListPanel();
-        return;
-    }
-
-    messageElements.forEach(row => row.querySelectorAll('.mes_text').forEach(text => {
-        const notice = document.createElement('div');
-        notice.className = 'generation_failure_notice';
-        notice.setAttribute('role', 'status');
-        notice.setAttribute('data-i18n', 'Generation failed. You can retry by sending a new message or keep chatting.');
-        notice.textContent = 'Generation failed. You can retry by sending a new message or keep chatting.';
-        text.after(notice);
-    }));
-    void mountReactMainChatMessageListPanel();
+    setMainChatMessageUiState(messageId, {
+        recoveryStatus: null,
+        recoveryStage: null,
+        failureNoticeVisible: true,
+    });
 }
 
 /**
@@ -5603,50 +5487,8 @@ function showGenerationFailureRecovery(messageId) {
  * @param {Number} [options.startIndex=0] Everything including and after startIndex will be replaced.
  * @param {Boolean} [options.fade=true] Kept for API compatibility; no longer used.
  */
-export async function redisplayChat({ targetChat = chat, startIndex = 0, fade: _fade = true } = {}) {
-    if (isReactMainChatOwner()) {
-        void mountReactMainChatMessageListPanel();
-        return;
-    }
-
-    const messageElements = Array.from(chatRoot.querySelectorAll('.mes'));
-    messageElements.forEach(row => row.classList.remove('last_mes'));
-
-    //Remove messages after index.
-    messageElements.filter(row => row.getAttribute('mesid') === String(startIndex)).forEach(row => {
-        for (let next = row.nextElementSibling; next;) {
-            const following = next.nextElementSibling;
-            if (next.matches('.mes')) next.remove();
-            next = following;
-        }
-        row.remove();
-    });
-
-    const t1 = performance.now();
-
-    const messages = targetChat.slice(startIndex);
-
-    if (messages.length > 0) {
-        const newMessageElements = messages.map((message, offset) => {
-            const i = startIndex + offset;
-            const messageElement = updateMessageElement(message, { messageId: i });
-
-            return messageElement?.nodeType === 1 ? messageElement : messageElement[0];
-        });
-
-        //The last_mes has been removed, add it to the new last message.
-        newMessageElements.at(-1).classList.add('last_mes');
-
-        //Append to chat in one DOM update.
-        chatRoot.append(...newMessageElements);
-
-        applyCharacterTagsToMessageDivs({ mesIds: lodash.range(startIndex, targetChat.length, 1) });
-    }
-
-    applyStylePins();
-    updateEditArrowClasses();
-
-    console.info(`Rendered ${targetChat.length - startIndex} messages in ${((performance.now() - t1) / 1000).toFixed(3)} seconds.`);
+export async function redisplayChat(_options = {}) {
+    void mountReactMainChatMessageListPanel();
 }
 
 export function scrollOnMediaLoad(renderGeneration = mainChatMessageRenderGeneration) {
@@ -6341,24 +6183,13 @@ function usesWorkspaceGeneration() {
 }
 
 function getWorkspaceGenerationTarget({ preview = false } = {}) {
-    return this_chid === undefined && (name2 === neutralCharacterName || (preview && (getComposerValue().trim() || hasPendingFileAttachment())))
-        ? { temporary: true, history: chat.map(({ is_user, is_system, mes, extra }) => ({
-            is_user: is_user === true, is_system, mes: String(mes ?? ''), extra: {
-                api: extra?.api, type: extra?.type, files: extra?.files, media: extra?.media, tool_invocations: extra?.tool_invocations,
-            },
-        })) }
-        : getCurrentChatGenerationTarget();
+    return getWorkspaceGenerationTargetSnapshot({
+        characterSelected: this_chid !== undefined, characterName: name2, neutralName: neutralCharacterName, preview,
+        hasDraft: () => Boolean(getComposerValue().trim() || hasPendingFileAttachment()), history: chat, current: getCurrentChatGenerationTarget,
+    });
 }
 
-async function workspaceGenerationRequest(route, body, { keepalive = false } = {}) {
-    const response = await fetch(`/api/chats/generation${route}`, {
-        method: body === undefined ? 'GET' : 'POST', headers: getRequestHeaders(), body: JSON.stringify(body), keepalive,
-    });
-    if (response.status === 204) return;
-    const result = await response.json();
-    if (!response.ok) throw new Error(result.error ?? 'Generation request failed');
-    return result;
-}
+const workspaceGenerationRequest = createWorkspaceGenerationRequest(getRequestHeaders);
 
 let workspaceGenerationScroll = null;
 let workspaceSendFailureToast = null;
@@ -6481,18 +6312,7 @@ eventSource.on(event_types.CHAT_LOADED, event => {
     }
 });
 
-async function captureWorkspaceWorldRuntime(activations) {
-    const worldInfo = activations.map(([, { world, uid, content, position, depth, role, order, useProbability, probability }]) =>
-        ({ world, uid, content, position, depth, role, order, useProbability, probability }));
-    const promptMap = { ...extension_prompts };
-    const scanPrompts = [];
-    for (const key of Object.keys(promptMap)) {
-        if (!promptMap[key].scan) continue;
-        const text = await getExtensionPromptByName(key, promptMap);
-        if (text) scanPrompts.push(text);
-    }
-    return { worldInfo, scanPrompts };
-}
+const captureWorkspaceWorldRuntime = activations => captureWorkspaceWorldRuntimeWithPorts(activations, extension_prompts, getExtensionPromptByName);
 
 function ownsWorkspaceComposer(snapshot) {
     const current = getComposerSnapshot();
@@ -6504,95 +6324,55 @@ function flushWorkspaceGenerationSettings() {
     return saveSettings(0, { strict: true });
 }
 
-async function startWorkspaceGeneration(action, text) {
-    if (workspaceGeneration.busy()) return false;
-    const target = getWorkspaceGenerationTarget();
-    if (!target) {
-        toastr.warning('Load or finish saving this chat before generating.');
-        return false;
-    }
-    const activations = [...WorldInfoBuffer.externalActivations.entries()];
-    const composer = getComposerSnapshot();
-    const isCurrent = () => ownsWorkspaceComposer(composer);
-    const requestId = crypto.randomUUID();
-    workspaceSendViewport = null;
-    const prepared = workspaceGeneration.prepare(target, { action, text, requestId });
-    workspaceSendViewport = action === 'send'
-        ? { requestId, contextKey: composer.contextKey, questionIndex: chat.length, completed: null }
-        : null;
-    if (workspaceSendViewport) workspaceGenerationScroll = null;
-    const ownsPreparation = () => isCurrent() && workspaceGeneration.ownsPreparation(prepared);
-    if (action !== 'send') queueWorkspaceGenerationScroll(true);
-    let creating = false;
-    try {
-        let attachments;
-        let clearFiles;
-        if (action === 'send' && hasPendingFileAttachment()) {
-            const input = document.getElementById('file_form_input');
-            const selected = Array.from(input.files);
-            const message = { extra: {} };
-            await populateFileAttachment(message, 'file_form_input', { isCurrent: ownsPreparation, reset: false });
-            if (!ownsPreparation()) return false;
-            attachments = message.extra;
-            if ((attachments.files?.length ?? 0) + (attachments.media?.length ?? 0) !== selected.length) return false;
-            clearFiles = () => {
-                if (isCurrent() && selected.length === input.files.length && selected.every((file, index) => file === input.files[index])) {
-                    document.getElementById('file_form')?.reset();
-                }
-            };
-        }
-        const worldRuntime = await captureWorkspaceWorldRuntime(activations);
-        if (!ownsPreparation()) return false;
-        await flushWorkspaceGenerationSettings();
-        if (!ownsPreparation()) return false;
-        creating = true;
-        const run = await workspaceGeneration.create(target, { action, text, attachments, ...worldRuntime, requestId, locale: readStoredUiLocale() }, prepared);
-        if (!run) return false;
-        clearFiles?.();
-        for (const [key, entry] of activations) {
-            if (WorldInfoBuffer.externalActivations.get(key) === entry) WorldInfoBuffer.externalActivations.delete(key);
-        }
-        return true;
-    } catch (error) {
-        if (ownsPreparation() || (creating && isCurrent())) toastr.error(error.message);
-        return false;
-    } finally {
-        workspaceGeneration.releasePreparation(prepared);
-    }
-}
-
-async function previewWorkspaceGeneration(round = 0, action = 'send') {
-    const send = action === 'send';
-    const target = getWorkspaceGenerationTarget({ preview: send });
-    if (!target) return { kind: 'prompt-preview-empty', reason: 'No chat selected', warnings: [] };
-    const text = send ? getComposerValue() : '';
-    const composer = getComposerSnapshot();
-    const draftAttachments = [];
-    if (send && hasPendingFileAttachment()) {
+const workspacePreparation = createWorkspaceGenerationPreparation({
+    generation: workspaceGeneration,
+    target: getWorkspaceGenerationTarget,
+    snapshot: getComposerSnapshot,
+    ownsComposer: ownsWorkspaceComposer,
+    text: getComposerValue,
+    requestId: () => crypto.randomUUID(),
+    activations: () => WorldInfoBuffer.snapshotExternalActivations(),
+    captureWorld: captureWorkspaceWorldRuntime,
+    consumeActivations: activations => WorldInfoBuffer.consumeExternalActivations(activations),
+    hasAttachments: hasPendingFileAttachment,
+    async captureAttachments(ownsPreparation, isCurrent) {
+        const input = document.getElementById('file_form_input');
+        const selected = Array.from(input.files);
+        const message = { extra: {} };
+        await populateFileAttachment(message, 'file_form_input', { isCurrent: ownsPreparation, reset: false });
+        if (!ownsPreparation()) return null;
+        const attachments = message.extra;
+        if ((attachments.files?.length ?? 0) + (attachments.media?.length ?? 0) !== selected.length) return null;
+        return { attachments, clearFiles() {
+            if (isCurrent() && selected.length === input.files.length && selected.every((file, index) => file === input.files[index])) {
+                document.getElementById('file_form')?.reset();
+            }
+        } };
+    },
+    async stageAttachments(isCurrent) {
+        const files = [];
         await populateFileAttachment({ extra: {} }, 'file_form_input', {
-            reset: false, isCurrent: () => ownsWorkspaceComposer(composer),
-            stageFile: file => String(draftAttachments.push(file)),
+            reset: false, isCurrent, stageFile: file => String(files.push(file)),
         });
-    }
-    const worldRuntime = await captureWorkspaceWorldRuntime([...WorldInfoBuffer.externalActivations.entries()]);
-    if (!ownsWorkspaceComposer(composer)) return { kind: 'prompt-preview-empty', reason: 'Selected chat changed', warnings: [] };
-    await flushWorkspaceGenerationSettings();
-    if (!ownsWorkspaceComposer(composer)) return { kind: 'prompt-preview-empty', reason: 'Selected chat changed', warnings: [] };
-    const { connection, messages, budget, tools, toolChoice, maxTokens, reasoningEffort, previewPipeline } = await workspaceGenerationRequest('/preview', {
-        ...target, action, text: text || undefined, locale: readStoredUiLocale(), round,
-        ...worldRuntime, ...(draftAttachments.length ? { draftAttachments } : {}),
-    });
-    return {
-        kind: 'prompt-preview', type: send ? 'normal' : action, model: connection.model, stream: true,
-        request: { model: connection.model, messages, max_tokens: maxTokens ?? budget.responseTokens, stream: true,
-            ...(tools?.length ? { tools, tool_choice: toolChoice } : {}), ...(reasoningEffort ? { reasoning_effort: reasoningEffort } : {}) },
-        entries: [], dropped: [], summarized: [], pipeline: previewPipeline ?? null, warnings: [],
-        pendingMessage: text ? { name: name1, mes: text } : null, pendingEntryIdentifier: null,
-        messagesInContext: messages.filter(message => ['user', 'assistant'].includes(message.role)).length,
-        budget: { context: budget.contextTokens, response: budget.responseTokens, used: budget.promptTokens,
-            remaining: budget.contextTokens - budget.responseTokens - budget.promptTokens, totalTokens: budget.promptTokens + budget.responseTokens },
-    };
-}
+        return files;
+    },
+    flushSettings: flushWorkspaceGenerationSettings,
+    locale: readStoredUiLocale,
+    preview: body => workspaceGenerationRequest('/preview', body),
+    userName: () => name1,
+    clearViewport: () => { workspaceSendViewport = null; },
+    beginViewport(action, requestId, composer) {
+        workspaceSendViewport = action === 'send'
+            ? { requestId, contextKey: composer.contextKey, questionIndex: chat.length, completed: null }
+            : null;
+        if (workspaceSendViewport) workspaceGenerationScroll = null;
+    },
+    scrollForPreparation: () => queueWorkspaceGenerationScroll(true),
+    missingTarget: () => toastr.warning('Load or finish saving this chat before generating.'),
+    error: error => toastr.error(error.message),
+});
+const startWorkspaceGeneration = workspacePreparation.start;
+const previewWorkspaceGeneration = workspacePreparation.preview;
 
 const generationBootstrapAdmission = createGenerationBootstrapAdmission();
 const ensureGenerationRuntime = createGenerationRuntimeBootstrap({
@@ -6626,7 +6406,7 @@ const generationCaller = createGenerationCallerService({
     removeReasoning: (...args) => removeReasoningFromString(...args),
     isQuietStopped: (...args) => isMainChatQuietTransportStopException(...args),
     getResponseLength: api => api === 'openai' ? oai_settings.openai_max_tokens : amount_gen,
-    setResponseLength: (api, length) => { if (api === 'openai') oai_settings.openai_max_tokens = length; else amount_gen = length; },
+    setResponseLength: (api, length) => { if (api === 'openai') oai_settings.openai_max_tokens = length; else setAmountGen(length); },
     onceEvent: (...args) => eventSource.once(...args),
     onEvent: (...args) => eventSource.on(...args),
     removeEventListener: (...args) => eventSource.removeListener(...args),
@@ -6642,7 +6422,7 @@ const generationCaller = createGenerationCallerService({
     getNarratorType: () => system_message_types.NARRATOR,
     getLifecycle: () => getGenerationLifecycleService(),
     getAbortController: () => abortController,
-    isReactOwner: () => isReactMainChatOwner(),
+
     clearMessageUi: index => clearMainChatMessageUiState(index),
     clearVisibleStart: chatId => mainChatVisibleStartIndices.delete(chatId),
     getEditId: () => this_edit_mes_id,
@@ -6993,28 +6773,10 @@ export async function duplicateCharacter(options) {
 }
 
 function setInContextMessages(msgInContextCount, _type) {
-    if (isReactMainChatOwner()) {
-        const lastMessageId = Math.max(0, chat.length - msgInContextCount);
-        chat_metadata.lastInContextMessageId = lastMessageId;
-        setMainChatMessageUiFlag('lastInContext', false);
-        setMainChatMessageUiState(lastMessageId, { lastInContext: true });
-        return;
-    }
-
-    chatElement?.querySelectorAll('.mes').forEach(element => element.classList.remove('lastInContext'));
-
-    const blocks = Array.from(chatElement?.querySelectorAll('.mes:not([is_system="true"]), .mes.toolCall') ?? []);
-    const lastMessageBlock = blocks.at(-msgInContextCount);
-    lastMessageBlock?.classList.add('lastInContext');
-
-    if (!lastMessageBlock) {
-        const firstMessageId = getFirstDisplayedMessageId();
-        chatElement?.querySelectorAll(`.mes[mesid="${firstMessageId}"]`).forEach(element => element.classList.add('lastInContext'));
-    }
-
-    // Update last id to chat. No metadata save on purpose, gets hopefully saved via another call
     const lastMessageId = Math.max(0, chat.length - msgInContextCount);
     chat_metadata.lastInContextMessageId = lastMessageId;
+    setMainChatMessageUiFlag('lastInContext', false);
+    setMainChatMessageUiState(lastMessageId, { lastInContext: true });
 }
 
 /**
@@ -7343,7 +7105,7 @@ export function setSendButtonState(value) {
 /**
  * Processes the avatar image from the input element, allowing the user to crop it if necessary.
  * @param {HTMLInputElement} input - The input element containing the avatar file.
- * @returns {Promise<void>}
+ * @returns {Promise<string|undefined>}
  */
 async function read_avatar_load(input) {
     if (input.files && input.files[0]) {
@@ -7355,9 +7117,10 @@ async function read_avatar_load(input) {
         const file = input.files[0];
         const fileData = await getBase64Async(file);
 
+        let croppedImage;
         {
             const dlg = new Popup('Set the crop position of the avatar image', POPUP_TYPE.CROP, '', { cropImage: fileData });
-            const croppedImage = await dlg.show();
+            croppedImage = await dlg.show();
 
             if (!croppedImage) {
                 return;
@@ -7369,7 +7132,7 @@ async function read_avatar_load(input) {
         }
 
         if (menu_type == 'create') {
-            return;
+            return String(croppedImage);
         }
 
         await createOrEditCharacter();
@@ -7395,6 +7158,7 @@ async function read_avatar_load(input) {
         console.debug(`Refreshed ${avatarImages.length} avatar images for ${avatarKey}`);
 
         console.log('Avatar refreshed');
+        return String(croppedImage);
     }
 }
 
@@ -7571,7 +7335,7 @@ export function changeMainAPI(api = null) {
         if (activeItem.apiPresets) activeItem.apiPresets.style.display = 'flex';
     }
 
-    main_api = selectedVal;
+    setMainApi(selectedVal);
     setOnlineStatus('no_connection');
     validateDisabledSamplers();
     setupChatCompletionPromptManager(oai_settings);
@@ -7617,9 +7381,9 @@ async function applyStartupSettingsCore(data) {
         await eventSource.emit(event_types.SETTINGS_LOADED_BEFORE, settings);
 
         //Load AI model config settings
-        amount_gen = settings.amount_gen;
+        setAmountGen(settings.amount_gen);
         if (settings.max_context !== undefined)
-            max_context = parseInt(settings.max_context);
+            setMaxContext(parseInt(settings.max_context));
 
 
         // OpenAI
@@ -7652,7 +7416,7 @@ async function applyStartupSettingsCore(data) {
             settings.main_api = 'openai';
         }
 
-        main_api = settings.main_api;
+        setMainApi(settings.main_api);
         changeMainAPI('openai');
 
         // Load the active character
@@ -7775,7 +7539,7 @@ export async function saveSettings(loopCounter = 0) {
  */
 export function setGenerationParamsFromPreset(preset) {
     if (preset.genamt !== undefined) {
-        amount_gen = preset.genamt;
+        setAmountGen(preset.genamt);
         for (const id of ['amount_gen', 'amount_gen_counter']) {
             const input = document.getElementById(id);
             if (input) input.value = amount_gen;
@@ -7783,7 +7547,7 @@ export function setGenerationParamsFromPreset(preset) {
     }
 
     if (preset.max_length !== undefined) {
-        max_context = preset.max_length;
+        setMaxContext(preset.max_length);
         for (const id of ['max_context', 'max_context_counter']) {
             const input = document.getElementById(id);
             if (input) input.value = max_context;

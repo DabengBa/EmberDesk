@@ -153,6 +153,20 @@ test('entry owner is the same function in the synchronous facade and installed t
     expect(runtime.createGenerationLifecycleService(() => ({ chatId: 'chat' })).runGenerationEntry).toBe(shared.runGenerationEntry);
 });
 
+test('extension prompts are a live shared binding, including replacement and in-place updates', async () => {
+    const shared = await import('../public/scripts/generation-shared-state.js');
+    const initial = shared.extension_prompts;
+    const replacement = { first: { value: 'initial' } };
+    try {
+        shared.setExtensionPrompts(replacement);
+        expect(shared.extension_prompts).toBe(replacement);
+        replacement.second = { value: 'updated' };
+        expect(shared.extension_prompts.second.value).toBe('updated');
+    } finally {
+        shared.setExtensionPrompts(initial);
+    }
+});
+
 test('quiet orchestration is owned by the synchronous typed lifecycle', async () => {
     const shared = await import('../public/scripts/generation-shared-state.js');
     const runtime = await import('../public/scripts/generation-typed-runtime.js');

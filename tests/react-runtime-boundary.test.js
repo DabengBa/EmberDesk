@@ -70,7 +70,7 @@ describe('React runtime boundary', () => {
         expect(scriptSource).toContain('const messageUiById = getMainChatMessageUiStateById()');
         expect(scriptSource).toMatch(/buildMainChatSnapshotFromLegacyChat\(\{[\s\S]*?\bmessageUiById,/);
         expect(scriptSource).toContain('function setMainChatMessageUiState(');
-        expect(scriptSource).toContain('if (isReactMainChatOwner()) {');
+        expect(scriptSource).not.toContain('isReactMainChatOwner');
         expect(scriptSource).toContain('mainChatMessageUiState');
 
         const generationServiceSource = fs.readFileSync(
@@ -98,19 +98,17 @@ describe('React runtime boundary', () => {
         const appendMediaBlock = messageServiceSource.match(
             /export function appendMediaToMessage\([\s\S]*?\n\}\n\nexport function addCopyToCodeBlocks/,
         )?.[0] ?? '';
-        expect(appendMediaBlock).toMatch(
-            /if \(isReactMainChatOwner\(\)\) \{\s*scheduleMainChatMessageListPanelRefresh\(\);\s*return;/,
-        );
+        expect(appendMediaBlock).toContain('scheduleMainChatMessageListPanelRefresh();');
+        expect(appendMediaBlock).not.toMatch(/innerHTML|appendChild/);
         const updateElementBlock = messageServiceSource.match(/export function updateMessageElement\([\s\S]*?\n\}/)?.[0] ?? '';
-        expect(updateElementBlock).toMatch(/closest(?:\?\.)?\('\[data-main-chat-message-row-owner="react"\]'\)[\s\S]*?\{\s*scheduleMainChatMessageListPanelRefresh\(\);\s*return messageElement;\s*\}/);
+        expect(updateElementBlock).toContain('scheduleMainChatMessageListPanelRefresh();');
+        expect(updateElementBlock).toContain('return messageElement;');
 
         const recoveryBlock = scriptSource.match(
             /function clearGenerationAutoRecoveryStatus[\s\S]*?export async function redisplayChat/,
         )?.[0] ?? '';
         expect(recoveryBlock).toContain('setMainChatMessageUiState');
-        expect(recoveryBlock.indexOf('return;')).toBeLessThan(recoveryBlock.indexOf('const messageElement'));
-        expect(recoveryBlock).toContain("text.after(statusRow)");
-        expect(recoveryBlock).toContain("row.querySelectorAll('.generation_failure_notice').length");
+        expect(recoveryBlock).not.toMatch(/querySelector|innerHTML|text\.after/);
 
         const editorBlock = scriptSource.match(
             /export async function messageEdit\([\s\S]*?async function messageEditDone\([\s\S]*?\n\}/,
@@ -129,13 +127,8 @@ describe('React runtime boundary', () => {
         const contextBlock = scriptSource.match(
             /function setInContextMessages\([\s\S]*?\n\}\n\n\/\*\*\n \* @typedef \{object\} AdditionalRequestOptions/,
         )?.[0] ?? '';
-        const reactContextBranch = contextBlock.match(
-            /if \(isReactMainChatOwner\(\)\) \{[\s\S]*?return;\n    \}/,
-        )?.[0] ?? '';
-
-        expect(reactContextBranch).toContain('if (isReactMainChatOwner())');
-        expect(reactContextBranch).toContain("setMainChatMessageUiState(lastMessageId, { lastInContext: true });");
-        expect(reactContextBranch).not.toContain("chatElement.find('.mes').removeClass('lastInContext')");
+        expect(contextBlock).toContain("setMainChatMessageUiState(lastMessageId, { lastInContext: true });");
+        expect(contextBlock).not.toContain("chatElement.find('.mes').removeClass('lastInContext')");
     });
 
     test('moves React-owned messages without reading legacy message DOM', () => {
@@ -243,7 +236,7 @@ describe('React runtime boundary', () => {
         expect(scriptSource).toContain('emit: (event, id) => eventSource.emit(event_types[event], id)');
         expect(scriptSource).toContain('...getChatMessageCommands()');
         expect(commandSource).toContain('...createChatMessageReasoningCommands({ ...deps, commitMessageEdit, cancelMessageEdit })');
-        expect(reasoningSource).toContain('requireMessageShellContext().getChatMessageCommands()');
+        expect(reasoningSource).not.toContain('setReasoningEventHandlers');
         expect(reasoningCommandsBlock).toContain('await deps.save()');
         expect(reasoningCommandsBlock).toContain("deps.emit('MESSAGE_REASONING_EDITED', id)");
         expect(reasoningCommandsBlock).toContain("deps.emit('MESSAGE_REASONING_DELETED', id)");
@@ -327,10 +320,7 @@ describe('React runtime boundary', () => {
             /async function replaceAssistantRecoveryMessage\([\s\S]*?\n\}\n\nfunction getGenerationLifecycleStatusLabels/,
         )?.[0] ?? '';
 
-        expect(recoveryBlock).toContain('if (isReactMainChatOwner())');
         expect(recoveryBlock).toContain('scheduleMainChatMessageListPanelRefresh();');
-        expect(recoveryBlock).not.toMatch(
-            /if \(isReactMainChatOwner\(\)\) \{[\s\S]*?chatElement\.find/,
-        );
+        expect(recoveryBlock).not.toMatch(/chatElement\.find/);
     });
 });

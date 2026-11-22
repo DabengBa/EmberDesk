@@ -54,35 +54,33 @@ function harness(react = false) {
     return { ...state, ...functions };
 }
 
-test('legacy recovery clears attempts and passes the actual native row to render', async () => {
+test('recovery clears model state and refreshes the React projection', async () => {
     const h = harness(); const r = h.row(0);
     h.clearGenerationAttemptMessage(0);
     expect(h.chat[0].mes).toBe(''); expect(h.chat[0].extra.reasoning).toBeUndefined();
-    expect(r.parts['.mes_text'][0].innerHTML).toBe(''); expect(r.parts['.mes_reasoning'][0].innerHTML).toBe('');
+    expect(r.parts['.mes_text'][0].innerHTML).toBe('old'); expect(r.parts['.mes_reasoning'][0].innerHTML).toBe('reasoning');
+    expect(h.events).toContainEqual(['clear-ui', 0]);
     await h.replaceAssistantRecoveryMessage(0, {});
-    expect(h.events).toContainEqual(['render', 0, [r]]);
-    expect(h.events.indexOf('mount')).toBeLessThan(h.events.indexOf('replaced'));
+    expect(h.events).toContain('refresh');
+    expect(h.events.indexOf('refresh')).toBeLessThan(h.events.indexOf('replaced'));
 });
 
-test('legacy recovery status and failure notice are inserted and cleared without jQuery', () => {
-    const h = harness(); const r = h.row(0);
+test('recovery status and failure notice update React UI state', () => {
+    const h = harness();
     h.showGenerationAutoRecoveryStatus(0, 'retry', 'fallback');
-    const status = r.parts['.generation_auto_recovery_status'][0];
-    expect(status.attributes['data-recovery-stage']).toBe('fallback'); expect(status.children[1].textContent).toBe('retry');
+    expect(h.events).toContainEqual(['ui', 0, { recoveryStatus: 'retry', recoveryStage: 'fallback', failureNoticeVisible: false }]);
     h.clearGenerationAutoRecoveryStatus(0);
-    expect(r.parts['.generation_auto_recovery_status']).toHaveLength(0);
+    expect(h.events).toContainEqual(['ui', 0, { recoveryStatus: null, recoveryStage: null, failureNoticeVisible: false }]);
     h.showGenerationFailureRecovery(0);
-    expect(r.parts['.generation_failure_notice']).toHaveLength(1);
-    h.showGenerationFailureRecovery(0);
-    expect(r.parts['.generation_failure_notice']).toHaveLength(1);
+    expect(h.events).toContainEqual(['ui', 0, { recoveryStatus: null, recoveryStage: null, failureNoticeVisible: true }]);
 });
 
-test('legacy redisplay preserves earlier rows and updates later rows in order', async () => {
+test('redisplay schedules the React projection without mutating existing rows', async () => {
     const h = harness(); const first = h.row(0); h.row(1); h.row(2);
     await h.redisplayChat({ targetChat: [{}, {}, {}], startIndex: 1 });
     expect(h.rows.map(item => item.id)).toEqual(['0', '1', '2']);
-    expect(first.classes.has('last_mes')).toBe(false);
-    expect(h.events.slice(-4)).toEqual(['append', 'tags', 'pins', 'arrows']);
+    expect(first.classes.has('last_mes')).toBe(true);
+    expect(h.events).toContain('mount');
 });
 
 test('React recovery and redisplay retain projection ownership', async () => {
@@ -93,12 +91,9 @@ test('React recovery and redisplay retain projection ownership', async () => {
     expect(h.rows).toHaveLength(1);
 });
 
-test('message shell receives a native template and chat root while DOM handlers retain their collection', () => {
-    const template = { name: 'template' }, root = { name: 'root' }, legacy = { jquery: '3.5.1' };
-    const templateLine = source.match(/^const messageTemplate = .*;$/m)?.[0];
-    const document = { querySelector: selector => selector === '#message_template .mes' ? template : null };
-    const resolved = new Function('document', '$', `${templateLine}; return messageTemplate;`)(document, () => { throw Error('message template must not use jQuery'); });
-    expect(resolved).toBe(template);
+test('message shell receives a native chat root while DOM handlers retain their collection', () => {
+    const root = { name: 'root' }, legacy = { jquery: '3.5.1' };
+    expect(source).not.toContain('get messageTemplate()');
     function getter(contextName) {
         const start = source.indexOf(`${contextName}({`);
         const snippet = source.slice(start, source.indexOf('});', start));

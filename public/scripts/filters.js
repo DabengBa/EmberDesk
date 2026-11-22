@@ -381,3 +381,9 @@ export class FilterHelper {
         }
     }
 }
+
+export let entitiesFilter;
+
+export function initializeEntitiesFilter(onDataChanged) {
+    return entitiesFilter ??= new FilterHelper(onDataChanged);
+}

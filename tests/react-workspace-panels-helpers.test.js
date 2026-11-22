@@ -1079,7 +1079,7 @@ describe('React workspace panels bridge helpers', () => {
         const scriptSource = read('public/script.js');
         const chatOpsSource = read('public/scripts/chat-ops-service.js');
         const loadEarlierBlock = chatOpsSource.match(
-            /export async function loadEarlierChatMessages\([\s\S]*?if \(isReactMainChatOwner\(\)\) \{[\s\S]*?void mountReactMainChatMessageListPanel\(\);\n        return;\n    \}/,
+            /export async function loadEarlierChatMessages\([\s\S]*?\n\}/,
         )?.[0] ?? '';
 
         expect(scriptSource).toContain('function getMainChatReactVisibleWindow(projectedChat)');

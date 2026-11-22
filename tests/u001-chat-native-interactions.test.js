@@ -28,7 +28,7 @@ function setup() {
         document, $: jq, chat, saveChatConditional: save,
         eventSource: { emit, on: jest.fn() }, event_types: { MESSAGE_UPDATED: 'updated', CHAT_CHANGED: 'changed' },
         requireGenerationShellContext: () => ({ scheduleMainChatMessageListPanelRefresh: refresh }),
-        hideChatMessageRange: hide, chatElement: { 0: chatRoot, on: jest.fn() },
+        hideChatMessageRange: hide, chatElement: chatRoot,
         expandMessageMedia: expand, deleteMessageMedia: remove,
         viewMessageFile: openFile,
         openAttachmentPicker: null, HTMLInputElement: class {}, DragAndDropHandler: class {},
@@ -151,7 +151,7 @@ test('attachment picker merges the latest selection once without jQuery', async 
         },
         openAttachmentPicker: null, onFileAttach: attach, isSameFile: () => false,
         eventSource: { on() {} }, event_types: { CHAT_CHANGED: 'changed' },
-        chatElement: {}, DragAndDropHandler: class {}, checkForCreatorNotesStyles() {},
+        chatElement: { addEventListener() {} }, DragAndDropHandler: class {}, checkForCreatorNotesStyles() {},
     };
     const init = new Function(...Object.keys(env), `${initSource.replace('export ', '')}; return () => { initChatUtilities(merge); return openAttachmentPicker; };`)(...Object.values(env));
     const open = init();
@@ -187,7 +187,7 @@ test('expanded editor copies input back to its original field and emits a bubbli
     const env = {
         document, Event: FakeEvent, $: () => { throw Error('editor must not depend on jQuery'); },
         callGenericPopup: popup, POPUP_TYPE: { TEXT: 'text' }, t: strings => strings[0],
-        openAttachmentPicker: null, chatElement: {}, DragAndDropHandler: class {},
+        openAttachmentPicker: null, chatElement: { addEventListener() {} }, DragAndDropHandler: class {},
         eventSource: { on() {} }, event_types: { CHAT_CHANGED: 'changed' }, checkForCreatorNotesStyles() {},
     };
     // Other, not-yet-migrated registrations remain jQuery-based.
@@ -225,7 +225,7 @@ test('creator styles button registers natively and preserves its state classes',
     const env = {
         document, $: () => { throw Error('creator styles button must not use jQuery'); },
         openGlobalStylesPreferenceDialog: dialog, openAttachmentPicker: null,
-        chatElement: {}, DragAndDropHandler: class {}, eventSource: { on() {} },
+        chatElement: { addEventListener() {} }, DragAndDropHandler: class {}, eventSource: { on() {} },
         event_types: { CHAT_CHANGED: 'changed' }, checkForCreatorNotesStyles() {},
     };
     new Function(...Object.keys(env), `${initSource.replace('export ', '')}; initChatUtilities(() => []);`)(...Object.values(env));

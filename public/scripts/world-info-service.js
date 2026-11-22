@@ -203,6 +203,16 @@ export class WorldInfoBuffer {
      */
     static externalActivations = new Map();
 
+    static snapshotExternalActivations() {
+        return [...WorldInfoBuffer.externalActivations.entries()];
+    }
+
+    static consumeExternalActivations(activations) {
+        for (const [key, entry] of activations) {
+            if (WorldInfoBuffer.externalActivations.get(key) === entry) WorldInfoBuffer.externalActivations.delete(key);
+        }
+    }
+
     /**
      * @type {WIGlobalScanData} Chat independent data to be scanned, such as character descriptions
      */

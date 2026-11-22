@@ -2,6 +2,25 @@ import { expect, jest, test } from '@jest/globals';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 
+test('provider owns the original defaults and live generation settings', () => {
+    const source = readFileSync(new URL('../public/scripts/openai.js', import.meta.url), 'utf8');
+    const root = readFileSync(new URL('../public/script.js', import.meta.url), 'utf8');
+    const start = source.indexOf('export let amount_gen');
+    const end = source.indexOf('export function installOpenAIContext', start);
+    expect(start).toBeGreaterThan(-1);
+    const scope = vm.createContext({});
+    vm.runInContext(source.slice(start, end).replaceAll('export ', '') + '\nglobalThis.api = { get amount() { return amount_gen; }, get context() { return max_context; }, get api() { return main_api; }, setAmountGen, setMaxContext, setMainApi };', scope);
+    expect([scope.api.amount, scope.api.context, scope.api.api]).toEqual([80, 2048, undefined]);
+    scope.api.setAmountGen(13);
+    scope.api.setMaxContext(4096);
+    scope.api.setMainApi('openai');
+    expect([scope.api.amount, scope.api.context, scope.api.api]).toEqual([13, 4096, 'openai']);
+    expect(root).toContain('export { amount_gen, max_context, main_api };');
+    expect(root).toContain('setAmountGen(settings.amount_gen)');
+    expect(root).toContain('setMaxContext(parseInt(settings.max_context))');
+    expect(root).toContain('setMainApi(selectedVal)');
+});
+
 test('provider initialization leaves textarea sizing to React and does not bind retired Azure inputs', () => {
     const source = readFileSync(new URL('../public/scripts/openai.js', import.meta.url), 'utf8');
     const initialization = source.slice(source.indexOf('export function initOpenAI()'));

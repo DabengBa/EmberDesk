@@ -5,6 +5,7 @@ export let scrollLock = false;
 export let streamingProcessor: unknown = null;
 export let is_send_press = false;
 export let abortController: AbortController | null = new AbortController();
+export let extension_prompts: Record<string, unknown> = {};
 
 export function setGenerationStarted(value: Date): void { generation_started = value; }
 export function setGeneratingAttemptModel(value: string | null): void { generatingAttemptModel = value; }
@@ -12,6 +13,95 @@ export function setScrollLock(value: boolean): void { scrollLock = value; }
 export function setStreamingProcessor(value: unknown): void { streamingProcessor = value; }
 export function setSending(value: boolean): void { is_send_press = value; }
 export function setAbortController(value: AbortController | null): void { abortController = value; }
+export function setExtensionPrompts(value: Record<string, unknown>): void { extension_prompts = value; }
+
+type RawPromptMessage = { role: string; content?: string | null };
+
+/** Format raw requests without owning shell state or changing the transport. */
+export function buildRawGenerationPrompt(prompt: string | RawPromptMessage[], systemPrompt: string, prefill: string, substitute: (value: string) => string): RawPromptMessage[] {
+    if (typeof prompt === 'string') {
+        prompt = [{ role: 'user', content: prompt.trim() }];
+    } else if (prompt.length === 0 && !systemPrompt) {
+        throw Error('No messages provided');
+    }
+    prefill = substitute(prefill ?? '');
+    for (const message of prompt) message.content = substitute(message.content ?? '');
+    if (systemPrompt) prompt.unshift({ role: 'system', content: substitute(systemPrompt).trim() });
+    if (prefill) prompt.push({ role: 'assistant', content: prefill });
+    return prompt;
+}
+
+interface StopGenerationPorts {
+    stopBootstrap(): boolean;
+    getStreamingProcessor(): { onStopStreaming(): void } | null | undefined;
+    getAbortController(): AbortController | null | undefined;
+    rememberProcessorTerminal(processor: { onStopStreaming(): void }, terminal: string): void;
+    hideStopButton(): void;
+    rememberVisibleTerminal(terminal: string, state: { activeMessageId: null; observedTokenCount: number; observedChunkCount: number }): void;
+    mountMessageList(): unknown;
+    emitEvent(event: string): unknown;
+    events: { GENERATION_STOPPED: string };
+}
+
+interface ResponseLengthPorts {
+    getResponseLength(api: string): number;
+    setResponseLength(api: string | null, length: number): void;
+    onceEvent(event: string, hook: () => void): void;
+    removeEventListener(event: string, hook: () => void): void;
+    events: { CHAT_COMPLETION_SETTINGS_READY: string; GENERATE_AFTER_DATA: string };
+}
+
+/** Temporary response settings remain local to their caller instance. */
+export function createTemporaryResponseLength(ports: ResponseLengthPorts) {
+    let originalResponseLength = -1;
+    let lastApi: string | null = null;
+    const responseLength = {
+        isCustomized: () => originalResponseLength > -1,
+        save(api: string, length: number) {
+            originalResponseLength = ports.getResponseLength(api);
+            ports.setResponseLength(api, length);
+            lastApi = api;
+            console.log('[TempResponseLength] Saved original response length:', originalResponseLength);
+        },
+        restore(api?: string | null) {
+            if (originalResponseLength === -1) return;
+            api ||= lastApi;
+            ports.setResponseLength(api, originalResponseLength);
+            console.log('[TempResponseLength] Restored original response length:', originalResponseLength);
+            originalResponseLength = -1;
+            lastApi = null;
+        },
+        setupEventHook(api: string) {
+            const hook = () => { if (responseLength.isCustomized()) responseLength.restore(api); };
+            ports.onceEvent(api === 'openai' ? ports.events.CHAT_COMPLETION_SETTINGS_READY : ports.events.GENERATE_AFTER_DATA, hook);
+            return hook;
+        },
+        removeEventHook(api: string, hook: () => void) {
+            ports.removeEventListener(api === 'openai' ? ports.events.CHAT_COMPLETION_SETTINGS_READY : ports.events.GENERATE_AFTER_DATA, hook);
+        },
+    };
+    return responseLength;
+}
+
+/** Stop immediately, before any asynchronous projection is scheduled. */
+export function createStopGeneration(ports: StopGenerationPorts): () => boolean {
+    return function stopGeneration() {
+        const bootstrapStopped = ports.stopBootstrap();
+        let stopped = false;
+        const processor = ports.getStreamingProcessor();
+        if (processor) { ports.rememberProcessorTerminal(processor, 'stopped'); processor.onStopStreaming(); stopped = true; }
+        const controller = ports.getAbortController();
+        if (controller) {
+            controller.abort('Clicked stop button'); ports.hideStopButton();
+            if (!stopped) ports.rememberVisibleTerminal('stopped', { activeMessageId: null, observedTokenCount: 0, observedChunkCount: 0 });
+            stopped = true;
+        }
+        stopped ||= bootstrapStopped;
+        if (stopped) void ports.mountMessageList();
+        ports.emitEvent(ports.events.GENERATION_STOPPED);
+        return stopped;
+    };
+}
 
 /** Synchronous stop classification is also needed before the lifecycle bundle loads. */
 export function isUserStoppedGenerationError(exception: unknown, aborted: boolean): boolean {

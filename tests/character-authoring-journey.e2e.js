@@ -13,6 +13,17 @@ async function readCard(page, avatar) {
     }, avatar);
 }
 
+test('saves a character edit from the debounced compatibility path', async ({ page }) => {
+    await testSetup.awaitST({ page });
+    await page.locator('[data-react-workspace-shell-chrome] nav button').filter({ hasText: '角色库' }).click();
+    await page.locator('#rm_print_characters_block .character_select').filter({ hasText: 'Dev Character 002' }).first().click();
+    await expect(page.locator('[data-react-authoring-owner="characterAuthoring"]')).toBeVisible();
+
+    const saved = page.waitForResponse(response => new URL(response.url()).pathname === '/api/characters/edit', { timeout: 8000 });
+    await page.evaluate(() => document.getElementById('favorite_button').click());
+    expect((await saved).ok()).toBe(true);
+});
+
 test('bulk deletion waits for an in-flight character save', async ({ page }) => {
     let release;
     let intercepted;
