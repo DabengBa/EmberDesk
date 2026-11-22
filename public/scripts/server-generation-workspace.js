@@ -62,7 +62,7 @@ export function createWorkspaceGeneration({ request, subscribe, changed, finishe
     };
 
     const current = () => selection?.run?.status === 'running' ? selection : null;
-    const pending = () => selection && selection.kind !== 'continue' && (selection.preparing || selection.creating) && !selection.run;
+    const pending = () => selection && (selection.preparing || selection.creating) && !selection.run;
 
     function startWaiting(view) {
         if (view.kind !== 'send' || view.waitTimer !== undefined || view.waiting) return;
@@ -80,7 +80,7 @@ export function createWorkspaceGeneration({ request, subscribe, changed, finishe
         clearTimeout(view.waitTimer);
         view.waiting = false;
         const reconcile = finished(view.run, discovery);
-        if (!discovery && !view.run.temporary && reconcile && (view.kind === 'send' || (view.kind === 'regenerate' && view.run.status === 'completed'))) {
+        if (!discovery && !view.run.temporary && reconcile && (view.kind === 'send' || view.run.status === 'completed')) {
             view.reconciling = true;
             const release = () => { if (selection === view) detach(); };
             void reconcile.then(release, release);

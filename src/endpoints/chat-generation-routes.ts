@@ -9,9 +9,9 @@ import { canonicalSqliteManager, withCanonicalTransaction } from '../canonical-s
 import { MEDIA_EXTENSIONS } from '../constants.js';
 import { createServerGenerationService, ServerGenerationExecutionError, type GenerationChat, type GenerationEvent } from '../server-generation-service.ts';
 import { ChatGenerationBusyError } from '../server-generation-lock.ts';
-import { streamServerModel } from '../server-generation-model-transport.ts';
+
 import { applyGenerationOutputRegex, DEFAULT_GENERATION_USER_NAME, prepareGenerationUserMessage, readServerPromptSnapshot, ServerPromptError, type ServerPromptCommand, type ServerPromptRuntime, type ServerPromptSnapshot } from '../server-prompt.ts';
-import { prepareServerGeneration, previewServerGeneration, runServerPipeline } from '../server-generation-pipeline.ts';
+import { prepareServerGeneration, previewServerGeneration, runGenerationRound, runServerPipeline } from '../server-generation-pipeline.ts';
 import { array, readTemporaryPromptSnapshot, record, string } from '../server-prompt/snapshot.ts';
 import type { WorldInfoActivation } from '../server-prompt/world-info.ts';
 import { getCanonicalCharacter } from './character-store.ts';
@@ -146,12 +146,17 @@ const service = createServerGenerationService<GenerationPrompt>({
             const { messages, connection } = prepared.prompt;
             const apiKey = readSecret(prompt.directories, SECRET_KEYS.OPENAI) || undefined;
             const pipeline = prepared.pipeline ? await runServerPipeline({ prepared, snapshot, runtime, apiKey, ...ports }) : null;
-            const text = pipeline?.text ?? await streamServerModel({ ...connection, messages, maxTokens: connection.responseTokens, apiKey, signal: ports.signal, emit: ports.emit });
-            if (!text.trim()) throw new Error('Model returned an empty reply');
+            const text = pipeline?.text ?? await runGenerationRound({ ...connection, messages, maxTokens: connection.responseTokens,
+                apiKey, signal: ports.signal, emit: ports.emit }, snapshot, () => ports.emit('', true));
             const original = record(chat.original);
             const output = applyGenerationOutputRegex(snapshot, text, connection.model);
-            const reply = chat.kind === 'continue' ? `${string(original.mes)}${output}` : output;
-            return { ...original, name: string(snapshot.character.name), is_user: false, send_date: Date.now(), mes: reply,
+            if (chat.kind === 'continue') {
+                const extra = record(original.extra);
+                return { ...original, mes: `${string(original.mes)}${output}`, ...(pipeline ? {
+                    extra: { ...extra, tool_invocations: [...array(extra.tool_invocations), ...pipeline.invocations] },
+                } : {}) };
+            }
+            return { name: string(snapshot.character.name), is_user: false, send_date: Date.now(), mes: output,
                 ...(pipeline ? { extra: { tool_invocations: pipeline.invocations } } : {}) };
         } catch (error) {
             if (error instanceof ServerPromptError) throw new ServerGenerationExecutionError(error.code);
@@ -201,10 +206,12 @@ export function registerChatGenerationRoutes(context: ChatRouteContext) {
     function temporarySnapshot(db: DatabaseSync, handle: string, history: unknown) {
         if (!Array.isArray(history)) throw new ServerPromptError('invalid_config', 'Temporary history must be an array');
         const chat = history.map(item => {
-            const { is_user, mes, extra } = record(item);
+            const { is_user, is_system, mes, extra } = record(item);
+            const { api, type, tool_invocations } = record(extra);
             if (typeof is_user !== 'boolean' || typeof mes !== 'string') throw new ServerPromptError('invalid_config', 'Invalid temporary message');
-            return { is_user, mes, name: is_user ? DEFAULT_GENERATION_USER_NAME : 'Assistant',
-                extra: { ...sendAttachments(db, extra), tool_invocations: record(extra).tool_invocations } };
+            return { is_user, is_system: is_system === true, mes, name: is_user ? DEFAULT_GENERATION_USER_NAME : 'Assistant',
+                extra: { ...sendAttachments(db, extra), tool_invocations,
+                    ...(api === 'manual' ? { api } : {}), ...(type === 'narrator' ? { type } : {}) } };
         });
         return readTemporaryPromptSnapshot(db, handle, [draftHeader(), ...chat]);
     }
@@ -248,7 +255,9 @@ export function registerChatGenerationRoutes(context: ChatRouteContext) {
                     return { snapshot: { ...source, chat: [...source.chat, user] }, original: null, user };
                 }
                 const tail = source.chat.at(-1);
-                if (record(tail).is_user !== false) throw new Error('assistant_reply_required');
+                if (source.chat.length < 2 || action === 'continue' && (record(tail).is_user !== false || record(tail).is_system)) {
+                    throw new Error('assistant_reply_required');
+                }
                 return { snapshot: source, original: action === 'continue' ? tail ?? null : null };
             });
             const result = service.createTemporary(db, requestId, action, original, { snapshot, directories, handle, locale: string(locale), worldRuntime }, user);

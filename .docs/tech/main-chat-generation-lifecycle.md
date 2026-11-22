@@ -57,7 +57,9 @@ Listener audit for this path: the reply-pipeline and generation-type macro start
 
 `public/script.js` keeps thin compatibility entry points backed by one `createGenerationCallerService(ports)` instance from `public/scripts/generation-caller-service.js`. That caller owns request-envelope admission, quiet/raw orchestration, temporary response length and its event cleanup, regenerate admission/restore state, and synchronous stop. Ports read current chat, API and abort state rather than capturing a stale session. The caller still delegates visible execution to the same service-owned attempt loop and raw requests to the existing provider transport; it is not another executor.
 
-React composer and message actions dispatch visible commands directly; quiet, background, dry-run and nested callers reach the same command/lifecycle boundary. Slash-prefixed input is ordinary message text. The React composer calls the same synchronous `stopGeneration()` compatibility entry from its stop button, including before the workspace bundle finishes loading. Regenerate preserves its assistant-turn baseline, while failed intermediate attempts clear the attempt row before retrying. Continue and swipe are retired from the current command surface.
+The React composer and message actions use the server workspace for eligible OpenAI-compatible send, regenerate, and continue actions. The browser compatibility service still handles its supported commands, including quiet, background, dry-run and nested calls. Slash-prefixed input is ordinary message text. The React composer calls the synchronous `stopGeneration()` compatibility entry, including before the workspace bundle finishes loading. Swipe is retired.
+
+On the server workspace path, `src/endpoints/chat-generation-routes.ts` stages the action and `src/server-generation-pipeline.ts` runs bounded recovery for a plain reply or for the current pipeline round. Retries clear streamed draft output without replaying completed steps or browser actions. `public/scripts/server-generation-workspace.js` tracks the visible run through stop and reconciliation. Continue appends only the accepted suffix to the existing assistant row; failure or stop leaves that row and the composer draft unchanged. The server Prompt Inspector preview assembles the selected action without calling the model.
 
 ### Composer input ownership
 
@@ -71,7 +73,7 @@ For an active reply pipeline, `public/scripts/generation-service.js` plans recov
 
 ## Scope Boundary
 
-The unified service covers the current direct-chat, dry-run, nested, quiet, and background request families. The current transport supports OpenAI-compatible chat completion; retired group, swipe, continue and non-OpenAI transport paths are not implied by this boundary. Bounded recovery and public row/event contracts remain required.
+The generation boundary covers the current direct-chat, dry-run, nested, quiet, and background request families. The current transport supports OpenAI-compatible chat completion; retired group, swipe and non-OpenAI transport paths are not implied by this boundary. Bounded recovery and public row/event contracts remain required.
 
 ## Validation
 

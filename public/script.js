@@ -3164,23 +3164,25 @@ function getMainChatMessageListReactBridgeState() {
     const composer = getMainChatComposerBridgeState();
     const streamingTransport = getMainChatStreamingTransportBridgeState();
     let runView = workspaceGeneration.display();
-    // Once reconciliation has installed the saved turn, do not append its optimistic copy.
-    if (runView?.kind === 'send' && runView.reconciling && getCurrentChatGenerationTarget()?.version === runView.run.version) {
+    // Once reconciliation has installed the saved turn, do not project its optimistic copy.
+    if (runView?.reconciling && getCurrentChatGenerationTarget()?.version === runView.run.version) {
         runView = null;
     }
     const regenerating = runView?.kind === 'regenerate';
-    const keptMessages = regenerating ? chat.slice(0, findRegenerateTurnStart(chat)) : chat;
+    const continuing = runView?.kind === 'continue';
+    const continuedReply = continuing ? chat.at(-1) : null;
+    const keptMessages = regenerating ? chat.slice(0, findRegenerateTurnStart(chat)) : continuing ? chat.slice(0, -1) : chat;
     const failedReply = !runView && getFailedWorkspaceReply();
     const waiting = runView?.waiting && !runView.text;
-    const showAssistant = regenerating || waiting || runView?.text || runView?.kind === 'continue';
-    const assistant = runView && showAssistant ? (runView.assistantRow ??= { name: name2, mes: '', is_user: false, extra: {} }) : null;
-    if (assistant) assistant.mes = runView.text;
+    const showAssistant = regenerating || waiting || runView?.text || continuing;
+    const assistant = runView && showAssistant ? (runView.assistantRow ??= continuedReply ? { ...continuedReply } : { name: name2, mes: '', is_user: false, extra: {} }) : null;
+    if (assistant) assistant.mes = (continuedReply?.mes ?? '') + runView.text;
     const projectedChat = reactMainChatProjectionCleared ? [] : runView ? [
         ...keptMessages,
         ...(runView.kind === 'send' && !runView.discovered ? [runView.userRow ??= { name: name1, mes: runView.pendingText, is_user: true, extra: {} }] : []),
-        ...(runView.invocations?.length ? [ToolManager.createToolInvocationMessage(runView.invocations)] : []),
+        ...(!continuing && runView.invocations?.length ? [ToolManager.createToolInvocationMessage(runView.invocations)] : []),
         ...(assistant ? [assistant] : []),
-    ] : failedReply ? [...chat, { name: name2, mes: '', is_user: false, extra: {} }] : chat;
+    ] : failedReply && failedReply.kind !== 'continue' ? [...chat, { name: name2, mes: '', is_user: false, extra: {} }] : chat;
     const messageUiById = getMainChatMessageUiStateById();
     if (runView || failedReply) {
         // The synthetic rows reuse the old tail's numeric positions, not its UI state.
@@ -3190,7 +3192,7 @@ function getMainChatMessageListReactBridgeState() {
             if (regenerating && (!runView.reconciling || !runView.text)) last.regenerationStatus = t`Regenerating…`;
             else if (waiting) last.regenerationStatus = t`Waiting for reply…`;
         }
-        if (failedReply && last) last.replyRetryAvailable = true;
+        if (failedReply && projectedChat.length) (messageUiById[projectedChat.length - 1] ??= {}).replyRetryAvailable = true;
     }
     const visibleWindow = getMainChatReactVisibleWindow(projectedChat);
     const visibleMessageIds = visibleWindow.visibleMessageIds;
@@ -3383,6 +3385,7 @@ function getMainChatMessageListReactCommands() {
                         toastr.clear(workspaceSendFailureToast.toast, { force: true });
                         workspaceSendFailureToast = null;
                     }
+                    if (failedReply.kind === 'continue') return continueLastReply();
                 }
 
                 return executeMainChatVisibleGenerationAction({
@@ -6339,8 +6342,10 @@ function usesWorkspaceGeneration() {
 
 function getWorkspaceGenerationTarget({ preview = false } = {}) {
     return this_chid === undefined && (name2 === neutralCharacterName || (preview && (getComposerValue().trim() || hasPendingFileAttachment())))
-        ? { temporary: true, history: chat.filter(message => !message.is_system).map(({ is_user, mes, extra }) => ({
-            is_user, mes, extra: { files: extra?.files, media: extra?.media, tool_invocations: extra?.tool_invocations },
+        ? { temporary: true, history: chat.map(({ is_user, is_system, mes, extra }) => ({
+            is_user: is_user === true, is_system, mes: String(mes ?? ''), extra: {
+                api: extra?.api, type: extra?.type, files: extra?.files, media: extra?.media, tool_invocations: extra?.tool_invocations,
+            },
         })) }
         : getCurrentChatGenerationTarget();
 }
@@ -6384,7 +6389,7 @@ function queueWorkspaceGenerationScroll(explicit = false) {
 
 function getFailedWorkspaceReply() {
     const run = workspaceGeneration.failedReply();
-    if (!run || run.kind === 'continue' || !usesWorkspaceGeneration() || chat.at(-1)?.is_user !== true) return;
+    if (!run || !usesWorkspaceGeneration() || (run.kind === 'continue' ? !hasContinuableReply() : chat.at(-1)?.is_user !== true)) return;
     const target = getWorkspaceGenerationTarget();
     if (target && (run.temporary ? target.temporary : target.version === run.version)) return run;
 }
@@ -6439,7 +6444,12 @@ const workspaceGeneration = createWorkspaceGeneration({
             if (run.assistant) {
                 const start = run.kind === 'regenerate' ? findRegenerateTurnStart(chat)
                     : run.kind === 'continue' ? chat.length - 1 : chat.length;
-                chat.splice(start, chat.length - start, run.assistant);
+                const original = run.kind === 'continue' ? chat[start] : null;
+                const invocations = run.assistant.extra?.tool_invocations;
+                const replacement = original ? { ...original, mes: run.assistant.mes,
+                    ...(Array.isArray(invocations) ? { extra: { ...original.extra, tool_invocations: invocations } } : {}),
+                } : run.assistant;
+                chat.splice(start, chat.length - start, replacement);
             }
             if (run.status === 'interrupted' || (run.status === 'failed' && (run.kind === 'send' || !getFailedWorkspaceReply()))) showFailure();
             return;
@@ -6448,7 +6458,7 @@ const workspaceGeneration = createWorkspaceGeneration({
         // A historical run version does not describe the current chat returned by /find.
         const version = discovered ? run.chatVersion : run.version;
         // Do not retry the same version if the reconciliation read also came back stale.
-        if ((!discovered && run.status === 'failed' && (run.kind === 'send' || chat.at(-1)?.is_user !== true)) || (run.status === 'interrupted' && reconciledChatVersion === undefined)) {
+        if ((!discovered && run.status === 'failed' && (run.kind === 'send' || !getFailedWorkspaceReply())) || (run.status === 'interrupted' && reconciledChatVersion === undefined)) {
             showFailure();
         }
         if (current && typeof version === 'string' && current.version !== version && version !== reconciledChatVersion) {
@@ -6506,13 +6516,13 @@ async function startWorkspaceGeneration(action, text) {
     const isCurrent = () => ownsWorkspaceComposer(composer);
     const requestId = crypto.randomUUID();
     workspaceSendViewport = null;
-    const prepared = action === 'continue' ? undefined : workspaceGeneration.prepare(target, { action, text, requestId });
+    const prepared = workspaceGeneration.prepare(target, { action, text, requestId });
     workspaceSendViewport = action === 'send'
         ? { requestId, contextKey: composer.contextKey, questionIndex: chat.length, completed: null }
         : null;
     if (workspaceSendViewport) workspaceGenerationScroll = null;
-    const ownsPreparation = () => isCurrent() && (!prepared || workspaceGeneration.ownsPreparation(prepared));
-    if (prepared && action !== 'send') queueWorkspaceGenerationScroll(true);
+    const ownsPreparation = () => isCurrent() && workspaceGeneration.ownsPreparation(prepared);
+    if (action !== 'send') queueWorkspaceGenerationScroll(true);
     let creating = false;
     try {
         let attachments;
@@ -6534,7 +6544,7 @@ async function startWorkspaceGeneration(action, text) {
         const worldRuntime = await captureWorkspaceWorldRuntime(activations);
         if (!ownsPreparation()) return false;
         await flushWorkspaceGenerationSettings();
-        if (!ownsPreparation() || (!prepared && workspaceGeneration.busy())) return false;
+        if (!ownsPreparation()) return false;
         creating = true;
         const run = await workspaceGeneration.create(target, { action, text, attachments, ...worldRuntime, requestId, locale: readStoredUiLocale() }, prepared);
         if (!run) return false;
@@ -6551,13 +6561,14 @@ async function startWorkspaceGeneration(action, text) {
     }
 }
 
-async function previewWorkspaceGeneration(round = 0) {
-    const target = getWorkspaceGenerationTarget({ preview: true });
+async function previewWorkspaceGeneration(round = 0, action = 'send') {
+    const send = action === 'send';
+    const target = getWorkspaceGenerationTarget({ preview: send });
     if (!target) return { kind: 'prompt-preview-empty', reason: 'No chat selected', warnings: [] };
-    const text = getComposerValue();
+    const text = send ? getComposerValue() : '';
     const composer = getComposerSnapshot();
     const draftAttachments = [];
-    if (hasPendingFileAttachment()) {
+    if (send && hasPendingFileAttachment()) {
         await populateFileAttachment({ extra: {} }, 'file_form_input', {
             reset: false, isCurrent: () => ownsWorkspaceComposer(composer),
             stageFile: file => String(draftAttachments.push(file)),
@@ -6568,11 +6579,11 @@ async function previewWorkspaceGeneration(round = 0) {
     await flushWorkspaceGenerationSettings();
     if (!ownsWorkspaceComposer(composer)) return { kind: 'prompt-preview-empty', reason: 'Selected chat changed', warnings: [] };
     const { connection, messages, budget, tools, toolChoice, maxTokens, reasoningEffort, previewPipeline } = await workspaceGenerationRequest('/preview', {
-        ...target, action: 'send', text: text || undefined, locale: readStoredUiLocale(), round,
+        ...target, action, text: text || undefined, locale: readStoredUiLocale(), round,
         ...worldRuntime, ...(draftAttachments.length ? { draftAttachments } : {}),
     });
     return {
-        kind: 'prompt-preview', type: 'normal', model: connection.model, stream: true,
+        kind: 'prompt-preview', type: send ? 'normal' : action, model: connection.model, stream: true,
         request: { model: connection.model, messages, max_tokens: maxTokens ?? budget.responseTokens, stream: true,
             ...(tools?.length ? { tools, tool_choice: toolChoice } : {}), ...(reasoningEffort ? { reasoning_effort: reasoningEffort } : {}) },
         entries: [], dropped: [], summarized: [], pipeline: previewPipeline ?? null, warnings: [],
@@ -6712,11 +6723,16 @@ export function setOptionsMenuRegenerateAvailability(canRegenerate) {
     return Boolean(optionsMenuModuleRef?.updateOptionsMenuState?.({ canRegenerate: Boolean(canRegenerate) }));
 }
 
-function canContinueLastReply() {
-    if (is_send_press || workspaceGeneration.busy() || !usesWorkspaceGeneration() || chat.length < 2) return false;
+function hasContinuableReply() {
     const tail = chat.at(-1);
+    return chat.length >= 2 && tail?.is_user === false && !tail.is_system;
+}
+
+function canContinueLastReply() {
+    if (is_send_press || greetingSelectionPending || generationCaller.generationEntryPending || generationCaller.regenerateRequestInFlight
+        || workspaceGeneration.busy() || !usesWorkspaceGeneration() || !hasContinuableReply()) return false;
     const target = getWorkspaceGenerationTarget();
-    return tail?.is_user === false && !tail.is_system && Boolean(target?.temporary || target?.version);
+    return Boolean(target?.temporary || target?.version);
 }
 
 function continueLastReply() {
@@ -9528,8 +9544,13 @@ function getPromptInspectorBridge() {
     }
 
     globalThis.__emberDeskPromptInspectorBridge = {
-        preview: (round = 0) => usesWorkspaceGeneration()
-            ? previewWorkspaceGeneration(round) : previewNextGenerationRequest({ round }),
+        actions: () => {
+            const target = usesWorkspaceGeneration() && getWorkspaceGenerationTarget();
+            const hasHistory = target && (target.temporary ? target.history.length : Boolean(target.version) && chat.length);
+            return ['send', ...(hasHistory ? ['regenerate'] : []), ...(hasHistory && hasContinuableReply() ? ['continue'] : [])];
+        },
+        preview: (round = 0, action = 'send') => usesWorkspaceGeneration()
+            ? previewWorkspaceGeneration(round, action) : previewNextGenerationRequest({ round }),
         close: () => closePromptInspectorOverlay(),
     };
     return globalThis.__emberDeskPromptInspectorBridge;

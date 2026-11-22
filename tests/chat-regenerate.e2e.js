@@ -298,16 +298,17 @@ test('non-stream feedback follows explicit send and regenerate, but not a reader
 });
 
 test('non-stream feedback retries a failed reply without duplicating the submitted message', async ({ page, characterModel }) => {
-    const requests = await characterModel([{ status: 500 }, { content: 'reply after retry' }]);
+    const requests = await characterModel([{ status: 500 }, { status: 500 }, { content: 'reply after retry' }]);
     await page.locator('#send_textarea').fill('retry this question');
     await page.locator('#send_but').click();
     const chat = page.locator('#chat');
-    await expect(page.locator('#toast-container .toast-error')).toContainText('generation_failed');
+    const failure = page.locator('#toast-container .toast-error').filter({ hasText: 'generation_failed' });
+    await expect(failure).toBeVisible();
     await chat.getByRole('button', { name: '重试', exact: true }).click();
-    await expect(page.locator('#toast-container .toast-error')).toHaveCount(0, { timeout: 1500 });
+    await expect(failure).toHaveCount(0, { timeout: 1500 });
     await expect(chat.getByText('reply after retry', { exact: true })).toBeVisible();
     await expect(chat.getByText('retry this question', { exact: true })).toHaveCount(1);
-    expect(requests).toHaveLength(2);
+    expect(requests).toHaveLength(3);
 });
 
 test('non-stream feedback can stop attachment preparation without losing the draft', async ({ page, characterModel }) => {
@@ -377,6 +378,9 @@ test('continues the saved role reply through the React options menu', async ({ p
         { content: 'ORIGINAL_REPLY' },
         { content: 'CONTINUATION' },
         { status: 500 },
+        { status: 500 },
+        { content: ' RETRIED_SUFFIX' },
+        { content: 'CANCELLED_SUFFIX', holdOpen: true },
     ]);
     const options = page.locator('#options_button');
     const item = page.locator('#option_continue');
@@ -389,6 +393,28 @@ test('continues the saved role reply through the React options menu', async ({ p
     await sendCharacterMessage(page, 'continue this story', 'ORIGINAL_REPLY');
     const before = await chatSnapshot(page);
     await page.locator('#send_textarea').fill('unsent draft');
+
+    await page.locator('[data-react-workspace-shell-chrome] nav button').filter({ hasText: '提示词' }).first().click();
+    const preview = async trigger => {
+        const pending = page.waitForResponse(response => response.url().endsWith('/generation/preview'));
+        await trigger();
+        const response = await pending;
+        return { request: response.request().postDataJSON(), messages: JSON.stringify((await response.json()).messages) };
+    };
+    const sendPreview = await preview(() => page.getByRole('button', { name: '查看 Prompt' }).first().click());
+    expect(sendPreview.request.action).toBe('send');
+    expect(sendPreview.messages).toContain('unsent draft');
+    const action = page.locator('.prompt-inspector-meta select').first();
+    const regenPreview = await preview(() => action.selectOption('regenerate'));
+    expect(regenPreview.request.action).toBe('regenerate');
+    expect(regenPreview.messages).toContain('continue this story');
+    expect(regenPreview.messages).not.toMatch(/unsent draft|ORIGINAL_REPLY/);
+    const continuePreview = await preview(() => action.selectOption('continue'));
+    expect(continuePreview.request.action).toBe('continue');
+    expect(continuePreview.messages).toContain('ORIGINAL_REPLY');
+    expect(continuePreview.messages).not.toContain('unsent draft');
+    expect(requests).toHaveLength(1);
+    await page.keyboard.press('Escape');
 
     const continueReply = async () => {
         await options.click();
@@ -412,9 +438,21 @@ test('continues the saved role reply through the React options menu', async ({ p
 
     await waitForRegenerateSettled(page);
     await expectRunStatus(page, await continueReply(), 'failed');
-    await expect(page.getByText('generation_failed', { exact: true })).toBeVisible();
+    const retry = page.locator('#chat .mes').last().getByRole('button', { name: '重试', exact: true });
+    await expect(retry).toBeVisible();
     expect(await chatSnapshot(page)).toEqual(after);
-    expect(requests).toHaveLength(3);
+    expect(requests).toHaveLength(4);
+    await expectRunStatus(page, await startCharacterRun(page, 'continue', () => retry.click()), 'completed');
+    await expect.poll(() => lastMessageText(page)).toContain('CONTINUATION RETRIED_SUFFIX');
+    const retried = await chatSnapshot(page);
+    expect(retried).toHaveLength(before.length);
+
+    const stopped = await continueReply();
+    await expect(page.locator('#chat')).toContainText('CANCELLED_SUFFIX');
+    await page.locator('#mes_stop').click();
+    await expectRunStatus(page, stopped, 'cancelled');
+    await expect(page.locator('#chat')).not.toContainText('CANCELLED_SUFFIX');
+    expect(await chatSnapshot(page)).toEqual(retried);
 });
 
 async function startTemporaryChat(page) {
@@ -427,7 +465,7 @@ test('temporary assistant regenerates with a browser action and cancels visibly 
         { tool: 'custom', content: 'browser input' }, { tool: 'last', content: 'INITIAL_TEMPORARY_REPLY' },
         { tool: 'custom', content: 'fail action' }, { tool: 'last', content: 'REGENERATED_TEMPORARY_REPLY' },
         { tool: 'custom', content: 'fail reply' },
-        { content: ' CONTINUED_TEMPORARY_REPLY' },
+        { tool: 'custom', content: 'continued input' }, { tool: 'last', content: ' CONTINUED_TEMPORARY_REPLY' },
     ], { temporary: true, streamOpenAi: true });
     await page.evaluate(async () => {
         const { feature_settings } = await import('/scripts/feature-settings.js');
@@ -471,8 +509,10 @@ test('temporary assistant regenerates with a browser action and cancels visibly 
         await page.locator('#option_continue').click();
     });
     await expectRunStatus(page, continued, 'completed');
-    await expect.poll(() => lastMessageText(page)).toBe(`${regeneratedReply} CONTINUED_TEMPORARY_REPLY`);
-    expect(requests[5].tool_choice).toBeUndefined();
+    await expect.poll(() => lastMessageText(page)).toContain('CONTINUED_TEMPORARY_REPLY');
+    expect(await lastMessageText(page)).toMatch(/REGENERATED_TEMPORARY_REPLY[\s\S]*CONTINUED_TEMPORARY_REPLY/);
+    expect(requests[5].tool_choice.function.name).toBe('custom');
+    expect(requests[6].tool_choice.function.name).toBe('last');
     expect((await chatSnapshot(page)).filter(message => message.is_user)).toHaveLength(1);
     await expect(composer).toHaveValue('untouched draft');
     expect(writes).toEqual([]);
@@ -742,7 +782,7 @@ test.describe('chat regenerate', () => {
         // A failed server run never commits its replacement turn.
         const snapshotAfter = await chatSnapshot(page);
         expect(snapshotAfter).toEqual(snapshotBefore);
-        expect(requests).toHaveLength(2);
+        expect(requests).toHaveLength(3);
     });
 
     test('keeps the saved reply after stopping a server regeneration', async ({ page }) => {
@@ -1138,6 +1178,7 @@ test.describe('chat regenerate', () => {
             { content: 'SCRATCH_REPLY', stream: true },
             { content: 'SCRATCH_PARTIAL', holdOpen: true },
             { status: 500 },
+            { status: 500 },
             { content: 'SCRATCH_REPLACEMENT', stream: true },
         ], { temporary: true, streamOpenAi: true });
         const unrelatedRequests = [];
@@ -1177,7 +1218,7 @@ test.describe('chat regenerate', () => {
         const replacement = await chatSnapshot(page);
         expect(replacement.slice(0, -1)).toEqual(snapshotBefore.slice(0, -1));
         expect(replacement.at(-1).mes).toBe('SCRATCH_REPLACEMENT');
-        expect(requests).toHaveLength(4);
+        expect(requests).toHaveLength(5);
         expect(unrelatedRequests).toEqual([]);
         await page.reload();
         await expect(page.locator('#send_textarea')).toBeVisible();
