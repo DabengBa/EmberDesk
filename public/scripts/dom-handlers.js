@@ -65,7 +65,6 @@ const buildTemporaryChatDeleteWarningHtml = (...args) => shell().buildTemporaryC
 const callGenericPopup = (...args) => shell().callGenericPopup(...args);
 const canRegenerateLastReply = (...args) => shell().canRegenerateLastReply(...args);
 const cancelTtsPlay = (...args) => shell().cancelTtsPlay(...args);
-const chooseBogusFolder = (...args) => shell().chooseBogusFolder(...args);
 const closeCharacterExportPopup = (...args) => shell().closeCharacterExportPopup(...args);
 const closeCurrentChat = (...args) => shell().closeCurrentChat(...args);
 const handleWorkspaceDrawerOutsidePointer = target => shell().handleWorkspaceDrawerOutsidePointer(target);
@@ -103,17 +102,8 @@ const messageEdit = (...args) => shell().messageEdit(...args);
 const messageEditCancel = (...args) => shell().messageEditCancel(...args);
 const messageEditDone = (...args) => shell().messageEditDone(...args);
 const messageEditMove = (...args) => shell().messageEditMove(...args);
-const mountCharacterContextMenu = (...args) => shell().mountCharacterContextMenu(...args);
-const mountCharacterPopup = (...args) => shell().mountCharacterPopup(...args);
-const mountChatComposer = (...args) => shell().mountChatComposer(...args);
-const mountDialogueDelMesControls = (...args) => shell().mountDialogueDelMesControls(...args);
-
-const mountExportFormatPopup = (...args) => shell().mountExportFormatPopup(...args);
-const mountOptionsMenu = (...args) => shell().mountOptionsMenu(...args);
 const mountReactMainChatMessageListPanel = (...args) => shell().mountReactMainChatMessageListPanel(...args);
 const mountReactWorkspaceShellChromeHost = (...args) => shell().mountReactWorkspaceShellChromeHost(...args);
-const mountRightNavPanel = (...args) => shell().mountRightNavPanel(...args);
-const mountSelectChatPopup = (...args) => shell().mountSelectChatPopup(...args);
 const newAssistantChat = (...args) => shell().newAssistantChat(...args);
 const openAlternateGreetings = (...args) => shell().openAlternateGreetings(...args);
 const openCharacterChat = (...args) => shell().openCharacterChat(...args);
@@ -124,7 +114,6 @@ const openChatMemoryPanel = (...args) => shell().openChatMemoryPanel(...args);
 
 const processDroppedFiles = (...args) => shell().processDroppedFiles(...args);
 const queueReactCharacterAuthoringRemount = (...args) => shell().queueReactCharacterAuthoringRemount(...args);
-const read_avatar_load = (...args) => shell().read_avatar_load(...args);
 const regenerateLastReply = (...args) => shell().regenerateLastReply(...args);
 const renameCharacter = (...args) => shell().renameCharacter(...args);
 const renameChat = (...args) => shell().renameChat(...args);
@@ -134,7 +123,6 @@ const runMainChatVisibleMessageActionsShellAction = (...args) => shell().runMain
 const saveCharacterDebounced = (...args) => shell().saveCharacterDebounced(...args);
 const saveChatConditional = (...args) => shell().saveChatConditional(...args);
 
-const selectCharacterById = (...args) => shell().selectCharacterById(...args);
 const selectImportedChar = (...args) => shell().selectImportedChar(...args);
 const select_rm_characters = (...args) => shell().select_rm_characters(...args);
 const select_rm_create = (...args) => shell().select_rm_create(...args);
@@ -159,22 +147,6 @@ export function initDomHandlers() {
 }
 
 export async function bindLegacyShellHandlers() {
-    // React-owned composer markup must exist before handlers bind below.
-    await mountChatComposer();
-    // React-owned static panels must exist before the direct event
-    // bindings below; bootstrapWorkspace re-invokes these mounts later, and
-    // each mount is idempotent via its dataset.react*Mounted guard. Dialogue
-    // controls mount during bootstrap after their controller is initialized.
-    await Promise.all([
-        mountCharacterPopup(),
-        mountRightNavPanel(),
-        mountSelectChatPopup(),
-        mountCharacterContextMenu(),
-        mountOptionsMenu(),
-        mountExportFormatPopup(),
-        mountDialogueDelMesControls(),
-    ]);
-
     initCharacterSearch();
 
     function delegate(type, selector, handler) {
@@ -220,25 +192,6 @@ export async function bindLegacyShellHandlers() {
         }
     });
 
-    document.addEventListener('click', async function onCharacterSelect(event) {
-        if (event.button >= 1) return;
-        const target = event.target instanceof Element ? event.target : event.target?.parentElement;
-        const character = target?.closest('.character_select');
-        if (!character || character.disabled === true) return;
-        const id = Number(character.getAttribute('data-chid') ?? undefined);
-        await selectCharacterById(id);
-    });
-
-    document.addEventListener('click', function onBogusFolderSelect(event) {
-        if (event.button >= 1) return;
-        const target = event.target instanceof Element ? event.target : event.target?.parentElement;
-        const folder = target?.closest('.bogus_folder_select');
-        if (!folder || folder.disabled === true) return;
-        const tagId = folder.getAttribute('tagid');
-        console.debug('Bogus folder clicked', tagId);
-        chooseBogusFolder(null, tagId);
-    });
-
     const cssAutofit = CSS.supports('field-sizing', 'content');
     if (!cssAutofit) {
         /**
@@ -263,55 +216,6 @@ export async function bindLegacyShellHandlers() {
         });
     }
 
-    const chatElementScroll = document.getElementById('chat');
-    const chatScrollHandler = function () {
-        const scrollIsAtBottom = Math.abs(chatElementScroll.scrollHeight - chatElementScroll.clientHeight - chatElementScroll.scrollTop) < 5;
-
-        // Resume autoscroll if the user scrolls to the bottom
-        if (state.scrollLock && scrollIsAtBottom) {
-            state.scrollLock = false;
-        }
-
-        // Cancel autoscroll if the user scrolls up
-        if (!state.scrollLock && !scrollIsAtBottom) {
-            state.scrollLock = true;
-        }
-    };
-    chatElementScroll.addEventListener('scroll', chatScrollHandler, { passive: true });
-
-    function selectMessageForDeletion(index) {
-        const count = state.chat.length - index;
-        globalThis.__emberDeskBulkDeleteController.select(index, t`Delete ${count} messages, from message ${index + 1} through the end of this chat.`, t`Delete ${count} messages`);
-    }
-    globalThis.__emberDeskBulkDeleteController.setSelectionHandler(selectMessageForDeletion);
-
-    delegate('click', '.mes', function () {
-        //when a 'delete message' parent div is clicked
-        // and we are in delete mode and del_checkbox is visible
-        if (this.matches('[data-main-chat-message-row-owner="react"]')) return;
-        const row = this;
-        const deleteCheckbox = row.querySelector('.del_checkbox');
-
-        if (!state.is_delete_mode || !deleteCheckbox || !(deleteCheckbox.offsetWidth || deleteCheckbox.offsetHeight || deleteCheckbox.getClientRects().length)) {
-            return;
-        }
-        globalThis.__emberDeskBulkDeleteController.selectLegacyRange(Number(row.getAttribute('mesid')), state.chat.length, {
-            clear: () => document.querySelectorAll('.mes').forEach(candidateRow => {
-                const checkbox = candidateRow.querySelector('.del_checkbox');
-                if (checkbox) checkbox.checked = false;
-                candidateRow.classList.remove('selected');
-            }),
-            markClicked: () => row.classList.add('selected'),
-            announce: selectMessageForDeletion,
-            select: index => {
-                document.querySelectorAll(`.mes[mesid="${index}"]`).forEach(selectedRow => {
-                    selectedRow.classList.add('selected');
-                    const checkbox = selectedRow.querySelector('.del_checkbox');
-                    if (checkbox) checkbox.checked = true;
-                });
-            },
-        });
-    });
 
     function closeSelectChatPopup() {
         document.getElementById('shadow_select_chat_popup').close();
@@ -417,13 +321,6 @@ export async function bindLegacyShellHandlers() {
 
     dialoguePopupCommands = { confirmDialoguePopup, cancelDialoguePopup };
     // React owns button clicks; keyboard and programmatic callers use commands.
-
-    const avatarInput = /** @type {HTMLInputElement|null} */ (document.getElementById('add_avatar_button'));
-    if (avatarInput) {
-        avatarInput.addEventListener('change', () => read_avatar_load(avatarInput));
-    }
-
-    document.getElementById('form_create')?.addEventListener('submit', e => createOrEditCharacter(e));
 
     document.getElementById('delete_button')?.addEventListener('click', async function () {
         if (state.this_chid === undefined || !state.characters[state.this_chid]) {
@@ -737,15 +634,7 @@ export async function bindLegacyShellHandlers() {
         globalThis.__emberDeskBulkDeleteController.finish();
         document.getElementById('dialogue_del_mes').style.display = 'none';
         document.getElementById('send_form').style.display = state.css_send_form_display;
-        document.querySelectorAll('.del_checkbox').forEach(checkbox => {
-            const row = checkbox.closest('.mes');
-            if (row?.matches('[data-main-chat-message-row-owner="react"]')) return;
-            checkbox.style.display = 'none';
-            const content = row?.querySelector('.for_checkbox');
-            if (content) content.style.display = 'block';
-            row?.classList.remove('selected');
-            checkbox.checked = false;
-        });
+
         state.is_delete_mode = false;
         requestComposerFocus();
     }
@@ -756,15 +645,7 @@ export async function bindLegacyShellHandlers() {
         return controller.confirm(t`Deleting messages…`, async deletedFrom => {
             try {
                 document.getElementById('dialogue_del_mes').setAttribute('aria-busy', 'true');
-                document.querySelectorAll('.del_checkbox').forEach(checkbox => {
-                    const row = checkbox.closest('.mes');
-                    if (row?.matches('[data-main-chat-message-row-owner="react"]')) return;
-                    checkbox.style.display = 'none';
-                    const content = row?.querySelector('.for_checkbox');
-                    if (content) content.style.display = 'block';
-                    row?.classList.remove('selected');
-                    checkbox.checked = false;
-                });
+
                 await shell().getChatMessageCommands().deleteFrom(deletedFrom);
             } finally {
                 const dialogue = document.getElementById('dialogue_del_mes');

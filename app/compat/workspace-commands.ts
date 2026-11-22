@@ -42,6 +42,8 @@ export interface MainChatMessageActionsCommand {
 }
 
 export interface MainChatCommands {
+    setScrollLock(locked: boolean): void;
+    selectBulkMessage(index: number): void;
     selectGreeting(index: number, characterId: string, chatId: string): Promise<boolean> | boolean;
     openCharacterLibrary(): CommandResult;
     loadMoreMessages(messagesToLoad?: number | null): CommandResult;
@@ -96,6 +98,7 @@ export interface WorldInfoCommands {
 export type AuthoringKind = 'characterAuthoring';
 
 export interface AuthoringCommands {
+    processAvatarFile?(file: File): Promise<string | undefined>;
     setExternalMediaAllowed?(payload: { characterId: string; allowed: boolean }): CommandResult;
     saveCharacterAuthoring?(payload: Record<string, unknown>): CommandResult;
     cancelAuthoring?(kind: AuthoringKind): CommandResult;

@@ -393,9 +393,9 @@ export const MainChatMessageRow = memo(function MainChatMessageRow({
             data-reasoning-state={message.reasoningState ?? undefined}
             data-media-display={message.mediaDisplay ?? undefined}
             onClick={event => {
-                if (!bulk.active || !canSelectBulkMessage) return;
+                if (!bulk.active || bulk.busy || !canSelectBulkMessage) return;
                 event.stopPropagation();
-                bulkController.choose(numericMessageId);
+                commands?.selectBulkMessage?.(numericMessageId);
             }}
             onClickCapture={event => {
                 if (message.actionsExpanded

@@ -55,30 +55,10 @@ test('the real create button enters create mode and remounts authoring in order 
     expect(calls).toEqual(['select:create', 'remount']);
 });
 
-test('real shell binding handles native and programmatic change on the same avatar input without a jQuery selector', async () => {
-    const input = new EventTarget();
-    const chat = new EventTarget();
-    const stop = new Error('finished avatar binding');
-    const readAvatar = jest.fn();
-    const shell = new Proxy({ state: {}, read_avatar_load: readAvatar }, { get: (target, key) => key in target ? target[key] : jest.fn() });
-    registerDomHandlersShellContext(shell);
-    globalThis.document = { addEventListener: () => {}, getElementById: id => id === 'add_avatar_button' ? input : id === 'chat' ? chat : null };
-    globalThis.window = {};
-    globalThis.CSS = { supports: () => true };
-    globalThis.__emberDeskBulkDeleteController = { setSelectionHandler: jest.fn() };
-    const chain = { on: () => chain };
-    globalThis.$ = selector => {
-        if (selector === '#add_avatar_button') throw new Error('avatar change handler must not use jQuery');
-        if (selector === '#form_create') throw stop;
-        return chain;
-    };
-    await expect(bindLegacyShellHandlers()).rejects.toBe(stop);
-    input.files = [{ name: 'portrait.png' }];
-    input.dispatchEvent(new Event('change', { bubbles: true }));
-    input.dispatchEvent(new Event('change', { bubbles: true }));
-    expect(readAvatar).toHaveBeenCalledTimes(2);
-    expect(readAvatar).toHaveBeenNthCalledWith(1, input);
-    expect(readAvatar).toHaveBeenNthCalledWith(2, input);
+test('legacy shell no longer binds avatar input change or form submit', () => {
+    const source = readFileSync(new URL('../public/scripts/dom-handlers.js', import.meta.url), 'utf8');
+    expect(source).not.toContain("getElementById('add_avatar_button')");
+    expect(source).not.toContain("getElementById('form_create')?.addEventListener('submit'");
 });
 
 test('create-draft restoration sends the actual file input to the existing processor without jQuery', () => {
@@ -101,33 +81,4 @@ test('create-draft restoration sends the actual file input to the existing proce
     expect(() => select({ switchMenu: false })).toThrow(stop);
     expect(input.files).toBe(files);
     expect(readAvatar).toHaveBeenCalledWith(input);
-});
-
-test('legacy jQuery synthetic change reaches the same processor once without duplicating native changes', async () => {
-    const input = new EventTarget();
-    const stop = new Error('finished avatar binding');
-    const readAvatar = jest.fn();
-    registerDomHandlersShellContext(new Proxy({ state: {}, read_avatar_load: readAvatar }, { get: (target, key) => key in target ? target[key] : jest.fn() }));
-    globalThis.document = { addEventListener: () => {}, getElementById: id => id === 'add_avatar_button' ? input : id === 'chat' ? new EventTarget() : null };
-    globalThis.window = {};
-    globalThis.CSS = { supports: () => true };
-    globalThis.__emberDeskBulkDeleteController = { setSelectionHandler: jest.fn() };
-    let syntheticHandler;
-    const chain = { on: () => chain };
-    globalThis.$ = selector => {
-        if (selector === '#form_create') throw stop;
-        if (selector === input) return { on: (type, handler) => { if (type === 'change') syntheticHandler = handler; } };
-        return chain;
-    };
-    await expect(bindLegacyShellHandlers()).rejects.toBe(stop);
-    expect(typeof syntheticHandler).toBe('function');
-    input.files = [{ name: 'portrait.png' }];
-    input.dispatchEvent(new Event('change', { bubbles: true }));
-    syntheticHandler.call(input, { isTrigger: undefined });
-    syntheticHandler.call(input, { isTrigger: 3 }); // jQuery trigger
-    syntheticHandler.call(input, { isTrigger: 2 }); // jQuery triggerHandler
-    expect(readAvatar).toHaveBeenCalledTimes(3);
-    expect(readAvatar).toHaveBeenNthCalledWith(1, input);
-    expect(readAvatar).toHaveBeenNthCalledWith(2, input);
-    expect(readAvatar).toHaveBeenNthCalledWith(3, input);
 });

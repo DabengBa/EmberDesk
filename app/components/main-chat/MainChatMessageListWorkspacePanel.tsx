@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useMemo, useState, useSyncExternalStore } from 'react';
+import { Fragment, useCallback, useLayoutEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import type { MainChatCommands } from '../../compat/workspace-commands';
 import { getMainChatStore, type MainChatSnapshot } from '../../stores/main-chat-store';
 import { MainChatMessageRow } from './MainChatMessageRow';
@@ -23,6 +23,13 @@ export function MainChatMessageListWorkspacePanel({
     );
     const snapshot = mainChatStoreSnapshot;
     const replyViewport = snapshot.window.replyViewport;
+    useLayoutEffect(() => {
+        const chat = document.getElementById('chat');
+        if (!chat) return;
+        const onScroll = () => commands?.setScrollLock?.(Math.abs(chat.scrollHeight - chat.clientHeight - chat.scrollTop) >= 5);
+        chat.addEventListener('scroll', onScroll, { passive: true });
+        return () => chat.removeEventListener('scroll', onScroll);
+    }, [commands]);
     useMainChatHotkeys({ snapshot, commands });
     const messageIds = mainChatStoreSnapshot.window.visibleMessageIds.length > 0
         ? mainChatStoreSnapshot.window.visibleMessageIds

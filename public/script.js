@@ -1048,7 +1048,6 @@ registerDomHandlersShellContext({
     cancelTtsPlay: (...args) => cancelTtsPlay(...args),
     canRegenerateLastReply: (...args) => canRegenerateLastReply(...args),
     continueLastReply,
-    chooseBogusFolder: (...args) => chooseBogusFolder(...args),
     closeCharacterExportPopup: (...args) => closeCharacterExportPopup(...args),
     closeCurrentChat: (...args) => closeCurrentChat(...args),
     closeMessageEditor: (...args) => closeMessageEditor(...args),
@@ -1097,13 +1096,7 @@ registerDomHandlersShellContext({
     messageEditCancel: (...args) => messageEditCancel(...args),
     messageEditDone: (...args) => messageEditDone(...args),
     messageEditMove: (...args) => messageEditMove(...args),
-    mountCharacterContextMenu: (...args) => mountCharacterContextMenu(...args),
-    mountCharacterPopup: (...args) => mountCharacterPopup(...args),
-    mountChatComposer: (...args) => mountChatComposer(...args),
-    mountDialogueDelMesControls: (...args) => mountDialogueDelMesControls(...args),
     mountDialoguePopupControls: (...args) => mountDialoguePopupControls(...args),
-    mountExportFormatPopup: (...args) => mountExportFormatPopup(...args),
-    mountOptionsMenu: (...args) => mountOptionsMenu(...args),
     mountReactMainChatMessageListPanel: (...args) => mountReactMainChatMessageListPanel(...args),
     getMainChatIdentity: () => ({ character: characters[this_chid]?.avatar, chat: getCurrentChatId(), metadata: chat_metadata }),
     truncateMainChatUiState: (startIndex) => {
@@ -1126,8 +1119,7 @@ registerDomHandlersShellContext({
         });
     },
     mountReactWorkspaceShellChromeHost: (...args) => mountReactWorkspaceShellChromeHost(...args),
-    mountRightNavPanel: (...args) => mountRightNavPanel(...args),
-    mountSelectChatPopup: (...args) => mountSelectChatPopup(...args),
+
     newAssistantChat: (...args) => newAssistantChat(...args),
     openAlternateGreetings: (...args) => openAlternateGreetings(...args),
     openCharacterLibrary: () => openWorkspaceShellCharacterLibrary(),
@@ -1139,7 +1131,6 @@ registerDomHandlersShellContext({
 
     processDroppedFiles: (...args) => processDroppedFiles(...args),
     queueReactCharacterAuthoringRemount: (...args) => queueReactCharacterAuthoringRemount(...args),
-    read_avatar_load: (...args) => read_avatar_load(...args),
     regenerateLastReply: (...args) => regenerateLastReply(...args),
     renameCharacter: (...args) => renameCharacter(...args),
     renameChat: (...args) => renameChat(...args),
@@ -1151,7 +1142,6 @@ registerDomHandlersShellContext({
     isAuthoringMirrorWrite: () => authoringMirrorWriteDepth > 0,
     saveChatConditional: (...args) => saveChatConditional(...args),
     saveSettingsDebounced: (...args) => saveSettingsDebounced(...args),
-    selectCharacterById: (...args) => selectCharacterById(...args),
     selectImportedChar: (...args) => selectImportedChar(...args),
     selectRightMenuWithAnimation: (...args) => selectRightMenuWithAnimation(...args),
     select_rm_characters: (...args) => select_rm_characters(...args),
@@ -2589,6 +2579,14 @@ function getCharacterAuthoringReactCommands() {
     return createWorkspacePanelCommandPort({
         commands: {
             saveCharacterAuthoring: payload => saveCharacterAuthoringFromPayload(payload),
+            processAvatarFile: async file => {
+                const input = document.getElementById('add_avatar_button');
+                if (!(input instanceof HTMLInputElement)) return;
+                const transfer = new DataTransfer();
+                transfer.items.add(file);
+                input.files = transfer.files;
+                return read_avatar_load(input);
+            },
             setExternalMediaAllowed: ({ characterId, allowed }) => setCharacterExternalMediaAuthorization({
                 settings: power_user,
                 characterId,
@@ -2851,7 +2849,7 @@ function getCharacterAuthoringReactCommands() {
         },
         shouldRemount(commandResult, commandName) {
             // queryReplaceIntentOutcome does not affect the panel; never remount.
-            if (commandName === 'queryReplaceIntentOutcome' || commandName === 'setExternalMediaAllowed') {
+            if (commandName === 'queryReplaceIntentOutcome' || commandName === 'setExternalMediaAllowed' || commandName === 'processAvatarFile') {
                 return false;
             }
             // Edit-mode saves rebase the React session client-side; remounting on
@@ -3297,6 +3295,12 @@ function getMainChatMessageListReactCommands() {
     });
     return createWorkspacePanelCommandPort({
         commands: {
+            setScrollLock: locked => { setScrollLock(locked); return false; },
+            selectBulkMessage: index => {
+                const count = chat.length - index;
+                globalThis.__emberDeskBulkDeleteController.select(index, t`Delete ${count} messages, from message ${index + 1} through the end of this chat.`, t`Delete ${count} messages`);
+                return false;
+            },
             openCharacterLibrary: async () => {
                 await openWorkspaceShellCharacterLibrary();
                 return true;
@@ -4553,6 +4557,11 @@ async function bootstrapWorkspace() {
 }
 
 /** Starts the workspace after the SPA has committed its native hosts. */
+export const workspaceInitialPanelMounts = {
+    mountChatComposer, mountCharacterPopup, mountRightNavPanel, mountSelectChatPopup,
+    mountCharacterContextMenu, mountOptionsMenu, mountExportFormatPopup, mountDialogueDelMesControls,
+};
+
 export async function startWorkspaceRuntime(revealWorkspace) {
     await bindLegacyShellHandlers();
     revealWorkspace();
@@ -7098,7 +7107,7 @@ export function setSendButtonState(value) {
 /**
  * Processes the avatar image from the input element, allowing the user to crop it if necessary.
  * @param {HTMLInputElement} input - The input element containing the avatar file.
- * @returns {Promise<void>}
+ * @returns {Promise<string|undefined>}
  */
 async function read_avatar_load(input) {
     if (input.files && input.files[0]) {
@@ -7110,9 +7119,10 @@ async function read_avatar_load(input) {
         const file = input.files[0];
         const fileData = await getBase64Async(file);
 
+        let croppedImage;
         {
             const dlg = new Popup('Set the crop position of the avatar image', POPUP_TYPE.CROP, '', { cropImage: fileData });
-            const croppedImage = await dlg.show();
+            croppedImage = await dlg.show();
 
             if (!croppedImage) {
                 return;
@@ -7124,7 +7134,7 @@ async function read_avatar_load(input) {
         }
 
         if (menu_type == 'create') {
-            return;
+            return String(croppedImage);
         }
 
         await createOrEditCharacter();
@@ -7150,6 +7160,7 @@ async function read_avatar_load(input) {
         console.debug(`Refreshed ${avatarImages.length} avatar images for ${avatarKey}`);
 
         console.log('Avatar refreshed');
+        return String(croppedImage);
     }
 }
 

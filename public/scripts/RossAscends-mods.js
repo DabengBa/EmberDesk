@@ -39,6 +39,7 @@ import { accountStorage } from './util/AccountStorage.js';
 import { getCurrentUserHandle } from './user.js';
 import { getComposerValue, setComposerValue, subscribeComposerValue } from './main-chat-composer-service.js';
 import { scrollChatTo } from './chat-ui-motion.js';
+import { selectCharacterById } from './character-lifecycle-service.js';
 
 
 // Populated in initRossMods: drawer/panel markup is React-mounted after module eval.
@@ -224,6 +225,17 @@ export async function favsToHotswap() {
     }
 
     buildAvatarList(containers, favs, { interactable: true, highlightFavs: false });
+    for (const container of containers) {
+        for (const character of container.querySelectorAll('.character_select')) {
+            character.addEventListener('click', event => {
+                if (event.button >= 1 || character.disabled === true) return;
+                const characterId = character.getAttribute('data-chid') ?? undefined;
+                void selectCharacterById(Number(characterId));
+                setActiveCharacter(characterId);
+                saveSettingsDebounced();
+            });
+        }
+    }
 }
 
 //changes input bar and send button display depending on connection status
@@ -558,18 +570,6 @@ export function initRossMods({ openWorkspaceShellSettings = null, drawerService 
     SelectedCharacterTab?.addEventListener('click', function () { accountStorage.setItem('SelectedNavTab', 'rm_button_selected_ch'); });
     document.getElementById('rm_button_characters')?.addEventListener('click', function () { accountStorage.setItem('SelectedNavTab', 'rm_button_characters'); });
 
-    // when a char is selected from the list, save them as the auto-load character for next page load
-
-    // when a char is selected from the list, save their name as the auto-load character for next page load
-    document.addEventListener('click', function onCharacterSelectSave(event) {
-        if (event.button >= 1) return;
-        const target = event.target instanceof Element ? event.target : event.target?.parentElement;
-        const character = target?.closest('.character_select');
-        if (!character || character.disabled === true) return;
-        const characterId = character.getAttribute('data-chid') ?? undefined;
-        setActiveCharacter(characterId);
-        saveSettingsDebounced();
-    });
 
     subscribeComposerValue(saveUserInputDebounced);
 

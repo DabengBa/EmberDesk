@@ -269,7 +269,7 @@ test('cropped avatar updates native preview and submits the real form before cac
     class Popup { constructor() { this.cropData = { x: 1 }; } async show() { return 'data:image/png;base64,AA'; } }
     class FormData { constructor(element) { received.push(element); } get() { return 'avatar.png'; } }
     const run = new Function('document', 'Popup', 'POPUP_TYPE', 'getBase64Async', 'createOrEditCharacter', 'FormData', 'getThumbnailUrl', 'fetch', 'HTMLImageElement', `let selected_button = 'edit', menu_type = 'edit', create_save = {}, crop_data; ${source.slice(start, end)}; return read_avatar_load;`)({ getElementById: id => id === 'form_create' ? form : preview, querySelectorAll: () => [] }, Popup, { CROP: 5 }, async () => 'data', jest.fn(), FormData, () => '/thumb', jest.fn(), class {});
-    await run({ files: [{}] });
+    expect(await run({ files: [{}] })).toBe('data:image/png;base64,AA');
     expect(preview.src).toBe('data:image/png;base64,AA');
     expect(received).toEqual([form]);
 });

@@ -60,7 +60,13 @@ export function startWorkspace(revealWorkspace: () => void): Promise<void> {
             await import(/* @vite-ignore */ path);
         }
         const runtimePath = '/script.js';
-        const { startWorkspaceRuntime } = await import(/* @vite-ignore */ runtimePath);
+        const { startWorkspaceRuntime, workspaceInitialPanelMounts: mounts } = await import(/* @vite-ignore */ runtimePath);
+        await mounts.mountChatComposer();
+        await Promise.all([
+            mounts.mountCharacterPopup(), mounts.mountRightNavPanel(), mounts.mountSelectChatPopup(),
+            mounts.mountCharacterContextMenu(), mounts.mountOptionsMenu(), mounts.mountExportFormatPopup(),
+            mounts.mountDialogueDelMesControls(),
+        ]);
         await startWorkspaceRuntime(revealWorkspace);
     })();
 }
