@@ -5,6 +5,7 @@ export let scrollLock = false;
 export let streamingProcessor: unknown = null;
 export let is_send_press = false;
 export let abortController: AbortController | null = new AbortController();
+export let extension_prompts: Record<string, unknown> = {};
 
 export function setGenerationStarted(value: Date): void { generation_started = value; }
 export function setGeneratingAttemptModel(value: string | null): void { generatingAttemptModel = value; }
@@ -12,6 +13,7 @@ export function setScrollLock(value: boolean): void { scrollLock = value; }
 export function setStreamingProcessor(value: unknown): void { streamingProcessor = value; }
 export function setSending(value: boolean): void { is_send_press = value; }
 export function setAbortController(value: AbortController | null): void { abortController = value; }
+export function setExtensionPrompts(value: Record<string, unknown>): void { extension_prompts = value; }
 
 type RawPromptMessage = { role: string; content?: string | null };
 

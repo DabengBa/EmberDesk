@@ -7,6 +7,7 @@ export let scrollLock = false;
 export let streamingProcessor          = null;
 export let is_send_press = false;
 export let abortController                         = new AbortController();
+export let extension_prompts                          = {};
 
 export function setGenerationStarted(value      )       { generation_started = value; }
 export function setGeneratingAttemptModel(value               )       { generatingAttemptModel = value; }
@@ -14,6 +15,7 @@ export function setScrollLock(value         )       { scrollLock = value; }
 export function setStreamingProcessor(value         )       { streamingProcessor = value; }
 export function setSending(value         )       { is_send_press = value; }
 export function setAbortController(value                        )       { abortController = value; }
+export function setExtensionPrompts(value                         )       { extension_prompts = value; }
 
 
 

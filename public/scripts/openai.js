@@ -61,6 +61,14 @@ import { buildStepPrompt, createPipelineToolCompatibilityError, getActivePipelin
 // Installed by the workspace composition root before any domain initialization.
 // State properties must be getters: the shell can replace them after startup.
 let openAIContext;
+// Provider settings are live bindings consumed by the workspace and extensions.
+export let amount_gen = 80;
+export let max_context = 2048;
+export let main_api;
+export function setAmountGen(value) { amount_gen = value; }
+export function setMaxContext(value) { max_context = value; }
+export function setMainApi(value) { main_api = value; }
+
 export function installOpenAIContext(context) {
     openAIContext = context;
 }

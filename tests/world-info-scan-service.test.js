@@ -53,6 +53,21 @@ afterEach(() => {
     jest.restoreAllMocks();
 });
 
+test('consuming a snapshot preserves newer activations and uses the current map', () => {
+    const original = {};
+    const replacement = {};
+    WorldInfoBuffer.externalActivations.set('Book.1', original);
+    WorldInfoBuffer.externalActivations.set('Book.2', original);
+    const snapshot = WorldInfoBuffer.snapshotExternalActivations();
+    WorldInfoBuffer.externalActivations.set('Book.2', replacement);
+    WorldInfoBuffer.consumeExternalActivations(snapshot);
+    expect(WorldInfoBuffer.externalActivations.has('Book.1')).toBe(false);
+    expect(WorldInfoBuffer.externalActivations.get('Book.2')).toBe(replacement);
+    WorldInfoBuffer.externalActivations = new Map([['Book.1', replacement]]);
+    WorldInfoBuffer.consumeExternalActivations(snapshot);
+    expect(WorldInfoBuffer.externalActivations.get('Book.1')).toBe(replacement);
+});
+
 describe('World Info scan uses confirmed repository data without an editor', () => {
     test('a known character without a tag mapping still respects tag filters', async () => {
         state.setSelectedWorldInfo(['Book']);

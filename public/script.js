@@ -1,10 +1,10 @@
 import toastr from './scripts/notifications.js';
 import {
-    generation_started, generatingAttemptModel, scrollLock, streamingProcessor, is_send_press, abortController,
+    generation_started, generatingAttemptModel, scrollLock, streamingProcessor, is_send_press, abortController, extension_prompts,
     setGenerationStarted, setGeneratingAttemptModel, setScrollLock, setStreamingProcessor, setSending, setAbortController,
-    withGeneratingModel, findRegenerateTurnStart,
+    withGeneratingModel, findRegenerateTurnStart, setExtensionPrompts,
 } from './scripts/generation-shared-state.js';
-export { streamingProcessor, is_send_press, withGeneratingModel };
+export { streamingProcessor, is_send_press, withGeneratingModel, extension_prompts };
 
 import {
     showdown,
@@ -106,7 +106,9 @@ import {
     installOpenAIPresetService,
     refreshOpenAIPresetService,
     installProviderConnectionService,
+    amount_gen, max_context, main_api, setAmountGen, setMaxContext, setMainApi,
 } from './scripts/openai.js';
+export { amount_gen, max_context, main_api };
 
 import {
     backToMainChat,
@@ -209,7 +211,7 @@ import { endPipelineRun } from './scripts/reply-pipeline.js';
 import { createToolAction, normalizeToolBindings } from './scripts/tool-bindings-core.js';
 import { installToolBindingsServiceFactory, syncPipelineToolBindings } from './scripts/tool-bindings.js';
 import { getRegexedString, regex_placement } from './scripts/extensions/regex/engine.js';
-import { FILTER_STATES, FILTER_TYPES, FilterHelper, isFilterState } from './scripts/filters.js';
+import { FILTER_STATES, FILTER_TYPES, entitiesFilter, initializeEntitiesFilter, isFilterState } from './scripts/filters.js';
 import { initLocales, t, translate } from './scripts/i18n.js';
 import { countTokensOpenAIAsync, getFriendlyTokenizerName, getTokenCountAsync, initTokenizers, saveTokenCache } from './scripts/tokenizers.js';
 import { loader } from './scripts/action-loader.js';
@@ -218,7 +220,8 @@ import { setSettingsValue } from './scripts/settings-document-changes.js';
 import { setSelectedWorldInfo } from './scripts/world-info-state.js';
 import { ensurePanel, registerPanelHook } from './scripts/deferred-panels.js';
 import { getCharacterCardTagId } from './scripts/deferred-panel-replays.js';
-import { BulkEditOverlay } from './scripts/BulkEditOverlay.js';
+import { characterGroupOverlay, initializeCharacterGroupOverlay } from './scripts/BulkEditOverlay.js';
+export { characterGroupOverlay, entitiesFilter };
 import { beginSettingsSaveSnapshot, finishSettingsSaveSnapshot } from './scripts/character-sort-save-guard.js';
 import { appendFileContent, hasPendingFileAttachment, populateFileAttachment, decodeStyleTags, encodeStyleTags, normalizeStyleTagsForMarkdown, preserveNeutralChat, restoreNeutralChat, formatCreatorNotes, initChatUtilities, openFileAttachmentPicker, addDOMPurifyHooks } from './scripts/chats.js';
 import {
@@ -716,7 +719,7 @@ registerGenerationShellContext({
 registerChatOpsShellContext({
     state: {
         set chat_metadata(value) { chat_metadata = value; },
-        set extension_prompts(value) { extension_prompts = value; },
+        set extension_prompts(value) { setExtensionPrompts(value); },
         set selected_button(value) { selected_button = value; },
         set this_edit_mes_id(value) { this_edit_mes_id = value; },
         get characters() { return characters; },
@@ -988,7 +991,7 @@ registerDomHandlersShellContext({
     getChatMessageCommands: () => getChatMessageCommands(),
     state: {
         get amount_gen() { return amount_gen; },
-        set amount_gen(value) { amount_gen = value; },
+        set amount_gen(value) { setAmountGen(value); },
         get animation_duration() { return animation_duration; },
         get animation_easing() { return animation_easing; },
         get characters() { return characters; },
@@ -1018,7 +1021,7 @@ registerDomHandlersShellContext({
         get mainChatMessageActionsController() { return mainChatMessageActionsController; },
         set mainChatMessageActionsController(value) { mainChatMessageActionsController = value; },
         get max_context() { return max_context; },
-        set max_context(value) { max_context = value; },
+        set max_context(value) { setMaxContext(value); },
         get menu_type() { return menu_type; },
         get name1() { return name1; },
         get name2() { return name2; },
@@ -4002,7 +4005,7 @@ toastr.subscribe(function (args) {
     }
 });
 
-export const characterGroupOverlay = new BulkEditOverlay();
+initializeCharacterGroupOverlay();
 
 // Markdown converter
 export let mesForShowdownParse; //intended to be used as a context to compare showdown strings against
@@ -4395,14 +4398,6 @@ export function loadBackgroundSettings(settings) {
     applyActiveBackground();
 }
 
-export let amount_gen = 80; //default max length of AI generated responses
-export let max_context = 2048;
-
-export let extension_prompts = {};
-
-export let main_api;// = "kobold";
-
-
 //css
 var css_send_form_display = '';
 
@@ -4412,7 +4407,7 @@ export { getRequestHeaders } from './scripts/request-context.js';
 /** The tag of the active character. (NOT the id) */
 export let active_character = '';
 
-export const entitiesFilter = new FilterHelper(printCharactersDebounced);
+initializeEntitiesFilter(printCharactersDebounced);
 
 export function getSlideToggleOptions() {
     return {
@@ -6334,13 +6329,9 @@ const workspacePreparation = createWorkspaceGenerationPreparation({
     ownsComposer: ownsWorkspaceComposer,
     text: getComposerValue,
     requestId: () => crypto.randomUUID(),
-    activations: () => [...WorldInfoBuffer.externalActivations.entries()],
+    activations: () => WorldInfoBuffer.snapshotExternalActivations(),
     captureWorld: captureWorkspaceWorldRuntime,
-    consumeActivations(activations) {
-        for (const [key, entry] of activations) {
-            if (WorldInfoBuffer.externalActivations.get(key) === entry) WorldInfoBuffer.externalActivations.delete(key);
-        }
-    },
+    consumeActivations: activations => WorldInfoBuffer.consumeExternalActivations(activations),
     hasAttachments: hasPendingFileAttachment,
     async captureAttachments(ownsPreparation, isCurrent) {
         const input = document.getElementById('file_form_input');
@@ -6413,7 +6404,7 @@ const generationCaller = createGenerationCallerService({
     removeReasoning: (...args) => removeReasoningFromString(...args),
     isQuietStopped: (...args) => isMainChatQuietTransportStopException(...args),
     getResponseLength: api => api === 'openai' ? oai_settings.openai_max_tokens : amount_gen,
-    setResponseLength: (api, length) => { if (api === 'openai') oai_settings.openai_max_tokens = length; else amount_gen = length; },
+    setResponseLength: (api, length) => { if (api === 'openai') oai_settings.openai_max_tokens = length; else setAmountGen(length); },
     onceEvent: (...args) => eventSource.once(...args),
     onEvent: (...args) => eventSource.on(...args),
     removeEventListener: (...args) => eventSource.removeListener(...args),
@@ -7337,7 +7328,7 @@ export function changeMainAPI(api = null) {
         if (activeItem.apiPresets) activeItem.apiPresets.style.display = 'flex';
     }
 
-    main_api = selectedVal;
+    setMainApi(selectedVal);
     setOnlineStatus('no_connection');
     validateDisabledSamplers();
     setupChatCompletionPromptManager(oai_settings);
@@ -7383,9 +7374,9 @@ async function applyStartupSettingsCore(data) {
         await eventSource.emit(event_types.SETTINGS_LOADED_BEFORE, settings);
 
         //Load AI model config settings
-        amount_gen = settings.amount_gen;
+        setAmountGen(settings.amount_gen);
         if (settings.max_context !== undefined)
-            max_context = parseInt(settings.max_context);
+            setMaxContext(parseInt(settings.max_context));
 
 
         // OpenAI
@@ -7418,7 +7409,7 @@ async function applyStartupSettingsCore(data) {
             settings.main_api = 'openai';
         }
 
-        main_api = settings.main_api;
+        setMainApi(settings.main_api);
         changeMainAPI('openai');
 
         // Load the active character
@@ -7541,7 +7532,7 @@ export async function saveSettings(loopCounter = 0) {
  */
 export function setGenerationParamsFromPreset(preset) {
     if (preset.genamt !== undefined) {
-        amount_gen = preset.genamt;
+        setAmountGen(preset.genamt);
         for (const id of ['amount_gen', 'amount_gen_counter']) {
             const input = document.getElementById(id);
             if (input) input.value = amount_gen;
@@ -7549,7 +7540,7 @@ export function setGenerationParamsFromPreset(preset) {
     }
 
     if (preset.max_length !== undefined) {
-        max_context = preset.max_length;
+        setMaxContext(preset.max_length);
         for (const id of ['max_context', 'max_context_counter']) {
             const input = document.getElementById(id);
             if (input) input.value = max_context;
