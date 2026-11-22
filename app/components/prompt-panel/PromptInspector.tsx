@@ -227,7 +227,7 @@ function readStoryPair(message: Record<string, unknown>, receipt: Record<string,
         }
         if (tool === 'submit_story') {
             if (kind === 'user') return { tool, content, label: translate('Player · Chat history') };
-            if (kind === 'assistant') return { tool, content, label: translate('Character · Chat history') };
+            if (kind === 'assistant') return { tool, content, label: translate('AI reply · Chat history') };
             if (kind === 'system') return { tool, content, label: translate('Narrator · Chat history') };
         }
     } catch {

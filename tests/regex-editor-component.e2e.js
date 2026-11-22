@@ -13,6 +13,7 @@ test('retired placement cannot be selected but remains in historical rules', asy
     await expect(page.locator('[name=replace_position][value="3"]')).toHaveCount(0);
     await page.goto(`${url}?legacy`);
     await expect(page.locator('[name=replace_position][value="3"]')).toHaveCount(0);
+    await expect(page.getByRole('checkbox', { name: 'Rewrite original chat text' })).toBeChecked();
     expect(await page.evaluate(() => window.fixture.editor.current.getDraft().placement)).toEqual([1, 3]);
     await page.locator('[name=replace_position][value="1"]').uncheck();
     await page.locator('[name=replace_position][value="2"]').check();
@@ -23,10 +24,10 @@ test('controlled editor validates, exposes draft and runs live test', async ({ p
     expect(await page.evaluate(() => window.fixture.editor.current.validate())).toBe(false);
     await expect(page.locator('#regex_name_error')).toBeVisible();
     await page.locator('#regex_script_name').fill('Example'); await page.locator('#find_regex').fill('/a/g');
-    await page.locator('[name=replace_position][value="1"]').uncheck();
     expect(await page.evaluate(() => window.fixture.editor.current.validate())).toBe(false);
     await expect(page.locator('#regex_placement_error')).toBeVisible();
     await page.locator('[name=replace_position][value="2"]').check();
+    await expect(page.locator('#regex_placement_error')).toBeHidden();
     expect(await page.evaluate(() => window.fixture.editor.current.validate())).toBe(true);
     expect(await page.evaluate(() => window.fixture.editor.current.getDraft().placement)).toEqual([2]);
     await page.locator('#regex_test_mode_toggle').click(); await page.locator('#regex_test_input').fill('hello');
@@ -35,6 +36,44 @@ test('controlled editor validates, exposes draft and runs live test', async ({ p
     await page.locator('#find_regex').fill('['); expect(await page.evaluate(() => window.fixture.editor.current.validate())).toBe(false);
     await page.locator('[name=substitute_regex]').selectOption('1'); await page.locator('#find_regex').fill('{{invalid');
     expect(await page.evaluate(() => window.fixture.editor.current.validate())).toBe(true);
+});
+test('new rules require an explicit source and never infer a rewrite from empty timing', async ({ page }) => {
+    const sources = page.getByRole('group', { name: 'Content source' });
+    const timing = page.getByRole('group', { name: 'When to apply' });
+    for (const name of ['User message', 'AI reply', 'World Info', 'Reasoning content']) {
+        await expect(sources.getByRole('checkbox', { name, exact: true })).not.toBeChecked();
+    }
+    const display = timing.getByRole('checkbox', { name: 'When displaying chat' });
+    const prompt = timing.getByRole('checkbox', { name: 'Before sending to the model' });
+    const rewrite = timing.getByRole('checkbox', { name: 'Rewrite original chat text' });
+    await expect(display).toBeChecked();
+    await expect(prompt).not.toBeChecked();
+    await expect(rewrite).not.toBeChecked();
+    await page.locator('#regex_script_name').fill('Remove options');
+    await page.locator('#find_regex').fill('/<plot-options>.*<\\/plot-options>/g');
+    await sources.getByRole('checkbox', { name: 'AI reply' }).check();
+    await display.uncheck();
+    expect(await page.evaluate(() => window.fixture.editor.current.validate())).toBe(false);
+    await expect(timing.getByRole('alert')).toHaveText('Choose when to apply this rule.');
+    await expect(display).toBeFocused();
+    await prompt.check();
+    await expect(timing.getByRole('alert')).toBeHidden();
+    await display.check();
+    const draft = () => page.evaluate(() => {
+        const editor = window.fixture.editor.current;
+        return { valid: editor.validate(), ...editor.getDraft() };
+    });
+    expect(await draft()).toMatchObject({ valid: true, placement: [2], markdownOnly: true, promptOnly: true });
+    await rewrite.check();
+    expect(await draft()).toMatchObject({ valid: true, markdownOnly: false, promptOnly: false });
+    await expect(display).not.toBeChecked();
+    await expect(prompt).not.toBeChecked();
+    await prompt.check();
+    await expect(rewrite).not.toBeChecked();
+    expect(await draft()).toMatchObject({ valid: true, markdownOnly: false, promptOnly: true });
+    await expect(page.getByPlaceholder('Leave blank to delete matched text')).toHaveValue('');
+    await page.getByText('Replacement syntax', { exact: true }).click();
+    await expect(page.getByText(/\{\{match\}\}.*\$1.*\$<name>/)).toBeVisible();
 });
 test('debugger local order, save, test and expansion', async ({ page }) => {
     await page.getByRole('button', { name: 'Move Second up' }).click();

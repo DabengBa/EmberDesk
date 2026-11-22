@@ -339,7 +339,7 @@ test.describe('prompt inspector (request preview)', () => {
         for (const [indices, label, content] of [
             ['#4–#5', '历史摘要', '船长在午夜失踪。'],
             ['#6–#7', '玩家 · 历史原文', '我走下钟楼石阶。'],
-            ['#8–#9', '角色 · 历史原文', '石阶尽头有一扇铁门。'],
+            ['#8–#9', 'AI 回复 · 历史原文', '石阶尽头有一扇铁门。'],
             ['#10–#11', '本次输入', '我听听门后有没有动静。'],
         ]) {
             const row = rows.filter({ has: page.getByRole('button', { name: `${indices} ${label}`, exact: true }) });

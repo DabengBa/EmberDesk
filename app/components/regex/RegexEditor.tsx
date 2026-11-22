@@ -3,7 +3,7 @@ import { translate, useTranslated } from '@/compat/i18n.js';
 import { forwardRef, useImperativeHandle, useRef, useState } from 'react';
 import type { RegexEditorHandle, RegexScript } from './regex-types';
 
-const emptyScript: RegexScript = { id: '', scriptName: '', findRegex: '', replaceString: '', trimStrings: [], disabled: false, markdownOnly: true, promptOnly: false, runOnEdit: true, substituteRegex: 0, minDepth: null, maxDepth: null, placement: [1] };
+const emptyScript: RegexScript = { id: '', scriptName: '', findRegex: '', replaceString: '', trimStrings: [], disabled: false, markdownOnly: true, promptOnly: false, runOnEdit: true, substituteRegex: 0, minDepth: null, maxDepth: null, placement: [] };
 type Props = { initial?: RegexScript | null; onRun?: (script: RegexScript, input: string) => string; infoFor?: (script: RegexScript) => string; onValidityChange?: (valid: boolean) => void };
 function isPatternValid(pattern: string, substitute: number) {
     if (!pattern.trim()) return false;
@@ -22,25 +22,39 @@ export const RegexEditor = forwardRef<RegexEditorHandle, Props>(function RegexEd
     const [draft, setDraft] = useState<RegexScript>(() => {
         // Existing rules keep legacy semantics: missing flags mean false.
         // Only new rules default markdownOnly/runOnEdit to true.
-        const base = initial ? { ...emptyScript, markdownOnly: false, runOnEdit: false } : emptyScript;
-        return { ...base, ...initial, placement: initial?.placement ?? [1], trimStrings: initial?.trimStrings ?? [] };
+        const base = initial ? { ...emptyScript, markdownOnly: false, runOnEdit: false, placement: [1] } : emptyScript;
+        return { ...base, ...initial, placement: initial?.placement ?? base.placement, trimStrings: initial?.trimStrings ?? [] };
     });
+    // Both persisted flags off means rewrite. A separate UI choice prevents an
+    // unfinished draft with no timing selected from being saved in that mode.
+    const [rewrite, setRewrite] = useState(() => !draft.markdownOnly && !draft.promptOnly);
     const [trimText, setTrimText] = useState(() => (initial?.trimStrings ?? []).join('\n'));
     const [testMode, setTestMode] = useState(false);
     const [testInput, setTestInput] = useState('');
-    const [errors, setErrors] = useState({ name: '', find: '', placement: '' });
+    const [submittedErrors, setErrors] = useState({ name: '', find: '', placement: '', timing: '' });
+    const hasTiming = draft.markdownOnly || draft.promptOnly || rewrite;
+    const errors = {
+        ...submittedErrors,
+        placement: draft.placement.length ? '' : submittedErrors.placement,
+        timing: hasTiming ? '' : submittedErrors.timing,
+    };
     const change = (patch: Partial<RegexScript>) => setDraft(current => ({ ...current, ...patch }));
     useImperativeHandle(ref, () => ({
         getDraft: () => ({ ...draft, scriptName: draft.scriptName.trim() }),
         validate: () => {
-            const next = { name: draft.scriptName.trim() ? '' : translate('Enter a script name.'), find: isPatternValid(draft.findRegex, draft.substituteRegex) ? '' : translate('Enter a valid regular expression.'), placement: draft.placement.length ? '' : translate('Select at least one affected area.') };
+            const next = {
+                name: draft.scriptName.trim() ? '' : translate('Enter a script name.'),
+                find: isPatternValid(draft.findRegex, draft.substituteRegex) ? '' : translate('Enter a valid regular expression.'),
+                placement: draft.placement.length ? '' : translate('Select at least one content source.'),
+                timing: hasTiming ? '' : translate('Choose when to apply this rule.'),
+            };
             setErrors(next);
-            const first = next.name ? '#regex_script_name' : next.find ? '#find_regex' : next.placement ? 'input[name="replace_position"]' : '';
+            const first = next.name ? '#regex_script_name' : next.find ? '#find_regex' : next.placement ? 'input[name="replace_position"]' : next.timing ? 'input[name="only_format_display"]' : '';
             if (first) root.current?.querySelector<HTMLInputElement>(first)?.focus();
             onValidityChange?.(!first);
             return !first;
         },
-    }), [draft, onValidityChange]);
+    }), [draft, hasTiming, onValidityChange]);
     return (
 <div id="regex_editor_template" ref={root}>
     <div className="regex_editor">
@@ -102,8 +116,12 @@ export const RegexEditor = forwardRef<RegexEditorHandle, Props>(function RegexEd
                     <small >{translate('Replace With')}</small>
                 </label>
                 <div>
-                    <textarea id="regex_replace_string" className="regex_replace_string text_pole wide100p textarea_compact" aria-label="Replace With" data-i18n="[aria-label]Replace With;[placeholder]ext_regex_replace_string_placeholder" placeholder="Use {{match}} to include the matched text from the Find Regex, $1, $2, etc. for numbered capture groups, or $<name> for named capture groups." rows={3} value={draft.replaceString} onChange={event => change({ replaceString: event.target.value })}></textarea>
+                    <textarea id="regex_replace_string" className="regex_replace_string text_pole wide100p textarea_compact" aria-label="Replace With" data-i18n="[aria-label]Replace With" placeholder={translate('Leave blank to delete matched text')} rows={3} value={draft.replaceString} onChange={event => change({ replaceString: event.target.value })}></textarea>
                 </div>
+                <details>
+                    <summary><small>{translate('Replacement syntax')}</small></summary>
+                    <small>{translate('Use {{match}} for the entire match, $1, $2, etc. for numbered capture groups, or $<name> for named capture groups.')}</small>
+                </details>
             </div>
             <div className="flex1">
                 <label htmlFor="regex_trim_strings" className="title_restorable">
@@ -116,32 +134,32 @@ export const RegexEditor = forwardRef<RegexEditorHandle, Props>(function RegexEd
         </div>
 
         <div className="flex-container regex-editor-options">
-            <div className="flex1 regex-editor-option-group" role="group" aria-label="Affects" aria-describedby="regex_placement_error" data-i18n="[aria-label]ext_regex_affects">
-                <h4 >{translate('Affects')}</h4>
+            <div className="flex1 regex-editor-option-group" role="group" aria-labelledby="regex_source_heading" aria-describedby="regex_placement_error">
+                <h4 id="regex_source_heading">{translate('Content source')}</h4>
                 <small id="regex_placement_error" className="regex-validation-error" role="alert" hidden={!errors.placement}>{errors.placement}</small>
                 <div data-i18n="[title]ext_regex_user_input_desc" title="Messages sent by the user.">
                     <label className="checkbox flex-container">
                         <input type="checkbox" name="replace_position" value="1" checked={draft.placement.includes(1)} aria-invalid={!!errors.placement} onChange={event => change({ placement: event.target.checked ? [...draft.placement, 1] : draft.placement.filter(value => value !== 1) })} />
-                        <span >{translate('User Input')}</span>
+                        <span >{translate('User message')}</span>
                     </label>
                 </div>
                 <div data-i18n="[title]ext_regex_ai_input_desc" title="Messages received from the Generation API.">
                     <label className="checkbox flex-container">
                         <input type="checkbox" name="replace_position" value="2" checked={draft.placement.includes(2)} aria-invalid={!!errors.placement} onChange={event => change({ placement: event.target.checked ? [...draft.placement, 2] : draft.placement.filter(value => value !== 2) })} />
-                        <span >{translate('AI Output')}</span>
+                        <span >{translate('AI reply')}</span>
                     </label>
                 </div>
 
-                <div data-i18n="[title]ext_regex_wi_desc" title="Lorebook/World Info entry contents. Requires 'Only Format Prompt' to be checked!">
+                <div title={translate('World Info entries are processed before sending to the model.')}>
                     <label className="checkbox flex-container">
                         <input type="checkbox" name="replace_position" value="5" checked={draft.placement.includes(5)} aria-invalid={!!errors.placement} onChange={event => change({ placement: event.target.checked ? [...draft.placement, 5] : draft.placement.filter(value => value !== 5) })} />
                         <span >{translate('World Info')}</span>
                     </label>
                 </div>
-                <div data-i18n="[title]ext_regex_reasoning_desc" title="Reasoning block contents. When 'Only Format Prompt' is checked, it will also affect the reasoning contents added to the prompt.">
+                <div>
                     <label className="checkbox flex-container">
                         <input type="checkbox" name="replace_position" value="6" checked={draft.placement.includes(6)} aria-invalid={!!errors.placement} onChange={event => change({ placement: event.target.checked ? [...draft.placement, 6] : draft.placement.filter(value => value !== 6) })} />
-                        <span >{translate('Reasoning')}</span>
+                        <span >{translate('Reasoning content')}</span>
                     </label>
                 </div>
                 <div className="flex-container wide100p marginTop5">
@@ -160,6 +178,31 @@ export const RegexEditor = forwardRef<RegexEditorHandle, Props>(function RegexEd
                         <input name="max_depth" className="text_pole textarea_compact" type="number" min="0" max="9999" aria-label="Max Depth" data-i18n="[aria-label]Max Depth;[placeholder]ext_regex_min_depth_placeholder" placeholder="Unlimited" value={draft.maxDepth ?? ''} onChange={event => change({ maxDepth: event.target.value === '' ? null : Number(event.target.value) })} />
                     </div>
                 </div>
+            </div>
+            <div className="flex1 regex-editor-option-group" role="group" aria-labelledby="regex_timing_heading" aria-describedby="regex_timing_error">
+                <h4 id="regex_timing_heading">{translate('When to apply')}</h4>
+                <small id="regex_timing_error" className="regex-validation-error" role="alert" hidden={!errors.timing}>{errors.timing}</small>
+                <label className="checkbox flex-container">
+                    <input type="checkbox" name="only_format_display" checked={draft.markdownOnly} aria-invalid={!!errors.timing} onChange={event => {
+                        if (event.target.checked) setRewrite(false);
+                        change({ markdownOnly: event.target.checked });
+                    }} />
+                    <span>{translate('When displaying chat')}</span>
+                </label>
+                <label className="checkbox flex-container">
+                    <input type="checkbox" name="only_format_prompt" checked={draft.promptOnly} aria-invalid={!!errors.timing} onChange={event => {
+                        if (event.target.checked) setRewrite(false);
+                        change({ promptOnly: event.target.checked });
+                    }} />
+                    <span>{translate('Before sending to the model')}</span>
+                </label>
+                <label className="checkbox flex-container">
+                    <input type="checkbox" name="rewrite_original" checked={rewrite} aria-invalid={!!errors.timing} onChange={event => {
+                        setRewrite(event.target.checked);
+                        if (event.target.checked) change({ markdownOnly: false, promptOnly: false });
+                    }} />
+                    <span>{translate('Rewrite original chat text')}</span>
+                </label>
             </div>
             <div className="flex1 regex-editor-option-group">
                 <h4 >{translate('Other Options')}</h4>
@@ -181,18 +224,6 @@ export const RegexEditor = forwardRef<RegexEditorHandle, Props>(function RegexEd
                         <option value="1" >{translate('Substitute (raw)')}</option>
                         <option value="2" >{translate('Substitute (escaped)')}</option>
                     </select>
-                </label>
-                <span>
-                    <small >{translate('Ephemerality')}</small>
-                    <span className="fa-solid fa-circle-question note-link-span" data-i18n="[title]ext_regex_other_options_desc" title={"By default, regex scripts alter the chat file directly and irreversibly.\rEnabling either (or both) of the options below will prevent chat file alteration, while still altering the specified item(s)."}></span>
-                </span>
-                <label className="checkbox flex-container" data-i18n="[title]ext_regex_only_format_visual_desc" title="Chat history file contents won't change, but regex will be applied to the messages displayed in the Chat UI.">
-                    <input type="checkbox" name="only_format_display" checked={draft.markdownOnly} onChange={event => change({ markdownOnly: event.target.checked })} />
-                    <span >{translate('Alter Chat Display')}</span>
-                </label>
-                <label className="checkbox flex-container" data-i18n="[title]ext_regex_only_format_prompt_desc" title="Chat history file contents won't change, but regex will be applied to the outgoing prompt before it is sent to the LLM.">
-                    <input type="checkbox" name="only_format_prompt" checked={draft.promptOnly} onChange={event => change({ promptOnly: event.target.checked })} />
-                    <span >{translate('Alter Outgoing Prompt')}</span>
                 </label>
 
             </div>
