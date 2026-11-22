@@ -3952,7 +3952,7 @@ button.fa-brands::before {
 }
 
 
-/* Override toastr default styles */
+/* Workspace notification overrides */
 body #toast-container {
     margin-top: var(--topBarBlockSize);
 }
@@ -3960,7 +3960,7 @@ body #toast-container {
 body #toast-container>div {
     opacity: 1;
     filter: unset;
-    -ms-filter: unset;
+
     padding: 10px 10px 10px 50px;
     font-size: calc(var(--mainFontSize) * 0.95);
     width: 300px;
@@ -8053,4 +8053,265 @@ body:has(#emberdesk-react-workspace-shell-chrome-host) {
     margin-left: 3px;
     font-size: calc(var(--mainFontSize) * 0.75);
     opacity: 0.8;
+}
+
+/* Shared workspace and template styles. Keep these after the base rules. */
+.m-t-0 {
+    margin-top: 0;
+}
+
+.m-t-1 {
+    margin-top: 1em;
+}
+
+.m-t-2 {
+    margin-top: 2em;
+}
+
+.m-b-1 {
+    margin-bottom: 1em;
+}
+
+.margin-bot-10px,
+.marginBot10 {
+    margin-bottom: 10px !important;
+}
+
+.marginBot5 {
+    margin-bottom: 5px !important;
+}
+
+.marginTop5 {
+    margin-top: 5px !important;
+}
+
+.margin5 {
+    margin: 5px;
+}
+
+.marginLeft5 {
+    margin-left: 5px;
+}
+
+.justifySpaceBetween {
+    justify-content: space-between;
+}
+
+.alignitemsflexstart {
+    align-items: flex-start !important;
+}
+
+.alignItemsBaseline {
+    align-items: baseline !important;
+}
+
+.gap5px {
+    gap: 5px !important;
+}
+
+.gap10px {
+    gap: 10px !important;
+}
+
+.wide100pLess70px {
+    width: calc(100% - 70px);
+}
+
+.height100p {
+    height: 100%;
+}
+
+.TxtLrgBoldCenter {
+    text-align: center;
+    font-size: large;
+    font-weight: 600;
+}
+
+.textAlignCenter {
+    text-align: center;
+}
+
+.margin-right-10px {
+    margin-right: 10px;
+}
+
+.optional {
+    color: lightgray;
+}
+
+.monospace {
+    font-family: var(--monoFontFamily);
+}
+
+.expander {
+    flex-grow: 1;
+}
+
+.width100p {
+    width: 100%;
+}
+
+.flex {
+    display: flex;
+}
+
+.flex-container {
+    display: flex;
+    gap: 5px;
+    flex-wrap: wrap;
+}
+
+.flexNoGap {
+    gap: unset !important;
+}
+
+.flexnowrap {
+    flex-wrap: nowrap;
+}
+
+.inline-flex {
+    display: inline-flex;
+}
+
+.alignitemscenter,
+.alignItemsCenter {
+    align-items: center;
+}
+
+.overflow-hidden {
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+.alignContentCenter {
+    align-content: center;
+}
+
+.padding0 {
+    padding: 0;
+}
+
+.padding5 {
+    padding: 5px;
+}
+
+.padding10 {
+    padding: 10px;
+}
+
+.margin0 {
+    margin: 0;
+}
+
+.margin0auto {
+    margin: 0 auto;
+}
+
+.margin-r5 {
+    margin-right: 5px;
+}
+
+.margin-r2 {
+    margin-right: 2px;
+}
+
+.flex1 {
+    flex: 1;
+}
+
+.flex2 {
+    flex: 2 !important;
+}
+
+.flex4 {
+    flex: 4;
+}
+
+.flexFlowColumn {
+    flex-flow: column;
+}
+
+.flexFlowRow {
+    flex-flow: row;
+}
+
+.justifyLeft {
+    text-align: start;
+    justify-content: left;
+    margin-left: unset;
+}
+
+.justifyCenter {
+    justify-content: center;
+    margin: 0 auto;
+}
+
+.widthNatural {
+    width: unset !important;
+    min-width: unset !important;
+    max-width: unset !important;
+}
+
+.widthFreeExpand {
+    width: -webkit-fill-available;
+    width: -moz-available;
+}
+
+.wide100p {
+    width: 100%;
+}
+
+.wide50p {
+    width: 50%;
+}
+
+.textarea_compact {
+    font-size: calc(var(--mainFontSize) * 0.95);
+    line-height: 1.2;
+}
+
+.hoverglow {
+    transition: opacity var(--animation-duration-2x);
+}
+
+.hoverglow:hover {
+    opacity: 1 !important;
+    cursor: pointer;
+}
+
+input:disabled,
+textarea:disabled {
+    cursor: not-allowed;
+    filter: brightness(0.5);
+}
+
+.fontsize120p {
+    font-size: calc(var(--mainFontSize) * 1.2) !important;
+}
+
+.paddingBottom5px {
+    padding: unset;
+    padding-bottom: 5px;
+}
+
+.widthFitContent {
+    width: fit-content;
+    min-width: fit-content;
+}
+
+.flexGap5 {
+    gap: 5px;
+}
+
+.flexGap10 {
+    gap: 10px;
+}
+
+.opacity50p {
+    opacity: 0.5
+}
+
+.wordBreakAll {
+    word-break: break-all;
 }

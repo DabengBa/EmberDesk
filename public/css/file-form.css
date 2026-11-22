@@ -67,6 +67,10 @@
     text-align: left;
 }
 
+.fontsize90p {
+    font-size: calc(var(--mainFontSize) * 0.9) !important;
+}
+
 /* Audio Player Styles */
 .mes_audio_container {
     cursor: default;

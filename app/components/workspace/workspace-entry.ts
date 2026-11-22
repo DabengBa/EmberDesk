@@ -1,7 +1,7 @@
 import { useLayoutEffect } from 'react';
 
 const stylesheetGroups = [
-    ['/style.css', ['/css/brands.min.css', '/css/bright.min.css', '/css/toastr.min.css']],
+    ['/style.css', ['/css/brands.min.css', '/css/bright.min.css', '/css/notifications.css']],
     ['/css/user.css', ['/css/toggle-dependent.css', '/css/world-info.css', '/scripts/extensions/regex/style.css', '/css/mobile-styles.css', '/css/macros.css']],
 ] as const;
 
