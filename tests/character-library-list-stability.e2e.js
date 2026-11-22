@@ -62,7 +62,7 @@ test('data-change reprints keep the character library scroll position and curren
 
     // Same data-change path used by create/import/rename flows.
     await postCharacterApi(page, '/api/characters/duplicate', { avatar_url: SEEDED_AVATAR });
-    await page.evaluate(() => window.SillyTavern.getContext().getCharacters());
+    await page.evaluate(async () => (await import('/scripts/st-context.js')).getContext().getCharacters());
     await expect(rows).toHaveCount(initialRowCount + 1, { timeout: 15_000 });
 
     const scrollAfter = await page.evaluate(() => document.getElementById('right-nav-panel').scrollTop);
@@ -92,15 +92,16 @@ test('data-change reprints keep the character library scroll position and curren
     }
     await expect(rows).toHaveCount(lastPageRows, { timeout: 15_000 });
 
-    const deletedAvatar = await page.evaluate(() => {
+    const deletedAvatar = await page.evaluate(async () => {
+        const { getContext } = await import('/scripts/st-context.js');
         const rendered = document.querySelectorAll('#rm_print_characters_block .character_select');
         const chid = rendered[rendered.length - 1].getAttribute('data-chid');
-        return window.SillyTavern.getContext().characters[Number(chid)]?.avatar;
+        return getContext().characters[Number(chid)]?.avatar;
     });
     expect(deletedAvatar).toBeTruthy();
 
     await postCharacterApi(page, '/api/characters/delete', { avatar_url: deletedAvatar, delete_chats: false });
-    await page.evaluate(() => window.SillyTavern.getContext().getCharacters());
+    await page.evaluate(async () => (await import('/scripts/st-context.js')).getContext().getCharacters());
 
     // One character removed: the last page now holds lastPageRows - 1 rows.
     // A reprint that reset saveCharactersPage to one would render PAGE_SIZE.

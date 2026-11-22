@@ -86,7 +86,9 @@ describe('history panel controller', () => {
         const { createHistoryRenameCommand } = await loadTsModule('app/lib/history-panel-service.ts');
         const events = [];
         let resolve;
+        let current = true;
         const rename = createHistoryRenameCommand('old', {
+            isCurrent: () => current,
             invalid: () => events.push('invalid'), busy: value => events.push(`busy:${value}`),
             rename: name => { events.push(name); return new Promise(done => { resolve = done; }); },
             failed: () => events.push('failed'),
@@ -97,6 +99,8 @@ describe('history panel controller', () => {
         expect(await rename(false, '')).toBe(false);
         resolve(false);
         expect(await pending).toBe(false);
+        current = false;
+        expect(await rename(true, 'must not rename another chat')).toBe(true);
         expect(events).toEqual(['invalid', 'busy:true', 'new', 'failed', 'busy:false']);
     });
     test('deletion preserves confirmation, slash skip and delayed reopening', async () => {
@@ -119,6 +123,25 @@ describe('history panel controller', () => {
         expect(calls).toEqual([]);
         await expect(deleteHistoryChat('chat', true, { ...ports, remove: async () => { throw new Error('offline'); } })).rejects.toThrow('offline');
         expect(calls).toEqual(['close', 'hide']);
+    });
+    test('a confirmation from a previous chat session does not close or delete the current chat', async () => {
+        const { deleteHistoryChat } = await loadTsModule('app/lib/history-panel-service.ts');
+        let confirm;
+        let current = true;
+        const close = jest.fn();
+        const remove = jest.fn();
+        const showLoader = jest.fn(() => ({ hide: async () => {} }));
+        const deleting = deleteHistoryChat('same-name', false, {
+            confirm: () => new Promise(resolve => { confirm = resolve; }),
+            isCurrent: () => current, close, remove, showLoader,
+            hideMenu() {}, reopen() {}, schedule() {},
+        });
+        current = false;
+        confirm(true);
+        await deleting;
+        expect(close).not.toHaveBeenCalled();
+        expect(remove).not.toHaveBeenCalled();
+        expect(showLoader).not.toHaveBeenCalled();
     });
     test('a failed deletion finishes loader cleanup before the caller can retry', async () => {
         const { deleteHistoryChat } = await loadTsModule('app/lib/history-panel-service.ts');

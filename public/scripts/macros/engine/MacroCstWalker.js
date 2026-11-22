@@ -9,6 +9,7 @@ import { parseFlags, createEmptyFlags, MacroFlagType } from './MacroFlags.js';
 import { MacroParser } from './MacroParser.js';
 import { MacroRegistry } from './MacroRegistry.js';
 import { isFalseBoolean } from '/scripts/utils.js';
+import { getContext } from '../../st-context.js';
 
 /**
  * @typedef {Object} MacroCall
@@ -631,7 +632,7 @@ class MacroCstWalker {
     }
 
     /**
-     * Executes a variable operation using the SillyTavern context API.
+     * Executes a variable operation using the workspace context.
      *
      * @param {string} varName - The variable name.
      * @param {boolean} isGlobal - Whether this is a global ($) or local (.) variable.
@@ -640,7 +641,7 @@ class MacroCstWalker {
      * @returns {string} The result of the operation.
      */
     #executeVariableOperation(varName, isGlobal, operation, lazyValue) {
-        const ctx = SillyTavern.getContext();
+        const ctx = getContext();
         const vars = isGlobal ? ctx.variables.global : ctx.variables.local;
 
         /**

@@ -10,8 +10,9 @@ test('a delayed Settings response cannot restore a revoked external media grant'
     const checkbox = page.locator('[data-react-authoring-owner="characterAuthoring"]').getByRole('checkbox', { name: /允许此角色的消息 CSS 加载外部资源|Allow external CSS resources/ });
     await expect(checkbox).toBeVisible();
     if (!await checkbox.isChecked()) await checkbox.check();
-    const avatar = await page.evaluate(() => {
-        const context = window.SillyTavern.getContext();
+    const avatar = await page.evaluate(async () => {
+        const { getContext } = await import('/scripts/st-context.js');
+        const context = getContext();
         return context.characters[context.characterId].avatar;
     });
     const persistedSettings = () => page.evaluate(async () => {
@@ -54,7 +55,7 @@ test('a delayed Settings response cannot restore a revoked external media grant'
     await expect.poll(async () => (await persistedSettings()).power_user.external_media_allowed_overrides).not.toContain(avatar);
     release();
     await expect(panel.locator('.settings-status--success')).toBeVisible();
-    await expect.poll(() => page.evaluate(() => window.SillyTavern.getContext().powerUserSettings.external_media_allowed_overrides)).not.toContain(avatar);
+    await expect.poll(() => page.evaluate(async () => (await import('/scripts/st-context.js')).getContext().powerUserSettings.external_media_allowed_overrides)).not.toContain(avatar);
     expect((await persistedSettings()).power_user.external_media_allowed_overrides).not.toContain(avatar);
     expect((await persistedSettings()).oai_settings.fallback_provider_model).toBe(value);
     await page.reload();

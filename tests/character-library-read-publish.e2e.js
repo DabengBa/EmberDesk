@@ -57,13 +57,14 @@ test('a deletion while a refresh is in flight is projected on publication', asyn
 test('overflow shows the established warning and keeps the current array', async ({ page }) => {
     await testSetup.awaitST({ page });
     await page.evaluate(async () => {
+        const { getContext } = await import('/scripts/st-context.js');
         const app = await import('/script.js');
-        const reference = window.SillyTavern.getContext().characters;
+        const reference = getContext().characters;
         const originalFetch = window.fetch;
         window.fetch = (input, init) => input === '/api/characters/all'
             ? Promise.resolve(new Response(JSON.stringify({ overflow: true }), { status: 500 }))
             : originalFetch(input, init);
-        window.u008Refresh = app.getCharacters().then(() => ({ same: reference === window.SillyTavern.getContext().characters, count: reference.length })).finally(() => { window.fetch = originalFetch; });
+        window.u008Refresh = app.getCharacters().then(() => ({ same: reference === getContext().characters, count: reference.length })).finally(() => { window.fetch = originalFetch; });
     });
     const dialog = page.locator('dialog[open]');
     await expect(dialog).toContainText(/performance\.lazyLoadCharacters/);
@@ -81,8 +82,9 @@ test('the existing character refresh retains its observable read and publication
     await expect(page.locator('#right-nav-panel.openDrawer #rm_characters_block')).toBeVisible();
 
     const result = await page.evaluate(async () => {
+        const { getContext } = await import('/scripts/st-context.js');
         const app = await import('/script.js');
-        const context = window.SillyTavern.getContext();
+        const context = getContext();
         const reference = context.characters;
         const originalFetch = window.fetch;
         const original = structuredClone(reference);

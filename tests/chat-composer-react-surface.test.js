@@ -11,7 +11,7 @@ function readRepoFile(relativePath) {
 }
 
 function extractSendFormBlock(html) {
-    const match = html.match(/<div id="send_form"[^>]*>([\s\S]*?)<\/div>\s*<\/div>\s*<\/div>/);
+    const match = html.match(/<div id="send_form"[^>]*>([\s\S]*?)<\/div>/);
     return match ? match[0] : '';
 }
 
@@ -60,21 +60,21 @@ describe('chat composer React surface', () => {
         expect(textarea).toContain('connected_text');
     });
 
-    test('mount runs before DOM-ready handler bindings and options popper is lazy', () => {
+    test('mount runs before native workspace startup and options popper is lazy', () => {
         expect(script).toContain('async function mountChatComposer()');
         expect(script).toContain('module.mountChatComposer(host, {');
-        // mount must be awaited at the top of the jQuery ready callback,
-        // before the remaining attachment/options handlers bind.
-        const domHandlersSource = readRepoFile('public/scripts/dom-handlers.js');
-        const mountIdx = domHandlersSource.indexOf('await mountChatComposer();');
-        const bindIdx = domHandlersSource.indexOf('initCharacterSearch();');
+        const entry = readRepoFile('app/components/workspace/workspace-entry.ts');
+        const domHandlersSource = readRepoFile('public/script.js');
+        const mountIdx = entry.indexOf('await mounts.mountChatComposer();');
+        const bindIdx = entry.indexOf('await startWorkspaceRuntime(');
         expect(mountIdx).toBeGreaterThan(-1);
         expect(bindIdx).toBeGreaterThan(-1);
         expect(mountIdx).toBeLessThan(bindIdx);
         expect(domHandlersSource).not.toContain('userInputGenerateMutex');
         expect(script).not.toContain('bindMainChatReactComposerCommandPort');
-        // optionsPopper is created lazily, not at module eval time.
-        expect(script).toContain('function getOptionsPopper()');
-        expect(script).not.toMatch(/let optionsPopper = Popper\.createPopper/);
+        // The Options portal creates its Popper on first open, not at module evaluation.
+        const options = readRepoFile('app/components/options-menu/OptionsMenu.tsx');
+        expect(options).toContain("popper ??= runtime.createPopper(button, menu, { placement: 'top-start' });");
+        expect(script).not.toContain('function getOptionsPopper()');
     });
 });

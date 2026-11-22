@@ -6,7 +6,8 @@ test('prompt edited in the drawer is saved to the preset and survives reload', a
     await page.route('**/api/backends/chat-completions/status', route => route.fulfill({ json: { data: [] } }));
     await testSetup.awaitST({ page });
     await page.evaluate(async () => {
-        const context = window.SillyTavern.getContext();
+        const { getContext } = await import('/scripts/st-context.js');
+        const context = getContext();
         await context.selectCharacterById(context.characters.findIndex(character => character.name === 'Dev Character 001'));
     });
 

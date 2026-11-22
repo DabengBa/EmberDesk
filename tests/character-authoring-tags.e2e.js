@@ -35,8 +35,9 @@ test('character authoring manages many tags in a scoped panel', async ({ page })
     });
     await page.getByRole('button', { name: /全部导入|Import all/ }).click();
     await expect(page.locator('.toast-success')).toContainText(name);
-    const avatar = await page.evaluate(characterName => {
-        const character = window.SillyTavern.getContext().characters.find(item => item.name === characterName);
+    const avatar = await page.evaluate(async characterName => {
+        const { getContext } = await import('/scripts/st-context.js');
+        const character = getContext().characters.find(item => item.name === characterName);
         if (!character) throw new Error(`Imported character missing: ${characterName}`);
         return character.avatar;
     }, name);

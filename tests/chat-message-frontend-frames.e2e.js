@@ -101,7 +101,8 @@ async function closeCharacterAuthoringAfterSelection(page) {
 async function selectCharacterByName(page, name) {
     await openCharacterLibrary(page);
     const selectedName = await page.evaluate(async (characterNameToSelect) => {
-        const context = window.SillyTavern.getContext();
+        const { getContext } = await import('/scripts/st-context.js');
+        const context = getContext();
         const characterId = context.characters.findIndex(character => character?.name === characterNameToSelect);
         if (characterId < 0) {
             throw new Error(`Seeded character not found: ${characterNameToSelect}`);
@@ -110,8 +111,9 @@ async function selectCharacterByName(page, name) {
         return context.characters[characterId].name;
     }, name);
     expect(selectedName).toBe(name);
-    await page.waitForFunction((characterNameToSelect) => {
-        const context = window.SillyTavern.getContext();
+    await page.waitForFunction(async (characterNameToSelect) => {
+        const { getContext } = await import('/scripts/st-context.js');
+        const context = getContext();
         return context.characters[context.characterId]?.name === characterNameToSelect;
     }, name);
     await closeCharacterAuthoringAfterSelection(page);
@@ -120,11 +122,13 @@ async function selectCharacterByName(page, name) {
 async function openFrontendChat(page) {
     const name = frontendChatName();
     await page.evaluate(async (chatToOpen) => {
-        const context = window.SillyTavern.getContext();
+        const { getContext } = await import('/scripts/st-context.js');
+        const context = getContext();
         await context.openCharacterChat(chatToOpen);
     }, name);
-    await page.waitForFunction((chatName) => {
-        const context = window.SillyTavern.getContext();
+    await page.waitForFunction(async (chatName) => {
+        const { getContext } = await import('/scripts/st-context.js');
+        const context = getContext();
         return context.characters[context.characterId]?.chat === chatName
             && document.querySelectorAll('#chat .mes[mesid]').length === 4;
     }, name, { timeout: 30_000 });
@@ -132,7 +136,8 @@ async function openFrontendChat(page) {
 
 async function setFrontendFramesSettings(page, patch) {
     await page.evaluate(async (settingsPatch) => {
-        const context = window.SillyTavern.getContext();
+        const { getContext } = await import('/scripts/st-context.js');
+        const context = getContext();
         context.powerUserSettings.frontend_frames = {
             ...context.powerUserSettings.frontend_frames,
             ...settingsPatch,
@@ -304,7 +309,8 @@ test.describe('chat message frontend frames', () => {
         await expect(page.locator('.ed-frontend-frame')).toHaveCount(2, { timeout: 15_000 });
 
         await page.evaluate(async () => {
-            const context = window.SillyTavern.getContext();
+            const { getContext } = await import('/scripts/st-context.js');
+            const context = getContext();
             context.powerUserSettings.confirm_message_delete = false;
             await context.deleteMessage(3);
         });
@@ -350,7 +356,8 @@ test.describe('chat message frontend frames', () => {
         before.heights.forEach(height => expect(height).toMatch(/^\d+px$/));
 
         await page.evaluate(async () => {
-            const context = window.SillyTavern.getContext();
+            const { getContext } = await import('/scripts/st-context.js');
+            const context = getContext();
             context.powerUserSettings.confirm_message_delete = false;
             await context.deleteMessage(0);
         });
@@ -388,8 +395,9 @@ const STREAMING_FRAME_DOC = [
 ].join('\n');
 
 async function enableOpenAiStreaming(page) {
-    await page.evaluate(() => {
-        const context = window.SillyTavern.getContext();
+    await page.evaluate(async () => {
+        const { getContext } = await import('/scripts/st-context.js');
+        const context = getContext();
         context.powerUserSettings.stream_fade_in = false;
         context.powerUserSettings.streaming_fps = 60;
         context.chatCompletionSettings.chat_completion_source = 'openai';
@@ -454,11 +462,12 @@ async function installStreamingFetchStub(page, { chunks, delayMs = 150, keepStre
 }
 
 async function startGeneration(page, prompt) {
-    await page.evaluate((messageText) => {
+    await page.evaluate(async (messageText) => {
+        const { getContext } = await import('/scripts/st-context.js');
         const textarea = document.querySelector('#send_textarea');
         textarea.value = messageText;
         textarea.dispatchEvent(new Event('input', { bubbles: true }));
-        const context = window.SillyTavern.getContext();
+        const context = getContext();
         window.__edStreamGeneration = context.generate('normal', { automatic_trigger: false })
             .catch(() => 'aborted');
     }, prompt);
@@ -481,7 +490,7 @@ async function startFreshGeneratingChat(page) {
 }
 
 async function settleGeneration(page) {
-    await expect.poll(() => page.evaluate(() => window.SillyTavern.getContext().streamingProcessor === null), { timeout: 20_000 }).toBe(true);
+    await expect.poll(() => page.evaluate(async () => (await import('/scripts/st-context.js')).getContext().streamingProcessor === null), { timeout: 20_000 }).toBe(true);
     // Bounded wait — the generate() promise may already be settled.
     await page.evaluate(() => Promise.race([
         window.__edStreamGeneration,

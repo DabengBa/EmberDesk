@@ -8,6 +8,8 @@ jest.unstable_mockModule('../public/scripts/character-authoring.js', () => ({ bu
 jest.unstable_mockModule('../public/scripts/character-list-state.js', () => ({ getCharacterDeleteCandidates: jest.fn(), shouldRefreshCharacterAfterEdit: jest.fn() }));
 jest.unstable_mockModule('../public/scripts/request-context.js', () => ({ getRequestHeaders: jest.fn() }));
 jest.unstable_mockModule('../public/scripts/workspace-panels-react-bridge.js', () => ({ loadWorkspacePanelsModule: jest.fn() }));
+jest.unstable_mockModule('../public/scripts/utils.js', () => ({ escapeHtml: value => value, waitUntilCondition: jest.fn() }));
+jest.unstable_mockModule('../public/scripts/world-cascade-dialog.js', () => ({ buildCascadeSectionHtml: jest.fn(), showDeleteConfirmWithCascade: jest.fn() }));
 const lifecycle = await import('../public/scripts/character-lifecycle-service.js');
 
 test('real create-mode hide and selection visibility preserve inline and stylesheet display across repeated switches', () => {

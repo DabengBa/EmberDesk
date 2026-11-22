@@ -65,7 +65,7 @@ describe('global compatibility bridge', () => {
         expect(controller.bridge.getSnapshot()).toMatchObject({
             attached: true,
             legacy: {
-                hasSillyTavern: true,
+
                 hasEventSource: true,
                 hasEventTypes: true,
             },
@@ -141,7 +141,7 @@ describe('global compatibility bridge', () => {
         expect(getGlobalCompatibilityBridgeSnapshot({ legacyScope })).toEqual({
             attached: false,
             legacy: {
-                hasSillyTavern: true,
+
                 hasEventSource: true,
                 hasEventTypes: true,
             },
@@ -169,7 +169,7 @@ describe('global compatibility bridge', () => {
         expect(controller.bridge.getSnapshot()).toMatchObject({
             attached: true,
             legacy: {
-                hasSillyTavern: false,
+
                 hasEventSource: false,
                 hasEventTypes: false,
             },

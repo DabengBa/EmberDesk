@@ -49,12 +49,14 @@ test('create notes sink removes post-sanitization HTML while preserving isolated
 async function openContaminatedStylesDialog(page, kind) {
     await testSetup.awaitST({ page });
     await page.evaluate(async () => {
-        const context = window.SillyTavern.getContext();
+        const { getContext } = await import('/scripts/st-context.js');
+        const context = getContext();
         await context.selectCharacterById(context.characters.findIndex(character => character.name === 'Dev Character 001'));
     });
     await expect(page.locator('#chat .mes').first()).toBeVisible();
     await page.evaluate(async kind => {
-        const selected = window.SillyTavern.getContext();
+        const { getContext } = await import('/scripts/st-context.js');
+        const selected = getContext();
         const character = selected.characters[selected.characterId];
         character.data.creator_notes = '<style>.sink-fixture { color: inherit; }</style>';
         const { accountStorage } = await import('/scripts/util/AccountStorage.js');
@@ -100,7 +102,8 @@ test('initial styles dialog sanitizes its localized template at the sink', async
     await dialog.getByRole('button', { name: '应用到整个页面', exact: true }).click();
     await expect(dialog).toHaveCount(0);
     expect(await page.evaluate(async () => {
-        const context = window.SillyTavern.getContext();
+        const { getContext } = await import('/scripts/st-context.js');
+        const context = getContext();
         const { accountStorage } = await import('/scripts/util/AccountStorage.js');
         return accountStorage.getItem(`AllowGlobalStyles-${context.characters[context.characterId].avatar}`);
     })).toBe('true');

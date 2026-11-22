@@ -4,7 +4,8 @@ import { testSetup } from './frontend/frontent-test-utils.js';
 test('real chat load, consecutive saves and branch creation use the conditional protocol', async ({ page }) => {
     await testSetup.awaitST({ page });
     const result = await page.evaluate(async () => {
-        const context = window.SillyTavern.getContext();
+        const { getContext } = await import('/scripts/st-context.js');
+        const context = getContext();
         const index = context.characters.findIndex(character => character?.name === 'Dev Character 001');
         if (index < 0) throw new Error('Seed character unavailable');
         await context.selectCharacterById(index);

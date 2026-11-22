@@ -38,9 +38,9 @@ describe('character detail sidebar structure', () => {
 
     test('more menu delegates compact actions to existing character controls', () => {
         const source = read('public/script.js');
-        const domHandlersSource = read('public/scripts/dom-handlers.js');
+        const domHandlersSource = read('public/script.js');
 
-        expect(source).toContain('function toggleCharacterExportPopup(referenceElement = document.getElementById(\'export_button\'))');
+        expect(source).toContain("function toggleCharacterExportPopup(referenceElement = document.getElementById('export_button'), target");
         expect(domHandlersSource).toContain('case \'character_action_export\':');
         expect(domHandlersSource).toContain('case \'character_action_duplicate\':');
         expect(domHandlersSource).toContain('case \'delete_from_dropdown\':');
@@ -61,7 +61,7 @@ describe('character detail sidebar structure', () => {
 
     test('export format popup keeps keyboard focus and reports export results', async () => {
         const source = read('public/script.js');
-        const domHandlersSource = read('public/scripts/dom-handlers.js');
+        const domHandlersSource = read('public/script.js');
 
         expect(source).toContain('function closeCharacterExportPopup({ restoreFocus = true } = {})');
         expect(source).toContain("document.querySelector('#export_format_popup .export_format')?.focus()");

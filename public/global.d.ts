@@ -1,6 +1,6 @@
 
 
-import getContext from './scripts/st-context';
+
 import { getThemeObject } from './scripts/power-user';
 import { oai_settings } from './scripts/openai';
 import { FileAttachment } from './scripts/chats';
@@ -150,10 +150,6 @@ declare global {
         ai: any;
     }
 
-    var SillyTavern: {
-        getContext(): ReturnType<typeof getContext>;
-
-    };
 
     // Jquery plugins
     interface JQuery {

@@ -88,10 +88,22 @@ test('U016 remote deletion cannot change a bulk target or reset folder filtering
         await expect(dialog).toContainText('Dev Character 047');
         await expect(dialog).not.toContainText('Dev Character 048');
         await dialog.locator('.popup-button-ok').click();
-        await expect.poll(() => page.evaluate(() => window.SillyTavern.getContext().characters.some(c => c.avatar === 'dev-character-047.png')), { timeout: 15_000 }).toBe(false);
-        expect(await page.evaluate(() => window.SillyTavern.getContext().characters.some(c => c.avatar === 'dev-character-045.png'))).toBe(true);
-        await expect.poll(() => page.evaluate(() => window.SillyTavern.getContext().characters.some(c => c.avatar === 'dev-character-046.png')), { timeout: 15_000 }).toBe(false);
-        await expect.poll(() => page.evaluate(() => window.SillyTavern.getContext().characters.find(c => c.avatar === 'dev-character-045.png')?.name), { timeout: 15_000 }).toBe('ZZZ U016');
+        await expect.poll(() => page.evaluate(async () => {
+            const { getContext } = await import('/scripts/st-context.js');
+            return getContext().characters.some(c => c.avatar === 'dev-character-047.png');
+        }), { timeout: 15_000 }).toBe(false);
+        expect(await page.evaluate(async () => {
+            const { getContext } = await import('/scripts/st-context.js');
+            return getContext().characters.some(c => c.avatar === 'dev-character-045.png');
+        })).toBe(true);
+        await expect.poll(() => page.evaluate(async () => {
+            const { getContext } = await import('/scripts/st-context.js');
+            return getContext().characters.some(c => c.avatar === 'dev-character-046.png');
+        }), { timeout: 15_000 }).toBe(false);
+        await expect.poll(() => page.evaluate(async () => {
+            const { getContext } = await import('/scripts/st-context.js');
+            return getContext().characters.find(c => c.avatar === 'dev-character-045.png')?.name;
+        }), { timeout: 15_000 }).toBe('ZZZ U016');
         const visibleNames = await page.locator('#rm_print_characters_block .character_select .ch_name').allTextContents();
         expect(visibleNames[0]).toContain('Dev Character 001');
         expect(visibleNames.at(-1)).toContain('ZZZ U016');
@@ -156,14 +168,20 @@ test('U016 tag confirmation keeps its target after the tag popup closes', async 
         await page.evaluate(async () => (await import('/script.js')).characterGroupOverlay.bulkTagPopupHandler.hide());
         await expect(page.locator('#bulk_tag_shadow_popup')).toHaveCount(0);
         await page.waitForTimeout(2500);
-        expect(await page.evaluate(() => window.SillyTavern.getContext().characters.some(c => c.avatar === 'dev-character-044.png'))).toBe(true);
+        expect(await page.evaluate(async () => {
+            const { getContext } = await import('/scripts/st-context.js');
+            return getContext().characters.some(c => c.avatar === 'dev-character-044.png');
+        })).toBe(true);
         await confirm.locator('.popup-button-ok').click();
         await expect.poll(() => page.evaluate(async () => {
             const { tag_map } = await import('/scripts/tags.js');
             return tag_map['dev-character-005.png'];
         })).toEqual([]);
         expect(await page.evaluate(async () => (await import('/scripts/tags.js')).tag_map['dev-character-006.png'])).toEqual(['u016-tag']);
-        await expect.poll(() => page.evaluate(() => window.SillyTavern.getContext().characters.some(c => c.avatar === 'dev-character-044.png')), { timeout: 15_000 }).toBe(false);
+        await expect.poll(() => page.evaluate(async () => {
+            const { getContext } = await import('/scripts/st-context.js');
+            return getContext().characters.some(c => c.avatar === 'dev-character-044.png');
+        }), { timeout: 15_000 }).toBe(false);
     } finally {
         await other.close();
     }
@@ -202,7 +220,10 @@ test('real reconnect, trailing invalidation, failed read recovery and quiet poll
         await edit(other, 2, 'description', 'U015 disconnected update');
         await cdp.send('Network.emulateNetworkConditions', { offline: false, latency: 0, downloadThroughput: -1, uploadThroughput: -1 });
         await expect.poll(() => page.evaluate(() => window.u015Events.filter(x => x === 'ready').length), { timeout: 15_000 }).toBeGreaterThan(readies);
-        const description = n => page.evaluate(n => window.SillyTavern.getContext().characters.find(c => c.avatar === `dev-character-${String(n).padStart(3, '0')}.png`)?.description, n);
+        const description = n => page.evaluate(async n => {
+            const { getContext } = await import('/scripts/st-context.js');
+            return getContext().characters.find(c => c.avatar === `dev-character-${String(n).padStart(3, '0')}.png`)?.description;
+        }, n);
         await expect.poll(() => description(2), { timeout: 15_000 }).toBe('U015 disconnected update');
 
         let entered;
@@ -339,7 +360,10 @@ test('terminal SSE response reconnects and catches up after a write', async ({ p
         await edit(other, 9, 'description', 'U015 terminal catchup');
         release();
         await expect.poll(() => page.evaluate(() => window.u015Terminal.readies), { timeout: 12_000 }).toBeGreaterThan(0);
-        await expect.poll(() => page.evaluate(() => window.SillyTavern.getContext().characters.find(c => c.avatar === 'dev-character-009.png')?.description), { timeout: 12_000 }).toBe('U015 terminal catchup');
+        await expect.poll(() => page.evaluate(async () => {
+            const { getContext } = await import('/scripts/st-context.js');
+            return getContext().characters.find(c => c.avatar === 'dev-character-009.png')?.description;
+        }), { timeout: 12_000 }).toBe('U015 terminal catchup');
         expect(await page.evaluate(() => window.u015Terminal.instances)).toBe(2);
     } finally {
         release();
@@ -373,7 +397,10 @@ test('background overflow stays silent while explicit refresh warns and waits', 
         await dialog.locator('.popup-button-ok').click();
         await page.evaluate(() => window.u015Explicit);
         await page.unroute('**/api/characters/all', handler);
-        await expect.poll(() => page.evaluate(() => window.SillyTavern.getContext().characters.find(c => c.avatar === 'dev-character-010.png')?.description), { timeout: 12_000 }).toBe('U015 overflow recovery');
+        await expect.poll(() => page.evaluate(async () => {
+            const { getContext } = await import('/scripts/st-context.js');
+            return getContext().characters.find(c => c.avatar === 'dev-character-010.png')?.description;
+        }), { timeout: 12_000 }).toBe('U015 overflow recovery');
     } finally {
         await page.unroute('**/api/characters/all', handler);
         await other.close();

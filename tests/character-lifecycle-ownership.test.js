@@ -8,25 +8,17 @@ jest.unstable_mockModule('../public/scripts/character-authoring.js', () => ({ bu
 jest.unstable_mockModule('../public/scripts/character-list-state.js', () => ({ getCharacterDeleteCandidates: jest.fn(), shouldRefreshCharacterAfterEdit: () => true }));
 jest.unstable_mockModule('../public/scripts/request-context.js', () => ({ getRequestHeaders: () => ({}) }));
 jest.unstable_mockModule('../public/scripts/workspace-panels-react-bridge.js', () => ({ loadWorkspacePanelsModule: jest.fn() }));
+jest.unstable_mockModule('../public/scripts/utils.js', () => ({ escapeHtml: value => value, waitUntilCondition: jest.fn() }));
+jest.unstable_mockModule('../public/scripts/world-cascade-dialog.js', () => ({ buildCascadeSectionHtml: jest.fn(), showDeleteConfirmWithCascade: jest.fn() }));
 const { registerCharacterLifecycleShellContext } = await import('../public/scripts/character-lifecycle-shell-context.js');
 const lifecycle = await import('../public/scripts/character-lifecycle-service.js');
 let state, shell, identity;
 
-function fakeAvatarInput(file = { name: 'avatar.png' }) {
-    const input = new EventTarget();
-    input.files = [file];
-    let value = 'C:\\fakepath\\avatar.png';
-    Object.defineProperty(input, 'value', {
-        get: () => value,
-        set: next => { value = next; if (next === '') input.files = []; },
-    });
-    return input;
-}
 
 beforeEach(() => {
     emit.mockClear();
     identity = {};
-    state = { settingsReady: true, this_chid: '0', characters: [{ avatar: 'alice.png', canonical_card_version: 'form-version', data: {} }, { avatar: 'bob.png', data: {} }], chat: [], chat_metadata: {}, favsToHotswap: jest.fn() };
+    state = { settingsReady: true, create_save: {}, this_chid: '0', characters: [{ avatar: 'alice.png', canonical_card_version: 'form-version', data: {} }, { avatar: 'bob.png', data: {} }], chat: [], chat_metadata: {}, favsToHotswap: jest.fn() };
     shell = {
         state, getDraftTagIds: () => [], getCharacterWorldDraftIdentity: () => identity,
         getOneCharacter: jest.fn(async () => {}), getFirstMessage: jest.fn(() => ({ mes: 'Alice greeting' })),
@@ -287,21 +279,9 @@ test('successful legacy creation clears all field mirrors without jQuery or chan
     }
     const form = { getAttribute: () => 'createcharacter' };
     fields.form_create = form;
-    const cross = new EventTarget();
-    cross.click = jest.fn(() => cross.dispatchEvent(new Event('click', { bubbles: true, cancelable: true })));
+    const cross = { click: jest.fn() };
     fields.character_cross = cross;
-    const popup = { style: { display: 'block' } };
-    fields.character_popup = popup;
-    state.is_advanced_char_open = true;
-    const transition = jest.fn((_element, options) => options.complete());
-    const handlerSource = readFileSync(new URL('../public/scripts/dom-handlers.js', import.meta.url), 'utf8');
-    const closeBody = handlerSource.match(/document\.getElementById\('character_cross'\)\?\.addEventListener\('click', function \(\) \{([\s\S]*?)\n    \}\);/);
-    expect(closeBody).not.toBeNull();
-    cross.addEventListener('click', new Function('state', 'document', 'transitionOpacity', `return function() {${closeBody[1]}\n};`)(state, { getElementById: id => fields[id] ?? null }, transition));
-    const avatarInput = fakeAvatarInput();
-    const avatarChange = jest.fn();
-    avatarInput.addEventListener('change', avatarChange);
-    fields.add_avatar_button = avatarInput;
+    const avatar = { file: new File(['image'], 'avatar.png'), crop: { x: 12 } };
     fields['character_popup-button-h3'] = { textContent: 'Edit character' };
     fields.character_name_pole.value = 'New';
     globalThis.document = { getElementById: id => fields[id] ?? null };
@@ -313,14 +293,14 @@ test('successful legacy creation clears all field mirrors without jQuery or chan
         if (['#character_name_pole', '#description_textarea', '#tags_textarea', '#depth_prompt_depth', '#depth_prompt_role', '#character_popup-button-h3', '#character_world', '#alternate_greetings_template'].includes(selector)) throw new Error(`creation reset uses jQuery: ${selector}`);
         return chain;
     };
-    state.create_save = { alternate_greetings: [], extensions: {}, extra_books: [] };
+    state.create_save = { avatar, alternate_greetings: [], extensions: {}, extra_books: [] };
+    shell.ensureImageFormatSupported = async file => file;
     state.depth_prompt_depth_default = 4; state.depth_prompt_role_default = 0;
-    Object.assign(shell, { assignTagIdsToAvatar: jest.fn(), getCharacters: jest.fn(async () => { expect(state.is_advanced_char_open).toBe(false); }), select_rm_info: jest.fn() });
+    Object.assign(shell, { assignTagIdsToAvatar: jest.fn(), getCharacters: jest.fn(async () => { expect(cross.click).toHaveBeenCalledTimes(1); }), select_rm_info: jest.fn() });
     globalThis.fetch = jest.fn(async () => ({ ok: true, text: async () => 'new.png' }));
     await lifecycle.createOrEditCharacter();
     expect(cross.click).toHaveBeenCalledTimes(1);
-    expect(transition).toHaveBeenCalledWith(popup, expect.objectContaining({ opacity: 0 }));
-    expect(popup.style.display).toBe('none');
+
     expect(fields.character_name_pole.value).toBe('');
     expect(fields.description_textarea.value).toBe('');
     expect(fields.tags_textarea.value).toBe('');
@@ -333,19 +313,14 @@ test('successful legacy creation clears all field mirrors without jQuery or chan
     expect(state.create_save).toEqual(expect.objectContaining({ name: '', world: '', depth_prompt_depth: 4, depth_prompt_role: 0, alternate_greetings: [] }));
     expect(shell.assignTagIdsToAvatar).toHaveBeenCalledWith('new.png', []);
     expect(shell.select_rm_info).toHaveBeenCalledWith('char_create', 'new.png', 'alice.png');
-    expect(fields.add_avatar_button).toBe(avatarInput);
-    expect(avatarInput.files).toHaveLength(0);
-    expect(avatarChange).not.toHaveBeenCalled();
-    avatarInput.dispatchEvent(new Event('change'));
-    expect(avatarChange).toHaveBeenCalledTimes(1);
+    expect(fetch.mock.calls[0][1].body.get('avatar')).toBe(avatar.file);
+    expect(decodeURIComponent(fetch.mock.calls[0][0])).toBe('/api/characters/create?crop={"x":12}');
+    expect(state.create_save.avatar).toBeNull();
 });
 
 test('a current character edit restores the save control without jQuery', async () => {
     const saveButton = { setAttribute: jest.fn() };
-    const avatarInput = fakeAvatarInput();
-    const avatarChange = jest.fn();
-    avatarInput.addEventListener('change', avatarChange);
-    globalThis.document = { getElementById: id => id === 'form_create' ? { getAttribute: () => 'editcharacter' } : id === 'create_button' ? saveButton : id === 'add_avatar_button' ? avatarInput : null, querySelector: () => ({ dataset: { chid: '0' } }) };
+    globalThis.document = { getElementById: id => id === 'form_create' ? { getAttribute: () => 'editcharacter' } : id === 'create_button' ? saveButton : null, querySelector: () => ({ dataset: { chid: '0' } }) };
     const field = { data: () => '0', val() { return this; }, clone() { return this; }, replaceWith() {} };
     globalThis.$ = selector => {
         if (selector === '#create_button') throw new Error('edit save control must not use jQuery');
@@ -354,13 +329,14 @@ test('a current character edit restores the save control without jQuery', async 
     };
     state.chat_metadata.tainted = true;
     globalThis.fetch = jest.fn(async () => ({ ok: true, json: async () => ({ canonical_card_version: 'new-version' }) }));
-    await lifecycle.createOrEditCharacter();
+    const avatar = { file: new File(['edited'], 'upload.png'), crop: { x: 5 } };
+    shell.ensureImageFormatSupported = async file => file;
+    await lifecycle.createOrEditCharacter(undefined, avatar);
     expect(saveButton.setAttribute).toHaveBeenCalledWith('value', 'Save');
     expect(emit).toHaveBeenCalledWith('edited', expect.objectContaining({ detail: expect.objectContaining({ id: '0' }) }));
-    expect(avatarInput.files).toHaveLength(0);
-    expect(avatarChange).not.toHaveBeenCalled();
-    avatarInput.dispatchEvent(new Event('change'));
-    expect(avatarChange).toHaveBeenCalledTimes(1);
+    expect(fetch.mock.calls[0][1].body.get('avatar_url')).toBe('alice.png');
+    expect(fetch.mock.calls[0][1].body.get('avatar')).toBe(avatar.file);
+    expect(decodeURIComponent(fetch.mock.calls[0][0])).toBe('/api/characters/edit?crop={"x":5}');
 });
 
 test('authoring does not save a shallow character without a version', async () => {
@@ -422,15 +398,11 @@ test('authoring forwards its snapshot and surfaces a conflict without refreshing
         getCharacterAuthoringWriteUrl.mockReset();
     }
 });
-test('payload edit clears the uploaded file without replacing its input or losing change listeners', async () => {
+test('payload edit does not attach or clear the confirmed creation upload', async () => {
     const { buildCharacterAuthoringFormData, getCharacterAuthoringWriteUrl } = await import('../public/scripts/character-authoring.js');
     const file = new File(['avatar'], 'avatar.png', { type: 'image/png' });
-    const avatarInput = fakeAvatarInput(file);
-    const avatarChange = jest.fn();
-    avatarInput.addEventListener('change', avatarChange);
-    globalThis.document = { getElementById: id => id === 'add_avatar_button' ? avatarInput : null };
-    globalThis.$ = () => { throw new Error('avatar reset must preserve the input without jQuery'); };
-    state.create_save = { avatar: [file] };
+    const upload = { file, crop: { x: 4 } };
+    state.create_save = { avatar: upload };
     Object.assign(shell, {
         getCurrentCharacterAuthoringMode: () => 'edit',
         getCurrentCharacterAuthoringSource: () => state.characters[0],
@@ -443,11 +415,8 @@ test('payload edit clears the uploaded file without replacing its input or losin
     try {
         const result = await lifecycle.saveCharacterAuthoringFromPayload({ fields: { name: 'Alice' }, expectedCardJson: 'form-version', changedFields: [] });
         expect(result.ok).toBe(true);
-        expect(avatarInput.files).toHaveLength(0);
-        expect(state.create_save.avatar).toBeNull();
-        expect(avatarChange).not.toHaveBeenCalled();
-        avatarInput.dispatchEvent(new Event('change'));
-        expect(avatarChange).toHaveBeenCalledTimes(1);
+        expect(buildCharacterAuthoringFormData).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ avatarFile: null }));
+        expect(state.create_save.avatar).toBe(upload);
     } finally {
         buildCharacterAuthoringFormData.mockReset();
         getCharacterAuthoringWriteUrl.mockReset();

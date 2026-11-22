@@ -6,6 +6,14 @@ import { createReactRuntimeProvider } from '../public/scripts/react-runtime-prov
 import { createSettingsWriteOwner } from '../app/lib/settings-write-owner.ts';
 
 describe('settings write owner', () => {
+    test('accepts only valid, current revisions from any settings writer', () => {
+        const owner = createSettingsWriteOwner();
+        expect(owner.getRevision()).toBeNull();
+        expect(owner.observeRevision(12)).toBe(true);
+        for (const late of [11, -1, NaN, null, '13', 12.5]) expect(owner.observeRevision(late)).toBe(false);
+        expect(owner.observeRevision(12)).toBe(true);
+        expect(owner.getRevision()).toBe(12);
+    });
     test('rejects overlapping form conflicts and preserves a rebased provider otherwise', async () => {
         const { createSettingsWriteOwner } = await loadTsModule('app/lib/settings-write-owner.ts');
         const owner = createSettingsWriteOwner();

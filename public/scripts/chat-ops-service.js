@@ -54,6 +54,7 @@ const reloadCurrentChat = (...args) => shell().reloadCurrentChat(...args);
 let activeCharacterChatLoad;
 let failedCharacterChatLoad;
 let chatSessionVersion = 0;
+export const getChatSessionVersion = () => chatSessionVersion;
 // Each record belongs to a particular successful read (or explicit creation),
 // not merely to a character: reopening a file replaces the record.
 const chatVersions = new Map();
@@ -291,10 +292,11 @@ export async function prepareChatTransition(previous) {
     }
 }
 
-export async function clearChat({ clearData = false, preserveMainChatScrollSnapshot = true } = {}) {
+export async function clearChat({ clearData = false, preserveMainChatScrollSnapshot = true, isCurrent = () => true } = {}) {
     beginChatTransition();
     try {
         await checkpointChatTransition();
+        if (!isCurrent()) return false;
         chatSessionVersion++;
         cancelDebouncedChatSave();
         cancelDebouncedMetadataSave();
@@ -825,8 +827,9 @@ export async function getChat({ strictReload = false, reconciledChatVersion = un
 }
 
 
-export async function openCharacterChat(file_name) {
+export async function openCharacterChat(file_name, isCurrent = () => true) {
     await waitUntilCondition(() => !state.isChatSaving, debounce_timeout.extended, 10);
+    if (!isCurrent()) return;
     const currentChatId = getCurrentChatId();
     const isReopeningCurrentChat = typeof currentChatId === 'string' && currentChatId === file_name;
     if (isReopeningCurrentChat) {
@@ -834,7 +837,7 @@ export async function openCharacterChat(file_name) {
         state.mainChatVisibleStartIndices.delete(file_name);
     }
 
-    await clearChat({ clearData: true, preserveMainChatScrollSnapshot: !isReopeningCurrentChat });
+    if (await clearChat({ clearData: true, preserveMainChatScrollSnapshot: !isReopeningCurrentChat, isCurrent }) === false || !isCurrent()) return;
     state.characters[state.this_chid].chat = file_name;
     state.chat_metadata = {};
     if (await getChat() === false) return;

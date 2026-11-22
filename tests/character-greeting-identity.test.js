@@ -14,6 +14,8 @@ jest.unstable_mockModule('../public/scripts/events.js', () => ({ eventSource: { 
 jest.unstable_mockModule('../public/scripts/character-authoring.js', () => ({ buildCharacterAuthoringFormData: () => ({ get: () => 'a' }), getCharacterAuthoringWriteUrl: () => '/edit' }));
 jest.unstable_mockModule('../public/scripts/character-list-state.js', () => ({ getCharacterDeleteCandidates: jest.fn(), shouldRefreshCharacterAfterEdit: () => true }));
 jest.unstable_mockModule('../public/scripts/request-context.js', () => ({ getRequestHeaders: () => ({}) }));
+jest.unstable_mockModule('../public/scripts/utils.js', () => ({ escapeHtml: value => value, waitUntilCondition: jest.fn() }));
+jest.unstable_mockModule('../public/scripts/world-cascade-dialog.js', () => ({ buildCascadeSectionHtml: jest.fn(), showDeleteConfirmWithCascade: jest.fn() }));
 jest.unstable_mockModule('../public/scripts/character-lifecycle-shell-context.js', () => ({ requireCharacterLifecycleShellContext: () => shell }));
 const { createOrEditCharacter, saveCharacterAuthoringFromPayload } = await import('../public/scripts/character-lifecycle-service.js');
 

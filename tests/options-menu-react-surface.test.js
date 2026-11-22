@@ -67,11 +67,16 @@ describe('options menu + character context menu React surfaces', () => {
     const ctxMenu = readRepoFile('app/components/context-menu/CharacterContextMenu.tsx');
     const script = readRepoFile('public/script.js');
 
-    test('options shell stays legacy-owned; items are React-owned', () => {
+    test('the options portal owns visibility and the history command closes it through the same owner', () => {
         const block = workspaceHost.match(/<div id="options"[^>]*>([\s\S]*?)<\/div>/)?.[0] ?? '';
+        const handlers = readRepoFile('public/script.js');
         expect(block).toContain('id="options"');
         expect(block).toContain('style={{ display: "none" }}');
-        expect(block).not.toContain('options-content');
+        expect(options).toContain('createOptionsMenuController(');
+        expect(options).toContain("{ placement: 'top-start' }");
+        expect(handlers).not.toContain("document.getElementById('options').style.display");
+        expect(handlers).not.toContain('getOptionsMenuControllerFactory');
+        expect(readRepoFile('public/scripts/chat-history-commands.js')).toContain('hideMenu: closeOptionsMenu');
     });
 
     test('options component preserves item IDs', () => {
@@ -86,22 +91,22 @@ describe('options menu + character context menu React surfaces', () => {
     });
 
     test('React options invoke explicit menu commands', () => {
-        const handlers = readRepoFile('public/scripts/dom-handlers.js');
+        const handlers = readRepoFile('public/script.js');
         expect(options).toContain('onCommand');
         expect(script).toContain('runOptionsMenuCommand');
-        expect(handlers).toContain('export function runOptionsMenuCommand');
+        expect(readRepoFile('public/scripts/chat-history-commands.js')).toContain('async function runOptionsMenuCommand');
     });
 
     test('current-chat memory is a Wire Log peer with lazy panel lifecycle and chat-change cleanup', () => {
-        const domHandlers = readRepoFile('public/scripts/dom-handlers.js');
+        const domHandlers = readRepoFile('public/script.js');
         const panels = readRepoFile('app/workspace-panels.tsx');
         const historyService = readRepoFile('app/lib/history-panel-service.ts');
         expect(options).toContain('id="option_chat_memory"');
         expect(options.indexOf('id="option_chat_memory"')).toBeLessThan(options.indexOf('id="option_wire_log"'));
         expect(historyService).toContain("id === 'option_chat_memory'");
         expect(historyService).toContain('await ports.memory()');
-        expect(domHandlers).toContain('memory: openChatMemoryPanel');
-        expect(script).toContain('openChatMemoryPanel: (...args) => openChatMemoryPanel(...args)');
+        expect(readRepoFile('public/scripts/chat-history-commands.js')).toContain('memory: openChatMemoryPanel');
+        expect(script).toContain('openChatMemoryPanel,');
         expect(script).toContain('eventSource.on(event_types.CHAT_CHANGED, closeChatMemoryPanel)');
         expect(script).toContain('chatMemoryPanelController = workspace.createAuxiliaryPanelController({');
         expect(script).toContain('module.mountChatMemoryPanel(host, {');
@@ -112,17 +117,17 @@ describe('options menu + character context menu React surfaces', () => {
     });
 
     test('regenerate availability is a React state projection with a shell sync point', () => {
-        const domHandlers = readRepoFile('public/scripts/dom-handlers.js');
+        const domHandlers = readRepoFile('public/script.js');
         expect(options).toContain('canRegenerate');
         expect(script).toContain('export function setOptionsMenuRegenerateAvailability');
         expect(script).toContain('export function canRegenerateLastReply');
         expect(script).toContain('export async function regenerateLastReply');
         // The React command supplies the live eligibility check and action to
         // the shared history command owner.
-        expect(domHandlers).toContain('canRegenerate: canRegenerateLastReply');
-        expect(domHandlers).toContain('regenerate: () => { void regenerateLastReply(); }');
+        expect(readRepoFile('public/scripts/chat-history-commands.js')).toContain('canRegenerate: canRegenerateLastReply');
+        expect(readRepoFile('public/scripts/chat-history-commands.js')).toContain('regenerate: () => { void regenerateLastReply(); }');
         // Availability is synced every time the menu opens.
-        expect(domHandlers).toContain('setOptionsMenuRegenerateAvailability(canRegenerateLastReply())');
+        expect(script).toContain('setOptionsMenuRegenerateAvailability(canRegenerateLastReply())');
     });
 
     test('character context menu items are React-owned with shell preserved', () => {

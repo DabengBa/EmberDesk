@@ -7,6 +7,7 @@ jest.unstable_mockModule('../public/scripts/power-user.js', () => ({ registerDeb
 const originalMutationObserver = globalThis.MutationObserver;
 globalThis.MutationObserver = class { observe() {} };
 const {
+    createCharacterListLifecycle,
     syncBulkSelectionDomState,
     updateBulkDeleteButtonState,
 } = await import('../public/scripts/character-list-state.js');
@@ -14,6 +15,53 @@ if (originalMutationObserver === undefined) delete globalThis.MutationObserver;
 else globalThis.MutationObserver = originalMutationObserver;
 
 /* global globalThis */
+
+test('serializes reads through asynchronous publication without replacing the live array', async () => {
+    const characters = [];
+    const entered = Promise.withResolvers();
+    const release = Promise.withResolvers();
+    const fetchSnapshot = jest.fn()
+        .mockResolvedValueOnce([{ avatar: 'first.png' }])
+        .mockResolvedValueOnce([{ avatar: 'second.png' }]);
+    const printCharacters = jest.fn().mockImplementationOnce(() => {
+        entered.resolve();
+        return release.promise;
+    });
+    const lifecycle = createCharacterListLifecycle({
+        getCharacters: () => characters, getActiveAvatar: () => null,
+        preserveLoadedCharacterChat: () => {}, publishSnapshotEvent: () => {},
+        fetchSnapshot, printCharacters,
+    });
+    const first = lifecycle.refresh({ required: true });
+    const second = lifecycle.refresh({ required: true });
+    await entered.promise;
+    expect(fetchSnapshot).toHaveBeenCalledTimes(1);
+    expect(characters).toEqual([{ avatar: 'first.png' }]);
+    release.resolve();
+    await Promise.all([first, second]);
+    expect(characters).toEqual([{ avatar: 'second.png' }]);
+});
+
+test.each([true, false])('preserves the list page on delete fallback (reconciled: %s)', async reconciled => {
+    const characters = [{ avatar: 'keep.png' }, { avatar: 'delete.png' }];
+    const beforeSnapshot = {};
+    const deletedAvatars = ['delete.png'];
+    const deleteContext = { source: 'bulk' };
+    const reconcileAfterDelete = jest.fn(async () => {
+        expect(characters).toEqual([{ avatar: 'keep.png' }]);
+        return reconciled;
+    });
+    const printCharacters = jest.fn();
+    const lifecycle = createCharacterListLifecycle({
+        getCharacters: () => characters, reconcileAfterDelete, printCharacters, markMetric: jest.fn(),
+    });
+
+    await lifecycle.reconcileAfterDelete({ beforeSnapshot, deletedAvatars, deleteContext });
+
+    expect(reconcileAfterDelete).toHaveBeenCalledTimes(1);
+    expect(reconcileAfterDelete).toHaveBeenCalledWith({ beforeSnapshot, deletedAvatars, deleteContext });
+    expect(printCharacters.mock.calls).toEqual(reconciled ? [] : [[false, { allowDuringCharacterDelete: true }]]);
+});
 
 function createFakeButton() {
     const classes = new Set();

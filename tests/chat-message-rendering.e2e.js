@@ -173,7 +173,8 @@ async function closeCharacterAuthoringAfterSelection(page) {
 async function selectCharacterByName(page, name) {
     await openCharacterLibrary(page);
     const selectedName = await page.evaluate(async (characterNameToSelect) => {
-        const context = window.SillyTavern.getContext();
+        const { getContext } = await import('/scripts/st-context.js');
+        const context = getContext();
         const characterId = context.characters.findIndex(character => character?.name === characterNameToSelect);
 
         if (characterId < 0) {
@@ -185,8 +186,9 @@ async function selectCharacterByName(page, name) {
     }, name);
 
     expect(selectedName).toBe(name);
-    await page.waitForFunction((characterNameToSelect) => {
-        const context = window.SillyTavern.getContext();
+    await page.waitForFunction(async (characterNameToSelect) => {
+        const { getContext } = await import('/scripts/st-context.js');
+        const context = getContext();
         const character = context.characters[context.characterId];
         return character?.name === characterNameToSelect;
     }, name);
@@ -197,13 +199,15 @@ async function openChatAndMeasureFirstMessage(page, chatName, expectedFirstMessa
     const startedAt = await page.evaluate(() => performance.now());
 
     await page.evaluate(async (chatToOpen) => {
-        const context = window.SillyTavern.getContext();
+        const { getContext } = await import('/scripts/st-context.js');
+        const context = getContext();
         await context.openCharacterChat(chatToOpen);
     }, chatName);
 
-    await page.waitForFunction(({ expectedChatName, expectedText }) => {
+    await page.waitForFunction(async ({ expectedChatName, expectedText }) => {
+        const { getContext } = await import('/scripts/st-context.js');
         const normalize = value => String(value ?? '').replace(/\s+/g, ' ').trim();
-        const context = window.SillyTavern.getContext();
+        const context = getContext();
         const selectedChatName = context.characters[context.characterId]?.chat;
         const firstMessageText = document.querySelector('#chat .mes[mesid="0"] .mes_text')?.textContent ?? '';
 
@@ -309,7 +313,8 @@ async function readDeleteModeRowState(page, messageId) {
 
 async function openCharacterChat(page, chatName) {
     await page.evaluate(async (nextChatName) => {
-        const context = window.SillyTavern.getContext();
+        const { getContext } = await import('/scripts/st-context.js');
+        const context = getContext();
         await context.openCharacterChat(nextChatName);
     }, chatName);
 }
@@ -421,7 +426,7 @@ test.describe('chat message rendering', () => {
 
         await testSetup.awaitST({ page });
         // Rendering stored messages does not exercise model-generated memory summaries.
-        await page.evaluate(() => { window.SillyTavern.getContext().chatCompletionSettings.chat_memory_enabled = false; });
+        await page.evaluate(async () => { const { getContext } = await import('/scripts/st-context.js'); getContext().chatCompletionSettings.chat_memory_enabled = false; });
         await seedLongChatFixture(page, longChatName, longChat);
         await selectCharacterByName(page, characterName);
 
@@ -561,8 +566,9 @@ test.describe('chat message rendering', () => {
         await testSetup.awaitST({ page });
         await grantClipboardPermissions(page);
         await selectCharacterByName(page, characterName);
-        await page.evaluate(() => {
-            const context = window.SillyTavern.getContext();
+        await page.evaluate(async () => {
+            const { getContext } = await import('/scripts/st-context.js');
+            const context = getContext();
             context.powerUserSettings.confirm_message_delete = true;
         });
 
@@ -688,10 +694,11 @@ test.describe('chat message rendering', () => {
 
         await testSetup.awaitST({ page });
         // Delete-mode selection is independent of background model summaries.
-        await page.evaluate(() => { window.SillyTavern.getContext().chatCompletionSettings.chat_memory_enabled = false; });
+        await page.evaluate(async () => { const { getContext } = await import('/scripts/st-context.js'); getContext().chatCompletionSettings.chat_memory_enabled = false; });
         await selectCharacterByName(page, characterName);
-        await page.evaluate(() => {
-            const context = window.SillyTavern.getContext();
+        await page.evaluate(async () => {
+            const { getContext } = await import('/scripts/st-context.js');
+            const context = getContext();
             context.powerUserSettings.confirm_message_delete = true;
         });
 
@@ -731,6 +738,7 @@ test.describe('chat message rendering', () => {
 
         await page.locator('#dialogue_del_mes_cancel').click();
         await expect(page.locator('#dialogue_del_mes')).not.toBeVisible();
+        await expect(page.locator('#send_textarea')).toBeFocused();
 
         const exitedDeleteModeState = await readDeleteModeRowState(page, assistantMessageIndex);
         expect(exitedDeleteModeState).toMatchObject({
@@ -740,6 +748,16 @@ test.describe('chat message rendering', () => {
             checkboxChecked: false,
             checkboxShellVisible: true,
         });
+
+        await page.getByRole('button', { name: /^(Chat options|聊天选项)$/ }).click();
+        await page.getByRole('button', { name: '删除消息' }).click();
+        await expect(page.locator('#send_form')).toBeHidden();
+        await assistantRow.click();
+        await expect(page.locator('#dialogue_del_mes_ok')).toBeEnabled();
+        await page.keyboard.press('Escape');
+        await expect(page.locator('#dialogue_del_mes')).toBeHidden();
+        await expect(page.locator('#send_textarea')).toBeFocused();
+        expect(await page.evaluate(async () => (await import('/scripts/st-context.js')).getContext().chat.length)).toBe(seededMessages.length);
         expect(getUnexpectedConsoleErrors(consoleErrors)).toEqual([]);
     });
 
@@ -750,12 +768,12 @@ test.describe('chat message rendering', () => {
         await seedLongChatFixture(page, name, buildLongChatFixture(seededChatPath, 20));
         await selectCharacterByName(page, characterName);
         await openCharacterChat(page, name);
-        await page.evaluate(() => { window.moveOriginal = window.SillyTavern.getContext().chat[5]; });
+        await page.evaluate(async () => { const { getContext } = await import('/scripts/st-context.js'); window.moveOriginal = getContext().chat[5]; });
         const source = page.locator('#chat .mes[mesid="5"]');
         await source.locator('.mes_edit').evaluate(element => element.click());
         await source.locator('.edit_textarea').fill('slow move draft');
         // A non-reset metadata update is still the same loaded chat session.
-        await page.evaluate(() => window.SillyTavern.getContext().updateChatMetadata({ uid_test_marker: true }, false));
+        await page.evaluate(async () => (await import('/scripts/st-context.js')).getContext().updateChatMetadata({ uid_test_marker: true }, false));
         let release;
         const gate = new Promise(resolve => { release = resolve; });
         let saveStarted;
@@ -768,8 +786,9 @@ test.describe('chat message rendering', () => {
             });
             await started;
             // Both events used the same pre-refresh row while persistence was gated.
-            const result = await page.evaluate(() => {
-                const chat = window.SillyTavern.getContext().chat;
+            const result = await page.evaluate(async () => {
+                const { getContext } = await import('/scripts/st-context.js');
+                const chat = getContext().chat;
                 return { moved: chat[4] === window.moveOriginal, movedText: chat[4].mes, neighborText: chat[5].mes };
             });
             expect(result).toEqual({ moved: true, movedText: 'slow move draft', neighborText: 'Long rendering proof message 005 from user.' });
@@ -789,14 +808,14 @@ test.describe('chat message rendering', () => {
         await seedLongChatFixture(page, name, buildLongChatFixture(seededChatPath, 20));
         await selectCharacterByName(page, characterName);
         await openCharacterChat(page, name);
-        await page.evaluate(() => { window.moveOriginal = window.SillyTavern.getContext().chat[5]; });
+        await page.evaluate(async () => { const { getContext } = await import('/scripts/st-context.js'); window.moveOriginal = getContext().chat[5]; });
         const source = page.locator('#chat .mes[mesid="5"]');
         await source.locator('.mes_edit').evaluate(element => element.click());
         await source.locator('.edit_textarea').fill('draft follows message');
         await source.locator('.mes_edit_up').evaluate(element => element.click());
         const moved = page.locator('#chat .mes[mesid="4"]');
         await expect(moved.locator('.edit_textarea')).toHaveValue('draft follows message');
-        expect(await page.evaluate(() => window.SillyTavern.getContext().chat[4] === window.moveOriginal)).toBe(true);
+        expect(await page.evaluate(async () => (await import('/scripts/st-context.js')).getContext().chat[4] === window.moveOriginal)).toBe(true);
         await expect(page.locator('#chat .mes[mesid="5"] .mes_text')).toContainText('message 005');
         const saved = page.waitForResponse(response => response.url().includes('/api/chats/save') && response.request().method() === 'POST' && response.ok());
         await moved.locator('.mes_edit_done').evaluate(element => element.click());
@@ -819,13 +838,14 @@ test.describe('chat message rendering', () => {
         const pageErrors = [];
         page.on('pageerror', error => pageErrors.push(error.message));
         await testSetup.awaitST({ page });
-        await page.evaluate(() => { window.SillyTavern.getContext().chatCompletionSettings.chat_memory_enabled = false; });
+        await page.evaluate(async () => { const { getContext } = await import('/scripts/st-context.js'); getContext().chatCompletionSettings.chat_memory_enabled = false; });
         await seedLongChatFixture(page, chatName, fixture);
         await selectCharacterByName(page, characterName);
         await openCharacterChat(page, chatName);
         const retainedRow = page.locator('#chat .mes[mesid="3"]');
-        await page.evaluate(() => {
-            const context = window.SillyTavern.getContext();
+        await page.evaluate(async () => {
+            const { getContext } = await import('/scripts/st-context.js');
+            const context = getContext();
             window.bulkDeleteEvents = [];
             context.eventSource.on(context.eventTypes.MESSAGE_DELETED, count => {
                 window.bulkDeleteEvents.push({ count });
@@ -862,14 +882,15 @@ test.describe('chat message rendering', () => {
         const target = 'Bulk Delete Switch Target';
         const fixture = buildLongChatFixture(seededChatPath, 30);
         await testSetup.awaitST({ page });
-        await page.evaluate(() => { window.SillyTavern.getContext().chatCompletionSettings.chat_memory_enabled = false; });
+        await page.evaluate(async () => { const { getContext } = await import('/scripts/st-context.js'); getContext().chatCompletionSettings.chat_memory_enabled = false; });
         await seedLongChatFixture(page, source, fixture);
         await seedLongChatFixture(page, target, fixture);
 
         await selectCharacterByName(page, characterName);
         await openCharacterChat(page, source);
-        await page.evaluate(targetName => {
-            const context = window.SillyTavern.getContext();
+        await page.evaluate(async targetName => {
+            const { getContext } = await import('/scripts/st-context.js');
+            const context = getContext();
             context.eventSource.on(context.eventTypes.MESSAGE_DELETED, async () => {
                 await context.openCharacterChat(targetName);
                 document.querySelector('#chat .mes[mesid="3"] .mes_edit').click();
@@ -894,12 +915,13 @@ test.describe('chat message rendering', () => {
     test('bulk deletion keeps a new message draft created during the deletion event', async ({ page }) => {
         const name = 'Bulk Delete Concurrent Append';
         await testSetup.awaitST({ page });
-        await page.evaluate(() => { window.SillyTavern.getContext().chatCompletionSettings.chat_memory_enabled = false; });
+        await page.evaluate(async () => { const { getContext } = await import('/scripts/st-context.js'); getContext().chatCompletionSettings.chat_memory_enabled = false; });
         await seedLongChatFixture(page, name, buildLongChatFixture(seededChatPath, 20));
         await selectCharacterByName(page, characterName);
         await openCharacterChat(page, name);
-        await page.evaluate(() => {
-            const context = window.SillyTavern.getContext();
+        await page.evaluate(async () => {
+            const { getContext } = await import('/scripts/st-context.js');
+            const context = getContext();
             context.eventSource.on(context.eventTypes.MESSAGE_DELETED, async () => {
                 const message = { name: 'User', is_user: true, mes: 'new message', send_date: new Date().toISOString() };
                 context.chat.push(message);
@@ -926,13 +948,14 @@ test.describe('chat message rendering', () => {
         const source = 'Bulk Delete Reopen Source';
         const target = 'Bulk Delete Reopen Target';
         await testSetup.awaitST({ page });
-        await page.evaluate(() => { window.SillyTavern.getContext().chatCompletionSettings.chat_memory_enabled = false; });
+        await page.evaluate(async () => { const { getContext } = await import('/scripts/st-context.js'); getContext().chatCompletionSettings.chat_memory_enabled = false; });
         await seedLongChatFixture(page, source, buildLongChatFixture(seededChatPath, 30));
         await seedLongChatFixture(page, target, buildLongChatFixture(seededChatPath, 30));
         await selectCharacterByName(page, characterName);
         await openCharacterChat(page, source);
-        await page.evaluate(({ source, target }) => {
-            const context = window.SillyTavern.getContext();
+        await page.evaluate(async ({ source, target }) => {
+            const { getContext } = await import('/scripts/st-context.js');
+            const context = getContext();
             context.eventSource.on(context.eventTypes.MESSAGE_DELETED, async () => {
                 await context.openCharacterChat(target);
                 await context.openCharacterChat(source);
@@ -955,7 +978,7 @@ test.describe('chat message rendering', () => {
     test('bulk deletion preserves an expanded long chat window and its draft', async ({ page }) => {
         const name = 'Bulk Delete Long Window';
         await testSetup.awaitST({ page });
-        await page.evaluate(() => { window.SillyTavern.getContext().chatCompletionSettings.chat_memory_enabled = false; });
+        await page.evaluate(async () => { const { getContext } = await import('/scripts/st-context.js'); getContext().chatCompletionSettings.chat_memory_enabled = false; });
         await seedLongChatFixture(page, name, buildLongChatFixture(seededChatPath, 130));
         await selectCharacterByName(page, characterName);
         await openCharacterChat(page, name);
@@ -1027,7 +1050,8 @@ test.describe('chat message rendering', () => {
         for (const viewport of mobileViewports) {
             await page.setViewportSize({ width: viewport.width, height: viewport.height });
             await page.evaluate(async (chatName) => {
-                const context = window.SillyTavern.getContext();
+                const { getContext } = await import('/scripts/st-context.js');
+                const context = getContext();
                 await context.openCharacterChat(chatName);
             }, mobileLongChatName);
 

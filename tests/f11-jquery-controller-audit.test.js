@@ -21,6 +21,6 @@ describe('F11 React-owned panel compatibility bridges', () => {
 
         expect(source).toContain('input.dispatchEvent(new Event(\'input\', { bubbles: true }))');
         expect(source).not.toContain("$('#character_search_bar').val(normalizedQuery).trigger('input')");
-        expect(read('public/scripts/dom-handlers.js')).not.toContain("$('#character_search_bar').val('').trigger('input')");
+        expect(read('public/script.js')).not.toContain("$('#character_search_bar').val('').trigger('input')");
     });
 });

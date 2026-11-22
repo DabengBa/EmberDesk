@@ -498,7 +498,7 @@ describe('React workspace panels bridge helpers', () => {
     test('scopes edit-mode save fanout to display-facing fields and silences mirror-write autosaves', () => {
         const lifecycleSource = read('public/scripts/character-lifecycle-service.js');
         const scriptSource = read('public/script.js');
-        const domHandlersSource = read('public/scripts/dom-handlers.js');
+        const domHandlersSource = read('public/script.js');
         const workspacePanelSource = read('app/components/authoring/AuthoringWorkspacePanel.tsx');
 
         // React submits the session's dirty draft keys so the service can tell
@@ -515,8 +515,8 @@ describe('React workspace panels bridge helpers', () => {
         // for create_save sync) but must not arm the debounced legacy edit-save
         // on top of the direct API save already in flight.
         expect(scriptSource).toContain('authoringMirrorWriteDepth += 1');
-        expect(scriptSource).toContain('isAuthoringMirrorWrite: () => authoringMirrorWriteDepth > 0');
-        expect(domHandlersSource).toContain('!shell().isAuthoringMirrorWrite?.()');
+        expect(scriptSource).toContain("id !== 'character_name_pole' && !authoringMirrorWriteDepth");
+        expect(domHandlersSource).not.toContain('isAuthoringMirrorWrite');
     });
 
     test('routes quiet/background requests through the generation service without owner markers', () => {

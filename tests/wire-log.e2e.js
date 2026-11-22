@@ -8,7 +8,8 @@ const chatName = 'Dev Character 001 Session 01';
 async function setup(page, upstream) {
     await testSetup.awaitST({ page });
     await page.evaluate(async ({ upstream, chatName }) => {
-        const context = window.SillyTavern.getContext();
+        const { getContext } = await import('/scripts/st-context.js');
+        const context = getContext();
         const id = context.characters.findIndex(character => character?.name === 'Dev Character 001');
         await context.selectCharacterById(id);
         await context.openCharacterChat(chatName);
@@ -101,14 +102,14 @@ test.describe('wire log real upstream boundary', () => {
         await expect.poll(() => requests.some(request => isDeepStrictEqual(request, record.request.body))).toBe(true);
         expect(record.request.body).not.toHaveProperty('_trace');
         await expect(page.locator('#mes_stop')).toBeHidden();
-        await page.evaluate(async () => window.SillyTavern.getContext().openCharacterChat('Dev Character 001 Session 02'));
+        await page.evaluate(async () => (await import('/scripts/st-context.js')).getContext().openCharacterChat('Dev Character 001 Session 02'));
         const beforeSecondSend = new Set((await api(page, '?limit=100')).map(entry => entry.id));
         await page.locator('#send_textarea').fill('Another conversation wire proof');
         await page.locator('#send_but').click();
         const otherRecord = await waitForForegroundRecord(page, 'Dev Character 001 Session 02', 'Another conversation wire proof', beforeSecondSend);
         await expect.poll(() => requests.some(request => isDeepStrictEqual(request, otherRecord.request.body))).toBe(true);
         await expect(page.locator('#mes_stop')).toBeHidden();
-        await page.evaluate(async chatName => window.SillyTavern.getContext().openCharacterChat(chatName), chatName);
+        await page.evaluate(async chatName => (await import('/scripts/st-context.js')).getContext().openCharacterChat(chatName), chatName);
 
         const dialog = await openViewer(page);
         await expect(dialog).toBeVisible();
@@ -143,7 +144,8 @@ test.describe('wire log real upstream boundary', () => {
         await page.keyboard.press('Escape');
         await expect(page.locator('#options_button')).toBeFocused();
         await page.evaluate(async () => {
-            const context = window.SillyTavern.getContext();
+            const { getContext } = await import('/scripts/st-context.js');
+            const context = getContext();
             context.saveSettingsDebounced();
             await new Promise(resolve => setTimeout(resolve, 1500));
         });
@@ -155,14 +157,15 @@ test.describe('wire log real upstream boundary', () => {
     test('stopping a real stream retains its partial trace in the original conversation', async ({ page }) => {
         await setup(page, upstream);
         await api(page, '/config', { enabled: true });
-        await page.evaluate(() => { window.SillyTavern.getContext().chatCompletionSettings.stream_openai = true; });
+        await page.evaluate(async () => { const { getContext } = await import('/scripts/st-context.js'); getContext().chatCompletionSettings.stream_openai = true; });
         const before = new Set((await api(page, '?limit=100')).map(record => record.id));
         streaming = false;
         await page.locator('#send_textarea').fill('Wire log stop proof');
         await page.locator('#send_but').click();
         await expect.poll(() => streaming).toBe(true);
         await page.evaluate(async () => {
-            await window.SillyTavern.getContext().openCharacterChat('Dev Character 001 Session 02');
+            const { getContext } = await import('/scripts/st-context.js');
+            await getContext().openCharacterChat('Dev Character 001 Session 02');
         });
         await page.locator('#mes_stop').click();
         let stopped;

@@ -44,17 +44,19 @@ describe('Advanced Definitions popup React surface', () => {
         expect(popup).toContain('data-macros');
     });
 
-    test('mount runs before initSecrets and inside startup', () => {
+    test('mount runs during bootstrap before initSecrets', () => {
         expect(script).toContain('async function mountCharacterPopup()');
-        expect(script).toContain('module.mountCharacterPopup(host)');
+        expect(script).toContain('module.mountCharacterPopup(host,');
         const mountIdx = script.indexOf("measureStartupStage('mountCharacterPopup'");
         const secretsIdx = script.indexOf("measureStartupStage('initSecrets'");
-        const domHandlersSource = readRepoFile('public/scripts/dom-handlers.js');
-        const startupMountIdx = domHandlersSource.indexOf('mountCharacterPopup(),');
-        const closeBindIdx = domHandlersSource.indexOf("document.getElementById('character_cross')?.addEventListener('click'");
-        expect(startupMountIdx).toBeGreaterThan(domHandlersSource.indexOf('export async function bindLegacyShellHandlers()'));
-        expect(closeBindIdx).toBeGreaterThan(startupMountIdx);
         expect(mountIdx).toBeGreaterThan(script.indexOf('async function bootstrapWorkspace()'));
         expect(mountIdx).toBeLessThan(secretsIdx);
+    });
+
+    test('React wires close and save instead of native shell click listeners', () => {
+        const domHandlers = readRepoFile('public/script.js');
+        expect(popup).toMatch(/id="character_cross"[^\n]+onClick=\{onClose\}/);
+        expect(popup).toMatch(/id="character_popup_ok"[^\n]+onClick=\{onConfirm\}/);
+        expect(domHandlers).not.toMatch(/getElementById\('character_(cross|popup_ok)'\).*addEventListener/);
     });
 });

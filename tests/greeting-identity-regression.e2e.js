@@ -14,9 +14,13 @@ test('new regex-transformed greeting retains its authored identity without guess
     await page.locator('[data-react-workspace-shell-chrome] nav button').filter({ hasText: '角色库' }).click();
     await page.setInputFiles('#character_import_file', { name: 'identity.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(card)) });
     await expect(page.locator('.toast-success')).toContainText(name);
-    await page.waitForFunction(characterName => window.SillyTavern.getContext().characters.some(character => character.name === characterName), name);
+    await page.waitForFunction(async characterName => {
+        const { getContext } = await import('/scripts/st-context.js');
+        return getContext().characters.some(character => character.name === characterName);
+    }, name);
     const avatar = await page.evaluate(async characterName => {
-        const context = window.SillyTavern.getContext();
+        const { getContext } = await import('/scripts/st-context.js');
+        const context = getContext();
         context.featureSettings.regex = [{ id: 'identity-regex', scriptName: 'identity', findRegex: 'IDENTITY_MAIN', replaceString: 'TRANSFORMED_MAIN', trimStrings: [], placement: [2], disabled: false, markdownOnly: false, promptOnly: false, runOnEdit: false, substituteRegex: 0, minDepth: null, maxDepth: null }];
         const id = context.characters.findIndex(character => character.name === characterName);
         await context.selectCharacterById(id);
@@ -27,7 +31,7 @@ test('new regex-transformed greeting retains its authored identity without guess
         { user_name: 'User', character_name: name, chat_metadata: {} },
         { name, is_user: false, is_system: false, send_date: '2026-01-01', mes: 'TRANSFORMED_MAIN' },
     ] });
-    await page.evaluate(fileName => window.SillyTavern.getContext().openCharacterChat(fileName), legacy);
+    await page.evaluate(async fileName => (await import('/scripts/st-context.js')).getContext().openCharacterChat(fileName), legacy);
     const picker = page.getByTestId('main-chat-greeting-picker');
     await expect(picker).toContainText('— / 2');
 
@@ -37,10 +41,10 @@ test('new regex-transformed greeting retains its authored identity without guess
     await expect(page.locator('#chat')).toContainText('TRANSFORMED_MAIN');
     await expect(picker).toContainText('1 / 2');
     await page.keyboard.press('Escape');
-    await page.evaluate(() => window.SillyTavern.getContext().reloadCurrentChat());
+    await page.evaluate(async () => (await import('/scripts/st-context.js')).getContext().reloadCurrentChat());
     await expect(picker).toContainText('1 / 2');
     await picker.getByRole('button', { name: /下一个开场白|Next greeting/ }).click();
     await expect(picker).toContainText('2 / 2');
     await expect(page.locator('#chat')).toContainText(alternate);
-    expect(await page.evaluate(() => window.SillyTavern.getContext().chatMetadata.greeting.index)).toBe(2);
+    expect(await page.evaluate(async () => (await import('/scripts/st-context.js')).getContext().chatMetadata.greeting.index)).toBe(2);
 });

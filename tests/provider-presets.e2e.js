@@ -97,10 +97,13 @@ for (const entry of ['page', 'drawer']) {
         await testSetup.awaitST({ page });
         const initial = (await post(page, '/api/settings/get')).data;
         const initialSettings = JSON.parse(initial.settings);
-        const committed = await page.evaluate(() => ({
-            url: window.SillyTavern.getContext().chatCompletionSettings.custom_url,
-            model: window.SillyTavern.getContext().chatCompletionSettings.openai_model,
-        }));
+        const committed = await page.evaluate(async () => {
+            const { getContext } = await import('/scripts/st-context.js');
+            return ({
+            url: getContext().chatCompletionSettings.custom_url,
+            model: getContext().chatCompletionSettings.openai_model,
+        });
+        });
         if (entry === 'page') await page.goto('/settings');
         else await openSettings(page);
         const surface = page.locator(`[data-settings-surface="${entry}"]`);
@@ -132,10 +135,13 @@ for (const entry of ['page', 'drawer']) {
         expect(after.oai_settings.custom_url).toBe(initialSettings.oai_settings.custom_url);
         expect(after.oai_settings.openai_model).toBe(initialSettings.oai_settings.openai_model);
         if (entry === 'drawer') {
-            expect(await page.evaluate(() => ({
-                url: window.SillyTavern.getContext().chatCompletionSettings.custom_url,
-                model: window.SillyTavern.getContext().chatCompletionSettings.openai_model,
-            }))).toEqual(committed);
+            expect(await page.evaluate(async () => {
+                const { getContext } = await import('/scripts/st-context.js');
+                return ({
+                url: getContext().chatCompletionSettings.custom_url,
+                model: getContext().chatCompletionSettings.openai_model,
+            });
+            })).toEqual(committed);
         }
     });
 }
@@ -193,7 +199,7 @@ for (const overlapping of [false, true]) {
         const persisted = JSON.parse((await post(page, '/api/settings/get')).data.settings);
         expect(persisted.oai_settings).toMatchObject({ preset_settings_openai: 'F4 concurrent preset', temp_openai: 1.77, f4_remote_unknown: { retained: true }, openai_model: overlapping ? 'f4-remote-model-edit' : draftModel });
         if (!overlapping) {
-            expect(await page.evaluate(() => window.SillyTavern.getContext().chatCompletionSettings.temp_openai)).toBe(1.77);
+            expect(await page.evaluate(async () => (await import('/scripts/st-context.js')).getContext().chatCompletionSettings.temp_openai)).toBe(1.77);
         }
     });
 }
@@ -203,8 +209,9 @@ test('preset sensitive import and export preserve the selected choices', async (
     await openPrompt(page);
     const name = 'F6 Sensitive Import';
     await deleteFixturePresets(page, [name]);
-    const fixture = await page.evaluate(() => {
-        const settings = window.SillyTavern.getContext().chatCompletionSettings;
+    const fixture = await page.evaluate(async () => {
+        const { getContext } = await import('/scripts/st-context.js');
+        const settings = getContext().chatCompletionSettings;
         return { temperature: 0.63, custom_url: 'https://example.invalid/f6', prompts: settings.prompts, prompt_order: settings.prompt_order };
     });
     const input = page.locator('#openai_preset_import_file');
@@ -242,8 +249,9 @@ test('preset switching lets the user cancel, discard, or save unsaved changes', 
     await openPrompt(page);
     const names = ['F6 Switch First', 'F6 Switch Second'];
     await deleteFixturePresets(page, names);
-    const fixture = await page.evaluate(() => {
-        const settings = window.SillyTavern.getContext().chatCompletionSettings;
+    const fixture = await page.evaluate(async () => {
+        const { getContext } = await import('/scripts/st-context.js');
+        const settings = getContext().chatCompletionSettings;
         return { temperature: 0.71, prompts: settings.prompts, prompt_order: settings.prompt_order };
     });
     for (const name of names) {
@@ -282,8 +290,9 @@ test('preset form CRUD, failed writes, settings handoff and reload retain the fu
     await page.reload();
     await testSetup.awaitST({ page });
     await openPrompt(page);
-    const fixture = await page.evaluate(() => {
-        const settings = window.SillyTavern.getContext().chatCompletionSettings;
+    const fixture = await page.evaluate(async () => {
+        const { getContext } = await import('/scripts/st-context.js');
+        const settings = getContext().chatCompletionSettings;
         return { chat_completion_source: 'vertexai', temperature: 0.73, openai_max_context: 32000, openai_max_tokens: 4000,
             prompts: settings.prompts, prompt_order: settings.prompt_order,
             extensions: { regex_scripts: [], f4_marker: 'keep' }, f4_extra: { retained: true } };
@@ -291,7 +300,7 @@ test('preset form CRUD, failed writes, settings handoff and reload retain the fu
     await page.locator('#openai_preset_import_file').setInputFiles({ name: `${source}.json`, mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(fixture)) });
     await expect(page.locator('#settings_preset_openai')).toHaveValue(source);
     await expect(page.locator('#temp_openai_counter')).toHaveValue('0.73');
-    expect(await page.evaluate(() => window.SillyTavern.getContext().chatCompletionSettings.chat_completion_source)).toBe('openai');
+    expect(await page.evaluate(async () => (await import('/scripts/st-context.js')).getContext().chatCompletionSettings.chat_completion_source)).toBe('openai');
 
     await page.locator('#new_oai_preset').click();
     await confirmName(page, created);
@@ -311,9 +320,9 @@ test('preset form CRUD, failed writes, settings handoff and reload retain the fu
     await page.locator('#settings-memory-keepTurns').fill('7');
     await page.locator('#SettingsPanel button[type="submit"]').click();
     await expect(page.locator('#SettingsPanel .settings-status--success')).toBeVisible();
-    expect(await page.evaluate(() => window.SillyTavern.getContext().chatCompletionSettings.chat_memory_keep_turns)).toBe(7);
-    expect(await page.evaluate(() => window.SillyTavern.getContext().chatCompletionSettings.preset_settings_openai)).toBe(created);
-    expect(await page.evaluate(() => window.SillyTavern.getContext().chatCompletionSettings.temp_openai)).toBe(0.82);
+    expect(await page.evaluate(async () => (await import('/scripts/st-context.js')).getContext().chatCompletionSettings.chat_memory_keep_turns)).toBe(7);
+    expect(await page.evaluate(async () => (await import('/scripts/st-context.js')).getContext().chatCompletionSettings.preset_settings_openai)).toBe(created);
+    expect(await page.evaluate(async () => (await import('/scripts/st-context.js')).getContext().chatCompletionSettings.temp_openai)).toBe(0.82);
     await page.locator('[data-react-workspace-shell-chrome] nav button').filter({ hasText: '设置' }).click();
     await openPrompt(page);
     await page.locator('#update_oai_preset').click();

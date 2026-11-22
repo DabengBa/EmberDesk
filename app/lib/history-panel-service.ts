@@ -47,12 +47,13 @@ export function createExportPopupController<T>(ports: {
 }
 
 export function createHistoryRenameCommand(oldName: string, ports: {
+    isCurrent?(): boolean;
     invalid(): void; busy(value: boolean): void; rename(name: string): Promise<boolean>; failed(): void;
 }) {
     let renaming = false;
     return async (affirmative: boolean, input: string) => {
         if (renaming) return false;
-        if (!affirmative) return true;
+        if (!affirmative || ports.isCurrent?.() === false) return true;
         const name = input.trim();
         if (!name) { ports.invalid(); return false; }
         if (name === oldName) return true;
@@ -70,10 +71,12 @@ export function createHistoryRenameCommand(oldName: string, ports: {
 
 export async function deleteHistoryChat(file: string, slash: boolean, ports: {
     confirm(): Promise<boolean>; close(): void; showLoader(): { hide(): Promise<void> };
+    isCurrent?(): boolean;
     remove(file: string): Promise<unknown>; hideMenu(): void; reopen(): void;
     schedule(callback: () => Promise<void>): void;
 }) {
     if (!slash && !await ports.confirm()) return;
+    if (ports.isCurrent?.() === false) return;
     ports.close();
     const loader = ports.showLoader();
     try { await ports.remove(`${file}.jsonl`); }

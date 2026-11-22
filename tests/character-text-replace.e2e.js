@@ -246,6 +246,34 @@ test('export stops on failed presave and advances the version after a successful
     await expect(dialog.getByText(/「Edit after export」/).first()).toBeVisible();
 });
 
+test('autosave succeeds after cancelling card replacement that saved a pending edit', async ({ page }) => {
+    await testSetup.awaitST({ page });
+    await openCharacterLibrary(page);
+    await page.getByRole('searchbox', { name: /Search characters|搜索角色/ }).fill(characterName);
+    await page.locator('#rm_print_characters_block .character_select').filter({ hasText: characterName }).first().click();
+    const authoring = page.locator('[data-react-authoring-owner="characterAuthoring"]');
+    const description = authoring.locator('[data-react-authoring-field="description"] textarea');
+    await expect(description).toBeVisible();
+    const now = Date.now();
+    await page.clock.install({ time: now });
+    await page.clock.pauseAt(now + 1000);
+
+    const waitForEdit = () => page.waitForResponse(response => new URL(response.url()).pathname === '/api/characters/edit');
+    await description.fill('Saved before opening card replacement');
+    await authoring.locator('button[aria-haspopup="menu"][title]').click();
+    const presave = waitForEdit();
+    await authoring.getByRole('menuitem', { name: /Replace \/ Update|替换 \/ 更新/ }).click();
+    expect((await presave).status()).toBe(200);
+    const dialog = page.locator('dialog[open]').filter({ hasText: /Replace Character|替换角色/ });
+    await dialog.locator('.popup-button-cancel').click();
+    await expect(dialog).toHaveCount(0);
+
+    await description.fill('Saved after cancelling card replacement');
+    const autosave = waitForEdit();
+    await page.clock.runFor(1000);
+    expect((await autosave).status()).toBe(200);
+});
+
 test('a committed projection failure advances the version without losing newer edits', async ({ page }) => {
     await testSetup.awaitST({ page });
     await openCharacterLibrary(page);
@@ -515,7 +543,8 @@ test('pending chat and metadata are saved before the replacement request', async
     await page.clock.install({ time: clockStart });
     await page.clock.pauseAt(clockStart + 1000);
     const currentChatFile = await page.evaluate(async () => {
-        const context = window.SillyTavern.getContext();
+        const { getContext } = await import('/scripts/st-context.js');
+        const context = getContext();
         context.chat[0].mes = 'Pending chat marker';
         context.chatMetadata.pendingTestMarker = 'Pending metadata marker';
         const { saveMetadataDebounced } = await import('/scripts/feature-settings.js');

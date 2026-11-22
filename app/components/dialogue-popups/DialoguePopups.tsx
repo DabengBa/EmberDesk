@@ -21,11 +21,8 @@ export function DialoguePopupInput({ controller }: { controller: ReturnType<type
 
 /**
  * Confirmation-popup controls (React-owned inside #dialogue_popup_controls).
- * #dialogue_popup/#dialogue_popup_holder/#dialogue_popup_text/
- * #dialogue_popup_input stay legacy markup — callers mutate them via jQuery
- * (.html(), .val(), class/display toggles). dom-handlers.js binds
- * #dialogue_popup_ok / #dialogue_popup_cancel by ID after mount, so the
- * IDs/classes/data-result contract stays on the rendered <button>.
+ * The shell retains stable hosts; React buttons call the dialogue commands
+ * and keep their IDs and result attributes for native consumers.
  */
 export function DialoguePopupControls({ commands }: { commands?: { confirmDialoguePopup(): void; cancelDialoguePopup(): void } } = {}) {
     return (
@@ -43,18 +40,47 @@ export function DialoguePopupControls({ commands }: { commands?: { confirmDialog
     );
 }
 
-/**
- * Delete-messages confirmation buttons (React-owned inside #dialogue_del_mes).
- * The container itself stays legacy — chat-ops-service/dom-handlers toggle its
- * display and bind the buttons by ID.
- */
-export function DialogueDelMesControls({ controller, commands }: { controller: ReturnType<typeof createBulkDeleteController>; commands: { confirm(): void; cancel(): void } }) {
+export interface DialogueDelMesRuntime {
+    controller: ReturnType<typeof createBulkDeleteController>;
+    dialogue: HTMLElement;
+    composer: HTMLElement;
+    deletingLabel(): string;
+    deleteFrom(index: number): Promise<boolean>;
+    requestComposerFocus(): void;
+}
+
+export function DialogueDelMesControls({ controller, dialogue, composer, deletingLabel, deleteFrom, requestComposerFocus }: DialogueDelMesRuntime) {
     const state = useSyncExternalStore(controller.subscribe, controller.getSnapshot);
+    const wasActive = useRef(false);
+    useLayoutEffect(() => {
+        if (!state.active) {
+            if (wasActive.current) requestComposerFocus();
+            wasActive.current = false;
+            return;
+        }
+
+        wasActive.current = true;
+        const composerDisplay = composer.style.display;
+        const dialogueDisplay = dialogue.style.display;
+        composer.style.display = 'none';
+        dialogue.style.display = 'block';
+        return () => {
+            composer.style.display = composerDisplay;
+            dialogue.style.display = dialogueDisplay;
+        };
+    }, [state.active, dialogue, composer, requestComposerFocus]);
+
+    useLayoutEffect(() => {
+        if (!state.busy) return;
+        dialogue.setAttribute('aria-busy', 'true');
+        return () => dialogue.removeAttribute('aria-busy');
+    }, [state.busy, dialogue]);
+
     return (
         <>
             <p id="dialogue_del_mes_summary" role="status" aria-live="polite">{state.summary}</p>
-            <ContractButton id="dialogue_del_mes_ok" className="menu_button" label="Delete" ariaLabel={state.ariaLabel} disabled={state.selected === null || state.busy} onClick={commands.confirm} />
-            <ContractButton id="dialogue_del_mes_cancel" className="menu_button" label="Cancel" disabled={state.busy} onClick={commands.cancel} />
+            <ContractButton id="dialogue_del_mes_ok" className="menu_button" label="Delete" ariaLabel={state.ariaLabel} disabled={state.selected === null || state.busy} onClick={() => controller.confirm(deletingLabel(), deleteFrom)} />
+            <ContractButton id="dialogue_del_mes_cancel" className="menu_button" label="Cancel" disabled={state.busy} onClick={controller.finish} />
         </>
     );
 }

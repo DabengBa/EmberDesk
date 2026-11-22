@@ -1,6 +1,6 @@
 import toastr from './notifications.js';
 import { DOMPurify, Bowser } from '../lib.js';
-import { runDialoguePopupCommand, runDeleteMessageCommand } from './workspace-interaction-commands.js';
+import { runDialoguePopupCommand, runDeleteMessageCommand, runHistoryRowCommand } from './workspace-interaction-commands.js';
 
 import {
     online_status,
@@ -35,7 +35,7 @@ import { getTokenCountAsync } from './tokenizers.js';
 import { debounce_timeout } from './constants.js';
 
 import { Popup } from './popup.js';
-import { accountStorage } from './util/AccountStorage.js';
+
 import { getCurrentUserHandle } from './user.js';
 import { getComposerValue, setComposerValue, subscribeComposerValue } from './main-chat-composer-service.js';
 import { scrollChatTo } from './chat-ui-motion.js';
@@ -540,10 +540,7 @@ export function initRossMods({ openWorkspaceShellSettings = null, drawerService 
 
     SelectedCharacterTab = document.getElementById('rm_button_selected_ch');
 
-    //when "+New Character" is clicked
-    document.getElementById('rm_button_create')?.addEventListener('click', function () {
-        SelectedCharacterTab?.querySelectorAll(':scope > h2').forEach(heading => { heading.innerHTML = ''; }); // empty nav's 3rd panel tab
-    });
+
     //when any input is made to the create/edit character form textareas
     document.getElementById('rm_ch_create_block')?.addEventListener('input', countTokensDebounced);
     //when any input is made to the advanced editing popup textareas
@@ -566,9 +563,6 @@ export function initRossMods({ openWorkspaceShellSettings = null, drawerService 
     // are ready by now, and landing before APP_READY removes the old 300ms
     // race window where a nav click could interleave with the restore.
     OpenNavPanels(drawerService);
-
-    SelectedCharacterTab?.addEventListener('click', function () { accountStorage.setItem('SelectedNavTab', 'rm_button_selected_ch'); });
-    document.getElementById('rm_button_characters')?.addEventListener('click', function () { accountStorage.setItem('SelectedNavTab', 'rm_button_characters'); });
 
 
     subscribeComposerValue(saveUserInputDebounced);
@@ -635,7 +629,7 @@ export function initRossMods({ openWorkspaceShellSettings = null, drawerService 
             }
 
             if (isVisible(document.getElementById('select_chat_popup'))) {
-                document.getElementById('shadow_select_chat_popup').close();
+                runHistoryRowCommand('close');
                 return;
             }
 
@@ -644,8 +638,9 @@ export function initRossMods({ openWorkspaceShellSettings = null, drawerService 
                 return;
             }
 
-            if (isVisible(document.getElementById('dialogue_del_mes_cancel'))) {
-                runDeleteMessageCommand('cancel');
+            const cancelDelete = /** @type {HTMLButtonElement | null} */ (document.getElementById('dialogue_del_mes_cancel'));
+            if (isVisible(cancelDelete)) {
+                if (!cancelDelete.disabled) runDeleteMessageCommand('cancel');
                 return;
             }
 

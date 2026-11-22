@@ -89,7 +89,10 @@ test('manages global tags, assigns them to characters, filters and persists a me
     await expect(first).toBeVisible();
     await expect(second).toBeVisible();
     const ids = [await first.getAttribute('data-chid'), await second.getAttribute('data-chid')];
-    const avatars = await page.evaluate(characterIds => characterIds.map(id => window.SillyTavern.getContext().characters[Number(id)].avatar), ids);
+    const avatars = await page.evaluate(async characterIds => {
+        const { getContext } = await import('/scripts/st-context.js');
+        return characterIds.map(id => getContext().characters[Number(id)].avatar);
+    }, ids);
     await page.getByRole('button', { name: /^(Bulk edit characters|批量编辑角色)$/ }).click();
     await first.click();
     await second.click();
@@ -200,7 +203,8 @@ test('updates current chat message tag attributes after bulk add and remove', as
     const name = `chat${crypto.randomUUID().slice(0, 8)}`;
     await testSetup.awaitST({ page });
     await page.evaluate(async () => {
-        const context = window.SillyTavern.getContext();
+        const { getContext } = await import('/scripts/st-context.js');
+        const context = getContext();
         const id = context.characters.findIndex(character => character?.name === 'Dev Character 001');
         if (id < 0) throw new Error('Seeded character not found');
         await context.selectCharacterById(id);

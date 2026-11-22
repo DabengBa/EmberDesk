@@ -5,14 +5,7 @@ import fs from 'node:fs';
 import { chromium } from '@playwright/test';
 
 const read = path => fs.readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
-function registration(source, nativeMarker) {
-    const markers = [nativeMarker, "$(document).on('click', '.character_select'"];
-    const from = markers.map(marker => source.indexOf(marker)).find(index => index >= 0);
-    assert.notEqual(from, undefined);
-    const end = source.indexOf('\n    });', from);
-    assert(end > from);
-    return source.slice(from, end + '\n    });'.length);
-}
+
 function functionSource(source, marker) {
     const start = source.indexOf(marker);
     const end = source.indexOf('\n}\n', start);
@@ -21,7 +14,7 @@ function functionSource(source, marker) {
 }
 const script = read('public/script.js');
 const ross = read('public/scripts/RossAscends-mods.js');
-const dom = read('public/scripts/dom-handlers.js');
+
 const bulk = read('public/scripts/bulk-edit.js');
 const utils = read('public/scripts/utils.js');
 const workspaceHost = read('app/components/workspace/WorkspaceHost.tsx');
@@ -29,8 +22,7 @@ const avatarTemplate = workspaceHost.match(/<div id="inline_avatar_template"[\s\
     .replaceAll('className=', 'class=')
     .replace(/(<img [^>]*?)\s*\/>/g, '$1>');
 assert(avatarTemplate);
-const selection = registration(dom, "document.addEventListener('click', async function onCharacterSelect(");
-const save = registration(ross, "document.addEventListener('click', function onCharacterSelectSave(");
+
 const build = functionSource(script, 'export function buildAvatarList(');
 const render = functionSource(ross, 'export async function favsToHotswap(');
 const guard = functionSource(bulk, 'function guardBulkCheckboxClick(');
@@ -57,8 +49,7 @@ try {
         function setActiveCharacter(id) { active = id; events.push('active:' + id); }
         const saveLater = debounce(async () => { events.push('save:' + active); }, 1000);
         function saveSettingsDebounced() { events.push('schedule'); saveLater(); }
-        ${selection}
-        ${save}
+
         ${guard}
         window.enableGuard = () => document.addEventListener('click', guardBulkCheckboxClick);
         document.addEventListener('click', () => events.push('after-guard'));

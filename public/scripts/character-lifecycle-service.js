@@ -6,6 +6,98 @@ import { getRequestHeaders } from './request-context.js';
 import { requireCharacterLifecycleShellContext } from './character-lifecycle-shell-context.js';
 import { captureCharacterAuthorizationClock, characterAuthorizationChangedSince, hasPendingCharacterAuthorizationRevoke, invalidateCharacterExternalMediaAuthorization, isCharacterAuthorizationRetired, reconcileCharacterAuthorizationBaseline } from './character-external-media-authorization.js';
 import { loadWorkspacePanelsModule } from './workspace-panels-react-bridge.js';
+import { escapeHtml, waitUntilCondition } from './utils.js';
+import { debounce_timeout } from './constants.js';
+import { buildCascadeSectionHtml, showDeleteConfirmWithCascade } from './world-cascade-dialog.js';
+
+export async function confirmCharacterDeletion() {
+    if (state.this_chid === undefined || !state.characters[state.this_chid]) {
+        toastr.warning('No character selected.');
+        return;
+    }
+    const characterToDelete = state.characters[state.this_chid];
+    const avatarToDelete = characterToDelete.avatar;
+    const deleteDialogTitle = getCharacterDeleteDialogTitle(characterToDelete.name);
+
+    // Auto-stop generation if active
+    if (state.is_send_press !== false) {
+        shell().stopGeneration();
+        try {
+            await waitUntilCondition(() => state.is_send_press === false, debounce_timeout.extended, 10);
+        } catch {
+            // Timeout — proceed anyway
+        }
+    }
+
+    // Preflight: gather world info metadata before showing confirmation
+    let worldInfos = [];
+    try {
+        const resp = await fetch('/api/characters/delete-preflight', {
+            method: 'POST',
+            headers: getRequestHeaders(),
+            body: JSON.stringify({ avatars: [avatarToDelete] }),
+            cache: 'no-cache',
+        });
+        if (resp.ok) {
+            const data = await resp.json();
+            worldInfos = data.worldInfos ?? [];
+        }
+    } catch {
+        // Preflight failure should not block deletion
+    }
+
+    // Build dialog content: original deleteConfirm template + world info section
+    let content = await renderTemplateAsync('deleteConfirm');
+    const inTempChat = state.this_chid === undefined && state.name2 === state.neutralCharacterName;
+    if (inTempChat) {
+        content += buildTemporaryChatDeleteWarningHtml();
+    }
+    const cascadeHtml = buildCascadeSectionHtml(worldInfos);
+    if (cascadeHtml) {
+        content += cascadeHtml;
+    }
+
+    // When world infos exist, use the integrated dialog with "Delete All" button;
+    // otherwise fall back to the standard confirm dialog.
+    if (cascadeHtml) {
+        const dialogResult = await showDeleteConfirmWithCascade(deleteDialogTitle, content);
+        if (!dialogResult.confirmed) {
+            return;
+        }
+        await deleteCharacter(avatarToDelete, {
+            deleteChats: dialogResult.deleteChats,
+            temporaryChatAcknowledged: inTempChat,
+            deleteWorlds: dialogResult.deleteWorlds,
+        });
+    } else {
+        let deleteChats = false;
+        const confirm = await Popup.show.confirm(deleteDialogTitle, content, {
+            leftAlign: true,
+            defaultResult: POPUP_RESULT.NEGATIVE,
+            onClose: () => { deleteChats = Boolean(document.getElementById('del_char_checkbox')?.checked); },
+        });
+        if (!confirm) {
+            return;
+        }
+        await deleteCharacter(avatarToDelete, {
+            deleteChats,
+            temporaryChatAcknowledged: inTempChat,
+            deleteWorlds: [],
+        });
+    }
+}
+
+function buildTemporaryChatDeleteWarningHtml() {
+    return `
+        <div class="delete-dialog-info">
+            <span>${t`temporary chat — unsaved messages will be lost`}</span>
+        </div>`;
+}
+
+function getCharacterDeleteDialogTitle(characterName) {
+    const safeCharacterName = escapeHtml(characterName || t`this character`);
+    return t`Delete character "${safeCharacterName}"?`;
+}
 
 function shell() {
     return requireCharacterLifecycleShellContext();
@@ -82,11 +174,38 @@ const timestampToMoment = (...args) => shell().timestampToMoment(...args);
 const unshallowCharacter = (...args) => shell().unshallowCharacter(...args);
 const updateFavButtonState = (...args) => shell().updateFavButtonState(...args);
 
-function clearCharacterAvatarFileInput() {
-    const input = /** @type {HTMLInputElement|null} */ (document.getElementById('add_avatar_button'));
-    // Clearing in place keeps both native and jQuery change handlers attached.
-    if (input) input.value = '';
+/** @param {'characters' | 'back' | 'create' | 'current'} action */
+export function runCharacterNavigation(action) {
+    if (action === 'create') {
+        state.selected_button = 'create';
+        select_rm_create();
+        queueReactCharacterAuthoringRemount();
+        for (const heading of document.getElementById('rm_button_selected_ch')?.querySelectorAll(':scope > h2') ?? []) {
+            heading.textContent = '';
+        }
+        shell().clearDraftCharacterTags();
+        return;
+    }
+
+    if (action === 'current' && state.this_chid !== undefined && state.characters[state.this_chid]) {
+        state.selected_button = 'character_edit';
+        select_selected_character(state.this_chid);
+    } else {
+        state.selected_button = 'characters';
+        select_rm_characters();
+    }
+    if (action === 'current') {
+        const searchInput = document.getElementById('character_search_bar');
+        if (searchInput instanceof HTMLInputElement && searchInput.value !== '') {
+            searchInput.value = '';
+            searchInput.dispatchEvent(new Event('input', { bubbles: true }));
+        }
+        state.accountStorage.setItem('SelectedNavTab', 'rm_button_selected_ch');
+    } else if (action === 'characters') {
+        state.accountStorage.setItem('SelectedNavTab', 'rm_button_characters');
+    }
 }
+
 
 export async function selectCharacterById(id, { switchMenu = true } = {}) {
     if (state.characters[id] === undefined) {
@@ -271,6 +390,7 @@ export async function saveCharacterAuthoringFromPayload(saveModel = {}) {
 
     const mode = getCurrentCharacterAuthoringMode();
     const sourceCharacter = getCurrentCharacterAuthoringSource();
+    const avatarUpload = mode === 'create' ? state.create_save.avatar : null;
     const draftTagIds = mode === 'create' ? getDraftTagIds() : [];
     const finishSave = beginCharacterSave(mode === 'edit' ? String(sourceCharacter?.avatar || saveModel?.fields?.avatar || '') : '');
     if (!finishSave) return { ok: false, mode };
@@ -297,8 +417,7 @@ export async function saveCharacterAuthoringFromPayload(saveModel = {}) {
             }
         }
 
-        const avatarFileInput = /** @type {HTMLInputElement|null} */ (document.getElementById('add_avatar_button'));
-        const avatarFile = avatarFileInput?.files?.[0] ?? (state.create_save.avatar?.[0] ?? null);
+        const avatarFile = avatarUpload?.file;
         let preparedAvatarFile = null;
         if (avatarFile instanceof File) {
             preparedAvatarFile = await ensureImageFormatSupported(avatarFile);
@@ -319,8 +438,8 @@ export async function saveCharacterAuthoringFromPayload(saveModel = {}) {
         applyCharacterAuthoringSaveModel(saveModel, { submit: false });
 
         let url = getCharacterAuthoringWriteUrl(mode);
-        if (state.crop_data != undefined) {
-            url = getCharacterAuthoringWriteUrl(mode, JSON.stringify(state.crop_data));
+        if (avatarUpload?.crop != undefined) {
+            url = getCharacterAuthoringWriteUrl(mode, JSON.stringify(avatarUpload.crop));
         }
 
         const headers = getRequestHeaders({ omitContentType: true });
@@ -371,12 +490,12 @@ export async function saveCharacterAuthoringFromPayload(saveModel = {}) {
                     console.warn('Could not refresh the committed character card.', error);
                 }
             }
-            state.crop_data = undefined;
             return { ok: true, mode, canonicalCardVersion: committedProjectionVersion, projectionFailed: true };
         }
 
         if (mode === 'create') {
             const avatarId = await fetchResult.text();
+            if (state.create_save.avatar === avatarUpload) state.create_save.avatar = null;
             assignTagIdsToAvatar(avatarId, draftTagIds);
             await getCharacters();
             const createdIndex = state.characters.findIndex(character => character?.avatar === avatarId);
@@ -409,7 +528,7 @@ export async function saveCharacterAuthoringFromPayload(saveModel = {}) {
             } else {
                 select_rm_info('char_create', avatarId, state.this_chid !== undefined ? state.characters[state.this_chid]?.avatar : null);
             }
-            state.crop_data = undefined;
+
             return {
                 ok: true,
                 mode,
@@ -418,12 +537,7 @@ export async function saveCharacterAuthoringFromPayload(saveModel = {}) {
             };
         }
 
-        // The file input keeps the just-uploaded File; without clearing it every
-        // later autosave would re-attach and re-embed the same image.
-        if (avatarFile) {
-            clearCharacterAvatarFileInput();
-            state.create_save.avatar = null;
-        }
+
         if (shouldRefreshCharacterAfterEdit(state.characters, editedAvatar)) {
             await getOneCharacter(editedAvatar);
             // Only display-affecting edits justify the render fanout: favsToHotswap
@@ -458,7 +572,7 @@ export async function saveCharacterAuthoringFromPayload(saveModel = {}) {
                 }
             }
         }
-        state.crop_data = undefined;
+
         return {
             ok: true,
             mode,
@@ -531,10 +645,7 @@ export async function renameCharacter(name = null, { silent = false, renameChats
         if (response.ok) {
             const data = await response.json();
             const newAvatar = data.avatar;
-            const revision = data.settings_revision;
-            const hasRevision = Number.isSafeInteger(revision) && revision >= 0;
-            const snapshotIsCurrent = hasRevision && (state.settingsDocumentRevision == null || revision >= state.settingsDocumentRevision);
-            if (snapshotIsCurrent) state.settingsDocumentRevision = revision;
+            const snapshotIsCurrent = shell().observeSettingsRevision(data.settings_revision);
 
             const oldName = getCharaFilename(null, { manualAvatarKey: oldAvatar });
             const newName = getCharaFilename(null, { manualAvatarKey: newAvatar });
@@ -799,7 +910,7 @@ export function select_selected_character(chid, { switchMenu = true } = {}) {
         const field = document.getElementById(id);
         if (field) field.value = value == null ? '' : String(value);
     };
-    setMirrorValue('add_avatar_button', '');
+
 
     const popupHeading = document.getElementById('character_popup-button-h3');
     if (popupHeading && character.name !== undefined) popupHeading.textContent = character.name ?? '';
@@ -927,8 +1038,9 @@ export async function openCharacterWorldPopup() {
 /**
  * Creates or edits a character based on the form data.
  * @param {Event} [e] Event that triggered the function call.
+ * @param {{file: File, crop: unknown}} [replacementAvatar] Confirmed avatar for this edit only.
  */
-export async function createOrEditCharacter(e) {
+export async function createOrEditCharacter(e, replacementAvatar) {
     if (!state.settingsReady) {
         console.warn('Settings not ready, aborting character creation/editing.');
         return;
@@ -949,21 +1061,24 @@ export async function createOrEditCharacter(e) {
         && state.characters[state.this_chid]?.avatar === editTarget.avatar
         && shell().getCharacterWorldDraftIdentity?.() === editTarget.identity
         && state.chat === editTarget.chat && state.chat_metadata === editTarget.metadata;
-    const finishSave = beginCharacterSave(document.getElementById('form_create')?.getAttribute('actiontype') === 'createcharacter' ? '' : String(formData.get('avatar_url') || ''));
+    const creating = form?.getAttribute('actiontype') === 'createcharacter';
+    const avatarUpload = creating ? state.create_save.avatar : replacementAvatar;
+    const finishSave = beginCharacterSave(creating ? '' : String(formData.get('avatar_url') || ''));
     if (!finishSave) return;
     try {
         formData.set('fav', String(state.fav_ch_checked));
         const isNewChat = e instanceof CustomEvent && e.type === 'newChat';
 
-        const rawFile = formData.get('avatar');
+        const rawFile = avatarUpload?.file;
         if (rawFile instanceof File) {
             const convertedFile = await ensureImageFormatSupported(rawFile);
             formData.set('avatar', convertedFile);
         }
+        if (replacementAvatar && !isCurrentEdit()) return;
 
         const headers = getRequestHeaders({ omitContentType: true });
 
-        if (document.getElementById('form_create')?.getAttribute('actiontype') == 'createcharacter') {
+        if (creating) {
             if (String(document.getElementById('character_name_pole')?.value).length === 0) {
                 toastr.error(t`Name is required`);
                 return;
@@ -976,8 +1091,8 @@ export async function createOrEditCharacter(e) {
             //if the character name text area isn't empty (only posible when creating a new character)
                 let url = '/api/characters/create';
 
-                if (state.crop_data != undefined) {
-                    url += `?crop=${encodeURIComponent(JSON.stringify(state.crop_data))}`;
+                if (avatarUpload?.crop != undefined) {
+                    url += `?crop=${encodeURIComponent(JSON.stringify(avatarUpload.crop))}`;
                 }
 
                 formData.delete('alternate_greetings');
@@ -1040,9 +1155,7 @@ export async function createOrEditCharacter(e) {
                 const popupHeading = document.getElementById('character_popup-button-h3');
                 if (popupHeading) popupHeading.textContent = 'Create character';
 
-                state.create_save.avatar = null;
-
-                clearCharacterAvatarFileInput();
+                if (state.create_save.avatar === avatarUpload) state.create_save.avatar = null;
 
                 let oldSelectedChar = null;
                 if (state.this_chid !== undefined) {
@@ -1055,7 +1168,7 @@ export async function createOrEditCharacter(e) {
 
                 select_rm_info('char_create', avatarId, oldSelectedChar);
 
-                state.crop_data = undefined;
+
             } catch (error) {
                 console.error('Error creating character', error);
                 toastr.error(t`Failed to create character`);
@@ -1068,8 +1181,8 @@ export async function createOrEditCharacter(e) {
                 formData.set('expected_card_json', formVersion.version);
                 let url = '/api/characters/edit';
 
-                if (state.crop_data != undefined) {
-                    url += `?crop=${encodeURIComponent(JSON.stringify(state.crop_data))}`;
+                if (avatarUpload?.crop != undefined) {
+                    url += `?crop=${encodeURIComponent(JSON.stringify(avatarUpload.crop))}`;
                 }
 
                 formData.delete('alternate_greetings');
@@ -1106,9 +1219,7 @@ export async function createOrEditCharacter(e) {
                 if (!isCurrentEdit()) return;
                 state.favsToHotswap(); // Update fav state
 
-                clearCharacterAvatarFileInput();
                 document.getElementById('create_button')?.setAttribute('value', 'Save');
-                state.crop_data = undefined;
                 await eventSource.emit(event_types.CHARACTER_EDITED, { detail: { id: state.this_chid, character: state.characters[state.this_chid] } });
                 if (!isCurrentEdit()) return;
 
@@ -1134,6 +1245,7 @@ export async function createOrEditCharacter(e) {
                     if (!isCurrentEdit()) return;
                     await saveChatConditional();
                 }
+                return true;
             } catch (error) {
                 console.log(error);
                 toastr.error(t`Something went wrong while saving the character, or the image file provided was in an invalid format. Double check that the image is not a webp.`);

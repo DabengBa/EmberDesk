@@ -14,8 +14,9 @@ test.beforeEach(async ({ page }) => {
 test('overlapping refreshes cannot publish an older snapshot after a newer one', async ({ page }) => {
     await page.locator('[data-react-workspace-shell-chrome] nav button').filter({ hasText: '角色库' }).first().click();
     const result = await page.evaluate(async () => {
+        const { getContext } = await import('/scripts/st-context.js');
         const app = await import('/script.js');
-        const characters = window.SillyTavern.getContext().characters;
+        const characters = getContext().characters;
         const originalFetch = window.fetch;
         const state = structuredClone(characters);
         state[0].name = 'U009 old snapshot';
@@ -69,8 +70,9 @@ test('overlapping refreshes cannot publish an older snapshot after a newer one',
 
 test('a failed refresh does not poison the queued refresh', async ({ page }) => {
     const result = await page.evaluate(async () => {
+        const { getContext } = await import('/scripts/st-context.js');
         const app = await import('/script.js');
-        const characters = window.SillyTavern.getContext().characters;
+        const characters = getContext().characters;
         const originalFetch = window.fetch;
         const snapshot = structuredClone(characters);
         snapshot[0].name = 'U009 recovered';
@@ -96,7 +98,7 @@ test('a failed refresh does not poison the queued refresh', async ({ page }) => 
             await first;
             const retainedAfterFailure = characters[0].name === before;
             await second;
-            return { retainedAfterFailure, name: characters[0].name, count, same: reference === window.SillyTavern.getContext().characters };
+            return { retainedAfterFailure, name: characters[0].name, count, same: reference === getContext().characters };
         } finally {
             window.fetch = originalFetch;
         }
@@ -107,9 +109,10 @@ test('a failed refresh does not poison the queued refresh', async ({ page }) => 
 test('publication waits for the real page-loaded event before the next read', async ({ page }) => {
     await page.locator('[data-react-workspace-shell-chrome] nav button').filter({ hasText: '角色库' }).first().click();
     const result = await page.evaluate(async () => {
+        const { getContext } = await import('/scripts/st-context.js');
         const app = await import('/script.js');
         const { eventSource, event_types } = await import('/scripts/events.js');
-        const characters = window.SillyTavern.getContext().characters;
+        const characters = getContext().characters;
         const originalFetch = window.fetch;
         const original = structuredClone(characters);
         let count = 0;

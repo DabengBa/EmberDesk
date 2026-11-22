@@ -1,6 +1,7 @@
 import { moment } from '../lib.js';
 import { eventSource, event_types } from './events.js';
 import { getRequestHeaders } from './request-context.js';
+import { getContext } from './st-context.js';
 import { chat_completion_sources } from './openai.js';
 
 export const SECRET_KEYS = {
@@ -59,7 +60,7 @@ const getLabel = () => moment().format('L LT');
  * @returns {string|null} The secret key corresponding to the selected API, or null if no key is found.
  */
 export function resolveSecretKey() {
-    const { mainApi, chatCompletionSettings } = SillyTavern.getContext();
+    const { mainApi, chatCompletionSettings } = getContext();
     const chatCompletionSource = chatCompletionSettings.chat_completion_source;
 
     if (mainApi === 'openai') {

@@ -13,9 +13,13 @@ async function setupGreeting(page) {
     await page.locator('[data-react-workspace-shell-chrome] nav button').filter({ hasText: '角色库' }).click();
     await page.setInputFiles('#character_import_file', { name: 'greeting-ux.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(card)) });
     await expect(page.locator('.toast-success')).toContainText(name);
-    await page.waitForFunction(characterName => window.SillyTavern.getContext().characters.some(character => character.name === characterName), name);
+    await page.waitForFunction(async characterName => {
+        const { getContext } = await import('/scripts/st-context.js');
+        return getContext().characters.some(character => character.name === characterName);
+    }, name);
     const avatar = await page.evaluate(async characterName => {
-        const context = window.SillyTavern.getContext();
+        const { getContext } = await import('/scripts/st-context.js');
+        const context = getContext();
         const id = context.characters.findIndex(character => character.name === characterName);
         const avatarUrl = context.characters[id].avatar;
         await context.selectCharacterById(id);
@@ -27,7 +31,8 @@ async function setupGreeting(page) {
         { name, is_user: false, is_system: false, send_date: '2026-01-01', mes: 'First greeting' },
     ] });
     await page.evaluate(async fileName => {
-        await window.SillyTavern.getContext().openCharacterChat(fileName);
+        const { getContext } = await import('/scripts/st-context.js');
+        await getContext().openCharacterChat(fileName);
         const { closeWorkspaceChildSlotHost } = await import('/script.js');
         closeWorkspaceChildSlotHost('right-nav-panel', { force: true });
         closeWorkspaceChildSlotHost('left-nav-panel', { force: true });
@@ -93,7 +98,8 @@ test('pending selection survives a changed greeting snapshot until the save sett
         await picker.locator('button').nth(1).click();
         await saving;
         await page.evaluate(async () => {
-            window.SillyTavern.getContext().chat[0].mes = 'Changed during save';
+            const { getContext } = await import('/scripts/st-context.js');
+            getContext().chat[0].mes = 'Changed during save';
             (await import('/script.js')).scheduleMainChatMessageListPanelRefresh();
         });
         await expect(picker).toContainText('— / 2', { timeout: 2000 });

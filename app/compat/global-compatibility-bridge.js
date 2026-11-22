@@ -171,7 +171,7 @@ function createDetachedSnapshot(legacyScope) {
     return freezeSnapshot({
         attached: false,
         legacy: {
-            hasSillyTavern: Boolean(legacyScope?.SillyTavern),
+
             hasEventSource: hasEventSourceContract(legacyScope?.eventSource),
             hasEventTypes: Boolean(legacyScope?.event_types && typeof legacyScope.event_types === 'object'),
         },
@@ -185,7 +185,7 @@ function createAttachedSnapshot(legacyScope) {
     return freezeSnapshot({
         attached: true,
         legacy: {
-            hasSillyTavern: Boolean(legacyScope?.SillyTavern),
+
             hasEventSource: hasEventSourceContract(legacyScope?.eventSource),
             hasEventTypes: Boolean(legacyScope?.event_types && typeof legacyScope.event_types === 'object'),
         },

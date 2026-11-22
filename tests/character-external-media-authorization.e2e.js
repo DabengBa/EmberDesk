@@ -23,8 +23,9 @@ test('character media permission survives reopening and stays scoped when switch
     await selectCharacter(primary);
     await expect(permission).toBeChecked();
     await expect.poll(async () => page.evaluate(async () => {
+        const { getContext } = await import('/scripts/st-context.js');
         const { power_user } = await import('/scripts/power-user.js');
-        const { characters, characterId } = window.SillyTavern.getContext();
+        const { characters, characterId } = getContext();
         return power_user.external_media_allowed_overrides?.includes(characters[characterId]?.avatar);
     })).toBe(true);
     const revokedSave = page.waitForResponse(response => response.url().includes('/api/settings/character-css-authorization') && response.ok());

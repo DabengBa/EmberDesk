@@ -67,7 +67,7 @@ import { WorkspacePanelChrome } from './components/panels/WorkspacePanelChrome';
 import { ChatComposer, type ChatComposerProps } from './components/composer/ChatComposer';
 import { CharacterPopup } from './components/character-popup/CharacterPopup';
 import { CharacterWorldInfoEditor, type CharacterWorldInfoEditorProps } from './components/character-world-info/CharacterWorldInfoEditor';
-import { RightNavPanel, type CharacterSortSelection } from './components/right-nav/RightNavPanel';
+import { RightNavPanel } from './components/right-nav/RightNavPanel';
 export { createWorkspaceDrawerService, updateCharacterSearchSort } from './lib/workspace-drawer-service';
 export { createHistoryPanelController, createHistoryDisplayCommand, createExportPopupController, createExportPopupDismissal, projectHistoryChats, mergeAttachmentFiles } from './lib/history-panel-service';
 
@@ -89,7 +89,7 @@ import {
     type SelectChatListState,
 } from './components/select-chat/SelectChatList';
 import { CharacterContextMenu } from './components/context-menu/CharacterContextMenu';
-import { OptionsMenu } from './components/options-menu/OptionsMenu';
+import { OptionsMenu, type OptionsMenuRuntime } from './components/options-menu/OptionsMenu';
 import { DialogueDelMesControls, DialoguePopupContent, DialoguePopupControls, DialoguePopupInput } from './components/dialogue-popups/DialoguePopups';
 import { ExportFormatPopup } from './components/export-format/ExportFormatPopup';
 import * as stylex from '@stylexjs/stylex';
@@ -1085,11 +1085,10 @@ export function mountChatComposer(container: HTMLElement, props: ChatComposerPro
 
 /**
  * Mounts the Advanced Definitions popup markup into #character_popup.
- * The shell stays legacy-owned (display/opacity transitions); inner markup
- * is React-rendered before script.js binds #character_cross/#character_popup_ok.
+ * React binds the controls and reuses the shell's close transitions.
  */
-export function mountCharacterPopup(container: HTMLElement) {
-    mountSmallPanel(container, <CharacterPopup />);
+export function mountCharacterPopup(container: HTMLElement, handlers: React.ComponentProps<typeof CharacterPopup>) {
+    mountSmallPanel(container, <CharacterPopup {...handlers} />);
 }
 
 /**
@@ -1098,8 +1097,8 @@ export function mountCharacterPopup(container: HTMLElement) {
  * tags.js fills .rm_tag_filter, and the character list renders into
  * #rm_print_characters_block — all after this mount.
  */
-export function mountRightNavPanel(container: HTMLElement, options: { onCharacterSortChange: (selection: CharacterSortSelection) => void }) {
-    mountSmallPanel(container, <RightNavPanel onCharacterSortChange={options.onCharacterSortChange} />);
+export function mountRightNavPanel(container: HTMLElement, options: React.ComponentProps<typeof RightNavPanel>) {
+    mountSmallPanel(container, <RightNavPanel {...options} />);
 }
 
 /**
@@ -1173,11 +1172,17 @@ export function unmountWireLogPanel() {
  * Mounts the past-chats popup header/list shell into #select_chat_popup.
  * The list rows inside #select_chat_div are React-owned via mountSelectChatList.
  */
-export { createOptionsMenuController, importHistoryFiles, exportCharacter, createHistoryRenameCommand, deleteHistoryChat, exportHistoryChat, runHistoryMenuAction } from './lib/history-panel-service';
+export { importHistoryFiles, exportCharacter, createHistoryRenameCommand, deleteHistoryChat, exportHistoryChat, runHistoryMenuAction } from './lib/history-panel-service';
 export { createChatRecoveryDrafts, createPendingChatRecovery, restoreChatRecoveryDraft, createConditionalHistoryDelete, createIndexedDbDeleteAtomic } from './lib/chat-recovery-drafts';
 
-export function mountSelectChatPopup(container: HTMLElement, controller: ReturnType<typeof import('./lib/history-panel-service').createHistoryPanelController>, onSearch: (query: string) => void, onClose: () => void, onNewChat: () => void, onImportFile: (input: HTMLInputElement) => void, recovery?: import('./components/select-chat/SelectChatPopup').RecoveryDraftBridge) {
-    mountSmallPanel(container, <SelectChatPopup controller={controller} onSearch={onSearch} onClose={onClose} onNewChat={onNewChat} onImportFile={onImportFile} recovery={recovery} />);
+let selectChatPresentation: ReturnType<typeof import('./components/select-chat/select-chat-presentation').createSelectChatPresentation> | null = null;
+const registerSelectChatPresentation = (value: typeof selectChatPresentation) => { selectChatPresentation = value; };
+export function openSelectChatPopup() { selectChatPresentation?.open(); }
+export function closeSelectChatPopup() { selectChatPresentation?.close(); }
+export function focusSelectChatSearch() { selectChatPresentation?.focusSearch(); }
+
+export function mountSelectChatPopup(container: HTMLElement, controller: ReturnType<typeof import('./lib/history-panel-service').createHistoryPanelController>, onSearch: (query: string) => void, onClose: () => void, onNewChat: () => void, onImportFile: (input: HTMLInputElement) => void, recovery: import('./components/select-chat/SelectChatPopup').RecoveryDraftBridge | undefined, onClosed: () => void) {
+    mountSmallPanel(container, <SelectChatPopup controller={controller} onSearch={onSearch} onClose={onClose} onNewChat={onNewChat} onImportFile={onImportFile} recovery={recovery} registerPresentation={registerSelectChatPresentation} onClosed={onClosed} />);
 }
 
 let selectChatListPortal: WorkspacePortalMount | null = null;
@@ -1193,8 +1198,7 @@ function renderSelectChatList() {
         return;
     }
     selectChatListPortal ??= createWorkspacePortalMount(selectChatListContainer);
-    // Synchronous commit: delegated handlers and post-render measurements
-    // (highlight scroll/flash) run immediately after this returns.
+    // Synchronous commit preserves post-render measurements.
     selectChatListPortal.render(
         <StrictMode>
             <Theme theme={emberDeskTheme} mode="dark">
@@ -1250,6 +1254,8 @@ let optionsMenuPortal: WorkspacePortalMount | null = null;
 let optionsMenuContainer: HTMLElement | null = null;
 let optionsMenuState = { showBackToMain: false, canRegenerate: false, canContinue: false };
 let optionsMenuCommand: ((id: string) => void) | undefined;
+let optionsMenuRuntime: OptionsMenuRuntime | undefined;
+const optionsMenuCloseRef: { current: (() => void) | null } = { current: null };
 
 function renderOptionsMenu() {
     if (!optionsMenuContainer?.isConnected) {
@@ -1259,21 +1265,14 @@ function renderOptionsMenu() {
     optionsMenuPortal.render(
         <StrictMode>
             <Theme theme={emberDeskTheme} mode="dark">
-                <OptionsMenu {...optionsMenuState} onCommand={optionsMenuCommand} />
+                <OptionsMenu {...optionsMenuState} onCommand={optionsMenuCommand} runtime={optionsMenuRuntime} closeRef={optionsMenuCloseRef} />
             </Theme>
         </StrictMode>,
         true,
     );
 }
 
-/**
- * Mounts the options popup items into #options. The shell keeps its
- * display:none + Popper positioning; item click bindings land after mount.
- * Item visibility/enabled state (branch "Back to parent", "Regenerate") is
- * state-driven via updateOptionsMenuState so legacy jQuery .show()/.hide()
- * calls are retired.
- */
-export function mountOptionsMenu(container: HTMLElement, state?: Partial<typeof optionsMenuState>, onCommand?: (id: string) => void) {
+export function mountOptionsMenu(container: HTMLElement, state?: Partial<typeof optionsMenuState>, onCommand?: (id: string) => void, runtime?: OptionsMenuRuntime) {
     attachGlobalCompatibilityBridge();
     if (optionsMenuContainer !== container) {
         optionsMenuPortal?.unmount();
@@ -1281,8 +1280,13 @@ export function mountOptionsMenu(container: HTMLElement, state?: Partial<typeof 
     }
     optionsMenuContainer = container;
     optionsMenuCommand = onCommand;
+    optionsMenuRuntime = runtime;
     optionsMenuState = { ...optionsMenuState, ...state };
     renderOptionsMenu();
+}
+
+export function closeOptionsMenu() {
+    optionsMenuCloseRef.current?.();
 }
 
 export function updateOptionsMenuState(patch: Partial<typeof optionsMenuState>): boolean {
@@ -1305,9 +1309,8 @@ export function mountExportFormatPopup(container: HTMLElement, onExport?: (forma
 }
 
 /**
- * Mounts the confirm-popup buttons into #dialogue_popup_controls. The popup
- * shell (text/input/holder) stays legacy; dom-handlers.js binds the buttons
- * by ID after mount.
+ * Mounts the confirm-popup buttons into #dialogue_popup_controls and connects
+ * them to the shared dialogue commands.
  */
 export function mountDialoguePopupControls(container: HTMLElement, commands?: { confirmDialoguePopup(): void; cancelDialoguePopup(): void }) {
     mountSmallPanel(container, <DialoguePopupControls commands={commands} />);
@@ -1325,12 +1328,8 @@ export function openDialoguePresentation(controller: ReturnType<typeof import('.
     flushSync(() => controller.open(content));
 }
 
-/**
- * Mounts the delete-messages confirm buttons into #dialogue_del_mes. The
- * container stays legacy; dom-handlers.js binds the buttons by ID after mount.
- */
-export { createBulkDeleteController, createDialogueController, createDialoguePresentationController, getWorkspaceBulkDeleteController } from './lib/dialogue-service';
+export { createDialogueController, createDialoguePresentationController, getWorkspaceBulkDeleteController } from './lib/dialogue-service';
 
-export function mountDialogueDelMesControls(container: HTMLElement, controller: ReturnType<typeof import('./lib/dialogue-service').createBulkDeleteController>, commands: { confirm(): void; cancel(): void }) {
-    mountSmallPanel(container, <DialogueDelMesControls controller={controller} commands={commands} />);
+export function mountDialogueDelMesControls(container: HTMLElement, runtime: import('./components/dialogue-popups/DialoguePopups').DialogueDelMesRuntime) {
+    mountSmallPanel(container, <DialogueDelMesControls {...runtime} />);
 }

@@ -4,8 +4,9 @@ import { testSetup } from './frontend/frontent-test-utils.js';
 test('legacy help links delegate clicks to the corresponding system messages', async ({ page }) => {
     await testSetup.awaitST({ page });
 
-    const results = await page.evaluate(() => {
-        const chat = window.SillyTavern.getContext().chat;
+    const results = await page.evaluate(async () => {
+        const { getContext } = await import('/scripts/st-context.js');
+        const chat = getContext().chat;
         const fixture = document.createElement('div');
         document.body.append(fixture);
         let bubbled = 0;

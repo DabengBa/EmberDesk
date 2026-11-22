@@ -2,49 +2,65 @@ import { expect, jest, test } from '@jest/globals';
 import { readFileSync } from 'node:fs';
 import { runInNewContext } from 'node:vm';
 
-test('authoring file command forwards the file to the existing crop processor', async () => {
+function cropHarness(show, mode = 'create') {
     const source = readFileSync(new URL('../public/script.js', import.meta.url), 'utf8');
-    const start = source.indexOf('processAvatarFile: async file => {');
-    const end = source.indexOf('\n            },', start);
+    const start = source.indexOf('async function processCharacterAvatarFile(');
+    const end = source.indexOf('\n}\n\n/**', start) + 2;
     expect(start).toBeGreaterThanOrEqual(0);
-    const input = new (class HTMLInputElement {})();
-    const file = { name: 'portrait.png' };
-    class DataTransfer { constructor() { this.files = []; this.items = { add: value => this.files.push(value) }; } }
-    const read_avatar_load = jest.fn(async () => 'data:image/png;base64,cropped');
-    const command = runInNewContext(`({${source.slice(start, end)}\n}}).processAvatarFile`, {
-        document: { getElementById: () => input }, HTMLInputElement: input.constructor, DataTransfer, read_avatar_load,
-    });
-    expect(await command(file)).toBe('data:image/png;base64,cropped');
-    expect(input.files).toEqual([file]);
-    expect(read_avatar_load).toHaveBeenCalledWith(input);
-});
-
-test('crop cancellation leaves the draft processing without a preview or save', async () => {
-    const source = readFileSync(new URL('../public/script.js', import.meta.url), 'utf8');
-    const start = source.indexOf('async function read_avatar_load(');
-    const end = source.indexOf('\n}\n\n/**', start) + 2;
-    const save = jest.fn();
-    class Popup { async show() { return null; } }
-    const run = runInNewContext(`let selected_button = 'create', menu_type = 'create', create_save = {}, crop_data; ${source.slice(start, end)}; read_avatar_load;`, {
+    const save = jest.fn(async () => true);
+    const preview = { setAttribute: jest.fn() };
+    const fetch = jest.fn(async () => {});
+    class Popup { cropData = { x: 12 }; show = show; }
+    const runtime = runInNewContext(`let characterWorldDraftIdentity = {}, create_save = {}, chat = {};
+        ${source.slice(start, end)};
+        function getCharacterCardTarget() { return { avatar: 'existing.png', chat: 'chat', session: chat }; }
+        ({run: processCharacterAvatarFile, draft: create_save, switchSession() { characterWorldDraftIdentity = {}; }, switchChat() { chat = {}; }});`, {
         Popup, POPUP_TYPE: { CROP: 1 }, getBase64Async: async () => 'data', createOrEditCharacter: save,
+        getCurrentCharacterAuthoringMode: () => mode, getCurrentCharacterAuthoringSource: () => ({ avatar: 'existing.png' }),
+        getThumbnailUrl: () => '/thumbnail/existing.png', fetch, console,
+        document: { getElementById: () => preview, querySelectorAll: () => [] },
     });
-    expect(await run({ files: [{ name: 'portrait.png' }] })).toBeUndefined();
-    expect(save).not.toHaveBeenCalled();
+    return { ...runtime, save, preview, fetch };
+}
+
+test('crop cancellation keeps the previously confirmed upload for the next save', async () => {
+    const runtime = cropHarness(async () => null);
+    const confirmed = { file: { name: 'confirmed.png' }, crop: { x: 1 }, preview: 'data:confirmed' };
+    runtime.draft.avatar = confirmed;
+    expect(await runtime.run({ name: 'cancelled.png' })).toBeUndefined();
+    expect(runtime.draft.avatar).toBe(confirmed);
+    expect(runtime.preview.setAttribute).not.toHaveBeenCalled();
+    expect(runtime.save).not.toHaveBeenCalled();
 });
 
-test('create mode retains the selected file and crop while returning the cropped preview', async () => {
-    const source = readFileSync(new URL('../public/script.js', import.meta.url), 'utf8');
-    const start = source.indexOf('async function read_avatar_load(');
-    const end = source.indexOf('\n}\n\n/**', start) + 2;
-    const preview = { setAttribute: jest.fn() }, save = jest.fn();
-    class Popup { constructor() { this.cropData = { x: 12 }; } async show() { return 'data:cropped'; } }
-    const context = { Popup, POPUP_TYPE: { CROP: 1 }, getBase64Async: async () => 'data',
-        createOrEditCharacter: save, document: { getElementById: () => preview } };
-    const run = runInNewContext(`let selected_button = 'create', menu_type = 'create', create_save = {}, crop_data; ${source.slice(start, end)}; ({read_avatar_load, state: () => ({create_save, crop_data})});`, context);
-    const files = [{ name: 'portrait.png' }];
-    expect(await run.read_avatar_load({ files })).toBe('data:cropped');
-    expect(run.state().create_save.avatar).toBe(files);
-    expect(run.state().crop_data.x).toBe(12);
-    expect(preview.setAttribute).toHaveBeenCalledWith('src', 'data:cropped');
-    expect(save).not.toHaveBeenCalled();
+test('confirmed creation upload carries its file, crop, and preview together', async () => {
+    const runtime = cropHarness(async () => 'data:cropped');
+    const file = { name: 'portrait.png' };
+    expect(await runtime.run(file)).toBe('data:cropped');
+    expect(runtime.draft.avatar).toEqual({ file, crop: { x: 12 }, preview: 'data:cropped' });
+    expect(runtime.save).not.toHaveBeenCalled();
+});
+
+test.each(['switchSession', 'switchChat'])('a crop that resolves after %s cannot reach the edit save', async change => {
+    let resolve;
+    let ready;
+    const shown = new Promise(done => { ready = done; });
+    const runtime = cropHarness(() => new Promise(done => { resolve = done; ready(); }), 'edit');
+    const pending = runtime.run({ name: 'portrait.png' });
+    await shown;
+    runtime[change]();
+    resolve('data:cropped');
+    expect(await pending).toBeUndefined();
+    expect(runtime.save).not.toHaveBeenCalled();
+    expect(runtime.draft.avatar).toBeUndefined();
+});
+
+test('edit saves the confirmed upload explicitly and discards a stale completion preview', async () => {
+    const runtime = cropHarness(async () => 'data:cropped', 'edit');
+    runtime.save.mockImplementation(async () => { runtime.switchSession(); return true; });
+    const file = { name: 'portrait.png' };
+    expect(await runtime.run(file)).toBeUndefined();
+    expect(runtime.save).toHaveBeenCalledWith(undefined, { file, crop: { x: 12 }, preview: 'data:cropped' });
+    expect(runtime.fetch).toHaveBeenCalledWith('/characters/existing.png', { method: 'GET', cache: 'reload' });
+    expect(runtime.draft.avatar).toBeUndefined();
 });

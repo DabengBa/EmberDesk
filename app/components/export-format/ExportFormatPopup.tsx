@@ -2,10 +2,8 @@ import { ContractButton } from '../contract/ContractButton';
 
 /**
  * Character export format popup (React-owned inside #export_format_popup).
- * The shell stays the Popper target; .export_format buttons are bound via
- * document-level delegation in dom-handlers.js — the delegated handler reads
- * `data-format`, so the contract classes/attribute stay on the rendered
- * <button>.
+ * The shell remains the Popper target; React buttons invoke the export command
+ * directly and retain their stable classes and format attributes.
  */
 export function ExportFormatPopup({ onExport }: { onExport?: (format: string) => void } = {}) {
     return (

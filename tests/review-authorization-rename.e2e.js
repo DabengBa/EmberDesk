@@ -31,7 +31,7 @@ test('delayed rename snapshot cannot overwrite a newer revoke', async ({ page })
     await expect(page.locator('.toast-success')).toContainText(source);
     await select(page, source);
     if (!await permission(page).isChecked()) await permission(page).check();
-    const canonicalId = await page.evaluate(() => { const x = window.SillyTavern.getContext(); return x.characters[x.characterId].canonical_id; });
+    const canonicalId = await page.evaluate(async () => { const { getContext } = await import('/scripts/st-context.js'); const x = getContext(); return x.characters[x.characterId].canonical_id; });
     await expect(permission(page)).toBeEnabled();
     let release, ready;
     const gate = new Promise(resolve => { release = resolve; });
@@ -79,11 +79,11 @@ test('rename atomically moves the grant even if later settings writes fail', asy
     const sourceAvatar = seededAvatar(source);
     await testSetup.awaitST({ page });
     await select(page, source);
-    const old = await page.evaluate(() => { const x = window.SillyTavern.getContext(); return x.characters[x.characterId].avatar; });
+    const old = await page.evaluate(async () => { const { getContext } = await import('/scripts/st-context.js'); const x = getContext(); return x.characters[x.characterId].avatar; });
     expect(old).toBe(sourceAvatar);
     if (!await permission(page).isChecked()) await permission(page).check();
     await expect.poll(async () => (await saved(page)).power_user.external_media_allowed_overrides?.includes(old)).toBe(true);
-    const canonicalId = await page.evaluate(() => { const x = window.SillyTavern.getContext(); return x.characters[x.characterId].canonical_id; });
+    const canonicalId = await page.evaluate(async () => { const { getContext } = await import('/scripts/st-context.js'); const x = getContext(); return x.characters[x.characterId].canonical_id; });
     expect(canonicalId).toBeTruthy();
 
     await page.route('**/api/settings/save', route => route.abort());
@@ -98,7 +98,7 @@ test('rename atomically moves the grant even if later settings writes fail', asy
     const afterFailedSave = await saved(page);
     await page.unroute('**/api/settings/save');
     await page.reload(); await testSetup.awaitST({ page }); await select(page, target);
-    const unrelatedOld = await page.evaluate(() => { const x = window.SillyTavern.getContext(); return x.characters[x.characterId].avatar; });
+    const unrelatedOld = await page.evaluate(async () => { const { getContext } = await import('/scripts/st-context.js'); const x = getContext(); return x.characters[x.characterId].avatar; });
     // Reuse the freed avatar key: the old grant must not resurface at it.
     const changed = await page.evaluate(async reusedName => {
         const { renameCharacter } = await import('/scripts/character-lifecycle-service.js');
@@ -106,7 +106,8 @@ test('rename atomically moves the grant even if later settings writes fail', asy
     }, sourceAvatar.replace(/\.png$/, ''));
     expect(changed).toBe(true);
     const newState = await page.evaluate(async () => {
-        const x = window.SillyTavern.getContext(); const avatar = x.characters[x.characterId].avatar;
+        const { getContext } = await import('/scripts/st-context.js');
+        const x = getContext(); const avatar = x.characters[x.characterId].avatar;
         const { isCharacterExternalMediaAllowed } = await import('/scripts/external-media-policy.js');
         const { power_user } = await import('/scripts/power-user.js');
         return { avatar, allowed: isCharacterExternalMediaAllowed(power_user, avatar, x.characters[x.characterId].canonical_id), grants: power_user.external_media_allowed_overrides };

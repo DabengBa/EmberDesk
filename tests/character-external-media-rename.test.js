@@ -5,9 +5,19 @@ jest.unstable_mockModule('../public/scripts/notifications.js', () => ({ default:
 const state = {};
 const shell = {
     state, t: strings => strings[0], getCharaFilename: (_id, options) => options.manualAvatarKey,
+    observeSettingsRevision(value) {
+        if (!Number.isSafeInteger(value) || value < 0 || (state.settingsDocumentRevision != null && value < state.settingsDocumentRevision)) return false;
+        state.settingsDocumentRevision = value;
+        return true;
+    },
     renameTagKey: jest.fn(), deleteTagKey: avatar => { delete state.tag_map[avatar]; }, saveSettingsDebounced: jest.fn(), delay: jest.fn(),
     setCharacterId: id => { state.this_chid = id; },
     prepareChatTransition: jest.fn(async () => {}),
+    clearChat: jest.fn(async () => true),
+    setCharacterName: jest.fn(),
+    cancelTtsPlay: jest.fn(),
+    getChat: jest.fn(async () => {}),
+    persistMainChatMessageListScrollSnapshotBeforeClear: jest.fn(),
 
     getCharacters: () => { state.characters = [{ name: 'New', avatar: 'new.png' }]; },
     selectCharacterById: id => { state.this_chid = id; },
@@ -16,11 +26,14 @@ jest.unstable_mockModule('../public/scripts/events.js', () => ({ eventSource: { 
 jest.unstable_mockModule('../public/scripts/character-authoring.js', () => ({ buildCharacterAuthoringFormData: jest.fn(), getCharacterAuthoringWriteUrl: jest.fn() }));
 jest.unstable_mockModule('../public/scripts/character-list-state.js', () => ({ getCharacterDeleteCandidates: (characters, ids) => ids.map(avatar => ({ avatar, character: characters.find(c => c.avatar === avatar), index: 0 })), shouldRefreshCharacterAfterEdit: jest.fn() }));
 jest.unstable_mockModule('../public/scripts/request-context.js', () => ({ getRequestHeaders: () => ({}) }));
+jest.unstable_mockModule('../public/scripts/utils.js', () => ({ escapeHtml: value => value, waitUntilCondition: jest.fn() }));
+jest.unstable_mockModule('../public/scripts/world-cascade-dialog.js', () => ({ buildCascadeSectionHtml: jest.fn(), showDeleteConfirmWithCascade: jest.fn() }));
 jest.unstable_mockModule('../public/scripts/character-lifecycle-shell-context.js', () => ({ requireCharacterLifecycleShellContext: () => shell }));
 const { renameCharacter, deleteCharacter } = await import('../public/scripts/character-lifecycle-service.js');
 const { setCharacterExternalMediaAuthorization } = await import('../public/scripts/character-external-media-authorization.js');
 
 beforeEach(() => {
+    globalThis.window = { matchMedia: () => ({ matches: false }) };
     Object.assign(state, { characters: [{ name: 'Old', avatar: 'old.png' }], this_chid: 0, world_info: {}, active_character: null,
         power_user: { external_media_allowed_overrides: ['old.png', 'other.png'], external_media_forbidden_overrides: ['old.png', 'blocked.png'] } });
     shell.saveSettingsDebounced.mockClear();
@@ -86,7 +99,7 @@ test('successful deletion removes the old authorization so a reused avatar is no
     Object.assign(shell, { cancelCharacterSave: jest.fn(), closeCurrentChatForDelete: async () => true,
         getPastCharacterChats: async () => [], markPerfInteractionMetric: jest.fn(), select_rm_info: jest.fn(), removeCharacterFromUI: jest.fn() });
     Object.assign(state, { accountStorage: { removeItem: jest.fn() }, tag_map: {}, characterDeleteReconcileGeneration: 0 });
-    expect(await deleteCharacter('old.png', { deleteWorlds: [] })).toBe(true);
+    expect(await deleteCharacter('old.png', { deleteWorlds: [] })).toBe(1);
     expect(state.power_user.external_media_allowed_overrides).toEqual(['other.png']);
     expect(state.power_user.external_media_forbidden_overrides).toEqual(['blocked.png']);
     expect(shell.saveSettingsDebounced).not.toHaveBeenCalled();
@@ -188,7 +201,7 @@ test('a pending revoke that fails after deletion cannot restore the deleted avat
         save: () => pending,
         refresh: () => {},
     });
-    expect(await deleteCharacter('old.png', { deleteWorlds: [] })).toBe(true);
+    expect(await deleteCharacter('old.png', { deleteWorlds: [] })).toBe(1);
     reject(new Error('offline'));
     await revoke;
     expect(state.power_user.external_media_allowed_overrides).toEqual(['other.png']);
@@ -313,9 +326,9 @@ test('an older rename snapshot cannot resurrect an unrelated deleted character',
     Object.assign(state, { accountStorage: { removeItem: jest.fn() }, tag_map: {}, characterDeleteReconcileGeneration: 0 });
     let release;
     const response = new Promise(r => { release = r; });
-    globalThis.fetch = jest.fn(async url => url.endsWith('/rename') ? response : { ok: true });
+    globalThis.fetch = jest.fn(async url => url.endsWith('/rename') ? response : { ok: true, json: async () => ({}) });
     const rename = renameCharacter('New', { silent: true, renameChats: false });
-    expect(await deleteCharacter('other.png', { deleteWorlds: [] })).toBe(true);
+    expect(await deleteCharacter('other.png', { deleteWorlds: [] })).toBe(1);
     release({ ok: true, json: async () => ({ avatar: 'new.png', settings_revision: 11,
         mediaAuthorization: { external_media_allowed_overrides: ['new.png', 'other.png'], external_media_forbidden_overrides: ['new.png', 'blocked.png'] } }) });
     expect(await rename).toBe(true);
@@ -330,9 +343,9 @@ test('a later deletion of the rename successor is not undone by the delayed rena
     Object.assign(state, { accountStorage: { removeItem: jest.fn() }, tag_map: {}, characterDeleteReconcileGeneration: 0 });
     let release;
     const response = new Promise(r => { release = r; });
-    globalThis.fetch = jest.fn(async url => url.endsWith('/rename') ? response : { ok: true });
+    globalThis.fetch = jest.fn(async url => url.endsWith('/rename') ? response : { ok: true, json: async () => ({}) });
     const rename = renameCharacter('New', { silent: true, renameChats: false });
-    expect(await deleteCharacter('new.png', { deleteWorlds: [] })).toBe(true);
+    expect(await deleteCharacter('new.png', { deleteWorlds: [] })).toBe(1);
     release({ ok: true, json: async () => ({ avatar: 'new.png', settings_revision: 11,
         mediaAuthorization: { external_media_allowed_overrides: ['new.png'], external_media_forbidden_overrides: [] } }) });
     expect(await rename).toBe(true);

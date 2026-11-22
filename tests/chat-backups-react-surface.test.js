@@ -30,7 +30,7 @@ describe('chat backups React surface (Wave A)', () => {
         expect(adapter).toContain("displayPastChats");
         expect(adapter).toContain("'/api/backups/chat/download'");
         expect(adapter).toContain("formData.set('file_type', extension)");
-        expect(adapter).toContain("SillyTavern.getContext()");
+        expect(adapter).toContain("import { getContext } from './st-context.js';");
     });
 
     test('React component owns list rendering and keeps popup action contracts', () => {

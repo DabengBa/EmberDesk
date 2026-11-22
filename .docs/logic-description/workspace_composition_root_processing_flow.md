@@ -1,9 +1,11 @@
 # Workspace Composition Root Processing Flow
 
+> Historical model of the initial extraction. It predates retirement of `globalThis.SillyTavern` and changes to startup and React ownership. For current behavior, see [Workspace Composition Root](../tech/workspace-composition-root.md). The paired sandbox models this historical flow, not the current runtime.
+
 ## Metadata
 
 - Owner: Workspace Composition Root implementation documentation
-- Current code binding:
+- Code binding at the time of extraction:
   - `public/script.js`
   - `public/scripts/events.js`
   - `public/scripts/request-context.js`

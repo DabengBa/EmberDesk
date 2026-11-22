@@ -3,6 +3,7 @@ import { t } from './i18n.js';
 import { getFileExtension } from './utils.js';
 import { displayPastChats, importCharacterChat } from '/script.js';
 import { getRequestHeaders } from './request-context.js';
+import { getContext } from './st-context.js';
 import { loadWorkspacePanelsModule } from './workspace-panels-react-bridge.js';
 
 /**
@@ -34,7 +35,7 @@ async function restoreChatBackup(name) {
         return null;
     }
 
-    const context = SillyTavern.getContext();
+    const context = getContext();
 
     const formData = new FormData();
     formData.set('file_type', extension);

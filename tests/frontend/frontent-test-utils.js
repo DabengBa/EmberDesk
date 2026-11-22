@@ -45,10 +45,7 @@ async function isOnAppOrigin(page) {
 
 async function isAppReady(page) {
     try {
-        return await page.evaluate(() => Boolean(
-            window.SillyTavern?.getContext
-            && Number.isFinite(window.__emberDeskStartup?.appReadyAtMs)
-        ));
+        return await page.evaluate(() => Number.isFinite(window.__emberDeskStartup?.appReadyAtMs));
     } catch {
         return false;
     }
@@ -56,7 +53,7 @@ async function isAppReady(page) {
 
 async function waitForAppReady(page) {
     await page.waitForFunction(
-        () => window.SillyTavern?.getContext && Number.isFinite(window.__emberDeskStartup?.appReadyAtMs),
+        () => Number.isFinite(window.__emberDeskStartup?.appReadyAtMs),
         undefined,
         { timeout: 120_000 },
     );
@@ -205,7 +202,7 @@ async function ensureSession(page) {
 
 export const testSetup = {
     /**
-     * Navigates to the home page without waiting for SillyTavern to load.
+     * Navigates to the home page without waiting for the workspace to load.
      * @param {Object} params
      * @param {import('@playwright/test').Page} params.page
      */

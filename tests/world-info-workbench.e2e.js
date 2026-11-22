@@ -7,10 +7,13 @@ async function openWorldInfo(page) {
     // nav button on an already-open drawer re-mounts the React workbench
     // (replaceChildren) and drops the session-bound selection, so when a
     // restore may still be in flight we wait for it instead of double-opening.
-    const wiRestoring = await page.evaluate(() => (
+    const wiRestoring = await page.evaluate(async () => {
+        const { getContext } = await import('/scripts/st-context.js');
+        return (
         window.innerWidth > 1000
-        && window.SillyTavern?.getContext?.()?.accountStorage?.getItem('WINavOpened') === 'true'
-    ));
+        && getContext()?.accountStorage?.getItem('WINavOpened') === 'true'
+    );
+    });
     if (wiRestoring) {
         const restored = await page.locator('#WorldInfo.openDrawer')
             .waitFor({ state: 'visible', timeout: 10_000 })
@@ -929,10 +932,13 @@ test.describe('UI hardening', () => {
         // preserveOpenDrawers, so it can land after our nav click and (z-index
         // 4010) cover the regex drawer. Wait for that restore to settle first;
         // the regex open path then closes the unpinned drawer.
-        const wiRestorePending = await page.evaluate(() => (
+        const wiRestorePending = await page.evaluate(async () => {
+            const { getContext } = await import('/scripts/st-context.js');
+            return (
             window.innerWidth > 1000
-            && window.SillyTavern?.getContext?.()?.accountStorage?.getItem('WINavOpened') === 'true'
-        ));
+            && getContext()?.accountStorage?.getItem('WINavOpened') === 'true'
+        );
+        });
         if (wiRestorePending) {
             await expect(page.locator('#WorldInfo.openDrawer')).toBeVisible({ timeout: 15_000 });
         }
