@@ -17,7 +17,8 @@ test('bootstrap installs the synchronous domain before settings and preset pipel
     await testSetup.awaitST({ page });
     await expect(page.locator('html')).toHaveAttribute('data-reply-pipeline-init', 'true', { timeout: 15_000 });
     const result = await page.evaluate(async () => {
-        const context = window.SillyTavern.getContext();
+        const { getContext } = await import('/scripts/st-context.js');
+        const context = getContext();
         const { eventSource, event_types } = await import('/scripts/events.js');
         const { getToolBindings, syncPipelineToolBindings } = await import('/scripts/tool-bindings.js');
         context.chatCompletionSettings.reply_pipeline = { enabled: true, steps: [{ tool: 'boot_order_probe' }], final: 'boot_order_probe' };

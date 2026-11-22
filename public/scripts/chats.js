@@ -53,6 +53,7 @@ import { renderTemplateAsync } from './templates.js';
 import { t } from './i18n.js';
 import { humanizedDateTime } from './RossAscends-mods.js';
 import { accountStorage } from './util/AccountStorage.js';
+import { runCharacterNavigation } from './character-lifecycle-service.js';
 
 import { MEDIA_DISPLAY, MEDIA_SOURCE, MEDIA_TYPE, SCROLL_BEHAVIOR, SWIPE_DIRECTION } from './constants.js';
 
@@ -879,7 +880,7 @@ async function openGlobalStylesPreferenceDialog() {
         radio.addEventListener('change', function () {
             const allowed = this.id === 'global_styles_allowed';
             preference.set(allowed);
-            document.getElementById('rm_button_selected_ch')?.click();
+            runCharacterNavigation('current');
             setGlobalStylesButtonClass(allowed);
         });
     }
@@ -892,7 +893,7 @@ async function openGlobalStylesPreferenceDialog() {
     // Re-render the notes if the preference changed
     const newValue = preference.get();
     if (newValue !== currentValue) {
-        document.getElementById('rm_button_selected_ch')?.click();
+        runCharacterNavigation('current');
         setGlobalStylesButtonClass(newValue);
     }
 }
@@ -943,7 +944,7 @@ async function checkForCreatorNotesStyles() {
                 break;
         }
 
-        document.getElementById('rm_button_selected_ch')?.click();
+        runCharacterNavigation('current');
     }
 
     const currentPreference = preference.get();

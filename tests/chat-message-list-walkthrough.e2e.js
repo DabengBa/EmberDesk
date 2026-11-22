@@ -190,8 +190,9 @@ async function selectCharacterFromVisibleList(page, name) {
     const characterCard = page.locator('#rm_print_characters_block .character_select').filter({ hasText: name }).first();
     await expect(characterCard).toBeVisible();
     await characterCard.click();
-    await expect.poll(async () => page.evaluate((characterName) => {
-        const context = window.SillyTavern.getContext();
+    await expect.poll(async () => page.evaluate(async (characterName) => {
+        const { getContext } = await import('/scripts/st-context.js');
+        const context = getContext();
         return context.characters[context.characterId]?.name === characterName;
     }, name)).toBe(true);
     await closeCharacterAuthoringAfterSelection(page);
@@ -362,7 +363,7 @@ test.describe('main chat message list walkthrough', () => {
         await testSetup.awaitST({ page });
         await grantClipboardPermissions(page);
         // Message-list navigation does not exercise model-generated memory summaries.
-        await page.evaluate(() => { window.SillyTavern.getContext().chatCompletionSettings.chat_memory_enabled = false; });
+        await page.evaluate(async () => { const { getContext } = await import('/scripts/st-context.js'); getContext().chatCompletionSettings.chat_memory_enabled = false; });
         await selectCharacterFromVisibleList(page, characterName);
 
         await openPastChatSearchThenClose(page, 'Session');
@@ -398,7 +399,7 @@ test.describe('main chat message list walkthrough', () => {
 
         await testSetup.awaitST({ page });
         // History navigation does not exercise background model summaries.
-        await page.evaluate(() => { window.SillyTavern.getContext().chatCompletionSettings.chat_memory_enabled = false; });
+        await page.evaluate(async () => { const { getContext } = await import('/scripts/st-context.js'); getContext().chatCompletionSettings.chat_memory_enabled = false; });
         await selectCharacterFromVisibleList(page, characterName);
         await openPastChatsPopup(page);
 
@@ -420,7 +421,7 @@ test.describe('main chat message list walkthrough', () => {
 
     test('chat history keeps a rename draft after the server rejects it', async ({ page }) => {
         await testSetup.awaitST({ page });
-        await page.evaluate(() => { window.SillyTavern.getContext().chatCompletionSettings.chat_memory_enabled = false; });
+        await page.evaluate(async () => { const { getContext } = await import('/scripts/st-context.js'); getContext().chatCompletionSettings.chat_memory_enabled = false; });
         await selectCharacterFromVisibleList(page, characterName);
         await openPastChatsPopup(page);
         // The modal makes the underlying options button inert and inaccessible.
@@ -443,7 +444,7 @@ test.describe('main chat message list walkthrough', () => {
         const consoleErrors = createConsoleErrorCollector(page);
 
         await testSetup.awaitST({ page });
-        await page.evaluate(() => { window.SillyTavern.getContext().chatCompletionSettings.chat_memory_enabled = false; });
+        await page.evaluate(async () => { const { getContext } = await import('/scripts/st-context.js'); getContext().chatCompletionSettings.chat_memory_enabled = false; });
         await grantClipboardPermissions(page);
         await selectCharacterFromVisibleList(page, characterName);
         await openPastChat(page, reasoningChatName);

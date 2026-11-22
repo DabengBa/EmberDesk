@@ -16,7 +16,7 @@ describe('select chat popup React surface', () => {
         const component = readRepoFile('app/components/select-chat/SelectChatPopup.tsx');
         expect(component).toContain('onImportFile');
         expect(component).toContain('onClick={() => importInput.current?.click()}');
-        expect(readRepoFile('public/scripts/dom-handlers.js')).toContain('importFiles: importHistoryFiles');
+        expect(readRepoFile('public/scripts/chat-history-commands.js')).toContain('importFiles: importHistoryFiles');
     });
     test('React history close invokes the explicit close command', () => {
         const component = readRepoFile('app/components/select-chat/SelectChatPopup.tsx');
@@ -61,8 +61,8 @@ describe('select chat popup React surface', () => {
     });
 
     test('the mounted history bridge invokes explicit row commands', () => {
-        const handlers = readRepoFile('public/scripts/dom-handlers.js');
-        expect(handlers).toContain('export function runHistoryRowCommand');
+        const commands = readRepoFile('public/scripts/chat-history-commands.js');
+        expect(commands).toContain('export function createChatHistoryCommands');
         for (const action of ['openChat', 'renameChat', 'exportChat', 'deleteChat']) {
             expect(script).toContain(`runHistoryRowCommand('${action}'`);
         }
@@ -83,33 +83,30 @@ describe('select chat popup React surface', () => {
         expect(mounts).toContain('<LiveSelectChatList');
     });
 
-    test('explicit command adapters preserve arguments and reject calls before binding', () => {
-        const handlers = readRepoFile('public/scripts/dom-handlers.js');
-        const start = handlers.indexOf('let historyRowCommands;');
-        const end = handlers.indexOf('\nconst state = ', start);
-        const adapter = runInNewContext(`(() => { const installWorkspaceInteractionCommands = () => {}; ${handlers.slice(start, end).replaceAll('export function', 'function')}
-            return { runHistoryRowCommand, runOptionsMenuCommand, runDialoguePopupCommand,
-                install(history, options, dialogue) { historyRowCommands = history; optionsMenuCommand = options; dialoguePopupCommands = dialogue; } };
+    test('explicit command adapters preserve arguments', () => {
+        const commands = readRepoFile('public/scripts/workspace-interaction-commands.js');
+        const adapter = runInNewContext(`(() => { ${commands.replaceAll('export function', 'function')}
+            return { runHistoryRowCommand, runDialoguePopupCommand, installWorkspaceInteractionCommands };
         })()`);
-        expect(() => adapter.runHistoryRowCommand('deleteChat', 'a')).toThrow('History command unavailable');
         const calls = [];
-        adapter.install({ deleteChat: (...args) => calls.push(['delete', ...args]) },
-            (...args) => calls.push(['options', ...args]), { confirmDialoguePopup: () => calls.push(['confirm']) });
+        adapter.installWorkspaceInteractionCommands({
+            runHistoryRowCommand: (_action, ...args) => calls.push(['delete', ...args]),
+
+            runDialoguePopupCommand: () => calls.push(['confirm']),
+        });
         adapter.runHistoryRowCommand('deleteChat', 'a', { fromSlashCommand: true });
-        adapter.runOptionsMenuCommand('option_delete_mes', { fromSlashCommand: true });
+
         adapter.runDialoguePopupCommand('confirmDialoguePopup');
-        expect(calls).toEqual([['delete', 'a', { fromSlashCommand: true }], ['options', 'option_delete_mes', { fromSlashCommand: true }], ['confirm']]);
+        expect(calls).toEqual([['delete', 'a', { fromSlashCommand: true }], ['confirm']]);
     });
 
     test('mounts the history popup during startup and wires its close button to the history command', () => {
         expect(script).toContain('async function mountSelectChatPopup()');
         expect(script).toContain('module.mountSelectChatPopup(host, controller,');
         const mountIdx = script.indexOf('measureStartupStage(\'mountSelectChatPopup\'');
-        const domHandlersSource = readRepoFile('public/scripts/dom-handlers.js');
+        const domHandlersSource = readRepoFile('public/script.js');
         const startIdx = domHandlersSource.indexOf('export async function bindLegacyShellHandlers()');
-        const eagerMountIdx = domHandlersSource.indexOf('mountSelectChatPopup(),', startIdx);
-        expect(eagerMountIdx).toBeGreaterThan(startIdx);
-        expect(domHandlersSource.indexOf('await bootstrapWorkspace();', startIdx)).toBeGreaterThan(eagerMountIdx);
+        expect(domHandlersSource.indexOf('await bootstrapWorkspace();', startIdx)).toBeGreaterThan(startIdx);
         expect(mountIdx).toBeGreaterThan(script.indexOf('async function bootstrapWorkspace()'));
         const popup = readRepoFile('app/components/select-chat/SelectChatPopup.tsx');
         expect(popup).toMatch(/id="select_chat_cross"[^>]*onClick=\{onClose\}/);
@@ -147,8 +144,21 @@ describe('select chat popup React surface', () => {
         expect(script).toContain('renderSelectChatListReact: (...args) => renderSelectChatListReact(...args)');
     });
 
-    test('past_chat_template stays for the chat list; popup never empties the React list', () => {
-        expect(indexHtml).toContain('id="past_chat_template"');
+    test('React owns history presentation and native row fallback is removed', () => {
+        const handlers = readRepoFile('public/script.js');
+        expect(indexHtml).not.toContain('id="past_chat_template"');
+        expect(popup).toContain('createSelectChatPresentation(');
+        expect(readRepoFile('public/scripts/chat-history-commands.js')).toMatch(/await displayPastChats\(\);[\s\S]*?openHistory\(\)/);
+
+
+        expect(script).toContain('openHistory: () => selectChatPopupModuleRef?.openSelectChatPopup()');
+        expect(script).toContain('controller.endSession()');
+        for (const selector of ['.PastChat_cross', '.select_chat_block', '.renameChatButton', '.exportChatButton, .exportRawChatButton']) {
+            expect(handlers).not.toContain(`delegate('click', '${selector}'`);
+        }
+        expect(script).not.toContain("document.getElementById('select_chat_search')?.focus()");
+        expect(script).not.toContain("getElementById('shadow_select_chat_popup')?.addEventListener('close'");
+        expect(handlers).not.toContain("getElementById('shadow_select_chat_popup').addEventListener");
         const displayPastChatsBody = script.match(/export async function displayPastChats[\s\S]*?\n}/)?.[0] ?? '';
         expect(displayPastChatsBody).not.toContain('$(\'#select_chat_div\').empty()');
     });

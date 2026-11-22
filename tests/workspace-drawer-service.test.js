@@ -6,7 +6,7 @@ import { loadTsModule } from './helpers/load-ts-module.mjs';
 
 
 test('retired shell controls are not registered when their markup is absent', () => {
-    const handlers = readFileSync(new URL('../public/scripts/dom-handlers.js', import.meta.url), 'utf8');
+    const handlers = readFileSync(new URL('../public/scripts/numeric-input-wheel.js', import.meta.url), 'utf8');
     assert.doesNotMatch(handlers, /sliderId: '#(?:amount_gen|max_context)'/);
     assert.doesNotMatch(handlers, /sliderLocked|OpenAllWIEntries|CloseAllWIEntries/);
     assert.doesNotMatch(handlers, /doDrawerOpenClick|\.on\('click', '\.drawer-opener'/);
@@ -153,12 +153,13 @@ test('inline drawers in the three owned panels are React-controlled', () => {
 });
 
 test('retired inline and counter delegates do not own React controls', () => {
-    const source = readFileSync(new URL('../public/scripts/dom-handlers.js', import.meta.url), 'utf8');
+    const source = readFileSync(new URL('../public/script.js', import.meta.url), 'utf8');
     assert.doesNotMatch(source, /\.on\('click', '\.inline-drawer-toggle'/);
     assert.doesNotMatch(source, /\.on\('click', '\.inline-drawer-maximize'/);
     assert.doesNotMatch(source, /\.on\('(?:input|change|keydown|keyup|mouseup blur)', '\.range-block-counter input, \.neo-range-input'/);
     // The separate native wheel compatibility handler still covers non-React numbers.
-    assert.match(source, /dataset\.workspaceNumeric !== 'react'/);
+    const wheel = readFileSync(new URL('../public/scripts/numeric-input-wheel.js', import.meta.url), 'utf8');
+    assert.match(wheel, /dataset\.workspaceNumeric !== 'react'/);
 });
 
 test('workspace bootstrap installs drawer service and restores through it', () => {

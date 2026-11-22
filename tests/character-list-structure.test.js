@@ -256,7 +256,7 @@ describe('character list structure', () => {
 
         expect(powerUserSource).not.toContain('.autocomplete(');
         expect(powerUserSource).not.toContain('.ui-autocomplete-input');
-        expect(powerUserSource).toContain('setHotswapsDebounced();');
+        expect(powerUserSource).toContain("window.addEventListener('resize', () => setHotswapsDebounced());");
     });
 
     test('keeps character-library runner samples aligned with measured repeats', () => {
@@ -411,11 +411,7 @@ describe('character list structure', () => {
         expect(deleteCharacterSource.indexOf('state.isCharacterDeleteReconcileInProgress = false;')).toBeGreaterThan(deleteCharacterSource.indexOf('await removeCharacterFromUI(deletedAvatars, { deleteContext });'));
         expect(removeCharacterFromUISource).toContain('const beforeDeleteSnapshot = createCharacterListEntitySnapshot(getEntitiesList({ doFilter: true }));');
         expect(removeCharacterFromUISource).toContain('cancelDebounce(printCharactersDebounced);');
-        expect(removeCharacterFromUISource).toContain('const reconciled = await reconcileCharacterListAfterDelete({');
-        expect(removeCharacterFromUISource).toContain('deleteContext,');
-        // Fallback reprint keeps the current page/scroll too; only the
-        // explicit select_rm_characters navigation gesture does a full reset.
-        expect(removeCharacterFromUISource).toMatch(/if \(!reconciled\) \{\s+const printCharactersStartedAt = performance\.now\(\);(?:[^}]*)await printCharacters\(false, \{ allowDuringCharacterDelete: true \}\);/);
+        expect(removeCharacterFromUISource).toMatch(/await characterListLifecycle\.reconcileAfterDelete\(\{\s+beforeSnapshot: beforeDeleteSnapshot,\s+deletedAvatars,\s+deleteContext,/);
         expect(reconcileSource).toContain('createCharacterDeleteReconcilePlan({');
         expect(reconcileSource).toContain('createCharacterBulkDeletePagePlan({');
         expect(reconcileSource).toContain('const isBulkDeleteContext = deleteContext?.source === \'bulk\';');
@@ -438,32 +434,30 @@ describe('character list structure', () => {
         const cascadeDialogSource = read('public/scripts/world-cascade-dialog.js');
         const zhCnLocale = read('public/locales/zh-cn.json');
         const lifecycleSource = read('public/scripts/character-lifecycle-service.js');
-        const domHandlersSource = read('public/scripts/dom-handlers.js');
         const rightNavSource = read('app/components/right-nav/RightNavPanel.tsx');
         const deleteCharacterSource = extractFunctionSource(lifecycleSource, 'deleteCharacter');
-        const deleteDialogTitleSource = extractFunctionSource(scriptSource, 'getCharacterDeleteDialogTitle');
+        const deleteDialogTitleSource = extractFunctionSource(lifecycleSource, 'getCharacterDeleteDialogTitle');
         const newAssistantChatSource = extractFunctionSource(scriptSource, 'newAssistantChat');
 
         expect(rightNavSource).toContain('id="temporary_chat_status"');
         expect(rightNavSource).toContain("translate('Temporary chat')");
         expect(styleSource).toMatch(/#temporary_chat_status/);
         expect(scriptSource).toContain('function setTemporaryChatStatus');
-        expect(scriptSource).toContain('$(\'#temporary_chat_status\')');
+        expect(scriptSource).toContain("getElementById('temporary_chat_status')");
         expect(newAssistantChatSource).toContain('setTemporaryChatStatus(true)');
         expect(newAssistantChatSource).not.toContain('openPermanentAssistantChat');
         expect(deleteCharacterSource).toContain('temporaryChatAcknowledged = false');
         expect(deleteCharacterSource).toContain('if (inTempChat && !temporaryChatAcknowledged)');
-        expect(scriptSource).toContain('buildTemporaryChatDeleteWarningHtml');
-        expect(domHandlersSource).toContain('content += buildTemporaryChatDeleteWarningHtml();');
+        expect(scriptSource).toContain('confirmCharacterDeletion,');
+        expect(lifecycleSource).toContain('content += buildTemporaryChatDeleteWarningHtml();');
         expect(deleteDialogTitleSource).toContain('escapeHtml(characterName');
         expect(deleteDialogTitleSource).toContain('t`Delete character "${safeCharacterName}"?`');
-        expect(domHandlersSource).toContain('const characterToDelete = state.characters[state.this_chid];');
-        expect(domHandlersSource).toContain('const deleteDialogTitle = getCharacterDeleteDialogTitle(characterToDelete.name);');
-        expect(domHandlersSource).toContain('showDeleteConfirmWithCascade(deleteDialogTitle, content)');
-        expect(domHandlersSource).toMatch(/Popup\.show\.confirm\(deleteDialogTitle,\s*content,\s*\{[\s\S]*defaultResult: (state\.)?POPUP_RESULT\.NEGATIVE/);
-        expect(domHandlersSource).toMatch(/deleteCharacter\(avatarToDelete,\s*\{[\s\S]*temporaryChatAcknowledged: inTempChat[\s\S]*deleteWorlds: dialogResult\.deleteWorlds/);
-        expect(domHandlersSource).toMatch(/deleteCharacter\(avatarToDelete,\s*\{[\s\S]*deleteChats,[\s\S]*temporaryChatAcknowledged: inTempChat[\s\S]*\}\)/);
-        expect(domHandlersSource).toMatch(/deleteCharacter\(avatarToDelete,\s*\{[\s\S]*deleteWorlds: \[\],[\s\S]*clearWorldReferences: false[\s\S]*\}\)/);
+        expect(lifecycleSource).toContain('const characterToDelete = state.characters[state.this_chid];');
+        expect(lifecycleSource).toContain('const deleteDialogTitle = getCharacterDeleteDialogTitle(characterToDelete.name);');
+        expect(lifecycleSource).toContain('showDeleteConfirmWithCascade(deleteDialogTitle, content)');
+        expect(lifecycleSource).toMatch(/Popup\.show\.confirm\(deleteDialogTitle,\s*content,\s*\{[\s\S]*defaultResult: POPUP_RESULT\.NEGATIVE/);
+        expect(lifecycleSource).toMatch(/deleteCharacter\(avatarToDelete,\s*\{[\s\S]*temporaryChatAcknowledged: inTempChat[\s\S]*deleteWorlds: dialogResult\.deleteWorlds/);
+        expect(lifecycleSource).toMatch(/deleteCharacter\(avatarToDelete,\s*\{\s*deleteChats,\s*temporaryChatAcknowledged: inTempChat,\s*deleteWorlds: \[\],\s*\}\)/);
         expect(zhCnLocale).toContain('"Delete character \\"${0}\\"?": "删除角色「${0}」？"');
 
         expect(overlaySource).toContain('temporaryChatAcknowledged: inTempChat');
@@ -489,9 +483,7 @@ describe('character list structure', () => {
     });
 
     test('keeps selected-character navigation safe when the current character was deleted', () => {
-        const scriptSource = read('public/script.js');
         const lifecycleSource = read('public/scripts/character-lifecycle-service.js');
-        const domHandlersSource = read('public/scripts/dom-handlers.js');
         const selectSelectedCharacterSource = extractFunctionSource(lifecycleSource, 'select_selected_character');
 
         expect(selectSelectedCharacterSource).toContain('const character = state.characters[chid];');
@@ -499,7 +491,7 @@ describe('character list structure', () => {
         expect(selectSelectedCharacterSource).toContain("document.getElementById('rm_button_selected_ch')?.querySelectorAll(':scope > h2')");
         expect(selectSelectedCharacterSource).toContain("heading.textContent = character.name ?? '';");
         expect(selectSelectedCharacterSource).not.toContain('$(\'#rm_button_selected_ch\').children(\'h2\').text(characters[chid].name);');
-        expect(domHandlersSource).toMatch(/if \(state\.this_chid !== undefined && state\.characters\[state\.this_chid\]\) \{\s+state\.selected_button = 'character_edit';\s+select_selected_character\(state\.this_chid\);\s+\} else \{\s+state\.selected_button = 'characters';\s+select_rm_characters\(\);\s+\}/);
+        expect(lifecycleSource).toMatch(/if \(action === 'current' && state\.this_chid !== undefined && state\.characters\[state\.this_chid\]\) \{\s+state\.selected_button = 'character_edit';\s+select_selected_character\(state\.this_chid\);\s+\} else \{\s+state\.selected_button = 'characters';\s+select_rm_characters\(\);\s+\}/);
     });
 
     test('keeps the selected-character delete action directly discoverable and keyboard reachable', () => {

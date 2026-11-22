@@ -1,9 +1,10 @@
 import { ContractButton } from '../contract/ContractButton';
 import { ContractIconButton } from '../contract/ContractIconButton';
 import { translate, useTranslated } from '../../compat/i18n.js';
-import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react';
 import type { createHistoryPanelController } from '../../lib/history-panel-service';
 import { getRecoveryUnsentText, type RecoveryDraft } from '../../lib/chat-recovery-drafts';
+import { createSelectChatPresentation } from './select-chat-presentation';
 
 export interface RecoveryDraftBridge {
     list(): Promise<RecoveryDraft[]>;
@@ -94,15 +95,19 @@ function RecoveryDrafts({ bridge }: { bridge: RecoveryDraftBridge }) {
 }
 
 /**
- * Past-chats popup inner markup (React-owned inside #select_chat_popup).
- * #shadow_select_chat_popup shell stays legacy (display/opacity toggles);
- * #select_chat_div is the dynamic list container filled by script.js.
- * Action chrome is Astryx contract buttons; #select_chat_search stays a
- * plain input because legacy code drives it via jQuery .val()/input events.
+ * React owns the retained dialog shell and its inner popup markup.
  */
-export function SelectChatPopup({ controller, onSearch, onClose, onNewChat, onImportFile, recovery }: { controller: ReturnType<typeof createHistoryPanelController>; onSearch(query: string): void; onClose(): void; onNewChat(): void; onImportFile(input: HTMLInputElement): void; recovery?: RecoveryDraftBridge }) {
+export function SelectChatPopup({ controller, onSearch, onClose, onNewChat, onImportFile, recovery, registerPresentation, onClosed }: { controller: ReturnType<typeof createHistoryPanelController>; onSearch(query: string): void; onClose(): void; onNewChat(): void; onImportFile(input: HTMLInputElement): void; recovery?: RecoveryDraftBridge; registerPresentation(value: ReturnType<typeof createSelectChatPresentation> | null): void; onClosed(): void }) {
     useTranslated('');
     const importInput = useRef<HTMLInputElement>(null);
+    const searchInput = useRef<HTMLInputElement>(null);
+    useLayoutEffect(() => {
+        const dialog = searchInput.current?.closest('dialog');
+        if (!dialog) return;
+        const presentation = createSelectChatPresentation(dialog, () => searchInput.current, onClosed);
+        registerPresentation(presentation);
+        return () => { registerPresentation(null); presentation.dispose(); };
+    }, [onClosed, registerPresentation]);
     const searchLabel = useTranslated('Search chats');
     const { searchQuery } = useSyncExternalStore(controller.subscribe, controller.getSnapshot);
     return (
@@ -122,7 +127,7 @@ export function SelectChatPopup({ controller, onSearch, onClose, onNewChat, onIm
                 </div>
                 <ContractButton id="newChatFromManageScreenButton" className="menu_button menu_button_icon" variant="ghost" label="New Chat" onClick={onNewChat} icon={<i className="fa-solid fa-plus" aria-hidden="true" />} />
                 <ContractButton id="chat_import_button" className="menu_button menu_button_icon" variant="ghost" label="Import Chat" onClick={() => importInput.current?.click()} icon={<i className="fa-solid fa-file-import" aria-hidden="true" />} />
-                <input type="search" id="select_chat_search" className="text_pole flex1" aria-label={searchLabel} data-i18n="[aria-label]Search chats;[placeholder]Search..." placeholder="Search..." autoComplete="off" autoFocus value={searchQuery} onChange={event => onSearch(event.currentTarget.value)} />
+                <input type="search" id="select_chat_search" ref={searchInput} className="text_pole flex1" aria-label={searchLabel} data-i18n="[aria-label]Search chats;[placeholder]Search..." placeholder="Search..." autoComplete="off" value={searchQuery} onChange={event => onSearch(event.currentTarget.value)} />
                 <ContractIconButton id="select_chat_cross" className="chat-history-close fontsize120p" label="Close" labelKey="Close" onClick={onClose} icon={<i className="fa-solid fa-circle-xmark" aria-hidden="true" />} />
             </div>
             {recovery && <><PendingHistoryDeletes bridge={recovery} /><RecoveryDrafts bridge={recovery} /></>}

@@ -6,7 +6,8 @@ import { testSetup } from './frontend/frontent-test-utils.js';
 async function openCharacterHistory(page, characterName = 'Dev Character 001') {
     await testSetup.awaitST({ page });
     await page.evaluate(async (name) => {
-        const context = window.SillyTavern.getContext();
+        const { getContext } = await import('/scripts/st-context.js');
+        const context = getContext();
         await context.selectCharacterById(context.characters.findIndex(character => character.name === name));
     }, characterName);
     await page.locator('#options_button').click();
@@ -32,9 +33,10 @@ for (const action of ['search', 'close', 'close and reopen']) {
             }
         });
         try {
-            await page.evaluate(() => {
+            await page.evaluate(async () => {
+                const { getContext } = await import('/scripts/st-context.js');
                 window.__historyCompatTest = import('/scripts/chat-ops-service.js').then(({ displayChats }) => {
-                    const context = window.SillyTavern.getContext();
+                    const context = getContext();
                     return displayChats('delayed compat', context.chatId, '', context.characters[context.characterId].avatar, []);
                 });
             });
@@ -84,44 +86,6 @@ test('attachment picker merges files through user and programmatic native menu c
     await expect(page.locator('#file_form .file_name')).toContainText('2');
 });
 
-test('legacy message rows select the requested delete range', async ({ page }) => {
-    await testSetup.awaitST({ page });
-    await page.evaluate(async () => {
-        const context = window.SillyTavern.getContext();
-        context.chatCompletionSettings.chat_memory_enabled = false;
-        await context.selectCharacterById(context.characters.findIndex(character => character.name === 'Dev Character 001'));
-    });
-    expect(await page.evaluate(() => window.SillyTavern.getContext().chat.length)).toBeGreaterThanOrEqual(3);
-    await page.locator('#options_button').click();
-    await page.locator('#option_delete_mes').click();
-    await expect(page.locator('#dialogue_del_mes')).toBeVisible();
-    await page.evaluate(() => {
-        const host = document.createElement('div');
-        host.id = 'u004-legacy-rows';
-        Object.assign(host.style, { position: 'fixed', top: '10px', left: '10px', zIndex: '999999', background: 'white' });
-        for (let index = 0; index < 3; index++) {
-            const row = document.createElement('div');
-            row.className = 'mes';
-            row.setAttribute('mesid', String(index));
-            row.innerHTML = `<input class="del_checkbox" type="checkbox" style="display:inline-block"><span>row ${index}</span>`;
-            host.append(row);
-        }
-        document.body.prepend(host);
-    });
-    const rows = page.locator('#u004-legacy-rows .mes');
-    expect(await page.evaluate(() => ({
-        active: globalThis.__emberDeskBulkDeleteController.getSnapshot().active,
-        visible: Boolean(document.querySelector('#u004-legacy-rows .del_checkbox').getClientRects().length),
-    }))).toEqual({ active: true, visible: true });
-    await rows.nth(1).locator('span').click();
-    await expect(rows.nth(0)).not.toHaveClass(/selected/);
-    await expect(rows.nth(1)).toHaveClass(/selected/);
-    await expect(rows.nth(2)).toHaveClass(/selected/);
-    await expect(rows.nth(1).locator('.del_checkbox')).toBeChecked();
-    await expect(rows.nth(2).locator('.del_checkbox')).toBeChecked();
-    await expect(page.locator('#dialogue_del_mes_ok')).toBeEnabled();
-    await page.locator('#dialogue_del_mes_cancel').click();
-});
 
 test('public history highlights a requested row after the list has been scrolled', async ({ page }) => {
     await openCharacterHistory(page);
@@ -130,8 +94,9 @@ test('public history highlights a requested row after the list has been scrolled
         file_size: '1 KB', message_count: 1, preview_message: 'A chat', last_mes: '2026-01-01T00:00:00Z',
     })) }));
     const display = async (highlightNames) => page.evaluate(async names => {
+        const { getContext } = await import('/scripts/st-context.js');
         const { displayChats } = await import('/scripts/chat-ops-service.js');
-        const context = window.SillyTavern.getContext();
+        const context = getContext();
         await displayChats('', context.chatId, '', context.characters[context.characterId].avatar, names);
     }, highlightNames);
     await display([]);
@@ -161,8 +126,9 @@ test('history rows render the selected character thumbnail lazily', async ({ pag
     const avatar = page.locator('#select_chat_div .select_chat_block .avatar img').first();
     await expect(avatar).toHaveAttribute('loading', 'lazy');
     await expect(avatar).toHaveAttribute('decoding', 'async');
-    const identity = await page.evaluate(() => {
-        const context = window.SillyTavern.getContext();
+    const identity = await page.evaluate(async () => {
+        const { getContext } = await import('/scripts/st-context.js');
+        const context = getContext();
         return context.characters[context.characterId].avatar;
     });
     const src = await avatar.getAttribute('src');
@@ -176,8 +142,9 @@ test('public history display renders and highlights a requested row', async ({ p
     await openCharacterHistory(page);
     const name = await page.locator('#select_chat_div .select_chat_block').first().getAttribute('file_name');
     await page.evaluate(async name => {
+        const { getContext } = await import('/scripts/st-context.js');
         const { displayChats } = await import('/scripts/chat-ops-service.js');
-        const context = window.SillyTavern.getContext();
+        const context = getContext();
         await displayChats('', context.chatId, '', context.characters[context.characterId].avatar, [name]);
     }, name);
     await expect(page.locator('#select_chat_div .select_chat_block').first()).toHaveAttribute('file_name', name);
@@ -187,26 +154,27 @@ test('public history display renders and highlights a requested row', async ({ p
 test('options returns from a branch to its parent with user and programmatic native clicks', async ({ page }) => {
     await testSetup.awaitST({ page });
     await page.evaluate(async () => {
-        const context = window.SillyTavern.getContext();
+        const { getContext } = await import('/scripts/st-context.js');
+        const context = getContext();
         context.chatCompletionSettings.chat_memory_enabled = false;
         await context.selectCharacterById(context.characters.findIndex(character => character.name === 'Dev Character 003'));
     });
-    const parent = await page.evaluate(() => window.SillyTavern.getContext().chatId);
+    const parent = await page.evaluate(async () => (await import('/scripts/st-context.js')).getContext().chatId);
     for (const synthetic of [false, true]) {
         await page.evaluate(async () => { await (await import('/scripts/chat-branch.js')).branchChat(0); });
-        await expect.poll(() => page.evaluate(() => window.SillyTavern.getContext().chatId)).not.toBe(parent);
+        await expect.poll(() => page.evaluate(async () => (await import('/scripts/st-context.js')).getContext().chatId)).not.toBe(parent);
         await page.locator('#options_button').click();
         await expect(page.locator('#option_back_to_main')).toBeVisible();
         if (synthetic) await page.evaluate(() => document.querySelector('#option_back_to_main').click());
         else await page.locator('#option_back_to_main').click();
-        await expect.poll(() => page.evaluate(() => window.SillyTavern.getContext().chatId)).toBe(parent);
+        await expect.poll(() => page.evaluate(async () => (await import('/scripts/st-context.js')).getContext().chatId)).toBe(parent);
     }
 });
 
 test('history renames a chat through the real endpoint and retains the new name after reload', async ({ page }) => {
 
     await testSetup.awaitST({ page });
-    await page.evaluate(() => { window.SillyTavern.getContext().chatCompletionSettings.chat_memory_enabled = false; });
+    await page.evaluate(async () => { const { getContext } = await import('/scripts/st-context.js'); getContext().chatCompletionSettings.chat_memory_enabled = false; });
     await openCharacterHistory(page, 'Dev Character 002');
     const row = page.locator('#select_chat_div .select_chat_block:not([highlight="true"])').first();
     await expect(row).toBeVisible();
@@ -221,9 +189,10 @@ test('history renames a chat through the real endpoint and retains the new name 
     expect(response.ok()).toBe(true);
     expect(await response.json()).toMatchObject({ ok: true, sanitizedFileName: newName });
     await expect(page.locator(`.select_chat_block[file_name="${newName}"]`)).toBeVisible();
+    await expect(page.locator('#select_chat_search')).toBeFocused();
     await page.reload();
     await testSetup.awaitST({ page });
-    await page.evaluate(() => { window.SillyTavern.getContext().chatCompletionSettings.chat_memory_enabled = false; });
+    await page.evaluate(async () => { const { getContext } = await import('/scripts/st-context.js'); getContext().chatCompletionSettings.chat_memory_enabled = false; });
     await openCharacterHistory(page, 'Dev Character 002');
     await expect(page.locator(`.select_chat_block[file_name="${newName}"]`)).toBeVisible();
     await expect.poll(() => page.locator('.select_chat_block').evaluateAll((rows, previous) => rows.some(row => row.getAttribute('file_name') === previous), oldName)).toBe(false);
@@ -232,7 +201,7 @@ test('history renames a chat through the real endpoint and retains the new name 
 test('slash delchat deletes the selected chat through the real endpoint', async ({ page }) => {
     await openCharacterHistory(page, 'Dev Character 002');
 
-    const name = await page.evaluate(() => window.SillyTavern.getContext().chatId);
+    const name = await page.evaluate(async () => (await import('/scripts/st-context.js')).getContext().chatId);
     await expect(page.locator('.select_chat_block[highlight="true"]')).toHaveAttribute('file_name', name);
     await page.locator('#select_chat_cross').click();
     await page.evaluate(() => {
@@ -256,7 +225,7 @@ test('slash delchat deletes the selected chat through the real endpoint', async 
     await page.locator('#option_select_chat').click();
     const searchResponse = await refreshed;
     const searchData = await searchResponse.json();
-    const diagnostic = `deleted=${JSON.stringify(name)}, search=${JSON.stringify(searchData)}, current=${JSON.stringify(await page.evaluate(() => window.SillyTavern.getContext().chatId))}`;
+    const diagnostic = `deleted=${JSON.stringify(name)}, search=${JSON.stringify(searchData)}, current=${JSON.stringify(await page.evaluate(async () => (await import('/scripts/st-context.js')).getContext().chatId))}`;
     await expect.poll(() => page.locator('#select_chat_div .select_chat_block').evaluateAll((rows, target) => rows.some(row => row.getAttribute('file_name') === target), name), { message: diagnostic }).toBe(false);
     await expect(page.locator('#shadow_popup')).toBeHidden();
 });
@@ -264,7 +233,7 @@ test('slash delchat deletes the selected chat through the real endpoint', async 
 test('slash deletion waits for the real delete response before resolving and reopening history', async ({ page }) => {
     await openCharacterHistory(page, 'Dev Character 003');
 
-    const name = await page.evaluate(() => window.SillyTavern.getContext().chatId);
+    const name = await page.evaluate(async () => (await import('/scripts/st-context.js')).getContext().chatId);
     const traffic = [];
     page.on('request', request => {
         if (/\/api\/(chats|characters)\/(save|get|chats|delete|search)/.test(request.url())) {
@@ -296,7 +265,8 @@ test('slash deletion waits for the real delete response before resolving and reo
     await serverDeleted;
     expect(await page.evaluate(() => window.__u004SlashDone)).toBe(false);
     await page.evaluate(async () => {
-        window.SillyTavern.getContext().chat[0].mes = 'slash pending delete late edit proof';
+        const { getContext } = await import('/scripts/st-context.js');
+        getContext().chat[0].mes = 'slash pending delete late edit proof';
         const { saveChatConditional } = await import('/scripts/chat-ops-service.js');
         window.__backgroundSave = saveChatConditional();
     });
@@ -305,7 +275,7 @@ test('slash deletion waits for the real delete response before resolving and reo
     expect(await page.evaluate(() => window.__backgroundSave)).toBe(false);
     await expect.poll(() => page.evaluate(() => window.__u004SlashDone)).toBe(true);
     await expect(page.locator('#toast-container .toast-error')).toHaveCount(0);
-    expect(await page.evaluate(() => window.SillyTavern.getContext().chatId)).not.toBe(name);
+    expect(await page.evaluate(async () => (await import('/scripts/st-context.js')).getContext().chatId)).not.toBe(name);
     await expect.poll(() => page.evaluate(async () => {
         const storage = (await import('/lib.js')).localforage.createInstance({ name: 'EmberDesk_ChatRecovery' });
         const keys = (await storage.keys()).filter(key => key.startsWith('recovery-v1:playwright-e2e:'));
@@ -317,14 +287,14 @@ test('slash deletion waits for the real delete response before resolving and reo
     const response = await refreshed;
     expect(response.ok()).toBe(true);
     const data = await response.json();
-    const diagnostic = `deleted=${JSON.stringify(name)} current=${JSON.stringify(await page.evaluate(() => window.SillyTavern.getContext().chatId))} search=${JSON.stringify(Object.values(data).map(row => row.file_name))} traffic=${JSON.stringify(traffic)}`;
+    const diagnostic = `deleted=${JSON.stringify(name)} current=${JSON.stringify(await page.evaluate(async () => (await import('/scripts/st-context.js')).getContext().chatId))} search=${JSON.stringify(Object.values(data).map(row => row.file_name))} traffic=${JSON.stringify(traffic)}`;
     expect(Object.values(data).some(row => row.file_name === name || row.file_name === `${name}.jsonl`), diagnostic).toBe(false);
     await expect.poll(() => page.locator('#select_chat_div .select_chat_block').evaluateAll((rows, target) => rows.some(row => row.getAttribute('file_name') === target), name)).toBe(false);
 });
 
 test('slash delchat retains the rendered row when refreshing history fails', async ({ page }) => {
     await openCharacterHistory(page, 'Dev Character 003');
-    const name = await page.evaluate(() => window.SillyTavern.getContext().chatId);
+    const name = await page.evaluate(async () => (await import('/scripts/st-context.js')).getContext().chatId);
     await expect(page.locator('#select_chat_div .select_chat_block[highlight="true"]')).toHaveAttribute('file_name', name);
     await page.locator('#select_chat_cross').click();
     await page.route('**/api/chats/search', route => route.fulfill({ status: 503, body: 'unavailable' }));
@@ -560,7 +530,8 @@ test('options keyboard activation reports expanded state and Escape restores foc
 test('history programmatic native import click opens a single chooser', async ({ page }) => {
     await testSetup.awaitST({ page });
     await page.evaluate(async () => {
-        const context = window.SillyTavern.getContext();
+        const { getContext } = await import('/scripts/st-context.js');
+        const context = getContext();
         await context.selectCharacterById(context.characters.findIndex(character => character.name === 'Dev Character 001'));
     });
     await page.locator('#options_button').click();
@@ -592,7 +563,8 @@ test('options menu closes on outside click and Escape restores focus', async ({ 
 test('history closes with Escape and restores focus to options', async ({ page }) => {
     await testSetup.awaitST({ page });
     await page.evaluate(async () => {
-        const context = window.SillyTavern.getContext();
+        const { getContext } = await import('/scripts/st-context.js');
+        const context = getContext();
         await context.selectCharacterById(context.characters.findIndex(character => character.name === 'Dev Character 001'));
     });
     await page.locator('#options_button').click();
@@ -606,7 +578,8 @@ test('history closes with Escape and restores focus to options', async ({ page }
 test('history programmatic native close restores focus', async ({ page }) => {
     await testSetup.awaitST({ page });
     await page.evaluate(async () => {
-        const context = window.SillyTavern.getContext();
+        const { getContext } = await import('/scripts/st-context.js');
+        const context = getContext();
         await context.selectCharacterById(context.characters.findIndex(character => character.name === 'Dev Character 001'));
     });
     await page.locator('#options_button').click();
@@ -620,7 +593,8 @@ test('history programmatic native close restores focus', async ({ page }) => {
 test('history backdrop interaction preserves current close behavior', async ({ page }) => {
     await testSetup.awaitST({ page });
     await page.evaluate(async () => {
-        const context = window.SillyTavern.getContext();
+        const { getContext } = await import('/scripts/st-context.js');
+        const context = getContext();
         await context.selectCharacterById(context.characters.findIndex(character => character.name === 'Dev Character 001'));
     });
     await page.locator('#options_button').click();
@@ -634,12 +608,11 @@ test('history backdrop interaction preserves current close behavior', async ({ p
     await expect(page.locator('#options_button')).toBeFocused();
 });
 
-test('legacy presentation fallback remains usable without the mounted presentation', async ({ page }) => {
+test('the compatibility confirmation presents content and Escape cancels', async ({ page }) => {
     await testSetup.awaitST({ page });
     await page.evaluate(async () => {
         const { callPopup } = await import('/script.js');
-        window.__savedPresentation = window.__emberDeskDialoguePresentation;
-        window.__emberDeskDialoguePresentation = undefined;
+
         window.__fallbackResult = 'pending';
         callPopup('<b id="fallback-proof">Fallback</b>', 'confirm').then(value => { window.__fallbackResult = value; });
     });
@@ -647,29 +620,28 @@ test('legacy presentation fallback remains usable without the mounted presentati
     await page.keyboard.press('Escape');
     await expect.poll(() => page.evaluate(() => window.__fallbackResult)).toBe(false);
     await expect(page.locator('#shadow_popup')).toBeHidden();
-    await page.evaluate(() => { window.__emberDeskDialoguePresentation = window.__savedPresentation; });
 });
 
-test('the exported context dialogue adapter resolves without its controller bridge', async ({ page }) => {
+test('the exported context dialogue adapter resolves confirmation and input through React', async ({ page }) => {
     await testSetup.awaitST({ page });
-    await page.evaluate(() => {
-        window.__savedDialogueController = window.__emberDeskDialogueController;
-        window.__emberDeskDialogueController = undefined;
+    await page.evaluate(async () => {
+        const { getContext } = await import('/scripts/st-context.js');
+
         window.__contextDialogueResult = 'pending';
-        window.SillyTavern.getContext().callPopup('Compatibility confirmation', 'confirm').then(value => { window.__contextDialogueResult = value; });
+        getContext().callPopup('Compatibility confirmation', 'confirm').then(value => { window.__contextDialogueResult = value; });
     });
     await expect(page.locator('#shadow_popup')).toBeVisible();
     await page.locator('#dialogue_popup_ok').click();
     await expect.poll(() => page.evaluate(() => window.__contextDialogueResult)).toBe(true);
     await expect(page.locator('#shadow_popup')).toBeHidden();
-    await page.evaluate(() => {
+    await page.evaluate(async () => {
+        const { getContext } = await import('/scripts/st-context.js');
         window.__contextDialogueResult = 'pending';
-        window.SillyTavern.getContext().callPopup('Type a value', 'input', 'initial').then(value => { window.__contextDialogueResult = value; });
+        getContext().callPopup('Type a value', 'input', 'initial').then(value => { window.__contextDialogueResult = value; });
     });
     await page.locator('#dialogue_popup_input').fill('edited');
     await page.locator('#dialogue_popup_ok').click();
     await expect.poll(() => page.evaluate(() => window.__contextDialogueResult)).toBe('edited');
-    await page.evaluate(() => { window.__emberDeskDialogueController = window.__savedDialogueController; });
 });
 
 test('dialogue input receives focus and Escape cancels', async ({ page }) => {
@@ -747,7 +719,8 @@ test('character export reports an HTTP failure without starting a download', asy
 test('history import opens a native file picker and imports an exported JSONL chat', async ({ page }) => {
     await testSetup.awaitST({ page });
     await page.evaluate(async () => {
-        const context = window.SillyTavern.getContext();
+        const { getContext } = await import('/scripts/st-context.js');
+        const context = getContext();
         await context.selectCharacterById(context.characters.findIndex(character => character.name === 'Dev Character 001'));
     });
     await page.locator('#options_button').click();
@@ -770,7 +743,8 @@ test('history import opens a native file picker and imports an exported JSONL ch
 test('history JSONL export produces an actual download', async ({ page }) => {
     await testSetup.awaitST({ page });
     await page.evaluate(async () => {
-        const context = window.SillyTavern.getContext();
+        const { getContext } = await import('/scripts/st-context.js');
+        const context = getContext();
         await context.selectCharacterById(context.characters.findIndex(character => character.name === 'Dev Character 001'));
     });
     await page.locator('#options_button').click();
@@ -791,7 +765,8 @@ test('history JSONL export produces an actual download', async ({ page }) => {
 test('history delete confirms and reopens after a delete request', async ({ page }) => {
     await testSetup.awaitST({ page });
     await page.evaluate(async () => {
-        const context = window.SillyTavern.getContext();
+        const { getContext } = await import('/scripts/st-context.js');
+        const context = getContext();
         await context.selectCharacterById(context.characters.findIndex(character => character.name === 'Dev Character 001'));
     });
     await page.locator('#options_button').click();
@@ -898,7 +873,8 @@ test('legacy popup commands resolve typed input and cancel results', async ({ pa
 test('history search owns its input and recovers from no matches', async ({ page }) => {
     await testSetup.awaitST({ page });
     await page.evaluate(async () => {
-        const context = window.SillyTavern.getContext();
+        const { getContext } = await import('/scripts/st-context.js');
+        const context = getContext();
         await context.selectCharacterById(context.characters.findIndex(character => character.name === 'Dev Character 001'));
     });
     await page.locator('#options_button').click();
@@ -924,29 +900,31 @@ test('history search owns its input and recovers from no matches', async ({ page
 test('history new chat action creates a chat and closes the popup', async ({ page }) => {
     await testSetup.awaitST({ page });
     await page.evaluate(async () => {
-        const context = window.SillyTavern.getContext();
+        const { getContext } = await import('/scripts/st-context.js');
+        const context = getContext();
         await context.selectCharacterById(context.characters.findIndex(character => character.name === 'Dev Character 001'));
     });
-    const before = await page.evaluate(() => window.SillyTavern.getContext().chatId);
+    const before = await page.evaluate(async () => (await import('/scripts/st-context.js')).getContext().chatId);
     await page.locator('#options_button').click();
     await page.locator('#option_select_chat').click();
     await expect(page.locator('#shadow_select_chat_popup')).toBeVisible();
     await page.locator('#newChatFromManageScreenButton').click();
     await expect(page.locator('#shadow_select_chat_popup')).toBeHidden();
-    await expect.poll(() => page.evaluate(() => window.SillyTavern.getContext().chatId)).not.toBe(before);
+    await expect.poll(() => page.evaluate(async () => (await import('/scripts/st-context.js')).getContext().chatId)).not.toBe(before);
 });
 
 test('history programmatic native new chat command starts a chat', async ({ page }) => {
     await testSetup.awaitST({ page });
     await page.evaluate(async () => {
-        const context = window.SillyTavern.getContext();
+        const { getContext } = await import('/scripts/st-context.js');
+        const context = getContext();
         await context.selectCharacterById(context.characters.findIndex(character => character.name === 'Dev Character 002'));
     });
-    const before = await page.evaluate(() => window.SillyTavern.getContext().chatId);
+    const before = await page.evaluate(async () => (await import('/scripts/st-context.js')).getContext().chatId);
     await page.locator('#options_button').click();
     await page.locator('#option_select_chat').click();
     await expect(page.locator('#shadow_select_chat_popup')).toBeVisible();
     await page.evaluate(() => document.querySelector('#newChatFromManageScreenButton').click());
     await expect(page.locator('#shadow_select_chat_popup')).toBeHidden();
-    await expect.poll(() => page.evaluate(() => window.SillyTavern.getContext().chatId)).not.toBe(before);
+    await expect.poll(() => page.evaluate(async () => (await import('/scripts/st-context.js')).getContext().chatId)).not.toBe(before);
 });

@@ -21,8 +21,9 @@ const toolBinding = {
 };
 
 async function prepareOpenAiProvider(page) {
-    await page.evaluate(() => {
-        const context = window.SillyTavern.getContext();
+    await page.evaluate(async () => {
+        const { getContext } = await import('/scripts/st-context.js');
+        const context = getContext();
         context.chatCompletionSettings.chat_completion_source = 'openai';
         context.chatCompletionSettings.openai_model = 'gpt-4o-mini';
         // Non-streaming path: parseToolCalls handles choices[].message.tool_calls.
@@ -165,7 +166,8 @@ test.describe('tool bindings', () => {
         await testSetup.awaitST({ page });
         await expect(page.locator('#RegexPanel')).toHaveAttribute('data-tool-bindings-init', 'true');
         await page.evaluate(async () => {
-            await window.SillyTavern.getContext().selectCharacterById(0);
+            const { getContext } = await import('/scripts/st-context.js');
+            await getContext().selectCharacterById(0);
             const { init } = await import('/scripts/tool-bindings.js');
             const { messageFormatting } = await import('/scripts/message-service.js');
             await init();
@@ -246,12 +248,14 @@ test.describe('tool bindings', () => {
         // The new binding renders in the list, persists in feature_settings,
         // and is registered with ToolManager.
         await expect(page.locator('#saved_tool_bindings')).toContainText('e2e_ui_tool');
-        const stored = await page.evaluate(() => {
-            return window.SillyTavern.getContext().featureSettings.tool_bindings.map(binding => binding.name);
+        const stored = await page.evaluate(async () => {
+            const { getContext } = await import('/scripts/st-context.js');
+            return getContext().featureSettings.tool_bindings.map(binding => binding.name);
         });
         expect(stored).toContain('e2e_ui_tool');
-        const registered = await page.evaluate(() => {
-            return window.SillyTavern.getContext().ToolManager.tools.map(tool => tool.toFunctionOpenAI().function.name);
+        const registered = await page.evaluate(async () => {
+            const { getContext } = await import('/scripts/st-context.js');
+            return getContext().ToolManager.tools.map(tool => tool.toFunctionOpenAI().function.name);
         });
         expect(registered).toContain('e2e_ui_tool');
 
@@ -288,12 +292,24 @@ test.describe('tool bindings', () => {
         await expect(enabled).toBeChecked();
         await row.locator('.tool-binding-toggle-on').click();
         await expect(enabled).not.toBeChecked();
-        await expect.poll(() => page.evaluate(() => window.SillyTavern.getContext().featureSettings.tool_bindings.find(binding => binding.name === 'e2e_ui_tool')?.enabled)).toBe(false);
-        await expect.poll(() => page.evaluate(() => window.SillyTavern.getContext().ToolManager.tools.map(tool => tool.toFunctionOpenAI().function.name))).not.toContain('e2e_ui_tool');
+        await expect.poll(() => page.evaluate(async () => {
+            const { getContext } = await import('/scripts/st-context.js');
+            return getContext().featureSettings.tool_bindings.find(binding => binding.name === 'e2e_ui_tool')?.enabled;
+        })).toBe(false);
+        await expect.poll(() => page.evaluate(async () => {
+            const { getContext } = await import('/scripts/st-context.js');
+            return getContext().ToolManager.tools.map(tool => tool.toFunctionOpenAI().function.name);
+        })).not.toContain('e2e_ui_tool');
         await row.locator('.tool-binding-toggle-off').click();
         await expect(enabled).toBeChecked();
-        await expect.poll(() => page.evaluate(() => window.SillyTavern.getContext().featureSettings.tool_bindings.find(binding => binding.name === 'e2e_ui_tool')?.enabled)).toBe(true);
-        await expect.poll(() => page.evaluate(() => window.SillyTavern.getContext().ToolManager.tools.map(tool => tool.toFunctionOpenAI().function.name))).toContain('e2e_ui_tool');
+        await expect.poll(() => page.evaluate(async () => {
+            const { getContext } = await import('/scripts/st-context.js');
+            return getContext().featureSettings.tool_bindings.find(binding => binding.name === 'e2e_ui_tool')?.enabled;
+        })).toBe(true);
+        await expect.poll(() => page.evaluate(async () => {
+            const { getContext } = await import('/scripts/st-context.js');
+            return getContext().ToolManager.tools.map(tool => tool.toFunctionOpenAI().function.name);
+        })).toContain('e2e_ui_tool');
 
         // Verify the UI edit survives a real settings write and boot registration.
         await page.evaluate(async () => (await import('/script.js')).saveSettings());
@@ -303,14 +319,20 @@ test.describe('tool bindings', () => {
         await page.locator('#RegexPanel .wpc-tab').filter({ hasText: '工具绑定' }).click();
         await expect(row).toContainText('Edited tool');
         await expect(enabled).toBeChecked();
-        await expect.poll(() => page.evaluate(() => window.SillyTavern.getContext().ToolManager.tools.map(tool => tool.toFunctionOpenAI().function.name))).toContain('e2e_ui_tool');
+        await expect.poll(() => page.evaluate(async () => {
+            const { getContext } = await import('/scripts/st-context.js');
+            return getContext().ToolManager.tools.map(tool => tool.toFunctionOpenAI().function.name);
+        })).toContain('e2e_ui_tool');
         await row.locator('.tool-binding-delete').click();
         await page.locator('.popup-button-cancel').click();
         await expect(row).toHaveCount(1);
         await row.locator('.tool-binding-delete').click();
         await page.locator('.popup-button-ok').click();
         await expect(row).toHaveCount(0);
-        await expect.poll(() => page.evaluate(() => window.SillyTavern.getContext().ToolManager.tools.map(tool => tool.toFunctionOpenAI().function.name))).not.toContain('e2e_ui_tool');
+        await expect.poll(() => page.evaluate(async () => {
+            const { getContext } = await import('/scripts/st-context.js');
+            return getContext().ToolManager.tools.map(tool => tool.toFunctionOpenAI().function.name);
+        })).not.toContain('e2e_ui_tool');
 
         // Switching back to the regex tab keeps the legacy controls functional.
         await page.locator('#RegexPanel .wpc-tab').filter({ hasText: /^正则$/ }).click();
@@ -323,8 +345,9 @@ test.describe('tool bindings', () => {
         // Persist through the real settings save path, then reload so the
         // SETTINGS_LOADED wiring performs registration exactly as at boot.
         await page.evaluate(async (binding) => {
+            const { getContext } = await import('/scripts/st-context.js');
             const script = await import('/script.js');
-            const context = window.SillyTavern.getContext();
+            const context = getContext();
             context.featureSettings.tool_bindings = [binding];
             context.chatCompletionSettings.reply_pipeline = { enabled: true, steps: [] };
             await script.saveSettings();
@@ -332,16 +355,18 @@ test.describe('tool bindings', () => {
         await page.reload();
         await testSetup.awaitST({ page });
 
-        await expect.poll(async () => page.evaluate(() => {
-            return window.SillyTavern.getContext().ToolManager.tools.map(tool => tool.toFunctionOpenAI().function.name);
+        await expect.poll(async () => page.evaluate(async () => {
+            const { getContext } = await import('/scripts/st-context.js');
+            return getContext().ToolManager.tools.map(tool => tool.toFunctionOpenAI().function.name);
         }), { timeout: 30_000 }).toContain('game_content');
 
         await installGenerateStub(page);
         await prepareOpenAiProvider(page);
 
         await page.locator('#send_textarea').fill('tool binding e2e message');
-        await page.evaluate(() => {
-            window.__emberdeskToolGeneration = window.SillyTavern.getContext()
+        await page.evaluate(async () => {
+            const { getContext } = await import('/scripts/st-context.js');
+            window.__emberdeskToolGeneration = getContext()
                 .generate('normal', { automatic_trigger: false })
                 .catch(error => {
                     window.__emberdeskToolGenerationError = String(error?.message ?? error);
@@ -416,7 +441,8 @@ test.describe('tool bindings', () => {
             .getAttribute('mesid');
         expect(replyId).toBeTruthy();
         await page.evaluate(async (id) => {
-            const context = window.SillyTavern.getContext();
+            const { getContext } = await import('/scripts/st-context.js');
+            const context = getContext();
             context.powerUserSettings.confirm_message_delete = false;
             await context.deleteMessage(Number(id));
         }, replyId);
@@ -433,13 +459,15 @@ test.describe('tool bindings', () => {
 
         // Flip the required flag — the next request must force a tool call.
         await page.evaluate(async () => {
+            const { getContext } = await import('/scripts/st-context.js');
             const script = await import('/script.js');
-            window.SillyTavern.getContext().featureSettings.tool_choice_required = true;
+            getContext().featureSettings.tool_choice_required = true;
             await script.saveSettings();
         });
         await page.locator('#send_textarea').fill('required e2e message');
-        await page.evaluate(() => {
-            window.SillyTavern.getContext()
+        await page.evaluate(async () => {
+            const { getContext } = await import('/scripts/st-context.js');
+            getContext()
                 .generate('normal', { automatic_trigger: false })
                 .catch(() => { });
         });
@@ -452,7 +480,8 @@ test.describe('tool bindings', () => {
     test('pipeline toggle persists and controls the next request tool list', async ({ page }) => {
         await testSetup.awaitST({ page });
         await page.evaluate(async binding => {
-            const context = window.SillyTavern.getContext();
+            const { getContext } = await import('/scripts/st-context.js');
+            const context = getContext();
             context.featureSettings.tool_bindings = [binding];
             context.chatCompletionSettings.reply_pipeline = { enabled: true, steps: [{ tool: binding.name }] };
             await (await import('/script.js')).saveSettings();
@@ -484,8 +513,9 @@ test.describe('tool bindings', () => {
         await testSetup.awaitST({ page });
 
         await page.evaluate(async (binding) => {
+            const { getContext } = await import('/scripts/st-context.js');
             const script = await import('/script.js');
-            const context = window.SillyTavern.getContext();
+            const context = getContext();
             context.featureSettings.tool_bindings = [{ ...binding, enabled: false }];
             await script.saveSettings();
         }, toolBinding);
@@ -493,16 +523,18 @@ test.describe('tool bindings', () => {
         await testSetup.awaitST({ page });
         await expect(page.locator('#RegexPanel')).toHaveAttribute('data-tool-bindings-init', 'true', { timeout: 30_000 });
 
-        const names = await page.evaluate(() => {
-            return window.SillyTavern.getContext().ToolManager.tools.map(tool => tool.toFunctionOpenAI().function.name);
+        const names = await page.evaluate(async () => {
+            const { getContext } = await import('/scripts/st-context.js');
+            return getContext().ToolManager.tools.map(tool => tool.toFunctionOpenAI().function.name);
         });
         expect(names).not.toContain('game_content');
 
         await installGenerateStub(page);
         await prepareOpenAiProvider(page);
         await page.locator('#send_textarea').fill('no tools expected');
-        await page.evaluate(() => {
-            window.__emberdeskToolGeneration = window.SillyTavern.getContext()
+        await page.evaluate(async () => {
+            const { getContext } = await import('/scripts/st-context.js');
+            window.__emberdeskToolGeneration = getContext()
                 .generate('normal', { automatic_trigger: false })
                 .catch(error => {
                     window.__emberdeskToolGenerationError = String(error?.message ?? error);
@@ -540,9 +572,10 @@ test.describe('tool bindings', () => {
         }));
 
         await page.evaluate(async (bindings) => {
+            const { getContext } = await import('/scripts/st-context.js');
             const script = await import('/script.js');
             const { promptManager } = await import('/scripts/openai.js');
-            const context = window.SillyTavern.getContext();
+            const context = getContext();
             context.featureSettings.tool_bindings = bindings;
             context.chatCompletionSettings.reply_pipeline = {
                 enabled: true,
@@ -610,23 +643,25 @@ test.describe('tool bindings', () => {
         await installPipelineStub(page, { steps: ['analyze', 'review', 'respond'] });
         await prepareOpenAiProvider(page);
 
-        await page.evaluate(() => {
-            const context = window.SillyTavern.getContext();
+        await page.evaluate(async () => {
+            const { getContext } = await import('/scripts/st-context.js');
+            const context = getContext();
             context.chatCompletionSettings.media_inlining = true;
             context.chat.push({ name: 'User', is_user: true, is_system: false, mes: 'media history proof',
                 extra: { media: [{ type: 'image', url: 'data:image/png;base64,aGVsbG8=' }] } });
         });
         await page.locator('#send_textarea').fill('reply pipeline e2e message');
         const previews = await page.evaluate(async () => {
+            const { getContext } = await import('/scripts/st-context.js');
             const { previewNextGenerationRequest } = await import('/react/login/workspace/generation-service.js');
             const { getPipelineRunState } = await import('/scripts/reply-pipeline-core.js');
-            const first = window.SillyTavern.getContext().chatCompletionSettings.reply_pipeline.steps[0];
+            const first = getContext().chatCompletionSettings.reply_pipeline.steps[0];
             const model = first.model;
             first.model = 'gpt-3.5-turbo';
             const noVision = await previewNextGenerationRequest({ round: 0 });
             first.model = model;
             const before = structuredClone(getPipelineRunState());
-            const second = window.SillyTavern.getContext().chatCompletionSettings.reply_pipeline.steps[1];
+            const second = getContext().chatCompletionSettings.reply_pipeline.steps[1];
             const secondModel = second.model;
             second.model = 'gpt-4.1';
             const explicitSecond = await previewNextGenerationRequest({ round: 1 });
@@ -645,8 +680,9 @@ test.describe('tool bindings', () => {
         expect(previews.requests).toBe(0);
 
         await page.locator('#send_textarea').fill('reply pipeline e2e message');
-        await page.evaluate(() => {
-            window.__emberdeskToolGeneration = window.SillyTavern.getContext()
+        await page.evaluate(async () => {
+            const { getContext } = await import('/scripts/st-context.js');
+            window.__emberdeskToolGeneration = getContext()
                 .generate('normal', { automatic_trigger: false })
                 .catch(error => {
                     window.__emberdeskToolGenerationError = String(error?.message ?? error);
@@ -656,8 +692,10 @@ test.describe('tool bindings', () => {
         await expect.poll(() => page.evaluate(() =>
             window.__emberdeskToolRequests?.some(request => request.messages?.some(message => message?.role === 'tool')) ?? false,
         ), { timeout: 30_000 }).toBe(true);
-        await expect.poll(() => page.evaluate(() =>
-            window.SillyTavern.getContext().chat.some(message => String(message?.mes ?? '').includes('RESPOND_TEXT')),
+        await expect.poll(() => page.evaluate(async () => {
+            const { getContext } = await import('/scripts/st-context.js');
+            return getContext().chat.some(message => String(message?.mes ?? '').includes('RESPOND_TEXT'));
+        },
         ), { timeout: 30_000 }).toBe(true);
         await page.evaluate(() => window.__emberdeskToolGeneration);
 
@@ -695,8 +733,9 @@ test.describe('tool bindings', () => {
         expect(turnRequests[0].reasoning_effort).toBe('low');
         expect(turnRequests[1].reasoning_effort).not.toBe('low');
 
-        const chatState = await page.evaluate(() => {
-            const chat = window.SillyTavern.getContext().chat;
+        const chatState = await page.evaluate(async () => {
+            const { getContext } = await import('/scripts/st-context.js');
+            const chat = getContext().chat;
             const reply = chat.at(-1);
             return {
                 isSystem: !!reply?.is_system,
@@ -752,8 +791,9 @@ test.describe('tool bindings', () => {
 
         // While still enabled, a later turn uses the current effective reply,
         // not the stale content captured in its real tool invocation.
-        const storedInvocations = await page.evaluate(() => {
-            const context = window.SillyTavern.getContext();
+        const storedInvocations = await page.evaluate(async () => {
+            const { getContext } = await import('/scripts/st-context.js');
+            const context = getContext();
             context.chatCompletionSettings.chat_memory_enabled = false;
             const reply = context.chat.at(-1);
             reply.mes = reply.mes.replace('RESPOND_TEXT', 'EDITED_PIPELINE_REPLY');
@@ -764,9 +804,10 @@ test.describe('tool bindings', () => {
             const { previewNextGenerationRequest } = await import('/react/login/workspace/generation-service.js');
             return await previewNextGenerationRequest();
         });
-        await page.evaluate(() => {
+        await page.evaluate(async () => {
+            const { getContext } = await import('/scripts/st-context.js');
             window.__emberdeskToolRequests = [];
-            window.__emberdeskToolGeneration = window.SillyTavern.getContext().generate('normal', { automatic_trigger: false });
+            window.__emberdeskToolGeneration = getContext().generate('normal', { automatic_trigger: false });
         });
         await page.evaluate(() => window.__emberdeskToolGeneration);
         const enabledRequests = await page.evaluate(() => window.__emberdeskToolRequests);
@@ -781,16 +822,20 @@ test.describe('tool bindings', () => {
         expect(enabledRequests[0].messages.some(message => message.role === 'user' && message.content === 'enabled follow-up message')).toBe(true);
         const enabledWire = JSON.stringify(enabledRequests[0].messages);
         for (const text of ['ANALYZE_TEXT', 'REVIEW_TEXT', 'RESPOND_TEXT', 'data-respond-option']) expect(enabledWire).not.toContain(text);
-        expect(await page.evaluate(() => window.SillyTavern.getContext().chat.find(message => message.mes.includes('EDITED_PIPELINE_REPLY')).extra.tool_invocations)).toEqual(storedInvocations);
+        expect(await page.evaluate(async () => {
+            const { getContext } = await import('/scripts/st-context.js');
+            return getContext().chat.find(message => message.mes.includes('EDITED_PIPELINE_REPLY')).extra.tool_invocations;
+        })).toEqual(storedInvocations);
         await expect(page.locator('#chat .mes').last()).toContainText('RESPOND_TEXT');
 
         // A later ordinary generation (pipeline disabled) must not carry stale
         // step prompts from the finished run.
         await page.locator('#send_textarea').fill('plain follow-up message');
-        await page.evaluate(() => {
+        await page.evaluate(async () => {
+            const { getContext } = await import('/scripts/st-context.js');
             window.__emberdeskToolRequests = [];
-            window.SillyTavern.getContext().chatCompletionSettings.reply_pipeline.enabled = false;
-            window.SillyTavern.getContext()
+            getContext().chatCompletionSettings.reply_pipeline.enabled = false;
+            getContext()
                 .generate('normal', { automatic_trigger: false })
                 .catch(() => { });
         });
@@ -838,8 +883,9 @@ test.describe('tool bindings', () => {
         }));
 
         await page.evaluate(async (bindings) => {
+            const { getContext } = await import('/scripts/st-context.js');
             const script = await import('/script.js');
-            const context = window.SillyTavern.getContext();
+            const context = getContext();
             context.featureSettings.tool_bindings = bindings;
             context.chatCompletionSettings.reply_pipeline = {
                 enabled: true,
@@ -860,23 +906,29 @@ test.describe('tool bindings', () => {
         await prepareOpenAiProvider(page);
 
         await page.locator('#send_textarea').fill('reply pipeline e2e message');
-        await page.evaluate(() => {
-            window.__emberdeskToolGeneration = window.SillyTavern.getContext()
+        await page.evaluate(async () => {
+            const { getContext } = await import('/scripts/st-context.js');
+            window.__emberdeskToolGeneration = getContext()
                 .generate('normal', { automatic_trigger: false })
                 .catch(error => {
                     window.__emberdeskToolGenerationError = String(error?.message ?? error);
                 });
         });
 
-        await expect.poll(() => page.evaluate(() =>
-            window.SillyTavern.getContext().chat.some(message => message?.mes === 'FALLBACK_REPLY_TEXT'),
+        await expect.poll(() => page.evaluate(async () => {
+            const { getContext } = await import('/scripts/st-context.js');
+            return getContext().chat.some(message => message?.mes === 'FALLBACK_REPLY_TEXT');
+        },
         ), { timeout: 30_000 }).toBe(true);
 
         const requests = await page.evaluate(() => window.__emberdeskToolRequests);
         const turnRequests = requests.filter(request => request.messages?.some(message => String(message?.content ?? '').includes('reply pipeline e2e message')));
         expect(turnRequests).toHaveLength(3);
         expect(turnRequests.map(request => request.model)).toEqual(['gpt-4.1-mini', 'gpt-4.1', 'gpt-4o-mini']);
-        expect(await page.evaluate(() => window.SillyTavern.getContext().chat.findLast(message => message.mes === 'FALLBACK_REPLY_TEXT')?.extra?.model)).toBe('gpt-4o-mini');
+        expect(await page.evaluate(async () => {
+            const { getContext } = await import('/scripts/st-context.js');
+            return getContext().chat.findLast(message => message.mes === 'FALLBACK_REPLY_TEXT')?.extra?.model;
+        })).toBe('gpt-4o-mini');
         const fallbackRequest = turnRequests[2];
         expect(turnRequests.slice(0, 2).map(request => request.tools.map(tool => tool.function.name)))
             .toEqual([['analyze'], ['respond']]);
@@ -892,14 +944,17 @@ test.describe('tool bindings', () => {
         // display must be lifted when the pipeline falls back, so the error is
         // not swallowed. The merged card reports summary and keeps both step
         // blocks visible.
-        const lastRunCard = await page.evaluate(() => window.SillyTavern.getContext().chat
+        const lastRunCard = await page.evaluate(async () => {
+            const { getContext } = await import('/scripts/st-context.js');
+            return getContext().chat
             .filter(message => Array.isArray(message?.extra?.tool_invocations)
                 && typeof message?.extra?.reply_pipeline_run === 'string')
             .slice(-1)
             .map(message => ({
                 display: message.extra.reply_pipeline_display,
                 stepDisplays: message.extra.tool_invocations.map(invocation => invocation.pipeline?.display),
-            })));
+            }));
+        });
         expect(lastRunCard).toEqual([{ display: 'summary', stepDisplays: ['summary', 'summary'] }]);
         await expect(page.locator('#chat .mes:has([data-tool-invocation])').last()).not.toHaveClass(/replyPipelineHidden/);
     });
@@ -932,10 +987,10 @@ test.describe('reply pipeline step editor', () => {
         if (await page.locator('.popup-button-cancel').isVisible()) await page.locator('.popup-button-cancel').click();
         await expect(row.locator('.prompt-panel-item-name-text')).toHaveText('preset_beta');
         await expect(input).toHaveValue('preset_beta');
-        expect(await page.evaluate(() => window.SillyTavern.getContext().chatCompletionSettings.reply_pipeline.steps[0].model)).toBe('model-beta');
+        expect(await page.evaluate(async () => (await import('/scripts/st-context.js')).getContext().chatCompletionSettings.reply_pipeline.steps[0].model)).toBe('model-beta');
         await chooser.selectOption({ label: 'AutoBind A' }, { force: true });
         await expect(row.locator('.prompt-panel-item-name-text')).toHaveText('preset_alpha');
-        expect(await page.evaluate(() => window.SillyTavern.getContext().chatCompletionSettings.reply_pipeline.steps[0].model)).toBe('model-alpha');
+        expect(await page.evaluate(async () => (await import('/scripts/st-context.js')).getContext().chatCompletionSettings.reply_pipeline.steps[0].model)).toBe('model-alpha');
         await chooser.selectOption({ label: 'AutoBind B' }, { force: true });
         await expect(row.locator('.prompt-panel-item-name-text')).toHaveText('preset_beta');
         await page.evaluate(previous => {
@@ -951,10 +1006,13 @@ test.describe('reply pipeline step editor', () => {
         await expect(input).toHaveValue('preset_beta');
         await input.focus();
         await input.press('Tab');
-        expect(await page.evaluate(() => window.SillyTavern.getContext().chatCompletionSettings.reply_pipeline.steps[0].tool)).toBe('preset_beta');
+        expect(await page.evaluate(async () => (await import('/scripts/st-context.js')).getContext().chatCompletionSettings.reply_pipeline.steps[0].tool)).toBe('preset_beta');
         await input.fill('');
         await input.pressSequentially('beta_edited');
-        expect(await page.evaluate(() => window.SillyTavern.getContext().featureSettings.tool_bindings.some(binding => binding.name.startsWith('beta_')))).toBe(false);
+        expect(await page.evaluate(async () => {
+            const { getContext } = await import('/scripts/st-context.js');
+            return getContext().featureSettings.tool_bindings.some(binding => binding.name.startsWith('beta_'));
+        })).toBe(false);
         await input.press('Enter');
         await expect(row.locator('.prompt-panel-item-name-text')).toHaveText('beta_edited');
     });
@@ -963,24 +1021,27 @@ test.describe('reply pipeline step editor', () => {
         page.on('pageerror', error => console.error('Pipeline browser error:', error.message));
         await testSetup.awaitST({ page });
         await expect(page.locator('html')).toHaveAttribute('data-reply-pipeline-init', 'true', { timeout: 15_000 });
-        await page.evaluate(() => {
-            const context = window.SillyTavern.getContext();
+        await page.evaluate(async () => {
+            const { getContext } = await import('/scripts/st-context.js');
+            const context = getContext();
             context.featureSettings.tool_bindings = [];
             context.chatCompletionSettings.reply_pipeline = { enabled: true, steps: [] };
             window.__emberDeskPromptPanelBridge.addPipelineStep();
         });
         const input = page.locator('.prompt-panel-pipeline-tool');
         await input.pressSequentially('auto_reply');
-        expect(await page.evaluate(() => window.SillyTavern.getContext().featureSettings.tool_bindings)).toEqual([]);
+        expect(await page.evaluate(async () => (await import('/scripts/st-context.js')).getContext().featureSettings.tool_bindings)).toEqual([]);
         await input.press('Enter');
-        const inspect = () => page.evaluate(() => {
-            const context = window.SillyTavern.getContext();
+        const inspect = () => page.evaluate(async () => {
+            const { getContext } = await import('/scripts/st-context.js');
+            const context = getContext();
             return { names: context.featureSettings.tool_bindings.map(binding => binding.name),
                 registry: context.ToolManager.tools.map(tool => tool.toFunctionOpenAI().function.name) };
         });
         expect(await inspect()).toMatchObject({ names: ['auto_reply'], registry: expect.arrayContaining(['auto_reply']) });
         const collision = await page.evaluate(async () => {
-            const context = window.SillyTavern.getContext();
+            const { getContext } = await import('/scripts/st-context.js');
+            const context = getContext();
             context.ToolManager.registerFunctionTool({ name: 'code_only', description: 'original code tool',
                 parameters: { type: 'object', properties: {} }, action: async () => 'original' });
             const original = context.ToolManager.tools.find(tool => tool.toFunctionOpenAI().function.name === 'code_only');
@@ -991,7 +1052,8 @@ test.describe('reply pipeline step editor', () => {
         });
         expect(collision).toEqual({ preserved: true, placeholder: false });
         await page.evaluate(async () => {
-            const context = window.SillyTavern.getContext();
+            const { getContext } = await import('/scripts/st-context.js');
+            const context = getContext();
             context.featureSettings.tool_bindings = [];
             const { eventSource, event_types } = await import('/scripts/events.js');
             await eventSource.emit(event_types.OAI_PRESET_CHANGED_AFTER);
@@ -1000,7 +1062,8 @@ test.describe('reply pipeline step editor', () => {
         });
         expect((await inspect()).names).toEqual(['auto_reply']);
         await page.evaluate(async () => {
-            window.SillyTavern.getContext().featureSettings.tool_bindings = [];
+            const { getContext } = await import('/scripts/st-context.js');
+            getContext().featureSettings.tool_bindings = [];
             const { saveSettings } = await import('/script.js');
             await saveSettings();
         });
@@ -1013,8 +1076,9 @@ test.describe('reply pipeline step editor', () => {
     test('prompt panel bottom renders one row per step and writes reply_pipeline', async ({ page }) => {
         await testSetup.awaitST({ page });
 
-        await page.evaluate(() => {
-            const context = window.SillyTavern.getContext();
+        await page.evaluate(async () => {
+            const { getContext } = await import('/scripts/st-context.js');
+            const context = getContext();
             context.chatCompletionSettings.reply_pipeline = {
                 enabled: true,
                 steps: [
@@ -1047,7 +1111,7 @@ test.describe('reply pipeline step editor', () => {
         await rows.nth(2).locator('.prompt-panel-pipeline-tool').fill('temp');
         await rows.nth(2).locator('.prompt-panel-pipeline-instruction').fill('TEMP_PROMPT');
 
-        let stored = await page.evaluate(() => window.SillyTavern.getContext().chatCompletionSettings.reply_pipeline);
+        let stored = await page.evaluate(async () => (await import('/scripts/st-context.js')).getContext().chatCompletionSettings.reply_pipeline);
         expect(stored.steps.map(step => step.tool)).toEqual(['analyze', 'respond', 'temp']);
         expect(stored.steps[2].prompt).toBe('TEMP_PROMPT');
         // The last row owns `final` (it produces the reply); advanced step
@@ -1059,26 +1123,26 @@ test.describe('reply pipeline step editor', () => {
         // Reorder via the drag handle's keyboard path → execution order
         // changes; `final` follows the last row.
         await rows.nth(0).locator('.prompt-panel-drag-handle').press('ArrowDown');
-        stored = await page.evaluate(() => window.SillyTavern.getContext().chatCompletionSettings.reply_pipeline);
+        stored = await page.evaluate(async () => (await import('/scripts/st-context.js')).getContext().chatCompletionSettings.reply_pipeline);
         expect(stored.steps.map(step => step.tool)).toEqual(['respond', 'analyze', 'temp']);
         expect(stored.steps.map(step => step.model ?? '')).toEqual(['model-respond', 'model-analyze', '']);
         await page.evaluate(async () => { const { saveSettings } = await import('/script.js'); await saveSettings(); });
         await page.reload();
         await testSetup.awaitST({ page });
         await expect(rows).toHaveCount(3);
-        stored = await page.evaluate(() => window.SillyTavern.getContext().chatCompletionSettings.reply_pipeline);
+        stored = await page.evaluate(async () => (await import('/scripts/st-context.js')).getContext().chatCompletionSettings.reply_pipeline);
         expect(stored.steps.map(step => [step.tool, step.model ?? ''])).toEqual([['respond', 'model-respond'], ['analyze', 'model-analyze'], ['temp', '']]);
 
         // Delete a row via its expanded editor → the plan shrinks.
         await rows.nth(1).locator('.prompt-panel-item-name').click();
         await rows.nth(1).locator('.prompt-panel-item-editor .red_button').click();
-        stored = await page.evaluate(() => window.SillyTavern.getContext().chatCompletionSettings.reply_pipeline);
+        stored = await page.evaluate(async () => (await import('/scripts/st-context.js')).getContext().chatCompletionSettings.reply_pipeline);
         expect(stored.steps.map(step => step.tool)).toEqual(['respond', 'temp']);
         expect(stored.final).toBe('temp');
 
         // Disabling the pipeline hides the per-step trigger checkboxes.
         await page.locator('#completion_prompt_manager .prompt-panel-pipeline-head input[type="checkbox"]').uncheck();
-        stored = await page.evaluate(() => window.SillyTavern.getContext().chatCompletionSettings.reply_pipeline);
+        stored = await page.evaluate(async () => (await import('/scripts/st-context.js')).getContext().chatCompletionSettings.reply_pipeline);
         expect(stored.enabled).toBe(false);
         const tags = await page.evaluate(() => window.__emberDeskPromptPanelBridge.getState().pipelineTriggerTags);
         expect(tags).toEqual([]);
@@ -1091,8 +1155,9 @@ test.describe('reply pipeline step editor', () => {
 
     test('step model editor persists a free-form model through settings reload', async ({ page }) => {
         await testSetup.awaitST({ page });
-        await page.evaluate(() => {
-            window.SillyTavern.getContext().chatCompletionSettings.reply_pipeline = {
+        await page.evaluate(async () => {
+            const { getContext } = await import('/scripts/st-context.js');
+            getContext().chatCompletionSettings.reply_pipeline = {
                 enabled: true, steps: [{ tool: 'analyze', prompt: 'keep prompt', reasoning_effort: 'low' }],
             };
             window.__emberDeskPromptPanelBridge.setPipelineEnabled(true);
@@ -1104,7 +1169,7 @@ test.describe('reply pipeline step editor', () => {
         await page.evaluate(async () => { const { saveSettings } = await import('/script.js'); await saveSettings(); });
         await page.reload();
         await testSetup.awaitST({ page });
-        const step = await page.evaluate(() => window.SillyTavern.getContext().chatCompletionSettings.reply_pipeline.steps[0]);
+        const step = await page.evaluate(async () => (await import('/scripts/st-context.js')).getContext().chatCompletionSettings.reply_pipeline.steps[0]);
         expect(step).toMatchObject({ tool: 'analyze', prompt: 'keep prompt', reasoning_effort: 'low', model: 'custom/model-v1' });
         if (!(await model.isVisible())) await row.locator('.prompt-panel-item-name').click();
         await expect(model).toHaveValue('custom/model-v1');

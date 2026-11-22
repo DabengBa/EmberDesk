@@ -1555,7 +1555,7 @@ function updateTagFilterIndicator(filterSelector) {
 }
 
 
-function onCharacterCreateClick() {
+export function clearDraftCharacterTags() {
     characterTagsService.setDraft([]);
 }
 
@@ -1763,7 +1763,7 @@ function restoreSavedTagFilters() {
 export function initTags() {
     document.addEventListener('click', event => {
         if (!(event.target instanceof Element)) return;
-        if (event.target.closest('#rm_button_create')) onCharacterCreateClick();
+
         if (!event.target.closest('.tags_view')) return;
         // 1. Prevent the label from toggling the checkbox
         event.preventDefault();

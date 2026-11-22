@@ -38,7 +38,7 @@ async function saved(page) {
     });
 }
 async function avatar(page) {
-    return await page.evaluate(() => { const x = window.SillyTavern.getContext(); return x.characters[x.characterId].avatar; });
+    return await page.evaluate(async () => { const { getContext } = await import('/scripts/st-context.js'); const x = getContext(); return x.characters[x.characterId].avatar; });
 }
 
 test('two tabs: stale unrelated settings save cannot restore a persisted revocation', async ({ page, context }) => {
@@ -52,14 +52,15 @@ test('two tabs: stale unrelated settings save cannot restore a persisted revocat
     const other = await context.newPage();
     await testSetup.awaitST({ page: other });
     await other.waitForTimeout(2500);
-    await expect.poll(() => other.evaluate(id => window.SillyTavern.getContext().powerUserSettings.external_media_allowed_overrides.includes(id), id)).toBe(true);
+    await expect.poll(() => other.evaluate(async id => (await import('/scripts/st-context.js')).getContext().powerUserSettings.external_media_allowed_overrides.includes(id), id)).toBe(true);
     await permission(page).uncheck();
     await expect.poll(async () => (await saved(page)).grants.includes(id)).toBe(false);
     const statuses = [];
     other.on('response', r => { if (r.url().includes('/api/settings/save')) statuses.push(r.status()); });
     const model = `authorization-merge-${Date.now()}`;
     await other.evaluate(async value => {
-        window.SillyTavern.getContext().chatCompletionSettings.openai_model = value;
+        const { getContext } = await import('/scripts/st-context.js');
+        getContext().chatCompletionSettings.openai_model = value;
         const { saveSettings } = await import('/script.js');
         await saveSettings(0, { strict: true });
     }, model);

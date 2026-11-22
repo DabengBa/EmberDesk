@@ -40,7 +40,7 @@ The first extracted contract modules are:
 
 - `public/scripts/events.js` - owns `event_types` and the `eventSource` emitter.
 - `public/scripts/request-context.js` - owns CSRF token loading and `getRequestHeaders()`.
-- `public/scripts/public-api.js` - explicitly installs `globalThis.SillyTavern`.
+
 - `public/scripts/world-info-shell-context.js` - owns the fail-closed internal context registry used by the World Info compatibility facade.
 
 ## Architecture And Constraints
@@ -61,9 +61,8 @@ The first extracted contract modules are:
 During `public/script.js` evaluation:
 
 1. The root imports `eventSource` / `event_types`, request-context helpers, and the browser library.
-2. `installPublicBrowserApi({ getContext })` explicitly assigns the first-party compatibility object `globalThis.SillyTavern`.
-3. `registerWorldInfoShellContext(...)` registers callable shell capabilities and a lazy `extensionPromptRoles` accessor. It does not cause `world-info.js` to import the root.
-4. `app/components/workspace/workspace-entry.ts` loads the original browser module URLs for the event emitter, i18n and `/script.js` in that order. It passes the native i18n exports and a narrow live frontend-frame port to their React adapters before mounting the composer and initial panels. React does not read `SillyTavern.getContext()` for these capabilities. The entry calls `startWorkspaceRuntime(revealWorkspace)`, which awaits the remaining native bindings and bootstrap via `bindLegacyShellHandlers()`. It does not wait for `window.load`.
+2. `registerWorldInfoShellContext(...)` registers callable shell capabilities and a lazy `extensionPromptRoles` accessor. It does not cause `world-info.js` to import the root.
+3. `app/components/workspace/workspace-entry.ts` loads the original browser module URLs for the event emitter, i18n and `/script.js` in that order. It passes the native i18n exports and a narrow live frontend-frame port to their React adapters before mounting the composer and initial panels. The entry calls `startWorkspaceRuntime(revealWorkspace)`, which installs the chat draft subscription before awaiting `bootstrapWorkspace()` directly. It does not wait for `window.load`.
 
 The native graph keeps its original URLs. It imports TypeScript owners from three ES-module entries in the same Vite app build, served under `/react/login/workspace/`: `runtime.js` for shared generation state, callers, workspace generation, settings writes and drawers; `generation-service.js` for the generation service; and `generation-attempt.js` loaded only when the lifecycle is needed. The service imports native dependencies by their original `/scripts/` URLs, sharing the registries and event state used by the shell. In development, Vite serves those same three entry URLs from source before the backend proxy. No prebuild writes source files into `public/`.
 
@@ -82,12 +81,12 @@ The same-entry browser target has native `structuredClone`; the classic `public/
 7. Hydrate feature modules, including macro autocomplete, World Info, chat observers, and workspace helpers.
 8. Run scraper and late feature initialization.
 9. Emit `event_types.APP_INITIALIZED`.
-10. Fix the viewport and mount the React workspace shell chrome. The runtime wrapper commits the interactive workspace via `revealWorkspace`, then emits `event_types.APP_READY`.
-11. Start deferred version, built-in feature, and panel warmup work after readiness.
+10. Fix the viewport and finish the shell bootstrap. The runtime wrapper commits the interactive workspace via `revealWorkspace`, then emits `event_types.APP_READY`.
+11. Start the character-change stream, record readiness, and queue deferred version, built-in feature, and panel warmup work.
 
 `APP_READY` therefore follows core initialization, viewport preparation, React shell mounting and removal of the startup interaction block. Deferred work is not allowed to delay the readiness event or make a secondary panel failure block the already initialized shell.
 
-### Extracted request and public API contracts
+### Request and workspace context contracts
 
 `request-context.js` preserves the existing request shape: JSON requests receive `Content-Type: application/json` and the current `X-CSRF-Token`; callers may omit the content type for requests such as `pingServer()`. `loadCsrfToken()` rejects its caller on fetch or response failure, so the bootstrap owner decides how initialization fails.
 
@@ -99,7 +98,21 @@ request callers use `getRequestHeaders()`. `app/workspace-panels.tsx` retains
 includes `tests/script-js-composition-root.test.js`, compatibility tests and
 the isolated browser scenarios in `tests/thirteenth-frontend.e2e.js`.
 
-`public-api.js` has no module-evaluation side effect. The root calls `installPublicBrowserApi()` explicitly, which keeps public-global installation testable and prevents an imported helper from unexpectedly mutating the browser global.
+The React Options portal owns menu visibility, `aria-expanded`, motion and
+lazy Popper positioning. Native commands close it through the same controller
+used for outside clicks and Escape. The React chat history panel owns native
+dialog presentation and search focus; the shell still supplies the open
+command, loads history, and provides the existing row actions.
+
+React owns the message range deletion confirmation, composer visibility and
+focus restoration. Options, message rows, Escape and chat transitions use the
+same bulk-delete controller in `app/lib/dialogue-service.ts`. The confirmation
+calls the existing `deleteFrom` command; persistence and event ordering stay
+with the chat command. The shell no longer exposes the controller on a global.
+
+The workspace no longer installs `globalThis.SillyTavern`. Existing native context consumers import `getContext` from `public/scripts/st-context.js`. Browser diagnostics and performance tooling wait for application readiness before importing the same module via `/scripts/st-context.js`. React continues to consume narrow runtime ports.
+
+React binds the Advanced Definitions close and save controls on the retained `#character_popup` host. The callbacks preserve the existing host transitions and synchronous form references. The visible character avatar file input is likewise React-owned; the hidden native form field remains a data bridge for the existing upload and draft flows.
 
 ### Tokenizers and notifications
 
@@ -137,7 +150,7 @@ modal, action loader and lifecycle integration.
 | Select2 | Removed with its placeholder plugin, styles, types and unused helpers. Character World Info and the global selector use React; browser checks cover selection, synchronization, dialogs and menus. Dynamic paths cannot be exhaustively established by static search alone. |
 | Cropper | Retained as the native image-crop implementation used by the React popup |
 
-Character selection and duplication keep their established busy checks, confirmation, request, event and refresh order in the lifecycle service. The React Library owns selection in its rendered list; favorite-character hotswap invokes the same selection operation directly. Authoring calls the avatar crop command and uses its returned preview; the native form input remains for serialization. Tags use live getters and existing domain operations rather than copying character, tag or bulk-selection state into the root or a new store.
+Character selection and duplication keep their established busy checks, confirmation, request, event and refresh order in the lifecycle service. The React Library owns selection in its rendered list; favorite-character hotswap invokes the same selection operation directly. React Authoring calls the avatar crop command and uses its returned preview. A confirmed file and crop go directly into multipart serialization or the create draft; dismissal does not change the retained draft, and results from an obsolete session do not update the current preview. React-owned form events still update the fields used by compatibility tools, including World Info. Card import, replacement and export use explicit commands; replacement captures the avatar and chat session before awaiting user input. Tags use live getters and existing domain operations rather than copying character, tag or bulk-selection state into the root or a new store.
 
 Character lorebook controls use book names as values, including numeric names, rather than list indexes. Primary changes keep the established immediate character save and embedded-book clearing semantics; auxiliaries remain local `world_info.charLore` associations saved through the existing settings debounce. Create-mode associations remain on the create draft. Each dialog captures the character avatar/file name or create session identity, rejects stale actions and checks identity again after awaits. Replacing a cached card object during a refresh is allowed when the selected character and editing session still match. An already submitted edit still refreshes its own card, but its late completion cannot change another selected chat, authoring session or World Info button. The root's post-dialog draft sync also refuses a different authoring session.
 
@@ -153,6 +166,14 @@ Legacy reasoning mounts a DOMPurify-sanitized DOM fragment with `replaceChildren
 
 `tests/generation-caller-root.test.js` checks production live ports and compatibility wrappers; caller/lifecycle tests cover shared session behavior. `tests/fe3-chat-interactions.e2e.js` covers a real DOM legacy-menu fixture, real dialogue controls, chat scrolling and React reasoning/formatting identity. Existing bootstrap, regenerate and frontend-frame browser specs cover the affected startup, recovery and message-safety paths. These are ownership/implementation changes, not new product capabilities; FE3 therefore updates technical ownership documentation without changing `.docs/db` product semantics.
 
+### Workspace controller ownership
+
+React owns the Chat Options menu lifecycle (visibility, positioning, dismissal and focus), Chat History dialog lifecycle (including search and focus), and the retained character popup controls. Native callers use commands rather than a second renderer. Confirmed avatar uploads carry the file, crop and preview together; live tool popups such as World Info still use selected form mirrors.
+
+React RightNav and the Library toolbar use the same navigation command as native chat callers. `public/scripts/character-list-state.js` serializes snapshot reads through publication, preserves the selected avatar and filters pending deletions at commit, and owns SSE retry and bulk-idle admission. `public/script.js` wires the existing live character array, fetch, chat selection and list rendering to that owner; standalone reads remain separate from publication. React owns bulk-delete presentation, while persistence stays with the chat message commands.
+
+`public/scripts/chat-history-commands.js` dispatches history and option actions; `public/scripts/chat-ops-service.js` and `public/scripts/chat-recovery-coordinator.js` own chat persistence and recovery coordination. The shared settings writer owns the latest observed revision; the generation shell context constructs the caller and lazy runtime. The generic DOM binder and its shell context are gone. Cross-workspace native effects live in specific installers, including `message-dom-effects.js` and `numeric-input-wheel.js`. `public/script.js` still wires shared state and retains concrete compatibility handlers. See the [controller retirement record](workspace-controller-retirement-plan.md).
+
 ## Static Contract And Proof
 
 The exact reverse-import snapshot and parser live in `tests/helpers/script-js-reverse-import-contract.js`. `tests/script-js-composition-root.test.js` verifies:
@@ -161,7 +182,7 @@ The exact reverse-import snapshot and parser live in `tests/helpers/script-js-re
 - side-effect, namespace, re-export, query-string, and dynamic reverse imports are detected;
 - extracted event and request names do not reverse-import from `script.js`;
 - request-context CSRF behavior and error propagation;
-- explicit public API installation;
+- absence of the retired browser-global installer;
 - `bootstrapWorkspace()` remains the startup entry and the obsolete `firstLoadInit` name is absent.
 
 The contract does not prove that `script.js` is already thin. It proves only that the current extraction boundary is explicit and that future reverse dependencies cannot grow silently.
@@ -176,10 +197,10 @@ Related semantic IDs:
 
 Primary code binding points:
 
-- `public/script.js`: root imports, public API installation, World Info context registration, CSRF prefilter installation, `bootstrapWorkspace()`, and approved re-exports.
+- `public/script.js`: root imports, World Info context registration, `bootstrapWorkspace()`, and retained compatibility exports.
 - `public/scripts/events.js`: event table and emitter owner.
-- `public/scripts/request-context.js`: request headers, CSRF loading, and Ajax prefilter.
-- `public/scripts/public-api.js`: explicit public-global installer.
+- `public/scripts/request-context.js`: request headers and CSRF loading.
+- `public/scripts/st-context.js`: explicitly imported first-party context accessor.
 - `public/scripts/world-info-shell-context.js`: internal fail-closed context registry.
 - `tests/helpers/script-js-reverse-import-contract.js`: exact legacy reverse-import snapshot.
 - `tests/script-js-composition-root.test.js`: focused runtime and static gate.
@@ -189,7 +210,8 @@ Related documents:
 - [Third-Party Extension Compatibility](third-party-extension-compatibility.md)
 - [World Info Shell Context](world-info-shell-context.md)
 - [Startup APP_READY Optimization](startup-app-ready-optimization.md)
-- [Workspace Composition Root Processing Flow](../logic-description/workspace_composition_root_processing_flow.md)
+- [Workspace Controller Retirement Plan](workspace-controller-retirement-plan.md)
+- [Historical Workspace Composition Root Processing Flow](../logic-description/workspace_composition_root_processing_flow.md)
 
 ## Validation
 
@@ -199,10 +221,10 @@ Focused composition-root and extension compatibility proof:
 pnpm run test:compat
 ```
 
-Standalone current-behavior proof:
+Focused startup and runtime ordering proof:
 
 ```bash
-uv run python .docs/logic-description/workspace_composition_root_sandbox_proof.py
+pnpm --dir tests run test:e2e workspace-spa-entry.e2e.js generation-bootstrap-order.e2e.js
 ```
 
 Syntax and documentation proof:

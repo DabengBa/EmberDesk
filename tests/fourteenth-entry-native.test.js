@@ -63,7 +63,7 @@ test('dialogue popup configures native controls and preserves React input owners
     const controller = { callPopup: jest.fn(() => Promise.resolve('done')) };
     const presentation = { open: jest.fn() };
     const document = { getElementById: id => nodes[id] };
-    const run = new Function('document', 'globalThis', 'dialogueController', 'transitionOpacity', 'animation_duration', 'animation_easing', 't', `let popup_type, dialogueCloseStop; ${source.slice(start, end).replace('export ', '')}; return callPopup;`)(document, { __emberDeskDialoguePresentation: presentation }, controller, jest.fn(), 0, 'linear', strings => strings[0]);
+    const run = new Function('document', 'dialoguePresentation', 'dialogueController', 'transitionOpacity', 'animation_duration', 'animation_easing', 't', `let popup_type, dialogueCloseStop; ${source.slice(start, end).replace('export ', '')}; return callPopup;`)(document, presentation, controller, jest.fn(), 0, 'linear', strings => strings[0]);
     await expect(run('hello', 'input', 'value', { wide: true, rows: 3 })).resolves.toBe('done');
     expect(nodes.dialogue_popup.classList.toggle).toHaveBeenCalledWith('wide_dialogue_popup', true);
     expect(nodes.dialogue_popup_input.setAttribute).not.toHaveBeenCalled();
@@ -84,23 +84,15 @@ test('temporary chat status updates hidden and aria state without jQuery', () =>
     expect(status.setAttribute).toHaveBeenLastCalledWith('aria-hidden', 'true');
 });
 
-test('bulk delete displays legacy controls but leaves React-owned rows alone', () => {
+test('bulk delete opens the shared controller only when generation is idle', () => {
     const start = source.indexOf('function openMessageDelete()');
     const end = source.indexOf('let chatMessageCommands;', start);
-    const mark = { style: {} };
-    const legacy = { matches: () => false, querySelector: () => mark };
-    const react = { matches: () => true };
-    const checkboxes = [legacy, react].map(row => ({ style: {}, closest: () => row }));
-    const nodes = { dialogue_del_mes: { style: {} }, send_form: { style: {} } };
-    const document = { getElementById: id => nodes[id], querySelectorAll: () => checkboxes };
     const open = jest.fn();
-    const run = new Function('document', 'globalThis', 'closeMessageEditor', 't', `let is_send_press = false, is_delete_mode = false; ${source.slice(start, end)}; return openMessageDelete;`)(document, { __emberDeskBulkDeleteController: { open } }, jest.fn(), strings => strings[0]);
-    run();
-    expect(nodes.dialogue_del_mes.style.display).toBe('block');
-    expect(nodes.send_form.style.display).toBe('none');
-    expect(checkboxes[0].style.display).toBe('grid');
-    expect(mark.style.display).toBe('none');
-    expect(checkboxes[1].style.display).toBeUndefined();
+    const close = jest.fn();
+    const makeRun = new Function('bulkDeleteController', 'closeMessageEditor', 't', 'is_send_press', `${source.slice(start, end)}; return openMessageDelete;`);
+    makeRun({ open }, close, strings => strings[0], false)();
+    makeRun({ open }, close, strings => strings[0], true)();
+    expect(close).toHaveBeenCalledTimes(2);
     expect(open).toHaveBeenCalledTimes(1);
 });
 
@@ -186,11 +178,6 @@ test('settings override popup keeps draft edits until affirmative confirmation',
     expect(popup).toHaveBeenCalledTimes(1);
 });
 
-test('send form restore display is initialized without a jQuery collection', () => {
-    const line = source.split('\n').find(value => value.includes('var css_send_form_display ='));
-    const display = new Function(`${line}; return css_send_form_display;`)();
-    expect(display).toBe('');
-});
 
 test('background application updates native background image', () => {
     const start = source.indexOf('export function applyActiveBackground()');
@@ -238,16 +225,29 @@ test('export popup controller shows and hides native popup without altering focu
     expect(popup.style.display).toBe('block');
 });
 
-test('history search focus selects native input after the existing delay', () => {
-    const start = source.indexOf('    // UX convenience: Focus the search field');
-    const end = source.indexOf('    addChatBackupsBrowser();', start);
-    const input = { click: jest.fn(), focus: jest.fn(), select: jest.fn() };
-    let delay;
-    new Function('document', 'setTimeout', source.slice(start, end))({ getElementById: () => input }, (fn, ms) => { delay = ms; fn(); });
-    expect(delay).toBe(200);
-    expect(input.click).toHaveBeenCalledTimes(1);
-    expect(input.focus).toHaveBeenCalledTimes(1);
-    expect(input.select).toHaveBeenCalledTimes(1);
+test.each([
+    [true, true, true, true],
+    [false, true, true, false],
+    [true, false, true, false],
+    [true, true, false, false],
+])('history search focus follows a successful open and render (%s, %s, %s)', async (mounted, open, rendered, shouldFocus) => {
+    const start = source.indexOf('export async function displayPastChats(');
+    const end = source.indexOf('export function selectRightMenuWithAnimation(', start);
+    expect(start).toBeGreaterThanOrEqual(0);
+    expect(end).toBeGreaterThan(start);
+    const calls = [];
+    const snapshot = { searchQuery: '', items: [], open };
+    const controller = {
+        setSearchQuery: jest.fn(), getSnapshot: () => snapshot,
+        displayChats: jest.fn(async () => true), getRenderedSelection: () => 'selection',
+    };
+    const module = { focusSelectChatSearch: () => calls.push('focus') };
+    const render = jest.fn().mockImplementationOnce(async () => mounted).mockImplementationOnce(async () => { calls.push('render'); return rendered; });
+    const run = new Function('getCurrentChatDetails', 'loadWorkspacePanelsModule', 'getReactSelectChatListBridge', 'renderSelectChatListReact', 'debounce', 'addChatBackupsBrowser', `let selectChatSearchCommand; ${source.slice(start, end).replace('export ', '')}; return displayPastChats;`)(
+        () => ({ sessionName: '', avatarImgURL: '' }), async () => module, () => ({ controller }), render, fn => fn, jest.fn(),
+    );
+    expect(await run()).toBe(shouldFocus ? 'selection' : null);
+    expect(calls).toEqual(shouldFocus ? ['render', 'focus'] : mounted && open ? ['render'] : []);
 });
 
 test('authoring bridge reads title and token summaries from native shell nodes', () => {
@@ -261,29 +261,24 @@ test('authoring bridge reads title and token summaries from native shell nodes',
     expect(state.tokenSummary).toEqual({ total: '42', permanent: '5' });
 });
 
-test('cropped avatar updates native preview and submits the real form before cache refresh', async () => {
-    const start = source.indexOf('async function read_avatar_load(');
-    const end = source.indexOf('\n}\n\n/**', start) + 2;
-    const preview = { src: '', setAttribute(name, value) { this[name] = value; } }, form = {};
-    const received = [];
-    class Popup { constructor() { this.cropData = { x: 1 }; } async show() { return 'data:image/png;base64,AA'; } }
-    class FormData { constructor(element) { received.push(element); } get() { return 'avatar.png'; } }
-    const run = new Function('document', 'Popup', 'POPUP_TYPE', 'getBase64Async', 'createOrEditCharacter', 'FormData', 'getThumbnailUrl', 'fetch', 'HTMLImageElement', `let selected_button = 'edit', menu_type = 'edit', create_save = {}, crop_data; ${source.slice(start, end)}; return read_avatar_load;`)({ getElementById: id => id === 'form_create' ? form : preview, querySelectorAll: () => [] }, Popup, { CROP: 5 }, async () => 'data', jest.fn(), FormData, () => '/thumb', jest.fn(), class {});
-    expect(await run({ files: [{}] })).toBe('data:image/png;base64,AA');
-    expect(preview.src).toBe('data:image/png;base64,AA');
-    expect(received).toEqual([form]);
-});
 
-test('replace current chat reflects selected persisted chat in native field', async () => {
-    const start = source.indexOf('export async function replaceCurrentChat()');
+test.each([false, true])('replace current chat honors session changes during the list request (%s)', async stale => {
+    const start = source.indexOf('async function replaceCurrentChat(isCurrent)');
     const end = source.indexOf('\n}\n', start) + 2;
     const field = { value: '' }, getChat = jest.fn(), save = jest.fn();
     const character = { avatar: 'a.png', chat: '' };
-    const run = new Function('document', 'clearChat', 'fetch', 'getRequestHeaders', 'sortMoments', 'timestampToMoment', 'saveCharacterDebounced', 'getChat', `let chat_metadata, characters = [${JSON.stringify(character)}], this_chid = 0; ${source.slice(start, end).replace('export ', '')}; return replaceCurrentChat;`)({ getElementById: () => field }, jest.fn(), async () => ({ ok: true, json: async () => [{ file_name: 'saved.jsonl' }] }), () => ({}), jest.fn(), jest.fn(), save, getChat);
-    await run();
-    expect(field.value).toBe('saved');
-    expect(save).toHaveBeenCalledTimes(1);
-    expect(getChat).toHaveBeenCalledTimes(1);
+    let session = 0;
+    const clearChat = jest.fn(async () => { session++; });
+    const fetch = async () => ({ ok: true, json: async () => {
+        if (stale) session++;
+        return [{ file_name: 'saved.jsonl' }];
+    } });
+    const run = new Function('document', 'clearChat', 'fetch', 'getRequestHeaders', 'sortMoments', 'timestampToMoment', 'saveCharacterDebounced', 'getChat', 'getChatSessionVersion', 'getCurrentUserHandle', `let chat_metadata, characters = [${JSON.stringify(character)}], this_chid = 0; ${source.slice(start, end)}; return replaceCurrentChat;`)({ getElementById: () => field }, clearChat, fetch, () => ({}), jest.fn(), jest.fn(), save, getChat, () => session, () => 'user');
+    await run(() => session === 0);
+    expect(field.value).toBe(stale ? '' : 'saved');
+    expect(clearChat).toHaveBeenCalledTimes(stale ? 0 : 1);
+    expect(save).toHaveBeenCalledTimes(stale ? 0 : 1);
+    expect(getChat).toHaveBeenCalledTimes(stale ? 0 : 1);
 });
 
 test('closing a chat clears the direct character heading and emits chat change', async () => {
@@ -327,7 +322,7 @@ test('dialogue fallback opens native input and renders supplied markup', async (
         style: {}, dataset: {}, classList: { toggle: jest.fn() }, setAttribute: jest.fn(), focus: jest.fn(), querySelector: () => null, replaceChildren: jest.fn(), insertAdjacentHTML: jest.fn(),
     }]));
     const controller = { callPopup: jest.fn(async () => true) };
-    const run = new Function('document', 'globalThis', 'dialogueController', 'transitionOpacity', 'animation_duration', 'animation_easing', 't', 'Node', `let popup_type, dialogueCloseStop; ${source.slice(helperStart, end).replace('export ', '')}; return callPopup;`)({ getElementById: id => nodes[id] }, {}, controller, jest.fn(), 0, 'linear', strings => strings[0], class {});
+    const run = new Function('document', 'dialoguePresentation', 'dialogueController', 'transitionOpacity', 'animation_duration', 'animation_easing', 't', 'Node', `let popup_type, dialogueCloseStop; ${source.slice(helperStart, end).replace('export ', '')}; return callPopup;`)({ getElementById: id => nodes[id] }, null, controller, jest.fn(), 0, 'linear', strings => strings[0], class {});
     await run('<b>hello</b>', 'input', 'alice', { rows: 2 });
     expect(nodes.dialogue_popup_input.value).toBe('alice');
     expect(nodes.dialogue_popup_input.focus).toHaveBeenCalledTimes(1);

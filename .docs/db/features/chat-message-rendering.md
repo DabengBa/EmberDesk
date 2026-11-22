@@ -46,7 +46,6 @@ Let users reliably read opened chat history and finalized generated messages as 
 
 React owns the main-chat typed message store, visible row output, rich-body projection, row controls including reasoning expand/copy/edit/delete/collapse, ordering, long-chat windowing, and reading-position restore. Provider transport and reasoning parsing/templates remain compatibility-owned; the composer text value is owned by `main-chat-composer-service` with the uncontrolled `#send_textarea` as its render detail. Documented formatting exports may remain as thin delegates to the framework-neutral render service.
 
-The React Runtime Boundary is part of this feature's implementation contract: message state enters React as an immutable snapshot, and legacy capabilities are reached only through named command ports. The public `globalThis.SillyTavern`, `eventSource`, `event_types`, selector contracts remain internal surfaces and are not React state inputs.
 
 ## Semantic Interaction IDs
 

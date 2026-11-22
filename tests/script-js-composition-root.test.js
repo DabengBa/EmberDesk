@@ -42,19 +42,14 @@ async function importRequestContextModule() {
     return import(`../public/scripts/request-context.js?requestContext=${Date.now()}-${Math.random()}`);
 }
 
-async function importPublicApiModule() {
-    return import(`../public/scripts/public-api.js?publicApi=${Date.now()}-${Math.random()}`);
-}
-
 const originalGlobals = {
-    SillyTavern: globalThis.SillyTavern,
     $: globalThis.$,
     fetch: globalThis.fetch,
     console: globalThis.console,
 };
 
 afterEach(() => {
-    globalThis.SillyTavern = originalGlobals.SillyTavern;
+
     globalThis.$ = originalGlobals.$;
     globalThis.fetch = originalGlobals.fetch;
     globalThis.console = originalGlobals.console;
@@ -247,18 +242,6 @@ describe('native-ready entry DOM contracts', () => {
     });
 });
 
-describe('public browser API runtime contract', () => {
-    test('does not install the public API until explicitly called', async () => {
-        const module = await importPublicApiModule();
-
-        expect(globalThis.SillyTavern).toBeUndefined();
-
-        const getContext = jest.fn();
-        module.installPublicBrowserApi({ getContext });
-
-        expect(globalThis.SillyTavern).toEqual({ getContext });
-    });
-});
 
 describe('workspace bootstrap contract', () => {
     test('uses bootstrapWorkspace as the startup entry and keeps the old name out', () => {
@@ -266,9 +249,9 @@ describe('workspace bootstrap contract', () => {
 
         expect(source).toContain('async function bootstrapWorkspace()');
         expect(source).toContain('export async function startWorkspaceRuntime(revealWorkspace)');
-        expect(read('public/scripts/dom-handlers.js')).toContain('await bootstrapWorkspace();');
+        expect(read('public/script.js')).toContain('await bootstrapWorkspace();');
         expect(source).toContain('export { getRequestHeaders } from \'./scripts/request-context.js\';');
-        expect(source).toContain('installPublicBrowserApi({ getContext });');
+        expect(source).not.toContain('installPublicBrowserApi');
         expect(source).not.toContain('firstLoadInit');
     });
 });

@@ -18,6 +18,7 @@ async function mountSurfaces(page) {
         export const removeFromArray=(array,value)=>array.splice(array.indexOf(value),1);
         export const runAfterAnimation=(element,callback)=>queueMicrotask(callback);
         export const copyText=async text=>{window.copiedText=text;};
+        export const loadFileToDocument=async()=>{};
         export const addLongPressEvent=()=>{};
         export const timestampToMoment=()=>({format:()=>''});
     ` }));
@@ -30,16 +31,14 @@ async function mountSurfaces(page) {
 
     await page.evaluate(async () => {
         document.body.classList.add('noShadows');
-        for (const id of ['shadow_select_chat_popup', 'past_chat_template']) {
-            const original = document.getElementById(id);
-            document.body.append(original.cloneNode(true));
-            original.removeAttribute('id');
-            for (const child of original.querySelectorAll('[id]')) child.removeAttribute('id');
-        }
+        const original = document.getElementById('shadow_select_chat_popup');
+        document.body.append(original.cloneNode(true));
+        original.removeAttribute('id');
+        for (const child of original.querySelectorAll('[id]')) child.removeAttribute('id');
         window.toastr = { options: {}, info() {}, warning() {}, error() {}, success() {} };
         const module = await (await import('/scripts/workspace-panels-react-bridge.js')).loadWorkspacePanelsModule();
         const controller = module.createHistoryPanelController({ load: async () => [], restoreFocus() {} });
-        module.mountSelectChatPopup(document.getElementById('select_chat_popup'), controller, () => {}, () => {}, () => {}, () => {});
+        module.mountSelectChatPopup(document.getElementById('select_chat_popup'), controller, () => {}, () => module.closeSelectChatPopup(), () => {}, () => {}, undefined, () => {});
         module.mountSelectChatList(document.getElementById('select_chat_div'), {}, {
             currentChat: 'Current chat', avatarImg: '/img/ai4.png', searchQuery: '',
             items: ['Current chat', 'VeryLongChatFilename'.repeat(10)].map(fileName => ({ fileName, fileSize: '80 KB', messageCount: 84, preview: 'Chat preview.', dateLabel: 'Oct 12, 2026, 1:00 AM' })),
@@ -56,12 +55,10 @@ async function mountSurfaces(page) {
         } });
         const optionsHost = document.createElement('div');
         document.getElementById('options').append(optionsHost);
-        module.mountOptionsMenu(optionsHost, {}, () => {});
+        module.mountOptionsMenu(optionsHost, { canRegenerate: true, canContinue: true }, () => {});
         module.mountChatComposer(document.getElementById('send_form'));
         (await import('/scripts/keyboard.js')).initKeyboard();
-        const shell = document.getElementById('shadow_select_chat_popup');
-        if (shell instanceof HTMLDialogElement) shell.showModal();
-        else shell.style.display = 'block';
+        module.openSelectChatPopup();
     });
 }
 

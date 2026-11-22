@@ -5,8 +5,11 @@ test.setTimeout(60_000);
 
 async function openWorldInfo(page) {
     await testSetup.awaitST({ page });
-    const restoring = await page.evaluate(() => window.innerWidth > 1000
-        && window.SillyTavern?.getContext?.()?.accountStorage?.getItem('WINavOpened') === 'true');
+    const restoring = await page.evaluate(async () => {
+        const { getContext } = await import('/scripts/st-context.js');
+        return window.innerWidth > 1000
+            && getContext()?.accountStorage?.getItem('WINavOpened') === 'true';
+    });
     if (restoring) await expect(page.locator('#WorldInfo.openDrawer')).toBeVisible({ timeout: 15_000 });
     else await page.locator('[data-react-workspace-shell-chrome] nav button').filter({ hasText: '世界书' }).click();
     await expect(page.locator('#world_info')).toBeVisible({ timeout: 15_000 });
@@ -41,7 +44,7 @@ test.describe('World Info global selector', () => {
         if (page.isClosed()) return;
         await page.unroute('**/api/settings/get');
         const remaining = await page.evaluate(async names => {
-            if (!window.SillyTavern?.getContext) return [];
+            if (!Number.isFinite(window.__emberDeskStartup?.appReadyAtMs)) return [];
             const wi = await import('/scripts/world-info.js');
             return names.filter(name => wi.world_names.includes(name));
         }, fixtureBooks);

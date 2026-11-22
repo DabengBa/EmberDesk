@@ -8,6 +8,10 @@ export function cancelOpacity(element) {
     active.cancel();
 }
 
+/**
+ * @param {HTMLElement | null | undefined} element
+ * @param {{ opacity?: number, duration?: number, easing?: string, complete?: () => void, settled?: () => void, isCurrent?: () => boolean }} [options]
+ */
 export function transitionOpacity(element, { opacity, duration = 0, easing = 'linear', complete, settled, isCurrent = () => true } = {}) {
     if (!element) return;
     cancelOpacity(element);

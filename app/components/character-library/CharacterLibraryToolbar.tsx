@@ -15,7 +15,9 @@ import { translate, useTranslated } from '../../compat/i18n.js';
 import { HostedDomSlot } from './HostedDomSlot';
 
 export interface CharacterLibraryToolbarBridge {
-    clickLegacyAction(actionId: string): void;
+    onCreateCharacter(): void;
+    openCharacterFilePicker(): void;
+    openExternalCharacterImport(): void;
     applySearchQuery(searchQuery: string): void;
     applySortOption(sortValue: string): void;
     toggleBulkEdit(): void;
@@ -436,9 +438,9 @@ export function CharacterLibraryToolbar({
         <div className={`emberdesk-react-character-library-toolbar ${stylex.props(characterLibraryStyles.toolbar).className ?? ''}`}>
             <div {...stylex.props(characterLibraryStyles.toolbarActions)}>
                 <div {...stylex.props(characterLibraryStyles.toolbarActionsInner)}>
-                    <ToolbarActionButton label="New" labelKey="Character Toolbar New" icon="fa-plus" title="Create New Character" onClick={() => bridge.clickLegacyAction('rm_button_create')} />
-                    <ToolbarActionButton icon="fa-file-arrow-up" title="Import Character from File" onClick={() => bridge.clickLegacyAction('character_import_button')} />
-                    <ToolbarActionButton icon="fa-link" title="Import content from external URL" onClick={() => bridge.clickLegacyAction('external_import_button')} />
+                    <ToolbarActionButton label="New" labelKey="Character Toolbar New" icon="fa-plus" title="Create New Character" onClick={bridge.onCreateCharacter} />
+                    <ToolbarActionButton icon="fa-file-arrow-up" title="Import Character from File" onClick={bridge.openCharacterFilePicker} />
+                    <ToolbarActionButton icon="fa-link" title="Import content from external URL" onClick={bridge.openExternalCharacterImport} />
                     <ToolbarActionButton icon="fa-list-check" title="Bulk edit characters" titleKey="Bulk_edit_characters" onClick={() => bridge.toggleBulkEdit()} />
                     <HostedDomSlot factory={extensionButtonsFactory} />
                 </div>

@@ -7,7 +7,8 @@ test('React message tags follow displayed avatars, live edits, and chat switches
     await testSetup.awaitST({ page });
     const names = { first: `owner-a-${crypto.randomUUID().slice(0, 8)}`, second: `owner-b-${crypto.randomUUID().slice(0, 8)}` };
     const fixture = await page.evaluate(async names => {
-        const context = window.SillyTavern.getContext();
+        const { getContext } = await import('/scripts/st-context.js');
+        const context = getContext();
         const first = context.characters.find(c => c.name === 'Dev Character 001');
         const second = context.characters.find(c => c.name === 'Dev Character 002');
         if (!first || !second) throw new Error('Seeded characters missing');
@@ -36,7 +37,7 @@ test('React message tags follow displayed avatars, live edits, and chat switches
     expect(Array.isArray(originalChat)).toBe(true);
     const ownerChat = `tag-owner-${crypto.randomUUID()}`;
     await testSetup.saveCharacterChat({ page, characterName: 'Dev Character 001', avatarUrl: fixture.firstAvatar, fileName: ownerChat, chat: originalChat });
-    await page.evaluate(async fileName => window.SillyTavern.getContext().openCharacterChat(fileName), ownerChat);
+    await page.evaluate(async fileName => (await import('/scripts/st-context.js')).getContext().openCharacterChat(fileName), ownerChat);
 
     await expect(page.locator('#chat')).toHaveAttribute('data-react-main-chat-owner', 'react');
     const ordinary = page.locator('#chat .mes').filter({ has: page.locator(`.avatar img[src*="${fixture.firstAvatar}"]`) }).first();
@@ -56,8 +57,9 @@ test('React message tags follow displayed avatars, live edits, and chat switches
     await expect(ordinary).not.toHaveAttribute(`data-char-tag-${liveName}`, '');
     expect(await ordinary.evaluate(row => row === window.__tagOwnerOrdinary)).toBe(true);
 
-    const forcedId = await page.evaluate(avatar => {
-        const context = window.SillyTavern.getContext();
+    const forcedId = await page.evaluate(async avatar => {
+        const { getContext } = await import('/scripts/st-context.js');
+        const context = getContext();
         const message = { name: 'Forced avatar', is_user: false, mes: 'forced avatar fixture', send_date: new Date().toISOString(), force_avatar: `/thumbnail?type=avatar&file=${encodeURIComponent(avatar)}` };
         const id = context.chat.length;
         context.chat.push(message);
@@ -83,19 +85,22 @@ test('React message tags follow displayed avatars, live edits, and chat switches
     await expect(forced).not.toHaveAttribute('data-char-tags', new RegExp(renamed));
     expect(await forced.evaluate(row => row === window.__tagOwnerForced)).toBe(true);
 
-    await page.evaluate(async () => window.SillyTavern.getContext().openCharacterChat('Dev Character 001 Session 02'));
-    await expect.poll(() => page.evaluate(() => {
-        const context = window.SillyTavern.getContext();
+    await page.evaluate(async () => (await import('/scripts/st-context.js')).getContext().openCharacterChat('Dev Character 001 Session 02'));
+    await expect.poll(() => page.evaluate(async () => {
+        const { getContext } = await import('/scripts/st-context.js');
+        const context = getContext();
         return context.characters[context.characterId]?.chat;
     })).toBe('Dev Character 001 Session 02');
     await expect(page.locator('#chat .mes').filter({ has: page.locator(`.avatar img[src*="${fixture.firstAvatar}"]`) }).first()).toHaveAttribute(`data-char-tag-${names.first}`, '');
     await page.evaluate(async () => {
-        const context = window.SillyTavern.getContext();
+        const { getContext } = await import('/scripts/st-context.js');
+        const context = getContext();
         await context.selectCharacterById(context.characters.findIndex(c => c.name === 'Dev Character 002'));
         await context.openCharacterChat('Dev Character 002 Session 01');
     });
-    await expect.poll(() => page.evaluate(() => {
-        const context = window.SillyTavern.getContext();
+    await expect.poll(() => page.evaluate(async () => {
+        const { getContext } = await import('/scripts/st-context.js');
+        const context = getContext();
         return [context.characters[context.characterId]?.name, context.characters[context.characterId]?.chat];
     })).toEqual(['Dev Character 002', 'Dev Character 002 Session 01']);
     const secondRow = page.locator('#chat .mes').filter({ has: page.locator(`.avatar img[src*="${fixture.secondAvatar}"]`) }).first();

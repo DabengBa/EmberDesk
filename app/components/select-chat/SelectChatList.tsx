@@ -3,11 +3,7 @@ import { useLayoutEffect, useRef, useSyncExternalStore } from 'react';
 import type { createHistoryPanelController, HistoryExportFormat } from '../../lib/history-panel-service';
 
 /**
- * React-owned past-chat rows rendered inside the legacy #select_chat_div
- * container. Replicates the #past_chat_template markup exactly so delegated
- * document handlers (.select_chat_block load, .renameChatButton,
- * .exportChatButton/.exportRawChatButton, .PastChat_cross), keyboard
- * navigation contracts, and extension selectors keep working unchanged.
+ * React-owned past-chat rows preserve the existing keyboard and row selectors.
  */
 export interface SelectChatListItem {
     fileName: string;

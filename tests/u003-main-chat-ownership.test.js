@@ -33,7 +33,7 @@ test('React row selects via the shared controller and ignores inactive or busy s
     const end = script.indexOf('\n            },', start);
     expect(start).toBeGreaterThan(-1);
     const command = runInNewContext(`({${script.slice(start, end)}\n}}).selectBulkMessage`, {
-        chat: [0, 1, 2, 3], globalThis: { __emberDeskBulkDeleteController: controller },
+        chat: [0, 1, 2, 3], bulkDeleteController: controller,
         t: (strings, ...values) => strings.reduce((result, part, i) => result + part + (values[i] ?? ''), ''),
     });
     const row = read('app/components/main-chat/MainChatMessageRow.tsx');
@@ -49,9 +49,12 @@ test('React row selects via the shared controller and ignores inactive or busy s
     click(); expect(controller.getSnapshot().selected).toBeNull();
     controller.open('Choose'); click();
     expect(controller.getSnapshot()).toMatchObject({ selected: 1, summary: 'Delete 3 messages, from message 2 through the end of this chat.' });
-    controller.begin('Deleting'); click();
+    let resolve;
+    const pending = controller.confirm('Deleting', () => new Promise(done => { resolve = done; }));
+    click();
     expect(stopPropagation).toHaveBeenCalledTimes(1);
-    controller.finish(); expect(controller.getSnapshot()).toMatchObject({ active: false, selected: null });
+    resolve(); await pending;
+    expect(controller.getSnapshot()).toMatchObject({ active: false, selected: null });
 });
 
 test('composition waits for composer then all initial panels before runtime reveal', async () => {

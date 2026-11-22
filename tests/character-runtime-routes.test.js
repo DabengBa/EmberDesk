@@ -283,23 +283,23 @@ jest.setTimeout(20000);
 
 test('frontend getCharacters implementation uses /api/characters/all to preserve eager payload mode', () => {
     const scriptSource = fs.readFileSync(path.join(repoRoot, 'public', 'script.js'), 'utf8');
+    const listSource = fs.readFileSync(path.join(repoRoot, 'public', 'scripts', 'character-list-state.js'), 'utf8');
     const fetchAllCharactersDataOnlyStart = scriptSource.indexOf('async function fetchAllCharactersDataOnly()');
-    const refreshStart = scriptSource.indexOf('function enqueueCharacterRefresh(');
     const getCharactersStart = scriptSource.indexOf('export function getCharacters()');
 
     expect(fetchAllCharactersDataOnlyStart).toBeGreaterThanOrEqual(0);
-    expect(refreshStart).toBeGreaterThanOrEqual(0);
+
     expect(getCharactersStart).toBeGreaterThanOrEqual(0);
 
     const fetchAllCharactersDataOnlyBody = scriptSource.slice(fetchAllCharactersDataOnlyStart, fetchAllCharactersDataOnlyStart + 500);
-    const refreshBody = scriptSource.slice(refreshStart, getCharactersStart);
+
     const getCharactersBody = scriptSource.slice(getCharactersStart, getCharactersStart + 100);
 
     expect(fetchAllCharactersDataOnlyBody).toContain('fetch(\'/api/characters/all\'');
     expect(fetchAllCharactersDataOnlyBody).not.toContain('fetch(\'/api/characters/list\'');
-    expect(refreshBody).toContain('await fetchAllCharactersDataOnly()');
-    expect(getCharactersBody).toContain('return enqueueCharacterRefresh()');
-    expect(refreshBody).not.toContain('fetch(\'/api/characters/list\'');
+    expect(scriptSource).toContain('fetchSnapshot: fetchAllCharactersDataOnly');
+    expect(listSource).toContain('await deps.fetchSnapshot()');
+    expect(getCharactersBody).toContain('return characterListLifecycle.refresh()');
 });
 
 /**

@@ -55,7 +55,8 @@ test('loaded character chat previews greetings without writes, persists a select
     });
     await expect(page.locator('.toast-success')).toContainText(name);
     const avatar = await page.evaluate(async characterName => {
-        const context = window.SillyTavern.getContext();
+        const { getContext } = await import('/scripts/st-context.js');
+        const context = getContext();
         const id = context.characters.findIndex(character => character.name === characterName);
         if (id < 0) throw new Error(`Imported character missing: ${characterName}`);
         await context.selectCharacterById(id);
@@ -68,7 +69,7 @@ test('loaded character chat previews greetings without writes, persists a select
             { name, is_user: false, is_system: false, send_date: '2026-01-01', mes: main },
         ],
     });
-    await page.evaluate(async fileName => window.SillyTavern.getContext().openCharacterChat(fileName), chatName);
+    await page.evaluate(async fileName => (await import('/scripts/st-context.js')).getContext().openCharacterChat(fileName), chatName);
     const picker = page.getByTestId('main-chat-greeting-picker');
     const trigger = picker.locator('[data-greeting-picker-trigger]');
     const previousGreeting = picker.getByRole('button', { name: /上一个开场白|Previous greeting/ });
@@ -139,8 +140,9 @@ test('loaded character chat previews greetings without writes, persists a select
     // Make generation otherwise eligible so an offline provider cannot hide a
     // missing pending-selection guard. Never let a regression contact a provider.
     await page.evaluate(async () => {
+        const { getContext } = await import('/scripts/st-context.js');
         const script = await import('/script.js');
-        const context = window.SillyTavern.getContext();
+        const context = getContext();
         context.chatCompletionSettings.chat_completion_source = 'openai';
         context.chatCompletionSettings.openai_model = 'gpt-4o-mini';
         script.changeMainAPI('openai');
@@ -174,7 +176,7 @@ test('loaded character chat previews greetings without writes, persists a select
         const submitted = await saveStarted;
 
         expect(submitted.chat[0].chat_metadata.greeting).toEqual({ index: 2, text: alternates[1] });
-        const pendingMessages = await page.evaluate(() => structuredClone(window.SillyTavern.getContext().chat));
+        const pendingMessages = await page.evaluate(async () => structuredClone((await import('/scripts/st-context.js')).getContext().chat));
         await page.locator('#send_textarea').evaluate(element => {
             element.value = 'MUST_NOT_SEND_WHILE_GREETING_SAVES';
             element.dispatchEvent(new Event('input', { bubbles: true }));
@@ -184,10 +186,11 @@ test('loaded character chat previews greetings without writes, persists a select
         await page.locator('#chat .mes[mesid="0"] .mes_edit').evaluate(element => element.click());
         await page.locator('#send_but').evaluate(element => element.click());
         await page.evaluate(async () => {
-            await window.SillyTavern.getContext().generate('continue');
+            const { getContext } = await import('/scripts/st-context.js');
+            await getContext().generate('continue');
         });
         await expect(page.locator('#chat .edit_textarea')).toHaveCount(0);
-        expect(await page.evaluate(() => window.SillyTavern.getContext().chat)).toEqual(pendingMessages);
+        expect(await page.evaluate(async () => (await import('/scripts/st-context.js')).getContext().chat)).toEqual(pendingMessages);
         await expect(page.locator('#send_textarea')).toHaveValue('MUST_NOT_SEND_WHILE_GREETING_SAVES');
         expect(generationRequests).toEqual([]);
         expect(await readStoredState(page, avatar, chatName)).toEqual(before);
@@ -208,7 +211,8 @@ test('loaded character chat previews greetings without writes, persists a select
     await page.reload();
     await testSetup.awaitST({ page });
     await page.evaluate(async ({ avatarUrl, fileName }) => {
-        const context = window.SillyTavern.getContext();
+        const { getContext } = await import('/scripts/st-context.js');
+        const context = getContext();
         const id = context.characters.findIndex(character => character.avatar === avatarUrl);
         if (id < 0) throw new Error(`Reloaded character missing: ${avatarUrl}`);
         await context.selectCharacterById(id);
@@ -341,10 +345,11 @@ test('loaded character chat previews greetings without writes, persists a select
     // A user turn starts the conversation permanently: saving and reloading
     // must not offer to replace its opening message again.
     await page.evaluate(async () => {
+        const { getContext } = await import('/scripts/st-context.js');
         const script = await import('/script.js');
         await script.sendMessageAsUser('STARTED_CONVERSATION');
-        await window.SillyTavern.getContext().saveChat();
-        await window.SillyTavern.getContext().reloadCurrentChat();
+        await getContext().saveChat();
+        await getContext().reloadCurrentChat();
     });
     await expect(page.locator('#chat')).toContainText('STARTED_CONVERSATION');
     await expect(picker).toBeHidden();

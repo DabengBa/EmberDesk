@@ -527,7 +527,14 @@ export function AuthoringWorkspacePanel({
                         actions={liveManagementActions ?? managementActions}
                         disabled={isActionPending}
                         onOpen={refreshManagementActions}
-                        onRun={actionId => void commands?.runManagementAction?.({ ...characterToolActionPayload, actionId })}
+                        onRun={async actionId => {
+                            if (actionId === 'replace_update') {
+                                const generation = saveGenerationRef.current;
+                                if (authoringSession.dirty && !await submitDraft()) return;
+                                if (generation !== saveGenerationRef.current) return;
+                            }
+                            await commands?.runManagementAction?.({ ...characterToolActionPayload, actionId });
+                        }}
                     />
                 </div>
                 <fieldset
@@ -568,12 +575,13 @@ export function AuthoringWorkspacePanel({
                                     accept="image/*"
                                     aria-label={translate("Upload character avatar")}
                                     onChange={async (event) => {
-                                        const file = event.target.files?.[0];
+                                        const file = event.currentTarget.files?.[0];
+                                        event.currentTarget.value = '';
                                         if (file) {
                                             const preview = await commands?.processAvatarFile?.(file);
                                             if (!preview) return;
                                             setAvatarPreviewOverride(preview);
-                                            updateDraft({ avatar: file.name });
+
                                         }
                                     }}
                                 />

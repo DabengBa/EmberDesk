@@ -28,7 +28,7 @@ describe('thumbnail lazy image loading templates', () => {
 
         expectTemplateFragment(indexHtml, 'character_template', '<img src="img/No-Image-Placeholder.svg" loading="lazy" decoding="async" />');
         expectTemplateFragment(indexHtml, 'inline_avatar_template', '<img src="img/No-Image-Placeholder.svg" loading="lazy" decoding="async" />');
-        expectTemplateFragment(indexHtml, 'past_chat_template', '<div className="avatar"><img src="img/No-Image-Placeholder.svg" loading="lazy" decoding="async" /></div>');
+
         expect(indexHtml).not.toContain('id="group_member_template"');
         expect(indexHtml).not.toContain('id="group_avatars_template"');
     });

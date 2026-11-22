@@ -14,7 +14,7 @@ Primary files:
 
 - `public/script.js`
 - `public/scripts/request-context.js`
-- `public/scripts/public-api.js`
+
 - `public/scripts/events.js`
 - `public/scripts/startup-helpers.js`
 - `app/components/workspace/WorkspaceHost.tsx`
@@ -41,7 +41,7 @@ Primary files:
 - `getSettings.applyCore`
 - post-ready deferred tasks
 
-Before that sequence begins, module composition installs `globalThis.SillyTavern` explicitly and registers the World Info shell context. `startWorkspaceRuntime()` binds the committed native hosts and invokes `bootstrapWorkspace()`, which loads the CSRF token as its first measured stage. Core failures propagate to the React host, which keeps the composer inert and offers reload; no readiness event is emitted on that path.
+Before that sequence begins, module composition registers the World Info shell context. `startWorkspaceRuntime()` binds the committed native hosts and invokes `bootstrapWorkspace()`, which loads the CSRF token as its first measured stage. Core failures propagate to the React host, which keeps the composer inert and offers reload; no readiness event is emitted on that path.
 
 Critical path work still includes:
 

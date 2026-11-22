@@ -5,11 +5,10 @@ import { translate, useTranslated } from '@/compat/i18n.js';
 import { useInlineDrawer } from '../../lib/workspace-drawer-service';
 /**
  * Advanced Definitions popup markup (React-owned inside #character_popup).
- * The popup shell stays legacy-owned: script.js toggles display/opacity and
- * binds #character_cross / #character_popup_ok after mount. Field IDs,
+ * React owns the close and confirm events. Field IDs,
  * form="form_create" associations, and data-macros attributes are preserved.
  */
-export function CharacterPopup() {
+export function CharacterPopup({ onClose, onConfirm, onFieldInput }: { onFieldInput?: (id: string, value: string) => void; onClose: () => void; onConfirm: () => void }) {
     const prompts = useInlineDrawer();
     const metadata = useInlineDrawer();
     useTranslated('');
@@ -22,7 +21,7 @@ export function CharacterPopup() {
                 <h3 id="character_popup-button-h3" className="margin0">Character</h3> <span >{translate('- Advanced Definitions')}</span>
             </div>
             <hr className="margin-bot-10px" />
-            <ContractIconButton id="character_cross" label="Close" icon={<i className="fa-solid fa-circle-xmark" aria-hidden="true" />} />
+            <ContractIconButton id="character_cross" label="Close" onClick={onClose} icon={<i className="fa-solid fa-circle-xmark" aria-hidden="true" />} />
             <div className="inline-drawer">
                 <div className="inline-drawer-toggle inline-drawer-header" data-workspace-inline="react" role="button" tabIndex={0} aria-expanded={prompts.open} onClick={prompts.onClick} onKeyDown={prompts.onKeyDown}>
                     <h4>
@@ -38,7 +37,7 @@ export function CharacterPopup() {
                             <span >{translate('Main Prompt')}</span>
                             <ContractIconButton className="editor_maximize right_menu_button" data-for="system_prompt_textarea" label="Expand the editor" nativeTitle title="Expand the editor" icon={<i className="fa-solid fa-expand" aria-hidden="true" />} />
                         </h4>
-                        <textarea id="system_prompt_textarea" name="system_prompt" data-macros data-i18n="[placeholder]Any contents here will replace the default Main Prompt used for this character. (v2 spec: system_prompt)" placeholder={"Any contents here will replace the default Main Prompt used for this character.\n(v2 spec: system_prompt)"} form="form_create" className="text_pole" autoComplete="off" rows={3}></textarea>
+                        <textarea id="system_prompt_textarea" onInput={event => onFieldInput?.(event.currentTarget.id, event.currentTarget.value)} name="system_prompt" data-macros data-i18n="[placeholder]Any contents here will replace the default Main Prompt used for this character. (v2 spec: system_prompt)" placeholder={"Any contents here will replace the default Main Prompt used for this character.\n(v2 spec: system_prompt)"} form="form_create" className="text_pole" autoComplete="off" rows={3}></textarea>
                         <div className="extension_token_counter">
                             <span >{translate('Tokens:')}</span> <span data-token-counter="system_prompt_textarea">counting...</span>
                         </div>
@@ -48,7 +47,7 @@ export function CharacterPopup() {
                             <span >{translate('Post-History Instructions')}</span>
                             <ContractIconButton className="editor_maximize right_menu_button" data-for="post_history_instructions_textarea" label="Expand the editor" nativeTitle title="Expand the editor" icon={<i className="fa-solid fa-expand" aria-hidden="true" />} />
                         </h4>
-                        <textarea id="post_history_instructions_textarea" name="post_history_instructions" data-macros data-i18n="[placeholder]Any contents here will replace the default Post-History Instructions used for this character. (v2 spec: post_history_instructions)" placeholder={"Any contents here will replace the default Post-History Instructions used for this character.\n(v2 spec: post_history_instructions)"} form="form_create" className="text_pole" autoComplete="off" rows={3}></textarea>
+                        <textarea id="post_history_instructions_textarea" onInput={event => onFieldInput?.(event.currentTarget.id, event.currentTarget.value)} name="post_history_instructions" data-macros data-i18n="[placeholder]Any contents here will replace the default Post-History Instructions used for this character. (v2 spec: post_history_instructions)" placeholder={"Any contents here will replace the default Post-History Instructions used for this character.\n(v2 spec: post_history_instructions)"} form="form_create" className="text_pole" autoComplete="off" rows={3}></textarea>
                         <div className="extension_token_counter">
                             <span >{translate('Tokens:')}</span> <span data-token-counter="post_history_instructions_textarea">counting...</span>
                         </div>
@@ -69,11 +68,11 @@ export function CharacterPopup() {
                     <div className="flex-container flexnowrap">
                         <div className="flex1">
                             <h4 >{translate('Created by')}</h4>
-                            <textarea id="creator_textarea" name="creator" data-i18n="[placeholder](Botmaker's name / Contact Info)" placeholder="(Botmaker's name / Contact info)" form="form_create" className="text_pole" autoComplete="off" rows={2}></textarea>
+                            <textarea id="creator_textarea" onInput={event => onFieldInput?.(event.currentTarget.id, event.currentTarget.value)} name="creator" data-i18n="[placeholder](Botmaker's name / Contact Info)" placeholder="(Botmaker's name / Contact info)" form="form_create" className="text_pole" autoComplete="off" rows={2}></textarea>
                         </div>
                         <div className="flex1">
                             <h4 >{translate('Character Version')}</h4>
-                            <textarea id="character_version_textarea" name="character_version" data-i18n="[placeholder](If you want to track character versions)" placeholder="(If you want to track character versions)" form="form_create" className="text_pole" autoComplete="off" rows={2}></textarea>
+                            <textarea id="character_version_textarea" onInput={event => onFieldInput?.(event.currentTarget.id, event.currentTarget.value)} name="character_version" data-i18n="[placeholder](If you want to track character versions)" placeholder="(If you want to track character versions)" form="form_create" className="text_pole" autoComplete="off" rows={2}></textarea>
                         </div>
                     </div>
                     <div className="flex-container flexnowrap">
@@ -82,14 +81,14 @@ export function CharacterPopup() {
                                 <span >{translate("Creator's Notes")}</span>
                                 <ContractIconButton className="editor_maximize" data-for="creator_notes_textarea" label="Expand the editor" nativeTitle title="Expand the editor" icon={<i className="fa-solid fa-expand" aria-hidden="true" />} />
                             </h4>
-                            <textarea id="creator_notes_textarea" name="creator_notes" data-i18n="[placeholder](Describe the bot, give use tips, or list the chat models it has been tested on. This will be displayed in the character list.)" placeholder="(Describe the bot, give use tips, or list the chat models it has been tested on. This will be displayed in the character list.)" form="form_create" className="text_pole" autoComplete="off" rows={4}></textarea>
+                            <textarea id="creator_notes_textarea" onInput={event => onFieldInput?.(event.currentTarget.id, event.currentTarget.value)} name="creator_notes" data-i18n="[placeholder](Describe the bot, give use tips, or list the chat models it has been tested on. This will be displayed in the character list.)" placeholder="(Describe the bot, give use tips, or list the chat models it has been tested on. This will be displayed in the character list.)" form="form_create" className="text_pole" autoComplete="off" rows={4}></textarea>
                         </div>
                         <div className="flex1">
                             <h4 className="flex-container alignItemsBaseline">
                                 <span >{translate('Tags to Embed')}</span>
                                 <ContractIconButton className="editor_maximize" data-for="tags_textarea" label="Expand the editor" nativeTitle title="Expand the editor" icon={<i className="fa-solid fa-expand" aria-hidden="true" />} />
                             </h4>
-                            <textarea id="tags_textarea" name="tags" data-i18n="[placeholder](Write a comma-separated list of tags)" placeholder="(Write a comma-separated list of tags)" form="form_create" className="text_pole" autoComplete="off" rows={4}></textarea>
+                            <textarea id="tags_textarea" onInput={event => onFieldInput?.(event.currentTarget.id, event.currentTarget.value)} name="tags" data-i18n="[placeholder](Write a comma-separated list of tags)" placeholder="(Write a comma-separated list of tags)" form="form_create" className="text_pole" autoComplete="off" rows={4}></textarea>
                         </div>
                     </div>
                 </div>
@@ -103,7 +102,7 @@ export function CharacterPopup() {
                         <span className="fa-solid fa-circle-question note-link-span" aria-hidden="true"></span>
                     </a>
                 </h4>
-                <textarea id="scenario_pole" name="scenario" data-macros data-i18n="[placeholder](Circumstances and context of the interaction)" placeholder="(Circumstances and context of the interaction)" className="text_pole" defaultValue="" autoComplete="off" form="form_create" rows={4}></textarea>
+                <textarea id="scenario_pole" onInput={event => onFieldInput?.(event.currentTarget.id, event.currentTarget.value)} name="scenario" data-macros data-i18n="[placeholder](Circumstances and context of the interaction)" placeholder="(Circumstances and context of the interaction)" className="text_pole" defaultValue="" autoComplete="off" form="form_create" rows={4}></textarea>
                 <div className="extension_token_counter">
                     <span >{translate('Tokens:')}</span> <span data-token-counter="scenario_pole" data-token-permanent="true">counting...</span>
                 </div>
@@ -114,17 +113,17 @@ export function CharacterPopup() {
                         <span >{translate("Character's Note")}</span>
                         <ContractIconButton className="editor_maximize right_menu_button" data-for="depth_prompt_prompt" label="Expand the editor" nativeTitle title="Expand the editor" icon={<i className="fa-solid fa-expand" aria-hidden="true" />} />
                     </h4>
-                    <textarea id="depth_prompt_prompt" name="depth_prompt_prompt" data-macros className="text_pole" rows={5} autoComplete="off" form="form_create" data-i18n="[placeholder](Text to be inserted in-chat @ designated depth and role)" placeholder="(Text to be inserted in-chat @ designated depth and role)"></textarea>
+                    <textarea id="depth_prompt_prompt" onInput={event => onFieldInput?.(event.currentTarget.id, event.currentTarget.value)} name="depth_prompt_prompt" data-macros className="text_pole" rows={5} autoComplete="off" form="form_create" data-i18n="[placeholder](Text to be inserted in-chat @ designated depth and role)" placeholder="(Text to be inserted in-chat @ designated depth and role)"></textarea>
                 </div>
                 <div>
                     <h4>
                         <span >{translate('@ Depth')}</span>
                     </h4>
-                    <input id="depth_prompt_depth" name="depth_prompt_depth" className="text_pole textarea_compact m-t-0" type="number" min="0" max="9999" defaultValue="4" form="form_create" data-i18n="[aria-label]@ Depth" aria-label="@ Depth" />
+                    <input id="depth_prompt_depth" onInput={event => onFieldInput?.(event.currentTarget.id, event.currentTarget.value)} name="depth_prompt_depth" className="text_pole textarea_compact m-t-0" type="number" min="0" max="9999" defaultValue="4" form="form_create" data-i18n="[aria-label]@ Depth" aria-label="@ Depth" />
                     <h4>
                         <span >{translate('Role')}</span>
                     </h4>
-                    <select id="depth_prompt_role" name="depth_prompt_role" form="form_create" className="text_pole textarea_compact m-t-0" data-i18n="[aria-label]Role" aria-label="Role">
+                    <select id="depth_prompt_role" onInput={event => onFieldInput?.(event.currentTarget.id, event.currentTarget.value)} name="depth_prompt_role" form="form_create" className="text_pole textarea_compact m-t-0" data-i18n="[aria-label]Role" aria-label="Role">
                         <option value="system" >{translate('System')}</option>
                         <option value="user" >{translate('User')}</option>
                         <option value="assistant" >{translate('Assistant')}</option>
@@ -134,7 +133,7 @@ export function CharacterPopup() {
                     </div>
                 </div>
             </div>
-            <ContractButton id="character_popup_ok" className="menu_button" label="Save" />
+            <ContractButton id="character_popup_ok" className="menu_button" label="Save" onClick={onConfirm} />
         </>
     );
 }

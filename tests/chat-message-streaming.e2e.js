@@ -23,7 +23,8 @@ async function openCharacterLibrary(page) {
 async function selectCharacterByName(page, name, chatName = seededChatName) {
     await openCharacterLibrary(page);
     const selectedName = await page.evaluate(async (characterNameToSelect) => {
-        const context = window.SillyTavern.getContext();
+        const { getContext } = await import('/scripts/st-context.js');
+        const context = getContext();
         const characterId = context.characters.findIndex(character => character?.name === characterNameToSelect);
 
         if (characterId < 0) {
@@ -37,7 +38,8 @@ async function selectCharacterByName(page, name, chatName = seededChatName) {
     expect(selectedName).toBe(name);
     if (chatName) {
         await page.evaluate(async (nextChatName) => {
-            const context = window.SillyTavern.getContext();
+            const { getContext } = await import('/scripts/st-context.js');
+            const context = getContext();
             await context.openCharacterChat(nextChatName);
         }, chatName);
     }
@@ -214,8 +216,9 @@ async function installNonStreamingFetchStub(page, { content, delayMs = 200 }) {
 }
 
 async function enableOpenAiStreaming(page, { chatCompletionSource = 'openai', streamOpenAi = true } = {}) {
-    await page.evaluate(({ source, streamEnabled }) => {
-        const context = window.SillyTavern.getContext();
+    await page.evaluate(async ({ source, streamEnabled }) => {
+        const { getContext } = await import('/scripts/st-context.js');
+        const context = getContext();
         context.powerUserSettings.stream_fade_in = false;
         context.powerUserSettings.streaming_fps = 60;
         context.chatCompletionSettings.chat_completion_source = source;
@@ -242,7 +245,8 @@ async function enableOpenAiStreaming(page, { chatCompletionSource = 'openai', st
 
 async function enableFallbackProvider(page) {
     await page.evaluate(async () => {
-        const context = window.SillyTavern.getContext();
+        const { getContext } = await import('/scripts/st-context.js');
+        const context = getContext();
         // Four-field contract: a non-empty fallback model enables fallback and
         // the attempt reuses the primary URL and API key.
         context.chatCompletionSettings.fallback_provider_model = 'fallback-model';
@@ -251,8 +255,9 @@ async function enableFallbackProvider(page) {
 
 async function startGeneration(page, prompt) {
     await page.locator('#send_textarea').fill(prompt);
-    await page.evaluate(() => {
-        const context = window.SillyTavern.getContext();
+    await page.evaluate(async () => {
+        const { getContext } = await import('/scripts/st-context.js');
+        const context = getContext();
         window.__emberdeskStreamingGeneration = context.generate('normal', { automatic_trigger: false })
             .then(result => {
                 window.__emberdeskStreamingGenerationResult = String(result ?? '');
@@ -266,8 +271,9 @@ async function startGeneration(page, prompt) {
 }
 
 async function startQuietPromptGeneration(page, options = {}) {
-    await page.evaluate((payload) => {
-        const context = window.SillyTavern.getContext();
+    await page.evaluate(async (payload) => {
+        const { getContext } = await import('/scripts/st-context.js');
+        const context = getContext();
         window.__emberdeskStreamingGeneration = context.generateQuietPrompt(payload)
             .then(result => {
                 window.__emberdeskStreamingGenerationResult = String(result ?? '');
@@ -316,7 +322,7 @@ async function waitForGeneration(page, { allowAbort = false, allowFailure = fals
         }
     }, { acceptAbort: allowAbort, acceptFailure: allowFailure });
 
-    await expect.poll(async () => page.evaluate(() => window.SillyTavern.getContext().streamingProcessor === null)).toBe(true);
+    await expect.poll(async () => page.evaluate(async () => (await import('/scripts/st-context.js')).getContext().streamingProcessor === null)).toBe(true);
 }
 
 async function waitForVisibleSendButtonGeneration(page) {
@@ -346,8 +352,9 @@ function userRowForGeneration(page, lastVisibleMessageIdBeforeGeneration) {
 
 async function installMessageEventCounters(page) {
     await page.evaluate(async () => {
+        const { getContext } = await import('/scripts/st-context.js');
         const script = await import('/script.js');
-        const context = window.SillyTavern.getContext();
+        const context = getContext();
         window.__emberdeskStreamingMessageEvents = [];
         window.__emberdeskStreamingRenderedEvents = [];
         context.eventSource.on(script.event_types.MESSAGE_RECEIVED, (messageId, type) => {
@@ -662,8 +669,9 @@ test.describe('chat message streaming', () => {
         await testSetup.awaitST({ page });
         await selectCharacterInFreshChat(page, characterName);
         await enableOpenAiStreaming(page);
-        await page.evaluate(() => {
-            const settings = window.SillyTavern.getContext().chatCompletionSettings;
+        await page.evaluate(async () => {
+            const { getContext } = await import('/scripts/st-context.js');
+            const settings = getContext().chatCompletionSettings;
             settings.custom_url = 'https://compatible.example/v1';
             settings.openai_model = 'compatible-model';
         });
@@ -697,7 +705,7 @@ test.describe('chat message streaming', () => {
         const messageId = await streamingRow.getAttribute('mesid');
         const textBeforeStop = await streamingRow.locator('.mes_text').textContent();
         expect(String(textBeforeStop ?? '').trim().length).toBeGreaterThan(0);
-        await expect.poll(async () => page.evaluate(() => window.SillyTavern.getContext().streamingProcessor?.observedTokenCount ?? 0))
+        await expect.poll(async () => page.evaluate(async () => (await import('/scripts/st-context.js')).getContext().streamingProcessor?.observedTokenCount ?? 0))
             .toBeGreaterThanOrEqual(1);
         await expectMainChatStreamingTransportState(page, {
             phase: ['streaming', 'completed'],
@@ -1176,14 +1184,16 @@ test.describe('chat message streaming', () => {
         await selectCharacterInFreshChat(page, characterName);
         const legacy = { value: 'RETIRED_SCRIPT_INJECT_SENTINEL', position: 0, depth: 0, scan: false, role: 0, filter: '/echo {{setvar::retirement_filter_proof::mutated}} | /return true' };
         await page.evaluate(async (entry) => {
-            const context = window.SillyTavern.getContext();
+            const { getContext } = await import('/scripts/st-context.js');
+            const context = getContext();
             context.chatMetadata.variables = { ...context.chatMetadata.variables, retirement_filter_proof: 'unchanged' };
             context.chatMetadata.script_injects = { retirement_proof: entry };
             await context.saveMetadata();
             await context.openCharacterChat(context.chatId);
         }, legacy);
-        const reopened = await page.evaluate(() => {
-            const context = window.SillyTavern.getContext();
+        const reopened = await page.evaluate(async () => {
+            const { getContext } = await import('/scripts/st-context.js');
+            const context = getContext();
             return { metadata: context.chatMetadata.script_injects, prompts: context.extensionPrompts, variable: context.chatMetadata.variables.retirement_filter_proof };
         });
         expect(reopened.metadata).toEqual({ retirement_proof: legacy });
@@ -1193,12 +1203,15 @@ test.describe('chat message streaming', () => {
         await installStreamingFetchStub(page, { chunks: ['Reply without injection.'] });
         await startGeneration(page, 'Check retired metadata.');
         await waitForGeneration(page);
-        const observed = await page.evaluate(() => ({
+        const observed = await page.evaluate(async () => {
+            const { getContext } = await import('/scripts/st-context.js');
+            return ({
             requests: window.__emberdeskStreamingRequests,
-            metadata: window.SillyTavern.getContext().chatMetadata.script_injects,
-            prompts: window.SillyTavern.getContext().extensionPrompts,
-            variable: window.SillyTavern.getContext().chatMetadata.variables.retirement_filter_proof,
-        }));
+            metadata: getContext().chatMetadata.script_injects,
+            prompts: getContext().extensionPrompts,
+            variable: getContext().chatMetadata.variables.retirement_filter_proof,
+        });
+        });
         expect(observed.requests).toHaveLength(1);
         expect(JSON.stringify(observed.requests)).not.toContain(legacy.value);
         expect(observed.metadata).toEqual({ retirement_proof: legacy });
@@ -1212,7 +1225,8 @@ test.describe('chat message streaming', () => {
         await enableOpenAiStreaming(page);
         await enableFallbackProvider(page);
         await page.evaluate(async () => {
-            const context = window.SillyTavern.getContext();
+            const { getContext } = await import('/scripts/st-context.js');
+            const context = getContext();
             context.featureSettings.tool_bindings = [{ id: 'terminal_test', name: 'analyze', enabled: true, description: 'analyze', parameters: { type: 'object', properties: {} }, actionBody: 'return "ok";' }];
             context.chatCompletionSettings.reply_pipeline = { enabled: true, steps: [{ tool: 'analyze', model: 'o1' }] };
             const { syncPipelineToolBindings } = await import('/scripts/tool-bindings.js');
@@ -1231,7 +1245,8 @@ test.describe('chat message streaming', () => {
         await enableOpenAiStreaming(page);
         await enableFallbackProvider(page);
         await page.evaluate(async () => {
-            const context = window.SillyTavern.getContext();
+            const { getContext } = await import('/scripts/st-context.js');
+            const context = getContext();
             context.featureSettings.tool_bindings = [{ id: 'recovery_test', name: 'analyze', enabled: true, description: 'analyze', parameters: { type: 'object', properties: {} }, actionBody: 'return "ok";' }];
             context.chatCompletionSettings.reply_pipeline = { enabled: true, steps: [{ tool: 'analyze', model: 'gpt-4.1-mini' }] };
             const { syncPipelineToolBindings } = await import('/scripts/tool-bindings.js');
@@ -1245,10 +1260,13 @@ test.describe('chat message streaming', () => {
         ] });
         await startGeneration(page, 'Pipeline recovery model proof');
         await waitForGeneration(page);
-        const actual = await page.evaluate(() => ({
+        const actual = await page.evaluate(async () => {
+            const { getContext } = await import('/scripts/st-context.js');
+            return ({
             requests: window.__emberdeskStreamingRequests.map(request => request.model),
-            reply: window.SillyTavern.getContext().chat.findLast(message => String(message.mes).includes('successful fallback')),
-        }));
+            reply: getContext().chat.findLast(message => String(message.mes).includes('successful fallback')),
+        });
+        });
         expect(actual.requests).toEqual(['gpt-4.1-mini', 'gpt-4.1-mini', 'fallback-model']);
         expect(actual.reply?.extra?.model).toBe('fallback-model');
     });
@@ -1259,7 +1277,8 @@ test.describe('chat message streaming', () => {
         await enableOpenAiStreaming(page);
         await enableFallbackProvider(page);
         await page.evaluate(async () => {
-            const context = window.SillyTavern.getContext();
+            const { getContext } = await import('/scripts/st-context.js');
+            const context = getContext();
             context.featureSettings.tool_bindings = [{ id: 'recovery_tool', name: 'analyze', enabled: true, description: 'analyze', parameters: { type: 'object', properties: {} }, actionBody: 'return "ok";' }];
             context.chatCompletionSettings.reply_pipeline = { enabled: true, steps: [{ tool: 'analyze', model: 'gpt-4.1-mini' }, { tool: 'analyze', model: 'gpt-4.1' }] };
             const { promptManager } = await import('/scripts/openai.js');
@@ -1313,7 +1332,8 @@ test.describe('chat message streaming', () => {
         await enableOpenAiStreaming(page);
         await enableFallbackProvider(page);
         await page.evaluate(async () => {
-            const context = window.SillyTavern.getContext();
+            const { getContext } = await import('/scripts/st-context.js');
+            const context = getContext();
             context.chatCompletionSettings.reply_pipeline = { enabled: true, steps: [] };
             context.featureSettings.tool_bindings = [{ id: 'ordinary_tool', name: 'analyze', enabled: true, description: 'analyze', parameters: { type: 'object', properties: {} }, actionBody: 'return "ordinary tool result";' }];
             const { syncPipelineToolBindings } = await import('/scripts/tool-bindings.js');
@@ -1325,7 +1345,7 @@ test.describe('chat message streaming', () => {
         ] });
         await startGeneration(page, 'ordinary tool continuation recovery');
         await waitForGeneration(page);
-        const actual = await page.evaluate(() => ({ requests: window.__emberdeskStreamingRequests, chat: window.SillyTavern.getContext().chat }));
+        const actual = await page.evaluate(async () => ({ requests: window.__emberdeskStreamingRequests, chat: (await import('/scripts/st-context.js')).getContext().chat }));
         expect(actual.requests).toHaveLength(3);
         expect(JSON.stringify(actual.chat)).toContain('ordinary recovered');
     });
@@ -1337,7 +1357,8 @@ test.describe('chat message streaming', () => {
         await enableOpenAiStreaming(page);
         await enableFallbackProvider(page);
         await page.evaluate(async () => {
-            const context = window.SillyTavern.getContext();
+            const { getContext } = await import('/scripts/st-context.js');
+            const context = getContext();
             context.chatCompletionSettings.openai_model = 'o1';
             context.featureSettings.tool_bindings = [{ id: 'stream_modes', name: 'analyze', enabled: true, description: 'analyze', parameters: { type: 'object', properties: {} }, actionBody: 'return JSON.stringify({ ok: true });' }];
             context.chatCompletionSettings.reply_pipeline = { enabled: true, steps: [{ tool: 'analyze', model: 'gpt-4o-mini' }], final: 'analyze' };
@@ -1350,7 +1371,7 @@ test.describe('chat message streaming', () => {
         ] });
         await startGeneration(page, 'Pipeline cross mode recovery');
         await waitForGeneration(page);
-        const actual = await page.evaluate(async () => ({ requests: window.__emberdeskStreamingRequests, chat: window.SillyTavern.getContext().chat, run: (await import('/scripts/reply-pipeline-core.js')).getPipelineRunState() }));
+        const actual = await page.evaluate(async () => ({ requests: window.__emberdeskStreamingRequests, chat: (await import('/scripts/st-context.js')).getContext().chat, run: (await import('/scripts/reply-pipeline-core.js')).getPipelineRunState() }));
 
         expect(actual.requests.map(request => [request.model, request.stream])).toEqual([
             ['gpt-4o-mini', true], ['o1', false], ['o1', false], ['fallback-model', true],
@@ -1371,7 +1392,8 @@ test.describe('chat message streaming', () => {
         await enableOpenAiStreaming(page);
         await enableFallbackProvider(page);
         await page.evaluate(async () => {
-            const context = window.SillyTavern.getContext();
+            const { getContext } = await import('/scripts/st-context.js');
+            const context = getContext();
             context.featureSettings.tool_bindings = ['analyze', 'review'].map(name => ({ id: name, name, enabled: true, description: name, parameters: { type: 'object', properties: {} }, actionBody: name === 'analyze' ? 'window.__completedToolCount = (window.__completedToolCount || 0) + 1; return "FIRST_RESULT";' : 'return "FINAL_RESULT";' }));
             context.chatCompletionSettings.reply_pipeline = { enabled: true, enforce_mode: 'forced', steps: [{ tool: 'analyze', model: 'gpt-4.1-mini' }, { tool: 'review', model: 'gpt-4.1' }], final: 'review' };
             const { promptManager } = await import('/scripts/openai.js');
@@ -1394,7 +1416,7 @@ test.describe('chat message streaming', () => {
         ] });
         await startGeneration(page, 'Pipeline second step recovery');
         await waitForGeneration(page);
-        const actual = await page.evaluate(async () => ({ requests: window.__emberdeskStreamingRequests, count: window.__completedToolCount, chat: window.SillyTavern.getContext().chat, run: (await import('/scripts/reply-pipeline-core.js')).getPipelineRunState() }));
+        const actual = await page.evaluate(async () => ({ requests: window.__emberdeskStreamingRequests, count: window.__completedToolCount, chat: (await import('/scripts/st-context.js')).getContext().chat, run: (await import('/scripts/reply-pipeline-core.js')).getPipelineRunState() }));
         expect(actual.requests.map(request => request.model)).toEqual(['gpt-4.1-mini', 'gpt-4.1', 'gpt-4.1', 'fallback-model']);
         expect(actual.count ?? 0).toBe(0); // Story steps do not execute named tool actions.
         for (const request of actual.requests.slice(1)) {
@@ -1417,7 +1439,8 @@ test.describe('chat message streaming', () => {
         await enableOpenAiStreaming(page);
         await enableFallbackProvider(page);
         await page.evaluate(async () => {
-            const context = window.SillyTavern.getContext();
+            const { getContext } = await import('/scripts/st-context.js');
+            const context = getContext();
             context.featureSettings.tool_bindings = [{ id: 'fail_close', name: 'analyze', enabled: true, description: 'analyze', parameters: { type: 'object', properties: {} }, actionBody: 'window.__completedToolCount = (window.__completedToolCount || 0) + 1; return JSON.stringify({ ok: true });' }];
             context.chatCompletionSettings.reply_pipeline = { enabled: true, steps: [{ tool: 'analyze', model: 'gpt-4o-mini' }], final: 'analyze' };
             const { syncPipelineToolBindings } = await import('/scripts/tool-bindings.js');
@@ -1600,7 +1623,7 @@ test.describe('chat message streaming', () => {
         await page.locator('#send_textarea').fill('Follow-up after provider failure.');
         await expect(page.locator('#send_textarea')).toHaveValue('Follow-up after provider failure.');
         await expect(page.locator('body')).not.toHaveAttribute('data-generating', 'true');
-        await expect.poll(async () => page.evaluate(() => window.SillyTavern.getContext().streamingProcessor === null)).toBe(true);
+        await expect.poll(async () => page.evaluate(async () => (await import('/scripts/st-context.js')).getContext().streamingProcessor === null)).toBe(true);
         await expectMainChatComposerState(page, {
             length: 'Follow-up after provider failure.'.length,
             empty: false,
@@ -1624,7 +1647,7 @@ test.describe('chat message streaming', () => {
         const recoveredRow = assistantRowForGeneration(page, lastVisibleMessageIdBeforeGeneration + 2);
         await expect(recoveredRow.locator('.mes_text')).toContainText('Recovered retry text.');
         await expect(page.locator('body')).not.toHaveAttribute('data-generating', 'true');
-        await expect.poll(async () => page.evaluate(() => window.SillyTavern.getContext().streamingProcessor === null)).toBe(true);
+        await expect.poll(async () => page.evaluate(async () => (await import('/scripts/st-context.js')).getContext().streamingProcessor === null)).toBe(true);
         await expect(userRow).toHaveCount(1);
         await expect(assistantRowsAfterFailure).toHaveCount(1);
         await expect(page.locator('#chat .mes[is_user="true"]').filter({ hasText: 'Start a deterministic provider failure proof.' })).toHaveCount(1);
@@ -1704,7 +1727,7 @@ test.describe('chat message streaming', () => {
         await page.locator('#send_textarea').fill('Follow-up after pre-token provider failure.');
         await expect(page.locator('#send_textarea')).toHaveValue('Follow-up after pre-token provider failure.');
         await expect(page.locator('body')).not.toHaveAttribute('data-generating', 'true');
-        await expect.poll(async () => page.evaluate(() => window.SillyTavern.getContext().streamingProcessor === null)).toBe(true);
+        await expect.poll(async () => page.evaluate(async () => (await import('/scripts/st-context.js')).getContext().streamingProcessor === null)).toBe(true);
         await expectMainChatComposerState(page, {
             length: 'Follow-up after pre-token provider failure.'.length,
             empty: false,

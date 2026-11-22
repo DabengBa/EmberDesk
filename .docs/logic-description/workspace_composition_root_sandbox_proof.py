@@ -1,4 +1,6 @@
-"""Sandbox proof for workspace_composition_root_processing_flow.md.
+"""Sandbox proof for the historical workspace_composition_root_processing_flow.md.
+
+This models the initial extraction, not the current runtime.
 
 Run with:
     uv run python .docs/logic-description/workspace_composition_root_sandbox_proof.py

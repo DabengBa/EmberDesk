@@ -5,7 +5,8 @@ import { openWorkspacePanelFixture } from './helpers/workspace-panel-fixture.js'
 test('bulk message checkbox selects a deletion range with Space', async ({ page }) => {
     await testSetup.awaitST({ page });
     await page.evaluate(async () => {
-        const context = window.SillyTavern.getContext();
+        const { getContext } = await import('/scripts/st-context.js');
+        const context = getContext();
         context.chatCompletionSettings.chat_memory_enabled = false;
         await context.selectCharacterById(context.characters.findIndex(character => character.name === 'Dev Character 001'));
         await context.openCharacterChat('Dev Character 001 Session 01');

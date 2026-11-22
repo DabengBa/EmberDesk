@@ -32,8 +32,9 @@ async function clickCharacter(page, n) {
 }
 
 async function state(page) {
-    return page.evaluate(() => {
-        const c = window.SillyTavern.getContext();
+    return page.evaluate(async () => {
+        const { getContext } = await import('/scripts/st-context.js');
+        const c = getContext();
         const character = c.characters[c.characterId];
         return {
             avatar: character?.avatar, name: c.name2, chatId: c.getCurrentChatId(),
@@ -96,7 +97,7 @@ async function hold(page, path, matches = () => true, transform = x => x) {
 }
 
 async function startRefresh(page) {
-    await page.evaluate(() => { window.u011Refresh = window.SillyTavern.getContext().getCharacters(); });
+    await page.evaluate(async () => { const { getContext } = await import('/scripts/st-context.js'); window.u011Refresh = getContext().getCharacters(); });
 }
 async function finishRefresh(page) {
     await page.evaluate(() => window.u011Refresh);
@@ -169,8 +170,9 @@ test('a reordered refresh during B chat loading keeps B chat and editor aligned'
 
 test('U013 ordinary detail loading writes the response and reports success', async ({ page }) => {
     const result = await page.evaluate(async target => {
+        const { getContext } = await import('/scripts/st-context.js');
         const app = await import('/script.js');
-        const chars = window.SillyTavern.getContext().characters;
+        const chars = getContext().characters;
         const before = chars.find(c => c.avatar === target);
         const beforeShallow = before?.shallow;
         const ok = await app.getOneCharacter(target);
@@ -190,8 +192,9 @@ test('U013 replaced still-shallow target discards old detail and reports failure
         }, target);
         await gate.wait();
         const published = await page.evaluate(async target => {
+            const { getContext } = await import('/scripts/st-context.js');
             const app = await import('/script.js');
-            const chars = window.SillyTavern.getContext().characters;
+            const chars = getContext().characters;
             const before = chars.find(c => c.avatar === target);
             const snapshot = structuredClone(chars);
             const next = snapshot.find(c => c.avatar === target);
@@ -204,8 +207,9 @@ test('U013 replaced still-shallow target discards old detail and reports failure
         expect(published).toEqual({ wasShallow: true, replaced: true, shallow: true });
         gate.release();
         const result = await page.evaluate(async target => {
+            const { getContext } = await import('/scripts/st-context.js');
             const ok = await window.u013Detail;
-            const current = window.SillyTavern.getContext().characters.find(c => c.avatar === target);
+            const current = getContext().characters.find(c => c.avatar === target);
             return { ok, same: current === window.u013Published, shallow: current.shallow, description: current.description };
         }, target);
         expect(result).toEqual({ ok: false, same: true, shallow: true, description: 'U013 replacement still shallow' });
@@ -213,7 +217,10 @@ test('U013 replaced still-shallow target discards old detail and reports failure
 });
 
 test('a captured shallow detail response must not overwrite a newer published detail', async ({ page }, testInfo) => {
-    const shallow = await page.evaluate(a => window.SillyTavern.getContext().characters.find(c => c.avatar === a)?.shallow, avatar(4));
+    const shallow = await page.evaluate(async a => {
+        const { getContext } = await import('/scripts/st-context.js');
+        return getContext().characters.find(c => c.avatar === a)?.shallow;
+    }, avatar(4));
     expect(shallow, 'The isolated server must serve shallow characters').toBe(true);
     const gate = await hold(page, '/api/characters/get', request => request.postDataJSON().avatar_url === avatar(4));
     try {
@@ -300,8 +307,9 @@ test('U012 standalone publication uses completed B rather than an old A argument
     await selectAThenB(page);
     const before = await completeB(page);
     await page.evaluate(async oldAvatar => {
+        const { getContext } = await import('/scripts/st-context.js');
         const app = await import('/script.js');
-        const snapshot = structuredClone(window.SillyTavern.getContext().characters).filter(c => c.avatar !== oldAvatar).reverse();
+        const snapshot = structuredClone(getContext().characters).filter(c => c.avatar !== oldAvatar).reverse();
         window.u012Publish = app.publishCharacterLibrarySnapshot(snapshot, { previousAvatar: oldAvatar });
     }, avatar(1));
     const outcome = await completionOrMissingDialog(page, 'u012Publish');
@@ -314,8 +322,9 @@ test('U012 missing current B still warns and reloads even when old A remains', a
     await selectAThenB(page);
     await completeB(page);
     await page.evaluate(async ({ a, b }) => {
+        const { getContext } = await import('/scripts/st-context.js');
         const app = await import('/script.js');
-        const snapshot = structuredClone(window.SillyTavern.getContext().characters).filter(c => c.avatar !== b).reverse();
+        const snapshot = structuredClone(getContext().characters).filter(c => c.avatar !== b).reverse();
         window.u012Missing = app.publishCharacterLibrarySnapshot(snapshot, { previousAvatar: a });
     }, { a: avatar(1), b: avatar(2) });
     const dialog = page.locator('dialog[open]');
@@ -327,7 +336,10 @@ test('U012 missing current B still warns and reloads even when old A remains', a
 
 test('U014 normal shallow selection loads real detail and chat', async ({ page }, testInfo) => {
     const target = avatar(7);
-    expect(await page.evaluate(a => window.SillyTavern.getContext().characters.find(c => c.avatar === a)?.shallow, target)).toBe(true);
+    expect(await page.evaluate(async a => {
+        const { getContext } = await import('/scripts/st-context.js');
+        return getContext().characters.find(c => c.avatar === a)?.shallow;
+    }, target)).toBe(true);
     const detail = page.waitForResponse(r => r.url().endsWith('/api/characters/get') && r.request().postDataJSON()?.avatar_url === target);
     const chat = page.waitForResponse(r => r.url().endsWith('/api/chats/get') && r.request().postDataJSON()?.avatar_url === target);
     await clickCharacter(page, 7);
@@ -337,7 +349,10 @@ test('U014 normal shallow selection loads real detail and chat', async ({ page }
     const chatPayload = await chatResponse.json();
     await settled(page, 7);
     const actual = await state(page);
-    const shallow = await page.evaluate(a => Boolean(window.SillyTavern.getContext().characters.find(c => c.avatar === a)?.shallow), target);
+    const shallow = await page.evaluate(async a => {
+        const { getContext } = await import('/scripts/st-context.js');
+        return Boolean(getContext().characters.find(c => c.avatar === a)?.shallow);
+    }, target);
     const observation = { detailStatus: detailResponse.status(), chatStatus: chatResponse.status(), chatRequest: chatResponse.request().postDataJSON(), detailDescription: detailData.description, chatMessageCount: chatPayload.length - 1, actual, shallow };
     await testInfo.attach('u014-control', { body: JSON.stringify(observation, null, 2), contentType: 'application/json' });
     expect(detailResponse.ok()).toBe(true);
@@ -365,20 +380,24 @@ test('U014 observe selected shallow replacement while detail responses are in fl
     };
     await page.route('**/api/characters/get', handler);
     try {
-        expect(await page.evaluate(a => window.SillyTavern.getContext().characters.find(c => c.avatar === a)?.shallow, target)).toBe(true);
+        expect(await page.evaluate(async a => {
+            const { getContext } = await import('/scripts/st-context.js');
+            return getContext().characters.find(c => c.avatar === a)?.shallow;
+        }, target)).toBe(true);
         const chat = page.waitForResponse(r => r.url().endsWith('/api/chats/get') && r.request().postDataJSON()?.avatar_url === target, { timeout: 15_000 });
         await clickCharacter(page, 8);
         await expect.poll(() => pending.length).toBe(1);
         const published = await page.evaluate(async ({ target, trigger }) => {
+            const { getContext } = await import('/scripts/st-context.js');
             const app = await import('/script.js');
-            const chars = window.SillyTavern.getContext().characters;
+            const chars = getContext().characters;
             const before = chars.find(c => c.avatar === target);
             const snapshot = structuredClone(chars);
             snapshot.find(c => c.avatar === trigger).name += ' U014 snapshot change';
             window.u014Publish = app.publishCharacterLibrarySnapshot(snapshot);
             const after = chars.find(c => c.avatar === target);
             window.u014Published = after;
-            return { replaced: before !== after, shallow: after?.shallow, avatar: after?.avatar, sameArray: chars === window.SillyTavern.getContext().characters, character: structuredClone(after) };
+            return { replaced: before !== after, shallow: after?.shallow, avatar: after?.avatar, sameArray: chars === getContext().characters, character: structuredClone(after) };
         }, { target, trigger: avatar(9) });
         expect(published).toMatchObject({ replaced: true, shallow: true, avatar: target, sameArray: true });
         await expect.poll(() => pending.length).toBe(2);
@@ -387,8 +406,9 @@ test('U014 observe selected shallow replacement while detail responses are in fl
         const chatPayload = await chatResponse.json();
         await settled(page, 8);
         const actual = await state(page);
-        const targetState = await page.evaluate(a => {
-            const current = window.SillyTavern.getContext().characters.find(c => c.avatar === a);
+        const targetState = await page.evaluate(async a => {
+            const { getContext } = await import('/scripts/st-context.js');
+            const current = getContext().characters.find(c => c.avatar === a);
             return { sameAsPublished: current === window.u014Published, shallow: current?.shallow, description: current?.description };
         }, target);
         const fields = ['description', 'personality', 'scenario', 'first_mes', 'mes_example'];
@@ -401,8 +421,9 @@ test('U014 observe selected shallow replacement while detail responses are in fl
         expect(targetState.shallow).toBe(true);
         pending[1].release();
         await page.evaluate(() => window.u014Publish);
-        observation.afterSecondDetail = await page.evaluate(a => {
-            const current = window.SillyTavern.getContext().characters.find(c => c.avatar === a);
+        observation.afterSecondDetail = await page.evaluate(async a => {
+            const { getContext } = await import('/scripts/st-context.js');
+            const current = getContext().characters.find(c => c.avatar === a);
             return { shallow: Boolean(current?.shallow), sameAsPublished: current === window.u014Published };
         }, target);
         observation.final = await state(page);

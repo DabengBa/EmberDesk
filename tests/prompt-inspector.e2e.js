@@ -17,7 +17,8 @@ async function openCharacterLibrary(page) {
 async function selectCharacterInSeededChat(page) {
     await openCharacterLibrary(page);
     await page.evaluate(async ({ name, chatName }) => {
-        const context = window.SillyTavern.getContext();
+        const { getContext } = await import('/scripts/st-context.js');
+        const context = getContext();
         // Keep unrelated background summarization from sending during a preview.
         context.chatCompletionSettings.chat_memory_enabled = false;
         const characterId = context.characters.findIndex(character => character?.name === name);
@@ -30,8 +31,9 @@ async function selectCharacterInSeededChat(page) {
 }
 
 async function enableOpenAiBackend(page) {
-    await page.evaluate(() => {
-        const context = window.SillyTavern.getContext();
+    await page.evaluate(async () => {
+        const { getContext } = await import('/scripts/st-context.js');
+        const context = getContext();
         context.chatCompletionSettings.chat_completion_source = 'openai';
         context.chatCompletionSettings.openai_model = 'gpt-4o-mini';
         context.chatCompletionSettings.stream_openai = false;
@@ -164,7 +166,7 @@ test.describe('prompt inspector (request preview)', () => {
         await enableOpenAiBackend(page);
         await installGenerateStub(page);
 
-        const chatLengthBefore = await page.evaluate(() => window.SillyTavern.getContext().chat.length);
+        const chatLengthBefore = await page.evaluate(async () => (await import('/scripts/st-context.js')).getContext().chat.length);
         await page.locator('#send_textarea').fill(PROBE_TEXT);
 
         const preview = await runPreview(page);
@@ -181,7 +183,7 @@ test.describe('prompt inspector (request preview)', () => {
         expect(preview.pendingMessage.mes).toContain(PROBE_TEXT);
         // No request was sent and nothing was committed.
         expect(await page.evaluate(() => window.__promptInspectorRequests.length)).toBe(0);
-        expect(await page.evaluate(() => window.SillyTavern.getContext().chat.length)).toBe(chatLengthBefore);
+        expect(await page.evaluate(async () => (await import('/scripts/st-context.js')).getContext().chat.length)).toBe(chatLengthBefore);
         await expect(page.locator('#send_textarea')).toHaveValue(PROBE_TEXT);
     });
 
@@ -245,9 +247,10 @@ test.describe('prompt inspector (request preview)', () => {
         await enableOpenAiBackend(page);
         await installGenerateStub(page);
         await page.evaluate(async () => {
+            const { getContext } = await import('/scripts/st-context.js');
             const { feature_settings } = await import('/scripts/feature-settings.js');
             feature_settings.tool_bindings = [{ name: 'submit_story', enabled: true }];
-            const settings = window.SillyTavern.getContext().chatCompletionSettings;
+            const settings = getContext().chatCompletionSettings;
             settings.openai_max_context = 65536;
             settings.openai_max_tokens = 1024;
             settings.reply_pipeline = { enabled: true, steps: [{ tool: 'submit_story' }] };
@@ -441,9 +444,10 @@ test.describe('prompt inspector (request preview)', () => {
         // A runnable pipeline enables history projection; its configured tool
         // remains distinct from synthetic historical submit_story records.
         await page.evaluate(async () => {
+            const { getContext } = await import('/scripts/st-context.js');
             const { feature_settings } = await import('/scripts/feature-settings.js');
             feature_settings.tool_bindings = [{ name: 'get_weather', enabled: true }];
-            const settings = window.SillyTavern.getContext().chatCompletionSettings;
+            const settings = getContext().chatCompletionSettings;
             // Exercise a deterministic history budget boundary independently of earlier sends.
             settings.openai_max_context = 2048;
             settings.reply_pipeline = { enabled: true, steps: [{ tool: 'get_weather' }] };
@@ -456,8 +460,9 @@ test.describe('prompt inspector (request preview)', () => {
         //  1. non-pipeline tool card (keeps structured replay)
         //  2. bare mid-pipeline card (is_system, all-pipeline invocations)
         //  3. merged pipeline card (assistant reply carrying invocations)
-        await page.evaluate(() => {
-            const context = window.SillyTavern.getContext();
+        await page.evaluate(async () => {
+            const { getContext } = await import('/scripts/st-context.js');
+            const context = getContext();
             context.chat.splice(1);
             for (let index = 0; index < 120; index++) {
                 context.chat.push({ name: index % 2 ? 'Seraphina' : 'User', is_user: index % 2 === 0, is_system: false, mes: `Historical turn ${index}: the explorer crossed the valley and remembered the story.`, extra: {} });
@@ -500,10 +505,11 @@ test.describe('prompt inspector (request preview)', () => {
         });
 
         await page.locator('#send_textarea').fill('CURRENT_USER_TEXT');
-        const before = await page.evaluate(() => structuredClone(window.SillyTavern.getContext().chat));
+        const before = await page.evaluate(async () => structuredClone((await import('/scripts/st-context.js')).getContext().chat));
         const budgetSettings = async () => await page.evaluate(async () => {
+            const { getContext } = await import('/scripts/st-context.js');
             const { promptManager } = await import('/scripts/openai.js');
-            const settings = window.SillyTavern.getContext().chatCompletionSettings;
+            const settings = getContext().chatCompletionSettings;
             const snapshot = value => ({
                 context: value.openai_max_context,
                 completion: value.openai_max_tokens,
@@ -572,12 +578,12 @@ test.describe('prompt inspector (request preview)', () => {
         await expect(overlay).toHaveCount(0);
 
         expect(await page.evaluate(() => window.__promptInspectorRequests.length)).toBe(0);
-        expect(await page.evaluate(() => window.SillyTavern.getContext().chat)).toEqual(before);
+        expect(await page.evaluate(async () => (await import('/scripts/st-context.js')).getContext().chat)).toEqual(before);
         const closingPreview = await runPreview(page, 1);
         expect(closingPreview.request.messages.flatMap(message => message.tool_calls ?? [])).toEqual(assistantToolCalls);
         expect(await budgetSettings()).toEqual(settingsBeforePreview);
 
-        await page.evaluate(async () => window.SillyTavern.getContext().generate('normal'));
+        await page.evaluate(async () => (await import('/scripts/st-context.js')).getContext().generate('normal'));
         expect(await budgetSettings()).toEqual(settingsBeforePreview);
         expect(await page.evaluate(() => window.__promptInspectorRequests.length)).toBe(1);
         const [live] = await page.evaluate(() => window.__promptInspectorRequests);

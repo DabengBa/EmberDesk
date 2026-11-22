@@ -25,7 +25,7 @@ The following are internal contracts consumed by EmberDesk's own modules; breaki
 
 ### Internal runtime surface
 
-- `globalThis.SillyTavern` (`public/scripts/public-api.js`, installed by `script.js`) — internal API for first-party modules and debugging; `getContext()` exposes feature settings, variables, tools, world info, and rendering helpers to first-party code.
+- `getContext()` (`public/scripts/st-context.js`) — explicit module access for existing first-party consumers of feature settings, variables, tools, world info, and rendering helpers. See [workspace composition](./workspace-composition-root.md).
 - `eventSource` / `event_types` (`public/scripts/events.js`) — internal event emitter/table..
 - `/lib.js` (`public/lib.js`) — shared browser utility surface for first-party modules.
 - `__emberDeskReactCompatibilityBridge` — internal-only React/legacy adapter; never a public API.
@@ -77,7 +77,7 @@ Stable event names consumed by first-party modules include `APP_READY`, `CHAT_CH
 
 - `public/scripts/events.js` owns `eventSource` and `event_types`.
 - `public/scripts/request-context.js` owns CSRF loading and request headers; there is no jQuery Ajax prefilter.
-- `public/scripts/public-api.js` installs `globalThis.SillyTavern`.
+
 - `public/script.js` assembles these contracts and calls `bootstrapWorkspace()`.
 
 The first-party reverse-import gate in `tests/helpers/script-js-reverse-import-contract.js` records current legacy coupling as an exact snapshot. New first-party reverse imports are blocked; `eventSource`, `event_types`, and `getRequestHeaders` must not be imported from `script.js`.

@@ -2,47 +2,7 @@ import { describe, expect, test } from '@jest/globals';
 import { loadTsModule } from './helpers/load-ts-module.mjs';
 
 describe('dialogue controller', () => {
-    test('legacy selection resets all rows and selects indices from the chosen row through the end', async () => {
-        const { selectLegacyDeleteRange } = await loadTsModule('app/lib/dialogue-service.ts');
-        const events = [];
-        selectLegacyDeleteRange(2, 5, {
-            clear: () => events.push('clear'),
-            markClicked: () => events.push('clicked'),
-            select: index => events.push(index),
-            announce: index => events.push(`announce:${index}`),
-        });
-        expect(events).toEqual(['clear', 'clicked', 'announce:2', 2, 3, 4]);
-    });
-    test('bulk deletion orders mutation, save, event, refresh and cleanup', async () => {
-        const { runBulkDeleteEffects } = await loadTsModule('app/lib/dialogue-service.ts');
-        const chat = [1, 2, 3, 4];
-        const metadata = { tainted: false };
-        const events = [];
-        const ports = {
-            chat, metadata, prepare: () => events.push('prepare'), isReactOwner: () => true,
-            getIdentity: () => { events.push('identity'); return 'chat-a'; },
-            removeLegacyRows: () => events.push('legacy-remove'), truncateUi: index => events.push(`truncate:${index}`),
-            save: async () => { events.push(`save:${chat.length}:${metadata.tainted}`); },
-            scrollLegacy: () => events.push('legacy-scroll'), emitDeleted: async index => { events.push(`emit:${index}`); },
-            refreshReact: async identity => { events.push(`refresh:${identity}`); },
-            markLegacyLast: () => events.push('legacy-last'), invalidSelection: () => events.push('invalid'),
-            cleanup: () => events.push('cleanup'),
-        };
-        await runBulkDeleteEffects(2, ports);
-        expect(events).toEqual(['prepare', 'identity', 'truncate:2', 'save:2:true', 'emit:2', 'refresh:chat-a', 'cleanup']);
-        events.length = 0;
-        ports.save = async () => { events.push('save-failed'); throw new Error('save failed'); };
-        await expect(runBulkDeleteEffects(1, ports)).rejects.toThrow('save failed');
-        expect(events).toEqual(['prepare', 'identity', 'truncate:1', 'save-failed', 'cleanup']);
-        events.length = 0;
-        ports.isReactOwner = () => false;
-        ports.save = async () => { events.push(`save:${chat.length}`); };
-        await runBulkDeleteEffects(0, ports);
-        expect(events).toEqual(['prepare', 'identity', 'truncate:0', 'save:0', 'emit:0', 'refresh:chat-a', 'cleanup']);
-        events.length = 0;
-        await runBulkDeleteEffects(-1, ports);
-        expect(events).toEqual(['prepare', 'invalid', 'cleanup']);
-    });
+
     test('presentation cancels stale close cleanup when reopened', async () => {
         const { createDialoguePresentationController } = await loadTsModule('app/lib/dialogue-service.ts');
         const actions = [];
@@ -89,6 +49,20 @@ describe('dialogue controller', () => {
         controller.finish();
         expect(controller.getSnapshot()).toMatchObject({ active: false, selected: null, busy: false });
     });
+    test('completion after a chat switch does not close the new selection', async () => {
+        const { createBulkDeleteController } = await loadTsModule('app/lib/dialogue-service.ts');
+        const controller = createBulkDeleteController();
+        controller.open('Choose');
+        controller.select(1, 'Delete', 'Delete');
+        let resolve;
+        const confirmation = controller.confirm('Deleting', () => new Promise(done => { resolve = done; }));
+        controller.finish();
+        controller.open('Choose in the new chat');
+        controller.select(3, 'Delete new', 'Delete new');
+        resolve();
+        await confirmation;
+        expect(controller.getSnapshot()).toMatchObject({ active: true, selected: 3, busy: false });
+    });
     test('input popup publishes its rows and edited input until it resolves', async () => {
         const { createDialogueController } = await loadTsModule('app/lib/dialogue-service.ts');
         const controller = createDialogueController();
@@ -103,12 +77,19 @@ describe('dialogue controller', () => {
         const { createBulkDeleteController } = await loadTsModule('app/lib/dialogue-service.ts');
         const controller = createBulkDeleteController();
         controller.open('Choose');
-        expect(controller.begin('Deleting')).toBe(false);
+        const calls = [];
+        await controller.confirm('Deleting', index => calls.push(index));
+        expect(calls).toEqual([]);
         controller.select(4, 'Delete 3', 'Delete three');
         expect(controller.getSnapshot()).toEqual({ active: true, selected: 4, busy: false, summary: 'Delete 3', ariaLabel: 'Delete three' });
-        expect(controller.begin('Deleting')).toBe(true);
-        expect(controller.begin('Deleting')).toBe(false);
-        controller.finish();
+        let resolve;
+        const pending = controller.confirm('Deleting', index => { calls.push(index); return new Promise(done => { resolve = done; }); });
+        await controller.confirm('Deleting', index => calls.push(index));
+        controller.select(2, 'Other', 'Other');
+        expect(calls).toEqual([4]);
+        expect(controller.getSnapshot()).toMatchObject({ selected: 4, busy: true });
+        resolve();
+        await pending;
         expect(controller.getSnapshot().selected).toBe(null);
         expect(controller.getSnapshot().busy).toBe(false);
     });

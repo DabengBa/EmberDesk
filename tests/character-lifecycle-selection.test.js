@@ -4,13 +4,15 @@ import fs from 'node:fs';
 jest.unstable_mockModule('../public/scripts/notifications.js', () => ({ default: new Proxy({}, { get: (_target, key) => globalThis.toastr?.[key] }) }));
 
 const emit = jest.fn(async () => {});
-jest.unstable_mockModule('../public/scripts/events.js', () => ({ eventSource: { emit }, event_types: { CHARACTER_DUPLICATED: 'duplicated' } }));
+jest.unstable_mockModule('../public/scripts/events.js', () => ({ eventSource: { emit }, event_types: { CHARACTER_DUPLICATED: 'duplicated', CHARACTER_EDITOR_OPENED: 'editor-opened' } }));
 jest.unstable_mockModule('../public/scripts/character-authoring.js', () => ({ buildCharacterAuthoringFormData: jest.fn(), getCharacterAuthoringWriteUrl: jest.fn() }));
 jest.unstable_mockModule('../public/scripts/character-list-state.js', () => ({ getCharacterDeleteCandidates: jest.fn(), shouldRefreshCharacterAfterEdit: jest.fn() }));
 jest.unstable_mockModule('../public/scripts/request-context.js', () => ({ getRequestHeaders: () => ({ 'Content-Type': 'application/json' }) }));
 jest.unstable_mockModule('../public/scripts/workspace-panels-react-bridge.js', () => ({ loadWorkspacePanelsModule: jest.fn() }));
+jest.unstable_mockModule('../public/scripts/utils.js', () => ({ escapeHtml: value => value, waitUntilCondition: jest.fn() }));
+jest.unstable_mockModule('../public/scripts/world-cascade-dialog.js', () => ({ buildCascadeSectionHtml: jest.fn(), showDeleteConfirmWithCascade: jest.fn() }));
 const { registerCharacterLifecycleShellContext } = await import('../public/scripts/character-lifecycle-shell-context.js');
-const { selectCharacterById, duplicateCharacter, select_selected_character } = await import('../public/scripts/character-lifecycle-service.js');
+const { selectCharacterById, duplicateCharacter, select_selected_character, runCharacterNavigation } = await import('../public/scripts/character-lifecycle-service.js');
 let state, shell, order;
 beforeEach(() => {
     order = [];
@@ -40,6 +42,70 @@ test('selection keeps scroll, clear, state and chat-load order under the lifecyc
     expect(state.this_edit_mes_id).toBeUndefined();
     expect(state.selected_button).toBe('character_edit');
     expect(shell.closeWorkspaceChildSlotHost).toHaveBeenCalledWith('right-nav-panel');
+});
+
+test('new navigation selects and requests authoring before clearing the heading and tag draft', () => {
+    shell.select_rm_create = () => order.push(`select:${state.selected_button}`);
+    shell.queueReactCharacterAuthoringRemount = () => order.push('remount');
+    shell.clearDraftCharacterTags = () => order.push('tags');
+    globalThis.document.getElementById = id => id === 'rm_button_selected_ch' ? {
+        querySelectorAll: () => [{ set textContent(value) { order.push(`heading:${value}`); } }],
+    } : null;
+    runCharacterNavigation('create');
+    expect(order).toEqual(['select:create', 'remount', 'heading:', 'tags']);
+});
+
+test.each(['present', 'deleted', 'unset'])('current navigation selects or falls back and clears search with a bubbling input (%s)', condition => {
+    const previousInput = globalThis.HTMLInputElement;
+    class Input extends EventTarget { value = 'Alice'; }
+    globalThis.HTMLInputElement = Input;
+    const search = new Input();
+    const input = jest.fn(() => order.push(['input', search.value]));
+    search.addEventListener('input', input);
+    state.this_chid = condition === 'present' ? '0' : condition === 'deleted' ? '99' : undefined;
+    state.accountStorage = { setItem: jest.fn((...args) => order.push(['preference', ...args])) };
+    Object.assign(shell, {
+        select_rm_characters: jest.fn(() => order.push(['list', state.selected_button])),
+        select_rm_create: jest.fn(() => order.push(['editor', state.selected_button])),
+        setMenuType: jest.fn(), queueReactCharacterAuthoringRemount: jest.fn(),
+        setTemporaryChatStatus: jest.fn(), updateFavButtonState: jest.fn(),
+        timestampToMoment: () => ({ toISOString: () => '' }), formatCreatorNotes: () => '',
+        getThumbnailUrl: () => '', setWorldInfoButtonClass: jest.fn(), checkEmbeddedWorld: jest.fn(),
+        getCharacterSource: () => null, saveSettingsDebounced: jest.fn(),
+    });
+    globalThis.document = { getElementById: id => id === 'character_search_bar' ? search : null, querySelectorAll: () => [] };
+    try {
+        runCharacterNavigation('current');
+        expect(state.selected_button).toBe(condition === 'present' ? 'character_edit' : 'characters');
+        if (condition === 'present') {
+            expect(shell.select_rm_create).toHaveBeenCalledTimes(1);
+            expect(shell.queueReactCharacterAuthoringRemount).toHaveBeenCalledTimes(1);
+            expect(emit).toHaveBeenCalledWith('editor-opened', '0');
+            expect(shell.select_rm_characters).not.toHaveBeenCalled();
+        } else {
+            expect(shell.select_rm_characters).toHaveBeenCalledTimes(1);
+            expect(shell.select_rm_create).not.toHaveBeenCalled();
+        }
+        expect(search.value).toBe('');
+        expect(input).toHaveBeenCalledTimes(1);
+        expect(input.mock.calls[0][0]).toMatchObject({ type: 'input', bubbles: true });
+        expect(order.at(-2)).toEqual(['input', '']);
+        expect(order.at(-1)).toEqual(['preference', 'SelectedNavTab', 'rm_button_selected_ch']);
+        runCharacterNavigation('current');
+        expect(input).toHaveBeenCalledTimes(1);
+    } finally {
+        if (previousInput === undefined) delete globalThis.HTMLInputElement;
+        else globalThis.HTMLInputElement = previousInput;
+    }
+});
+
+test.each([['characters', true], ['back', false]])('%s navigation opens the list with its own preference semantics', (action, storesPreference) => {
+    shell.select_rm_characters = jest.fn(() => order.push(state.selected_button));
+    state.accountStorage = { setItem: jest.fn() };
+    runCharacterNavigation(action);
+    expect(order).toEqual(['characters']);
+    if (storesPreference) expect(state.accountStorage.setItem).toHaveBeenCalledWith('SelectedNavTab', 'rm_button_characters');
+    else expect(state.accountStorage.setItem).not.toHaveBeenCalled();
 });
 
 test.each(['missing', 'saving', 'generating'])('selection leaves state untouched while %s', async condition => {

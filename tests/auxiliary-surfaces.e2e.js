@@ -17,7 +17,8 @@ test('wire records retain their matching upstream bodies when foreground and mem
     try {
         await testSetup.awaitST({ page });
         await page.evaluate(async upstream => {
-            const context = window.SillyTavern.getContext();
+            const { getContext } = await import('/scripts/st-context.js');
+            const context = getContext();
             Object.assign(context.chatCompletionSettings, { chat_memory_enabled: true, chat_completion_source: 'openai', openai_model: 'gpt-4o-mini', custom_url: upstream, stream_openai: false, n: 1, send_if_empty: '' });
             const script = await import('/script.js');
             script.changeMainAPI('openai');
@@ -58,7 +59,8 @@ test('wire records retain their matching upstream bodies when foreground and mem
 test('memory numeric wheel creates an applicable React draft', async ({ page }) => {
     await testSetup.awaitST({ page });
     await page.evaluate(async () => {
-        const context = window.SillyTavern.getContext();
+        const { getContext } = await import('/scripts/st-context.js');
+        const context = getContext();
         context.chatCompletionSettings.chat_memory_enabled = false;
         await context.selectCharacterById(context.characters.findIndex(character => character.name === 'Dev Character 001'));
     });
@@ -98,7 +100,8 @@ test('real memory and wire overlays restore focus and discard a forced-close dra
     await testSetup.awaitST({ page });
 
     await page.evaluate(async () => {
-        const context = window.SillyTavern.getContext();
+        const { getContext } = await import('/scripts/st-context.js');
+        const context = getContext();
         context.chatCompletionSettings.chat_memory_enabled = false;
         await context.selectCharacterById(context.characters.findIndex(character => character.name === 'Dev Character 001'));
     });
@@ -255,7 +258,8 @@ test('prompt handles reorder across rows without changing enablement or editor s
 test('prompt drag order persists in the real workspace after reload', async ({ page }) => {
     await testSetup.awaitST({ page });
     await page.evaluate(async () => {
-        const context = window.SillyTavern.getContext();
+        const { getContext } = await import('/scripts/st-context.js');
+        const context = getContext();
         await context.selectCharacterById(context.characters.findIndex(character => character.name === 'Dev Character 001'));
     });
     const rows = page.locator('#completion_prompt_manager .prompt-panel-item');
@@ -298,7 +302,7 @@ test('prompt drag order persists in the real workspace after reload', async ({ p
         return result;
     };
     await expect(async () => {
-        await page.evaluate(() => window.SillyTavern?.getContext?.()?.saveSettingsDebounced?.());
+        await page.evaluate(async () => (await import('/scripts/st-context.js')).getContext()?.saveSettingsDebounced?.());
         const matches = (await persistedOrder()).some(order => order.join(',') === expected.join(','));
         expect(matches).toBe(true);
     }).toPass({ timeout: 20_000 });
@@ -310,7 +314,8 @@ test('prompt drag order persists in the real workspace after reload', async ({ p
 test('preset row actions show dirty state and guard preset switching', async ({ page }) => {
     await testSetup.awaitST({ page });
     await page.evaluate(async () => {
-        const context = window.SillyTavern.getContext();
+        const { getContext } = await import('/scripts/st-context.js');
+        const context = getContext();
         await context.selectCharacterById(context.characters.findIndex(character => character.name === 'Dev Character 001'));
     });
     const saveButton = page.locator('#update_oai_preset');
@@ -359,9 +364,10 @@ test.describe('auxiliary workspace surfaces', () => {
     test.beforeEach(async ({ page }) => {
         await testSetup.awaitST({ page });
         await page.evaluate(async () => {
+            const { getContext } = await import('/scripts/st-context.js');
             const { Popup } = await import('/scripts/popup.js');
             for (const popup of Popup.util.popups.slice()) await popup.completeCancelled();
-            const context = window.SillyTavern.getContext();
+            const context = getContext();
             await context.selectCharacterById(context.characters.findIndex(character => character.name === 'Dev Character 001'));
         });
         await expect(page.locator('#chat .mes').first()).toBeVisible();
@@ -532,7 +538,8 @@ test.describe('auxiliary workspace surfaces', () => {
             closeWorkspaceChildSlotHost('left-nav-panel', { force: true });
         });
         await page.evaluate(async () => {
-            const ctx = window.SillyTavern.getContext();
+            const { getContext } = await import('/scripts/st-context.js');
+            const ctx = getContext();
             const message = ctx.chat.find(message => !message.is_system);
             message.extra ||= {};
             message.extra.media = [{ type: 'image', url: '/img/ai4.png', title: 'Avatar preview fixture' }];
@@ -558,7 +565,8 @@ test.describe('auxiliary workspace surfaces', () => {
 
     test('first-time style authorization uses explicit scope actions rather than cancel', async ({ page }) => {
         await page.evaluate(async () => {
-            const context = window.SillyTavern.getContext();
+            const { getContext } = await import('/scripts/st-context.js');
+            const context = getContext();
             const character = context.characters[context.characterId];
             character.data.creator_notes = '<style>.auxiliary-style-fixture { color: inherit; }</style>';
             const { accountStorage } = await import('/scripts/util/AccountStorage.js');
@@ -574,7 +582,8 @@ test.describe('auxiliary workspace surfaces', () => {
         await dialog.getByRole('button', { name: '应用到整个页面', exact: true }).click();
         await expect(dialog).toHaveCount(0);
         expect(await page.evaluate(async () => {
-            const context = window.SillyTavern.getContext();
+            const { getContext } = await import('/scripts/st-context.js');
+            const context = getContext();
             const { accountStorage } = await import('/scripts/util/AccountStorage.js');
             return accountStorage.getItem(`AllowGlobalStyles-${context.characters[context.characterId].avatar}`);
         })).toBe('true');

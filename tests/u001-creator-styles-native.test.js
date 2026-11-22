@@ -6,13 +6,13 @@ const stylesSource = source.slice(source.indexOf('async function openGlobalStyle
 
 function setup({ stored = 'false', result = 1001 } = {}) {
     let value = stored;
-    const clicks = jest.fn();
+    const navigate = jest.fn();
     const toggle = jest.fn();
     const radios = ['global_styles_allowed', 'global_styles_forbidden'].map(id => ({ id, checked: false, addEventListener(_type, fn) { this.change = fn; } }));
     const textarea = { value: '' };
     const templates = [];
     const document = {
-        getElementById: id => id === 'rm_button_selected_ch' ? { click: clicks } : id === 'creators_note_styles_button' ? { classList: { toggle } } : null,
+        getElementById: id => id === 'creators_note_styles_button' ? { classList: { toggle } } : null,
         createElement: () => {
             const template = { querySelector: selector => selector === 'textarea' ? textarea : radios.find(radio => `#${radio.id}` === selector), querySelectorAll: () => radios };
             templates.push(template);
@@ -29,13 +29,13 @@ function setup({ stored = 'false', result = 1001 } = {}) {
         document, StylesPreference, getCurrentEntityId: () => 'avatar', DOMPurify: { sanitize: html => html },
         renderTemplateAsync: async name => `<div>${name}</div>`, callGenericPopup: popup,
         POPUP_TYPE: { TEXT: 1 }, POPUP_RESULT: { AFFIRMATIVE: 1, CUSTOM1: 1001, CANCELLED: null },
-        t: strings => strings[0], this_chid: 0,
+        t: strings => strings[0], this_chid: 0, runCharacterNavigation: navigate,
         characters: [{ avatar: 'avatar', data: { creator_notes: '<style>.x{}</style>' } }],
         getStyleContentsFromMarkdown: () => '.x{}',
         $: () => { throw Error('creator styles must not depend on jQuery'); },
     };
     const api = new Function(...Object.keys(env), `${stylesSource}; return { openGlobalStylesPreferenceDialog, checkForCreatorNotesStyles };`)(...Object.values(env));
-    return { ...api, radios, textarea, templates, popup, clicks, toggle, getValue: () => value };
+    return { ...api, radios, textarea, templates, popup, navigate, toggle, getValue: () => value };
 }
 
 test('preference dialog selects current radio and applies a changed preference without jQuery', async () => {
@@ -47,7 +47,7 @@ test('preference dialog selects current radio and applies a changed preference w
     });
     await h.openGlobalStylesPreferenceDialog();
     expect(h.getValue()).toBe('true');
-    expect(h.clicks).toHaveBeenCalledTimes(2);
+    expect(h.navigate.mock.calls).toEqual([['current'], ['current']]);
     expect(h.toggle).toHaveBeenCalledWith('allowed', true);
 });
 
@@ -57,7 +57,8 @@ test.each([[1001, 'true'], [1, 'false'], [null, 'false']])('initial creator CSS 
     expect(h.popup).toHaveBeenCalledWith(h.templates[0], 1, '', expect.objectContaining({ okButton: false, cancelButton: false }));
     expect(h.textarea.value).toBe('.x{}');
     expect(h.getValue()).toBe(expected);
-    expect(h.clicks).toHaveBeenCalledTimes(1);
+    expect(h.navigate).toHaveBeenCalledWith('current');
+    expect(h.navigate).toHaveBeenCalledTimes(1);
     expect(h.toggle).toHaveBeenCalledWith('allowed', expected === 'true');
 });
 
@@ -65,6 +66,6 @@ test('existing creator CSS preference skips the prompt', async () => {
     const h = setup({ stored: 'true' });
     await h.checkForCreatorNotesStyles();
     expect(h.popup).not.toHaveBeenCalled();
-    expect(h.clicks).not.toHaveBeenCalled();
+    expect(h.navigate).not.toHaveBeenCalled();
     expect(h.toggle).toHaveBeenCalledWith('allowed', true);
 });

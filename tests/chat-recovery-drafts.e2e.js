@@ -15,7 +15,8 @@ test('a stale ordinary save preserves local edits for recovery after reload', as
         await second.goto('/');
         await testSetup.awaitST({ page: second });
         const select = tab => tab.evaluate(async () => {
-            const state = window.SillyTavern.getContext();
+            const { getContext } = await import('/scripts/st-context.js');
+            const state = getContext();
             state.chatCompletionSettings.chat_memory_enabled = false;
             const index = state.characters.findIndex(character => character.name === 'Dev Character 045');
             await state.selectCharacterById(index);
@@ -24,14 +25,15 @@ test('a stale ordinary save preserves local edits for recovery after reload', as
         const target = await select(page);
         expect(await select(second)).toEqual(target);
         const save = (tab, text) => tab.evaluate(async message => {
-            const state = window.SillyTavern.getContext();
+            const { getContext } = await import('/scripts/st-context.js');
+            const state = getContext();
             state.chat.push({ name: 'You', is_user: true, is_system: false, mes: message, send_date: Date.now() });
             return await (await import('/scripts/chat-ops-service.js')).saveChat();
         }, text);
         expect(await save(page, 'remote conflict winner 4836')).toBe(true);
         expect(await save(second, 'local conflict recovery 4836')).toBe(false);
         await expect(second.locator('#toast-container')).toContainText(/recovery drafts/i);
-        await second.evaluate(() => window.SillyTavern.getContext().chat.push({ name: 'You', is_user: true, mes: 'later local edit 4836' }));
+        await second.evaluate(async () => (await import('/scripts/st-context.js')).getContext().chat.push({ name: 'You', is_user: true, mes: 'later local edit 4836' }));
         await second.locator('#send_textarea').fill('later composer text 4836');
         await expect.poll(() => second.evaluate(async () => {
             const storage = (await import('/lib.js')).localforage.createInstance({ name: 'EmberDesk_ChatRecovery' });
@@ -79,7 +81,8 @@ test('a delayed ordinary save conflict checkpoints edits before allowing a chat 
         await second.goto('/');
         await testSetup.awaitST({ page: second });
         const select = (tab, characterName) => tab.evaluate(async name => {
-            const state = window.SillyTavern.getContext();
+            const { getContext } = await import('/scripts/st-context.js');
+            const state = getContext();
             state.chatCompletionSettings.chat_memory_enabled = false;
             const index = state.characters.findIndex(character => character.name === name);
             await state.selectCharacterById(index);
@@ -88,7 +91,8 @@ test('a delayed ordinary save conflict checkpoints edits before allowing a chat 
         const target = await select(page, 'Dev Character 043');
         expect(await select(second, 'Dev Character 043')).toEqual(target);
         await page.evaluate(async () => {
-            window.SillyTavern.getContext().chat.push({ name: 'You', is_user: true, mes: 'remote winner 8264' });
+            const { getContext } = await import('/scripts/st-context.js');
+            getContext().chat.push({ name: 'You', is_user: true, mes: 'remote winner 8264' });
             await (await import('/scripts/chat-ops-service.js')).saveChat();
         });
 
@@ -105,33 +109,38 @@ test('a delayed ordinary save conflict checkpoints edits before allowing a chat 
         });
 
         await second.evaluate(async () => {
-            const state = window.SillyTavern.getContext();
+            const { getContext } = await import('/scripts/st-context.js');
+            const state = getContext();
             state.chat.push({ name: 'You', is_user: true, mes: 'edit before conflict response 8264' });
             window.saveOutcome = (await import('/scripts/chat-ops-service.js')).saveChat();
         });
         await ready;
-        await second.evaluate(() => {
-            window.SillyTavern.getContext().chat.push({ name: 'You', is_user: true, mes: 'edit during delayed conflict 8264' });
+        await second.evaluate(async () => {
+            const { getContext } = await import('/scripts/st-context.js');
+            getContext().chat.push({ name: 'You', is_user: true, mes: 'edit during delayed conflict 8264' });
         });
         await second.locator('#send_textarea').fill('composer during delayed conflict 8264');
-        await second.evaluate(() => {
-            const state = window.SillyTavern.getContext();
+        await second.evaluate(async () => {
+            const { getContext } = await import('/scripts/st-context.js');
+            const state = getContext();
             const next = state.characters.findIndex(character => character.name === 'Dev Character 042');
             window.switchFinished = false;
             window.switchOutcome = state.selectCharacterById(next).then(() => 'switched', () => 'blocked').finally(() => { window.switchFinished = true; });
         });
         try {
             expect(await second.evaluate(() => window.switchOutcome)).toBe('blocked');
-            expect(await second.evaluate(() => {
-                const state = window.SillyTavern.getContext();
+            expect(await second.evaluate(async () => {
+                const { getContext } = await import('/scripts/st-context.js');
+                const state = getContext();
                 return state.characters[state.characterId]?.avatar;
             })).toBe(target.avatar);
         } finally { release(); }
 
         expect(await second.evaluate(() => window.saveOutcome)).toBe(false);
         await select(second, 'Dev Character 042');
-        expect(await second.evaluate(() => {
-            const state = window.SillyTavern.getContext();
+        expect(await second.evaluate(async () => {
+            const { getContext } = await import('/scripts/st-context.js');
+            const state = getContext();
             return state.characters[state.characterId].name;
         })).toBe('Dev Character 042');
         const drafts = await second.evaluate(async () => {
@@ -154,7 +163,8 @@ test('character library publication cannot discard edits while a save conflict i
         await other.goto('/');
         await testSetup.awaitST({ page: other });
         const select = tab => tab.evaluate(async () => {
-            const state = window.SillyTavern.getContext();
+            const { getContext } = await import('/scripts/st-context.js');
+            const state = getContext();
             state.chatCompletionSettings.chat_memory_enabled = false;
             const index = state.characters.findIndex(character => character.name === 'Dev Character 040');
             await state.selectCharacterById(index);
@@ -163,7 +173,8 @@ test('character library publication cannot discard edits while a save conflict i
         const identity = await select(page);
         await select(other);
         await other.evaluate(async () => {
-            window.SillyTavern.getContext().chat.push({ name: 'You', is_user: true, mes: 'library remote winner 1493' });
+            const { getContext } = await import('/scripts/st-context.js');
+            getContext().chat.push({ name: 'You', is_user: true, mes: 'library remote winner 1493' });
             await (await import('/scripts/chat-ops-service.js')).saveChat();
         });
         let release, ready;
@@ -175,13 +186,15 @@ test('character library publication cannot discard edits while a save conflict i
             await route.fulfill({ response });
         });
         await page.evaluate(async () => {
-            const state = window.SillyTavern.getContext();
+            const { getContext } = await import('/scripts/st-context.js');
+            const state = getContext();
             state.chat.push({ name: 'You', is_user: true, mes: 'library edit before 1493' });
             window.librarySave = (await import('/scripts/chat-ops-service.js')).saveChat();
         });
         await responseReady;
         await page.evaluate(async () => {
-            const state = window.SillyTavern.getContext();
+            const { getContext } = await import('/scripts/st-context.js');
+            const state = getContext();
             state.chat.push({ name: 'You', is_user: true, mes: 'library late edit 1493' });
             const snapshot = structuredClone(state.characters);
             snapshot.find(character => character.name === 'Dev Character 039').name += ' changed';
@@ -204,7 +217,8 @@ test('character library publication cannot discard edits while a save conflict i
 test('an in-flight save blocks character creation, rename, and missing-library reload', async ({ page }) => {
     await testSetup.awaitST({ page });
     const identity = await page.evaluate(async () => {
-        const state = window.SillyTavern.getContext();
+        const { getContext } = await import('/scripts/st-context.js');
+        const state = getContext();
         state.chatCompletionSettings.chat_memory_enabled = false;
         const index = state.characters.findIndex(character => character.name === 'Dev Character 035');
         await state.selectCharacterById(index);
@@ -223,12 +237,14 @@ test('an in-flight save blocks character creation, rename, and missing-library r
     });
     try {
         await page.evaluate(async () => {
-            window.SillyTavern.getContext().chat.push({ name: 'You', is_user: true, mes: 'pending transition edit 7284' });
+            const { getContext } = await import('/scripts/st-context.js');
+            getContext().chat.push({ name: 'You', is_user: true, mes: 'pending transition edit 7284' });
             window.transitionSave = (await import('/scripts/chat-ops-service.js')).saveChat();
         });
         await started;
         const result = await page.evaluate(async avatar => {
-            const state = window.SillyTavern.getContext();
+            const { getContext } = await import('/scripts/st-context.js');
+            const state = getContext();
             const lifecycle = await import('/scripts/character-lifecycle-service.js');
             const rename = await lifecycle.renameCharacter('Blocked rename 035', { silent: true, renameChats: false });
             const form = document.querySelector('#form_create');
@@ -256,19 +272,21 @@ test('an in-flight save blocks character creation, rename, and missing-library r
 test('a missing character library entry preserves an unconfirmed chat before reload', async ({ page }) => {
     await testSetup.awaitST({ page });
     const identity = await page.evaluate(async () => {
-        const state = window.SillyTavern.getContext();
+        const { getContext } = await import('/scripts/st-context.js');
+        const state = getContext();
         state.chatCompletionSettings.chat_memory_enabled = false;
         const index = state.characters.findIndex(character => character.name === 'Dev Character 036');
         await state.selectCharacterById(index);
         return { avatar: state.characters[index].avatar, chat: state.characters[index].chat };
     });
     await page.route('**/api/chats/save', route => route.abort('failed'));
-    await page.evaluate(() => window.SillyTavern.getContext().chat.push({ name: 'You', is_user: true, mes: 'missing character edit 7283' }));
+    await page.evaluate(async () => (await import('/scripts/st-context.js')).getContext().chat.push({ name: 'You', is_user: true, mes: 'missing character edit 7283' }));
     await page.locator('#send_textarea').fill('missing character composer 7283');
     expect(await page.evaluate(async () => (await import('/scripts/chat-ops-service.js')).saveChat())).toBe(false);
     await page.unroute('**/api/chats/save');
     await page.evaluate(async avatar => {
-        const state = window.SillyTavern.getContext();
+        const { getContext } = await import('/scripts/st-context.js');
+        const state = getContext();
         window.missingLibrary = (await import('/script.js')).publishCharacterLibrarySnapshot(structuredClone(state.characters).filter(character => character.avatar !== avatar));
     }, identity.avatar);
     const dialog = page.locator('dialog[open]');
@@ -290,7 +308,8 @@ for (const action of ['create', 'rename']) {
     test(`${action} preserves edits made after a confirmed save while the character request waits`, async ({ page }) => {
         await testSetup.awaitST({ page });
         const identity = await page.evaluate(async action => {
-            const state = window.SillyTavern.getContext();
+            const { getContext } = await import('/scripts/st-context.js');
+            const state = getContext();
             state.chatCompletionSettings.chat_memory_enabled = false;
             const index = state.characters.findIndex(character => character.name === (action === 'create' ? 'Dev Character 032' : 'Dev Character 033'));
             await state.selectCharacterById(index);
@@ -313,12 +332,13 @@ for (const action of ['create', 'rename']) {
             }, action);
             await started;
             expect(await page.evaluate(async () => (await import('/scripts/chat-ops-service.js')).saveChat())).toBe(true);
-            await page.evaluate(() => window.SillyTavern.getContext().chat.push({ name: 'You', is_user: true, mes: 'late confirmed transition edit 8142' }));
+            await page.evaluate(async () => (await import('/scripts/st-context.js')).getContext().chat.push({ name: 'You', is_user: true, mes: 'late confirmed transition edit 8142' }));
             await page.locator('#send_textarea').fill('late transition composer 8142');
             release();
             await page.evaluate(() => window.pendingCharacterTransition);
             const result = await page.evaluate(async identity => {
-                const state = window.SillyTavern.getContext();
+                const { getContext } = await import('/scripts/st-context.js');
+                const state = getContext();
                 const storage = (await import('/lib.js')).localforage.createInstance({ name: 'EmberDesk_ChatRecovery' });
                 const drafts = await Promise.all((await storage.keys()).filter(key => key.startsWith('recovery-v1:')).map(key => storage.getItem(key)));
                 return { current: state.characters[state.characterId]?.avatar, messages: state.chat.map(item => item.mes), drafts: drafts.filter(item => item.identity.avatar === identity.avatar && item.identity.chat === identity.chat) };
@@ -335,7 +355,8 @@ for (const action of ['create', 'rename']) {
     test(`${action} keeps the current session when a new save starts after server commit`, async ({ page }) => {
         await testSetup.awaitST({ page });
         const avatar = await page.evaluate(async action => {
-            const state = window.SillyTavern.getContext();
+            const { getContext } = await import('/scripts/st-context.js');
+            const state = getContext();
             state.chatCompletionSettings.chat_memory_enabled = false;
             const index = state.characters.findIndex(character => character.name === (action === 'create' ? 'Dev Character 030' : 'Dev Character 031'));
             await state.selectCharacterById(index);
@@ -359,14 +380,16 @@ for (const action of ['create', 'rename']) {
             }, action);
             await committed;
             await page.evaluate(async () => {
-                window.SillyTavern.getContext().chat.push({ name: 'You', is_user: true, mes: 'post commit pending save 8143' });
+                const { getContext } = await import('/scripts/st-context.js');
+                getContext().chat.push({ name: 'You', is_user: true, mes: 'post commit pending save 8143' });
                 window.transitionSave = (await import('/scripts/chat-ops-service.js')).saveChat();
             });
             await saving;
             releaseCharacter();
             await page.evaluate(() => window.pendingCharacterTransition);
-            const current = await page.evaluate(() => {
-                const state = window.SillyTavern.getContext();
+            const current = await page.evaluate(async () => {
+                const { getContext } = await import('/scripts/st-context.js');
+                const state = getContext();
                 return { avatar: state.characters[state.characterId]?.avatar, messages: state.chat.map(item => item.mes) };
             });
             expect(current.avatar).toBe(avatar);
@@ -383,14 +406,15 @@ for (const action of ['create', 'rename']) {
 test('creating a character preserves an unconfirmed chat save', async ({ page }) => {
     await testSetup.awaitST({ page });
     const identity = await page.evaluate(async () => {
-        const state = window.SillyTavern.getContext();
+        const { getContext } = await import('/scripts/st-context.js');
+        const state = getContext();
         state.chatCompletionSettings.chat_memory_enabled = false;
         const index = state.characters.findIndex(character => character.name === 'Dev Character 037');
         await state.selectCharacterById(index);
         return { avatar: state.characters[index].avatar, chat: state.characters[index].chat };
     });
     await page.route('**/api/chats/save', route => route.abort('failed'));
-    await page.evaluate(() => window.SillyTavern.getContext().chat.push({ name: 'You', is_user: true, mes: 'create unconfirmed edit 7282' }));
+    await page.evaluate(async () => (await import('/scripts/st-context.js')).getContext().chat.push({ name: 'You', is_user: true, mes: 'create unconfirmed edit 7282' }));
     await page.locator('#send_textarea').fill('create unconfirmed composer 7282');
     expect(await page.evaluate(async () => (await import('/scripts/chat-ops-service.js')).saveChat())).toBe(false);
     await page.unroute('**/api/chats/save');
@@ -399,8 +423,9 @@ test('creating a character preserves an unconfirmed chat save', async ({ page })
         return (await import('/scripts/character-lifecycle-service.js')).saveCharacterAuthoringFromPayload({ fields: { name: 'Create recovery proof 037' } });
     });
     expect(created.ok).toBe(true);
-    expect(await page.evaluate(() => {
-        const state = window.SillyTavern.getContext();
+    expect(await page.evaluate(async () => {
+        const { getContext } = await import('/scripts/st-context.js');
+        const state = getContext();
         return state.characters[state.characterId]?.avatar;
     })).toBe(created.avatar);
     const drafts = await page.evaluate(async () => {
@@ -416,7 +441,8 @@ test('renaming a character preserves an unconfirmed chat save', async ({ page })
     await testSetup.awaitST({ page });
     // Rename a disposable card: later tests in this lane need the original seed.
     const duplicateAvatar = await page.evaluate(async () => {
-        const original = window.SillyTavern.getContext().characters.find(character => character.name === 'Dev Character 038');
+        const { getContext } = await import('/scripts/st-context.js');
+        const original = getContext().characters.find(character => character.name === 'Dev Character 038');
         if (!original) throw new Error('Seed character for rename fixture is missing');
         const { token } = await fetch('/csrf-token').then(response => response.json());
         const response = await fetch('/api/characters/duplicate', {
@@ -428,16 +454,20 @@ test('renaming a character preserves an unconfirmed chat save', async ({ page })
         if (!result.path) throw new Error('Duplicate rename fixture did not return an avatar');
         return result.path;
     });
-    await expect.poll(() => page.evaluate(avatar => window.SillyTavern.getContext().characters.some(character => character.avatar === avatar), duplicateAvatar), { timeout: 15_000 }).toBe(true);
+    await expect.poll(() => page.evaluate(async avatar => {
+        const { getContext } = await import('/scripts/st-context.js');
+        return getContext().characters.some(character => character.avatar === avatar);
+    }, duplicateAvatar), { timeout: 15_000 }).toBe(true);
     const identity = await page.evaluate(async avatar => {
-        const state = window.SillyTavern.getContext();
+        const { getContext } = await import('/scripts/st-context.js');
+        const state = getContext();
         state.chatCompletionSettings.chat_memory_enabled = false;
         const index = state.characters.findIndex(character => character.avatar === avatar);
         await state.selectCharacterById(index);
         return { avatar: state.characters[index].avatar, chat: state.characters[index].chat };
     }, duplicateAvatar);
     await page.route('**/api/chats/save', route => route.abort('failed'));
-    await page.evaluate(() => window.SillyTavern.getContext().chat.push({ name: 'You', is_user: true, mes: 'rename unconfirmed edit 7281' }));
+    await page.evaluate(async () => (await import('/scripts/st-context.js')).getContext().chat.push({ name: 'You', is_user: true, mes: 'rename unconfirmed edit 7281' }));
     await page.locator('#send_textarea').fill('rename unconfirmed composer 7281');
     expect(await page.evaluate(async () => (await import('/scripts/chat-ops-service.js')).saveChat())).toBe(false);
     await page.unroute('**/api/chats/save');
@@ -454,19 +484,21 @@ test('renaming a character preserves an unconfirmed chat save', async ({ page })
 test('an ambiguous ordinary save retains edits before switching chats', async ({ page }) => {
     await testSetup.awaitST({ page });
     const target = await page.evaluate(async () => {
-        const state = window.SillyTavern.getContext();
+        const { getContext } = await import('/scripts/st-context.js');
+        const state = getContext();
         state.chatCompletionSettings.chat_memory_enabled = false;
         const index = state.characters.findIndex(character => character.name === 'Dev Character 041');
         await state.selectCharacterById(index);
         return { avatar: state.characters[index].avatar, chat: state.characters[index].chat };
     });
     await page.route('**/api/chats/save', route => route.abort('failed'));
-    await page.evaluate(() => window.SillyTavern.getContext().chat.push({ name: 'You', is_user: true, mes: 'unconfirmed save edit 7912' }));
+    await page.evaluate(async () => (await import('/scripts/st-context.js')).getContext().chat.push({ name: 'You', is_user: true, mes: 'unconfirmed save edit 7912' }));
     await page.locator('#send_textarea').fill('unconfirmed composer 7912');
     expect(await page.evaluate(async () => (await import('/scripts/chat-ops-service.js')).saveChat())).toBe(false);
     await page.unroute('**/api/chats/save');
     await page.evaluate(async () => {
-        const state = window.SillyTavern.getContext();
+        const { getContext } = await import('/scripts/st-context.js');
+        const state = getContext();
         await state.selectCharacterById(state.characters.findIndex(character => character.name === 'Dev Character 042'));
     });
     const drafts = await page.evaluate(async () => {
@@ -481,7 +513,8 @@ test('an ambiguous ordinary save retains edits before switching chats', async ({
 test('an injected integrity response preserves edits before the legacy reload dialog', async ({ page }) => {
     await testSetup.awaitST({ page });
     const identity = await page.evaluate(async () => {
-        const state = window.SillyTavern.getContext();
+        const { getContext } = await import('/scripts/st-context.js');
+        const state = getContext();
         state.chatCompletionSettings.chat_memory_enabled = false;
         const index = state.characters.findIndex(character => character.name === 'Dev Character 040');
         await state.selectCharacterById(index);
@@ -500,7 +533,7 @@ test('an injected integrity response preserves edits before the legacy reload di
     }, identity);
     expect(JSON.stringify(stored?.snapshot.messages)).toContain('integrity recovery message 3104');
     expect(stored?.snapshot.composer.value).toBe('integrity recovery composer 3104');
-    await page.evaluate(() => window.SillyTavern.getContext().chat.push({ name: 'You', is_user: true, mes: 'integrity dialog late edit 3104' }));
+    await page.evaluate(async () => (await import('/scripts/st-context.js')).getContext().chat.push({ name: 'You', is_user: true, mes: 'integrity dialog late edit 3104' }));
     await page.unroute('**/api/chats/save');
     const reload = page.waitForEvent('load');
     await dialog.locator('.popup-button-ok').click();
@@ -515,7 +548,8 @@ test('an injected integrity response preserves edits before the legacy reload di
     expect(JSON.stringify(afterReload?.snapshot.messages)).toContain('integrity dialog late edit 3104');
     expect(afterReload?.snapshot.composer.value).toBe('integrity recovery composer 3104');
     await page.evaluate(async identity => {
-        const state = window.SillyTavern.getContext();
+        const { getContext } = await import('/scripts/st-context.js');
+        const state = getContext();
         await state.selectCharacterById(state.characters.findIndex(character => character.avatar === identity.avatar));
     }, identity);
     await page.locator('#options_button').click();
@@ -532,7 +566,8 @@ test('an injected integrity response preserves edits before the legacy reload di
 test('an injected integrity response does not reload when the final checkpoint fails', async ({ page }) => {
     await testSetup.awaitST({ page });
     await page.evaluate(async () => {
-        const state = window.SillyTavern.getContext();
+        const { getContext } = await import('/scripts/st-context.js');
+        const state = getContext();
         state.chatCompletionSettings.chat_memory_enabled = false;
         await state.selectCharacterById(state.characters.findIndex(character => character.name === 'Dev Character 042'));
         state.chat.push({ name: 'You', is_user: true, mes: 'integrity before dialog 3106' });
@@ -541,8 +576,9 @@ test('an injected integrity response does not reload when the final checkpoint f
     await page.evaluate(async () => { void (await import('/scripts/chat-ops-service.js')).saveChat(); });
     const dialog = page.locator('dialog[open]').filter({ hasText: /integrity|完整性/i });
     await expect(dialog).toBeVisible();
-    await page.evaluate(() => {
-        window.SillyTavern.getContext().chat.push({ name: 'You', is_user: true, mes: 'integrity final checkpoint failure 3106' });
+    await page.evaluate(async () => {
+        const { getContext } = await import('/scripts/st-context.js');
+        getContext().chat.push({ name: 'You', is_user: true, mes: 'integrity final checkpoint failure 3106' });
         window.originalIntegrityRecoveryPut = IDBObjectStore.prototype.put;
         IDBObjectStore.prototype.put = function (value, key) {
             if (typeof key === 'string' && key.startsWith('recovery-v1:')) throw new DOMException('Storage full', 'QuotaExceededError');
@@ -551,7 +587,10 @@ test('an injected integrity response does not reload when the final checkpoint f
     });
     await dialog.locator('.popup-button-ok').click();
     await expect(page.locator('#toast-container')).toContainText(/do not refresh/i);
-    expect(await page.evaluate(() => window.SillyTavern.getContext().chat.some(message => message.mes === 'integrity final checkpoint failure 3106'))).toBe(true);
+    expect(await page.evaluate(async () => {
+        const { getContext } = await import('/scripts/st-context.js');
+        return getContext().chat.some(message => message.mes === 'integrity final checkpoint failure 3106');
+    })).toBe(true);
     expect(await page.evaluate(async () => {
         try { await (await import('/scripts/chat-ops-service.js')).clearChat({ clearData: true }); return false; }
         catch { return true; }
@@ -561,7 +600,8 @@ test('an injected integrity response does not reload when the final checkpoint f
 test('an injected integrity response retains the explicit overwrite command', async ({ page }) => {
     await testSetup.awaitST({ page });
     await page.evaluate(async () => {
-        const state = window.SillyTavern.getContext();
+        const { getContext } = await import('/scripts/st-context.js');
+        const state = getContext();
         state.chatCompletionSettings.chat_memory_enabled = false;
         await state.selectCharacterById(state.characters.findIndex(character => character.name === 'Dev Character 041'));
         state.chat.push({ name: 'You', is_user: true, mes: 'integrity overwrite message 3107' });
@@ -585,7 +625,8 @@ test('an injected integrity response retains the explicit overwrite command', as
 test('an injected integrity response never reloads when recovery storage fails', async ({ page }) => {
     await testSetup.awaitST({ page });
     await page.evaluate(async () => {
-        const state = window.SillyTavern.getContext();
+        const { getContext } = await import('/scripts/st-context.js');
+        const state = getContext();
         state.chatCompletionSettings.chat_memory_enabled = false;
         await state.selectCharacterById(state.characters.findIndex(character => character.name === 'Dev Character 043'));
         state.chat.push({ name: 'You', is_user: true, mes: 'integrity recovery storage failure 3105' });
@@ -600,18 +641,23 @@ test('an injected integrity response never reloads when recovery storage fails',
     expect(await page.evaluate(async () => (await import('/scripts/chat-ops-service.js')).saveChat())).toBe(false);
     await expect(page.locator('#toast-container')).toContainText(/do not refresh/i);
     await expect(page.locator('dialog[open]').filter({ hasText: /integrity|完整性/i })).toHaveCount(0);
-    expect(await page.evaluate(() => window.SillyTavern.getContext().chat.some(message => message.mes === 'integrity recovery storage failure 3105'))).toBe(true);
+    expect(await page.evaluate(async () => {
+        const { getContext } = await import('/scripts/st-context.js');
+        return getContext().chat.some(message => message.mes === 'integrity recovery storage failure 3105');
+    })).toBe(true);
     await expect(page.locator('#send_textarea')).toHaveValue('integrity storage failure composer 3105');
     expect(await page.evaluate(async () => {
+        const { getContext } = await import('/scripts/st-context.js');
         try { await (await import('/scripts/chat-ops-service.js')).clearChat({ clearData: true }); return false; }
-        catch { return window.SillyTavern.getContext().chat.some(message => message.mes === 'integrity recovery storage failure 3105'); }
+        catch { return getContext().chat.some(message => message.mes === 'integrity recovery storage failure 3105'); }
     })).toBe(true);
 });
 
 test('an unknown save outcome persists a recovery draft before it recommends reloading', async ({ page }) => {
     await testSetup.awaitST({ page });
     const identity = await page.evaluate(async () => {
-        const state = window.SillyTavern.getContext();
+        const { getContext } = await import('/scripts/st-context.js');
+        const state = getContext();
         state.chatCompletionSettings.chat_memory_enabled = false;
         const index = state.characters.findIndex(character => character.name === 'Dev Character 040');
         await state.selectCharacterById(index);
@@ -619,7 +665,7 @@ test('an unknown save outcome persists a recovery draft before it recommends rel
     });
     let attempts = 0;
     await page.route('**/api/chats/save', route => { attempts++; return route.abort('failed'); });
-    await page.evaluate(() => window.SillyTavern.getContext().chat.push({ name: 'You', is_user: true, mes: 'unknown outcome durable edit 6401' }));
+    await page.evaluate(async () => (await import('/scripts/st-context.js')).getContext().chat.push({ name: 'You', is_user: true, mes: 'unknown outcome durable edit 6401' }));
     await page.locator('#send_textarea').fill('unknown outcome durable composer 6401');
     expect(await page.evaluate(async () => (await import('/scripts/chat-ops-service.js')).saveChat())).toBe(false);
     expect(attempts).toBe(2);
@@ -636,7 +682,8 @@ test('an unknown save outcome persists a recovery draft before it recommends rel
     await page.reload();
     await testSetup.awaitST({ page });
     await page.evaluate(async identity => {
-        const state = window.SillyTavern.getContext();
+        const { getContext } = await import('/scripts/st-context.js');
+        const state = getContext();
         await state.selectCharacterById(state.characters.findIndex(character => character.avatar === identity.avatar));
     }, identity);
     await page.locator('#options_button').click();
@@ -662,7 +709,8 @@ test('an unknown save outcome persists a recovery draft before it recommends rel
 test('an unknown save outcome does not advise reload when recovery storage fails', async ({ page }) => {
     await testSetup.awaitST({ page });
     await page.evaluate(async () => {
-        const state = window.SillyTavern.getContext();
+        const { getContext } = await import('/scripts/st-context.js');
+        const state = getContext();
         state.chatCompletionSettings.chat_memory_enabled = false;
         await state.selectCharacterById(state.characters.findIndex(character => character.name === 'Dev Character 043'));
         window.originalRecoveryPut = IDBObjectStore.prototype.put;
@@ -672,16 +720,20 @@ test('an unknown save outcome does not advise reload when recovery storage fails
         };
     });
     await page.route('**/api/chats/save', route => route.abort('failed'));
-    await page.evaluate(() => window.SillyTavern.getContext().chat.push({ name: 'You', is_user: true, mes: 'unknown storage failure memory edit 6402' }));
+    await page.evaluate(async () => (await import('/scripts/st-context.js')).getContext().chat.push({ name: 'You', is_user: true, mes: 'unknown storage failure memory edit 6402' }));
     await page.locator('#send_textarea').fill('unknown storage failure memory composer 6402');
     expect(await page.evaluate(async () => (await import('/scripts/chat-ops-service.js')).saveChat())).toBe(false);
     await expect(page.locator('#toast-container')).toContainText(/do not refresh/i);
     await expect(page.locator('#toast-container')).not.toContainText(/reload the page to prevent data loss/i);
-    expect(await page.evaluate(() => window.SillyTavern.getContext().chat.some(message => message.mes === 'unknown storage failure memory edit 6402'))).toBe(true);
+    expect(await page.evaluate(async () => {
+        const { getContext } = await import('/scripts/st-context.js');
+        return getContext().chat.some(message => message.mes === 'unknown storage failure memory edit 6402');
+    })).toBe(true);
     await expect(page.locator('#send_textarea')).toHaveValue('unknown storage failure memory composer 6402');
     expect(await page.evaluate(async () => {
+        const { getContext } = await import('/scripts/st-context.js');
         try { await (await import('/scripts/chat-ops-service.js')).clearChat({ clearData: true }); return false; }
-        catch { return window.SillyTavern.getContext().chat.some(message => message.mes === 'unknown storage failure memory edit 6402'); }
+        catch { return getContext().chat.some(message => message.mes === 'unknown storage failure memory edit 6402'); }
     })).toBe(true);
     await page.evaluate(() => { IDBObjectStore.prototype.put = window.originalRecoveryPut; });
     await page.unroute('**/api/chats/save');
@@ -699,7 +751,8 @@ test('a save conflict reports failed recovery storage and can retry after storag
         await second.goto('/');
         await testSetup.awaitST({ page: second });
         const select = tab => tab.evaluate(async () => {
-            const state = window.SillyTavern.getContext();
+            const { getContext } = await import('/scripts/st-context.js');
+            const state = getContext();
             state.chatCompletionSettings.chat_memory_enabled = false;
             const index = state.characters.findIndex(character => character.name === 'Dev Character 044');
             await state.selectCharacterById(index);
@@ -707,11 +760,13 @@ test('a save conflict reports failed recovery storage and can retry after storag
         await select(page);
         await select(second);
         await page.evaluate(async () => {
-            window.SillyTavern.getContext().chat.push({ name: 'You', is_user: true, mes: 'remote winner 7741' });
+            const { getContext } = await import('/scripts/st-context.js');
+            getContext().chat.push({ name: 'You', is_user: true, mes: 'remote winner 7741' });
             await (await import('/scripts/chat-ops-service.js')).saveChat();
         });
-        await second.evaluate(() => {
-            window.SillyTavern.getContext().chat.push({ name: 'You', is_user: true, mes: 'quota recovery 7741' });
+        await second.evaluate(async () => {
+            const { getContext } = await import('/scripts/st-context.js');
+            getContext().chat.push({ name: 'You', is_user: true, mes: 'quota recovery 7741' });
             window.originalRecoveryPut = IDBObjectStore.prototype.put;
             IDBObjectStore.prototype.put = function (value, key) {
                 if (typeof key === 'string' && key.startsWith('recovery-v1:')) throw new DOMException('Storage full', 'QuotaExceededError');
@@ -721,8 +776,9 @@ test('a save conflict reports failed recovery storage and can retry after storag
         expect(await second.evaluate(async () => (await import('/scripts/chat-ops-service.js')).saveChat())).toBe(false);
         await expect(second.locator('#toast-container')).toContainText(/could not be saved to a recovery draft/i);
         expect(await second.evaluate(async () => {
+            const { getContext } = await import('/scripts/st-context.js');
             try { await (await import('/scripts/chat-ops-service.js')).clearChat({ clearData: true }); return false; }
-            catch { return window.SillyTavern.getContext().chat.some(message => message.mes === 'quota recovery 7741'); }
+            catch { return getContext().chat.some(message => message.mes === 'quota recovery 7741'); }
         })).toBe(true);
         await second.evaluate(() => { IDBObjectStore.prototype.put = window.originalRecoveryPut; });
         expect(await second.evaluate(async () => (await import('/scripts/chat-ops-service.js')).saveChat())).toBe(false);
@@ -740,8 +796,9 @@ test('one tab confirming deletion does not discard another tab when its checkpoi
         await second.goto('/');
         await testSetup.awaitST({ page: second });
         const select = tab => tab.evaluate(async () => {
+            const { getContext } = await import('/scripts/st-context.js');
             Object.defineProperty(navigator, 'locks', { configurable: true, value: undefined });
-            const state = window.SillyTavern.getContext();
+            const state = getContext();
             state.chatCompletionSettings.chat_memory_enabled = false;
             const index = state.characters.findIndex(character => character.name === 'Dev Character 046');
             await state.selectCharacterById(index);
@@ -766,7 +823,7 @@ test('one tab confirming deletion does not discard another tab when its checkpoi
         });
         const start = async tab => {
             await tab.evaluate(name => {
-                window.pendingDeleteTest = import('/scripts/dom-handlers.js').then(module => module.runHistoryRowCommand('deleteChat', name)).then(() => true, () => false);
+                window.pendingDeleteTest = import('/scripts/workspace-interaction-commands.js').then(module => module.runHistoryRowCommand('deleteChat', name)).then(() => true, () => false);
             }, file);
             await confirmHistoryDeletion(tab, file);
         };
@@ -778,8 +835,9 @@ test('one tab confirming deletion does not discard another tab when its checkpoi
             expect(requests[1]).toEqual(requests[0]);
             releaseFirst();
             expect(await page.evaluate(() => window.pendingDeleteTest)).toBe(true);
-            await second.evaluate(() => {
-                window.SillyTavern.getContext().chat[0].mes = 'second-tab late checkpoint 9256';
+            await second.evaluate(async () => {
+                const { getContext } = await import('/scripts/st-context.js');
+                getContext().chat[0].mes = 'second-tab late checkpoint 9256';
                 window.originalRecoveryPut = IDBObjectStore.prototype.put;
                 IDBObjectStore.prototype.put = function (value, key) {
                     if (typeof key === 'string' && key.startsWith('recovery-v1:')) throw new DOMException('Storage full', 'QuotaExceededError');
@@ -788,10 +846,11 @@ test('one tab confirming deletion does not discard another tab when its checkpoi
             });
             releaseSecond();
             expect(await second.evaluate(() => window.pendingDeleteTest)).toBe(false);
-            expect(await second.evaluate(() => window.SillyTavern.getContext().chat[0].mes)).toBe('second-tab late checkpoint 9256');
+            expect(await second.evaluate(async () => (await import('/scripts/st-context.js')).getContext().chat[0].mes)).toBe('second-tab late checkpoint 9256');
             await second.evaluate(async () => {
+                const { getContext } = await import('/scripts/st-context.js');
                 IDBObjectStore.prototype.put = window.originalRecoveryPut;
-                const state = window.SillyTavern.getContext();
+                const state = getContext();
                 await state.selectCharacterById(state.characters.findIndex(character => character.name === 'Dev Character 047'));
             });
             const saved = await second.evaluate(async () => {
@@ -812,8 +871,9 @@ test('two tabs without Web Locks replay one durable operation after a concurrent
         await second.goto('/');
         await testSetup.awaitST({ page: second });
         const select = tab => tab.evaluate(async () => {
+            const { getContext } = await import('/scripts/st-context.js');
             Object.defineProperty(navigator, 'locks', { configurable: true, value: undefined });
-            const state = window.SillyTavern.getContext();
+            const state = getContext();
             state.chatCompletionSettings.chat_memory_enabled = false;
             const index = state.characters.findIndex(character => character.name === 'Dev Character 046');
             await state.selectCharacterById(index);
@@ -838,7 +898,7 @@ test('two tabs without Web Locks replay one durable operation after a concurrent
         });
         const start = async tab => {
             await tab.evaluate(name => {
-                window.pendingDeleteTest = import('/scripts/dom-handlers.js').then(module => module.runHistoryRowCommand('deleteChat', name)).then(() => true, () => false);
+                window.pendingDeleteTest = import('/scripts/workspace-interaction-commands.js').then(module => module.runHistoryRowCommand('deleteChat', name)).then(() => true, () => false);
             }, file);
             await confirmHistoryDeletion(tab, file);
         };
@@ -865,8 +925,9 @@ test('two tabs protect a newer saved version from an older current-chat delete a
         await second.goto('/');
         await testSetup.awaitST({ page: second });
         const select = async tab => tab.evaluate(async () => {
+            const { getContext } = await import('/scripts/st-context.js');
             Object.defineProperty(navigator, 'locks', { configurable: true, value: undefined });
-            const state = window.SillyTavern.getContext();
+            const state = getContext();
             state.chatCompletionSettings.chat_memory_enabled = false;
             const index = state.characters.findIndex(character => character.name === 'Dev Character 046');
             await state.selectCharacterById(index);
@@ -877,7 +938,8 @@ test('two tabs protect a newer saved version from an older current-chat delete a
         expect(other).toEqual(first);
         const saved = page.waitForResponse(response => response.url().endsWith('/api/chats/save'));
         await page.evaluate(async () => {
-            window.SillyTavern.getContext().chat.push({ name: 'You', is_user: true, is_system: false, mes: 'newer-tab-saved-value', send_date: Date.now() });
+            const { getContext } = await import('/scripts/st-context.js');
+            getContext().chat.push({ name: 'You', is_user: true, is_system: false, mes: 'newer-tab-saved-value', send_date: Date.now() });
             await (await import('/scripts/chat-ops-service.js')).saveChat();
         });
         expect((await saved).status()).toBe(200);
@@ -890,7 +952,7 @@ test('two tabs protect a newer saved version from an older current-chat delete a
         });
         const remove = async () => {
             const deletion = second.evaluate(async file => {
-                try { await (await import('/scripts/dom-handlers.js')).runHistoryRowCommand('deleteChat', file); return true; }
+                try { await (await import('/scripts/workspace-interaction-commands.js')).runHistoryRowCommand('deleteChat', file); return true; }
                 catch { return false; }
             }, first.file);
             await confirmHistoryDeletion(second, first.file);
@@ -912,7 +974,7 @@ test('two tabs protect a newer saved version from an older current-chat delete a
         expect(JSON.stringify(remote.body)).toContain('newer-tab-saved-value');
         // The user continues editing after the conflict, without switching or
         // retrying. A reload must not be needed to trigger durable protection.
-        await second.evaluate(() => window.SillyTavern.getContext().chat.push({ name: 'You', is_user: true, mes: 'conflict late local 5349' }));
+        await second.evaluate(async () => (await import('/scripts/st-context.js')).getContext().chat.push({ name: 'You', is_user: true, mes: 'conflict late local 5349' }));
         await second.locator('#send_textarea').fill('conflict composer 5349');
         await expect.poll(() => second.evaluate(async () => {
             const storage = (await import('/lib.js')).localforage.createInstance({ name: 'EmberDesk_ChatRecovery' });
@@ -946,7 +1008,8 @@ test('active chat deletion uses its loaded version and retains a recovery draft'
     const deletes = [];
     await page.route('**/api/chats/delete', route => { deletes.push(route.request().postDataJSON()); return route.continue(); });
     const outcome = await page.evaluate(async () => {
-        const context = window.SillyTavern.getContext();
+        const { getContext } = await import('/scripts/st-context.js');
+        const context = getContext();
         const index = context.characters.findIndex(character => character.name === 'Dev Character 046');
         await context.selectCharacterById(index);
         const name = context.characters[index].chat;
@@ -954,7 +1017,7 @@ test('active chat deletion uses its loaded version and retains a recovery draft'
         return name;
     });
     const deletion = page.evaluate(async name => {
-        await (await import('/scripts/dom-handlers.js')).runHistoryRowCommand('deleteChat', name);
+        await (await import('/scripts/workspace-interaction-commands.js')).runHistoryRowCommand('deleteChat', name);
     }, outcome);
     const confirm = page.locator('dialog[open]').filter({ has: page.locator('.chat-file-name') });
     await expect(confirm.locator('.chat-file-name')).toHaveText(outcome);
@@ -973,7 +1036,8 @@ test('active chat deletion uses its loaded version and retains a recovery draft'
 test('current chat retries a committed lost response without reading a new version and checkpoints late edits', async ({ page }) => {
     await testSetup.awaitST({ page });
     const file = await page.evaluate(async () => {
-        const context = window.SillyTavern.getContext();
+        const { getContext } = await import('/scripts/st-context.js');
+        const context = getContext();
         context.chatCompletionSettings.chat_memory_enabled = false;
         const index = context.characters.findIndex(character => character.name === 'Dev Character 046');
         await context.selectCharacterById(index);
@@ -988,13 +1052,13 @@ test('current chat retries a committed lost response without reading a new versi
         else await route.continue();
     });
     const deletion = page.evaluate(async name => {
-        try { await (await import('/scripts/dom-handlers.js')).runHistoryRowCommand('deleteChat', name); return true; }
+        try { await (await import('/scripts/workspace-interaction-commands.js')).runHistoryRowCommand('deleteChat', name); return true; }
         catch { return false; }
     }, file);
     await confirmHistoryDeletion(page, file);
     expect(await deletion).toBe(false);
     expect(gets).toBe(0);
-    await page.evaluate(() => { window.SillyTavern.getContext().chat[0].mes = 'late edit before same-session retry'; });
+    await page.evaluate(async () => { const { getContext } = await import('/scripts/st-context.js'); getContext().chat[0].mes = 'late edit before same-session retry'; });
     const pending = page.getByTestId('pending-history-deletions');
     await expect(pending).toContainText(file);
     await pending.getByRole('button', { name: /retry deletion/i }).click();
@@ -1012,7 +1076,8 @@ test('current chat retries a committed lost response without reading a new versi
 test('an old delete replay does not clear a newly loaded chat at the same name', async ({ page }) => {
     await testSetup.awaitST({ page });
     const target = await page.evaluate(async () => {
-        const context = window.SillyTavern.getContext();
+        const { getContext } = await import('/scripts/st-context.js');
+        const context = getContext();
         const index = context.characters.findIndex(character => character.name === 'Dev Character 046');
         await context.selectCharacterById(index);
         return { avatar: context.characters[index].avatar, file: context.characters[index].chat };
@@ -1024,7 +1089,7 @@ test('an old delete replay does not clear a newly loaded chat at the same name',
         else await route.continue();
     });
     const deletion = page.evaluate(async file => {
-        try { await (await import('/scripts/dom-handlers.js')).runHistoryRowCommand('deleteChat', file); } catch { /* response lost */ }
+        try { await (await import('/scripts/workspace-interaction-commands.js')).runHistoryRowCommand('deleteChat', file); } catch { /* response lost */ }
     }, target.file);
     await confirmHistoryDeletion(page, target.file);
     await deletion;
@@ -1040,10 +1105,14 @@ test('an old delete replay does not clear a newly loaded chat at the same name',
     await page.reload();
     await testSetup.awaitST({ page });
     await page.evaluate(async () => {
-        const context = window.SillyTavern.getContext();
+        const { getContext } = await import('/scripts/st-context.js');
+        const context = getContext();
         await context.selectCharacterById(context.characters.findIndex(character => character.name === 'Dev Character 046'));
     });
-    expect(await page.evaluate(() => window.SillyTavern.getContext().chat.some(message => message.mes === 'new incarnation'))).toBe(true);
+    expect(await page.evaluate(async () => {
+        const { getContext } = await import('/scripts/st-context.js');
+        return getContext().chat.some(message => message.mes === 'new incarnation');
+    })).toBe(true);
     await page.locator('#options_button').click();
     await page.locator('#option_select_chat').click();
     const pending = page.getByTestId('pending-history-deletions');
@@ -1052,7 +1121,10 @@ test('an old delete replay does not clear a newly loaded chat at the same name',
     await expect(pending).toHaveCount(0);
     expect(requests).toHaveLength(2);
     expect(requests[1]).toEqual(requests[0]);
-    expect(await page.evaluate(() => window.SillyTavern.getContext().chat.some(message => message.mes === 'new incarnation'))).toBe(true);
+    expect(await page.evaluate(async () => {
+        const { getContext } = await import('/scripts/st-context.js');
+        return getContext().chat.some(message => message.mes === 'new incarnation');
+    })).toBe(true);
     const readStatus = await page.evaluate(async ({ avatar, file }) => {
         const { getRequestHeaders } = await import('/script.js');
         return (await fetch('/api/chats/get', { method: 'POST', headers: getRequestHeaders(), body: JSON.stringify({ avatar_url: avatar, file_name: file }) })).status;
@@ -1063,7 +1135,8 @@ test('an old delete replay does not clear a newly loaded chat at the same name',
 test('confirmed current deletion stays retryable if its final recovery checkpoint fails', async ({ page }) => {
     await testSetup.awaitST({ page });
     const file = await page.evaluate(async () => {
-        const context = window.SillyTavern.getContext();
+        const { getContext } = await import('/scripts/st-context.js');
+        const context = getContext();
         const index = context.characters.findIndex(character => character.name === 'Dev Character 046');
         await context.selectCharacterById(index);
         return context.characters[index].chat;
@@ -1074,8 +1147,9 @@ test('confirmed current deletion stays retryable if its final recovery checkpoin
         if (requests.length === 1) {
             const response = await route.fetch();
             expect(response.status()).toBe(200);
-            await page.evaluate(() => {
-                window.SillyTavern.getContext().chat[0].mes = 'late edit after deletion committed';
+            await page.evaluate(async () => {
+                const { getContext } = await import('/scripts/st-context.js');
+                getContext().chat[0].mes = 'late edit after deletion committed';
                 window.originalRecoveryPut = IDBObjectStore.prototype.put;
                 IDBObjectStore.prototype.put = function () { throw new DOMException('Storage full', 'QuotaExceededError'); };
             });
@@ -1083,13 +1157,13 @@ test('confirmed current deletion stays retryable if its final recovery checkpoin
         } else await route.continue();
     });
     const deletion = page.evaluate(async name => {
-        try { await (await import('/scripts/dom-handlers.js')).runHistoryRowCommand('deleteChat', name); return 'unexpected success'; }
+        try { await (await import('/scripts/workspace-interaction-commands.js')).runHistoryRowCommand('deleteChat', name); return 'unexpected success'; }
         catch (reason) { return reason.name; }
     }, file);
     await confirmHistoryDeletion(page, file);
     const error = await deletion;
     expect(error).toBe('QuotaExceededError');
-    expect(await page.evaluate(() => window.SillyTavern.getContext().chat[0].mes)).toBe('late edit after deletion committed');
+    expect(await page.evaluate(async () => (await import('/scripts/st-context.js')).getContext().chat[0].mes)).toBe('late edit after deletion committed');
     await page.evaluate(() => { IDBObjectStore.prototype.put = window.originalRecoveryPut; });
     const pending = page.getByTestId('pending-history-deletions');
     await expect(pending).toContainText(file);
@@ -1107,7 +1181,8 @@ test('confirmed current deletion stays retryable if its final recovery checkpoin
 test('history UI delete command can retry a lost response after loader cleanup', async ({ page }) => {
     await testSetup.awaitST({ page });
     const file = await page.evaluate(async () => {
-        const context = window.SillyTavern.getContext();
+        const { getContext } = await import('/scripts/st-context.js');
+        const context = getContext();
         const index = context.characters.findIndex(character => character.name === 'Dev Character 048');
         await context.selectCharacterById(index);
         const { getRequestHeaders } = await import('/script.js');
@@ -1124,7 +1199,7 @@ test('history UI delete command can retry a lost response after loader cleanup',
         else await route.continue();
     });
     const remove = page.evaluate(async name => {
-        try { await (await import('/scripts/dom-handlers.js')).runHistoryRowCommand('deleteChat', name); return true; }
+        try { await (await import('/scripts/workspace-interaction-commands.js')).runHistoryRowCommand('deleteChat', name); return true; }
         catch { return false; }
     }, file);
     const confirm = page.locator('dialog[open]').filter({ has: page.locator('.chat-file-name') });
@@ -1146,7 +1221,8 @@ test('history UI delete command can retry a lost response after loader cleanup',
 test('non-current history delete retries a lost response with the same condition', async ({ page }) => {
     await testSetup.awaitST({ page });
     const file = await page.evaluate(async () => {
-        const context = window.SillyTavern.getContext();
+        const { getContext } = await import('/scripts/st-context.js');
+        const context = getContext();
         const index = context.characters.findIndex(character => character.name === 'Dev Character 048');
         await context.selectCharacterById(index);
         const { getRequestHeaders } = await import('/script.js');
@@ -1163,8 +1239,9 @@ test('non-current history delete retries a lost response with the same condition
         else await route.continue();
     });
     const remove = () => page.evaluate(async name => {
+        const { getContext } = await import('/scripts/st-context.js');
         try {
-            const context = window.SillyTavern.getContext();
+            const context = getContext();
             await (await import('/scripts/chat-ops-service.js')).deleteCharacterChatByName(context.characterId, name);
             return true;
         }
@@ -1181,7 +1258,8 @@ test('non-current history delete retries a lost response with the same condition
 test('recovery UI hides another account and retries an ambiguous restore unchanged', async ({ page }) => {
     await testSetup.awaitST({ page });
     await page.evaluate(async () => {
-        const context = window.SillyTavern.getContext();
+        const { getContext } = await import('/scripts/st-context.js');
+        const context = getContext();
         const index = context.characters.findIndex(character => character.name === 'Dev Character 047');
         await context.selectCharacterById(index);
         const storage = (await import('/lib.js')).localforage.createInstance({ name: 'EmberDesk_ChatRecovery' });
@@ -1218,7 +1296,8 @@ test('recovery UI hides another account and retries an ambiguous restore unchang
 test('recovery creates a separate chat and retains the local export', async ({ page }) => {
     await testSetup.awaitST({ page });
     const avatar = await page.evaluate(async () => {
-        const context = window.SillyTavern.getContext();
+        const { getContext } = await import('/scripts/st-context.js');
+        const context = getContext();
         const index = context.characters.findIndex(character => character.name === 'Dev Character 047');
         await context.selectCharacterById(index);
         const avatar = context.characters[index].avatar;
@@ -1250,7 +1329,8 @@ test('a deletion with a lost response leaves the late edit discoverable after sw
 
 
     const chat = await page.evaluate(async () => {
-        const context = window.SillyTavern.getContext();
+        const { getContext } = await import('/scripts/st-context.js');
+        const context = getContext();
         context.chatCompletionSettings.chat_memory_enabled = false;
         const index = context.characters.findIndex(character => character.name === 'Dev Character 048');
         await context.selectCharacterById(index);
@@ -1267,13 +1347,13 @@ test('a deletion with a lost response leaves the late edit discoverable after sw
         await route.abort('failed');
     });
     const deletion = page.evaluate(async file => {
-        try { await (await import('/scripts/dom-handlers.js')).runHistoryRowCommand('deleteChat', file); }
+        try { await (await import('/scripts/workspace-interaction-commands.js')).runHistoryRowCommand('deleteChat', file); }
         catch { /* a lost response is expected */ }
     }, chat);
     try {
         await confirmHistoryDeletion(page, chat);
         await deleted;
-        await page.evaluate(() => { window.SillyTavern.getContext().chat[0].mes = 'late recovery edit 82731'; });
+        await page.evaluate(async () => { const { getContext } = await import('/scripts/st-context.js'); getContext().chat[0].mes = 'late recovery edit 82731'; });
     } finally {
         release();
         await deletion;
@@ -1285,17 +1365,19 @@ test('a deletion with a lost response leaves the late edit discoverable after sw
     await expect.poll(() => page.evaluate(async () => JSON.stringify([...(await import('/scripts/chat-ops-shell-context.js')).getChatOpsShellContext().state.mainChatMessageUiState]))).toContain('unsubmitted message editor 82731');
     await page.locator('#send_textarea').fill('unsubmitted composer 82731');
     await page.evaluate(async () => {
-        const context = window.SillyTavern.getContext();
+        const { getContext } = await import('/scripts/st-context.js');
+        const context = getContext();
         const index = context.characters.findIndex(character => character.name === 'Dev Character 047');
         if (index < 0) throw new Error('Switch target missing');
         await context.selectCharacterById(index);
-        if (String(window.SillyTavern.getContext().characterId) !== String(index)) throw new Error('Switch did not complete');
+        if (String(getContext().characterId) !== String(index)) throw new Error('Switch did not complete');
     });
     await page.reload();
     await testSetup.awaitST({ page });
 
     await page.evaluate(async () => {
-        const context = window.SillyTavern.getContext();
+        const { getContext } = await import('/scripts/st-context.js');
+        const context = getContext();
         await context.selectCharacterById(context.characters.findIndex(character => character.name === 'Dev Character 048'));
     });
     await page.locator('#options_button').click();
@@ -1327,7 +1409,8 @@ test('a deletion with a lost response leaves the late edit discoverable after sw
 test('storage failure prevents deleting the current chat', async ({ page }) => {
     await testSetup.awaitST({ page });
     const chat = await page.evaluate(async () => {
-        const context = window.SillyTavern.getContext();
+        const { getContext } = await import('/scripts/st-context.js');
+        const context = getContext();
         const index = context.characters.findIndex(character => character.name === 'Dev Character 047');
         await context.selectCharacterById(index);
         IDBObjectStore.prototype.put = function () { throw new DOMException('Storage full', 'QuotaExceededError'); };
@@ -1336,20 +1419,21 @@ test('storage failure prevents deleting the current chat', async ({ page }) => {
     let requests = 0;
     await page.route('**/api/chats/delete', route => { requests++; return route.continue(); });
     const deletion = page.evaluate(async file => {
-        try { await (await import('/scripts/dom-handlers.js')).runHistoryRowCommand('deleteChat', file); return 'resolved'; }
+        try { await (await import('/scripts/workspace-interaction-commands.js')).runHistoryRowCommand('deleteChat', file); return 'resolved'; }
         catch (error) { return error.name; }
     }, chat);
     await confirmHistoryDeletion(page, chat);
     const outcome = await deletion;
     expect(outcome).toBe('QuotaExceededError');
     expect(requests).toBe(0);
-    expect(await page.evaluate(() => window.SillyTavern.getContext().chat.length)).toBeGreaterThan(0);
+    expect(await page.evaluate(async () => (await import('/scripts/st-context.js')).getContext().chat.length)).toBeGreaterThan(0);
 });
 
 test('an IndexedDB deletion transaction failure leaves the recovery draft and sends nothing', async ({ page }) => {
     await testSetup.awaitST({ page });
     const file = await page.evaluate(async () => {
-        const state = window.SillyTavern.getContext();
+        const { getContext } = await import('/scripts/st-context.js');
+        const state = getContext();
         const index = state.characters.findIndex(character => character.name === 'Dev Character 047');
         await state.selectCharacterById(index);
         Object.defineProperty(navigator, 'locks', { configurable: true, value: undefined });
@@ -1363,7 +1447,7 @@ test('an IndexedDB deletion transaction failure leaves the recovery draft and se
     let requests = 0;
     await page.route('**/api/chats/delete', route => { requests++; return route.continue(); });
     const deletion = page.evaluate(async name => {
-        try { await (await import('/scripts/dom-handlers.js')).runHistoryRowCommand('deleteChat', name); return ''; }
+        try { await (await import('/scripts/workspace-interaction-commands.js')).runHistoryRowCommand('deleteChat', name); return ''; }
         catch (reason) { return reason.name; }
     }, file);
     await confirmHistoryDeletion(page, file);
@@ -1374,13 +1458,14 @@ test('an IndexedDB deletion transaction failure leaves the recovery draft and se
         const storage = (await import('/lib.js')).localforage.createInstance({ name: 'EmberDesk_ChatRecovery' });
         return (await storage.keys()).filter(key => key.startsWith('recovery-v1:')).length;
     })).toBeGreaterThan(0);
-    expect(await page.evaluate(() => window.SillyTavern.getContext().chat.length)).toBeGreaterThan(0);
+    expect(await page.evaluate(async () => (await import('/scripts/st-context.js')).getContext().chat.length)).toBeGreaterThan(0);
 });
 
 test('current deletion remains available without Web Locks', async ({ page }) => {
     await testSetup.awaitST({ page });
     const file = await page.evaluate(async () => {
-        const state = window.SillyTavern.getContext();
+        const { getContext } = await import('/scripts/st-context.js');
+        const state = getContext();
         const index = state.characters.findIndex(character => character.name === 'Dev Character 047');
         await state.selectCharacterById(index);
         Object.defineProperty(navigator, 'locks', { configurable: true, value: undefined });
@@ -1389,7 +1474,7 @@ test('current deletion remains available without Web Locks', async ({ page }) =>
     let requests = 0;
     await page.route('**/api/chats/delete', route => { requests++; return route.continue(); });
     const deletion = page.evaluate(async name => {
-        try { await (await import('/scripts/dom-handlers.js')).runHistoryRowCommand('deleteChat', name); return 'ok'; }
+        try { await (await import('/scripts/workspace-interaction-commands.js')).runHistoryRowCommand('deleteChat', name); return 'ok'; }
         catch (reason) { return reason.message; }
     }, file);
     await confirmHistoryDeletion(page, file);
@@ -1401,26 +1486,29 @@ test('current deletion remains available without Web Locks', async ({ page }) =>
 test('a failed checkpoint leaves the selected session and late edit in memory', async ({ page }) => {
     await testSetup.awaitST({ page });
     const chat = await page.evaluate(async () => {
-        const context = window.SillyTavern.getContext();
+        const { getContext } = await import('/scripts/st-context.js');
+        const context = getContext();
         const index = context.characters.findIndex(character => character.name === 'Dev Character 048');
         await context.selectCharacterById(index);
         return context.characters[index].chat;
     });
     await page.route('**/api/chats/delete', route => route.abort('failed'));
     const deletion = page.evaluate(async file => {
-        try { await (await import('/scripts/dom-handlers.js')).runHistoryRowCommand('deleteChat', file); } catch {}
-        window.SillyTavern.getContext().chat[0].mes = 'unsaved late edit';
+        const { getContext } = await import('/scripts/st-context.js');
+        try { await (await import('/scripts/workspace-interaction-commands.js')).runHistoryRowCommand('deleteChat', file); } catch {}
+        getContext().chat[0].mes = 'unsaved late edit';
         IDBObjectStore.prototype.put = function () { throw new DOMException('Storage full', 'QuotaExceededError'); };
     }, chat);
     await confirmHistoryDeletion(page, chat);
     await deletion;
     await expect.poll(() => page.evaluate(async () => (await import('/script.js')).isChatSaving)).toBe(false);
     const result = await page.evaluate(async () => {
-        const context = window.SillyTavern.getContext();
+        const { getContext } = await import('/scripts/st-context.js');
+        const context = getContext();
         const original = context.characterId;
         let error = '';
         try { await context.selectCharacterById(context.characters.findIndex(character => character.name === 'Dev Character 047')); } catch (reason) { error = reason.name; }
-        return { original, current: window.SillyTavern.getContext().characterId, text: context.chat[0]?.mes, error };
+        return { original, current: getContext().characterId, text: context.chat[0]?.mes, error };
     });
     expect(result.error).toBe('QuotaExceededError');
     expect(result.current).toBe(result.original);

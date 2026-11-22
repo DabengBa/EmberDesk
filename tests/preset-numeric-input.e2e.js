@@ -62,24 +62,24 @@ test('numeric preset counters permit sequential decimal, negative and cleared ed
     await penalty.press('ControlOrMeta+A');
     await penalty.pressSequentially('-0.45');
     await expect(penalty).toHaveValue('-0.45');
-    await expect.poll(() => page.evaluate(() => window.SillyTavern.getContext().chatCompletionSettings.freq_pen_openai)).toBe(-0.45);
+    await expect.poll(() => page.evaluate(async () => (await import('/scripts/st-context.js')).getContext().chatCompletionSettings.freq_pen_openai)).toBe(-0.45);
     const context = page.locator('#openai_max_context');
     await context.click();
     await context.press('ControlOrMeta+A');
     await context.pressSequentially('32');
     await expect(context).toHaveValue('32');
-    await expect.poll(() => page.evaluate(() => window.SillyTavern.getContext().chatCompletionSettings.openai_max_context)).toBe(32000);
+    await expect.poll(() => page.evaluate(async () => (await import('/scripts/st-context.js')).getContext().chatCompletionSettings.openai_max_context)).toBe(32000);
     await context.press('ControlOrMeta+A');
     await context.press('Backspace');
     await context.blur();
     await expect(context).toHaveValue('');
     await expect(context).toHaveAttribute('aria-invalid', 'true');
-    await expect.poll(() => page.evaluate(() => window.SillyTavern.getContext().chatCompletionSettings.openai_max_context)).toBe(32000);
+    await expect.poll(() => page.evaluate(async () => (await import('/scripts/st-context.js')).getContext().chatCompletionSettings.openai_max_context)).toBe(32000);
     await context.click();
     await context.press('ControlOrMeta+A');
     await context.pressSequentially('0.5');
     await expect(context).toHaveValue('0.5');
-    await expect.poll(() => page.evaluate(() => window.SillyTavern.getContext().chatCompletionSettings.openai_max_context)).toBe(500);
+    await expect.poll(() => page.evaluate(async () => (await import('/scripts/st-context.js')).getContext().chatCompletionSettings.openai_max_context)).toBe(500);
     await page.locator('#temp_openai').fill('0.5');
     await expect(temp).toHaveValue('0.5');
     await page.evaluate(async () => {
@@ -158,7 +158,7 @@ test('focused numeric wheel emits once and clears a corrected invalid draft', as
     await expect(temp).not.toHaveAttribute('aria-invalid', 'true');
     await expect(page.locator('#temp_openai_counter-error')).toHaveCount(0);
     await expect(page.locator('#temp_openai')).toHaveValue('2');
-    await expect.poll(() => page.evaluate(() => window.SillyTavern.getContext().chatCompletionSettings.temp_openai)).toBe(2);
+    await expect.poll(() => page.evaluate(async () => (await import('/scripts/st-context.js')).getContext().chatCompletionSettings.temp_openai)).toBe(2);
     expect(await page.evaluate(() => window.wheelInputEvents)).toBe(1);
 });
 
@@ -171,7 +171,7 @@ test('invalid numeric draft remains visible and reports an error without changin
     await expect(temp).toHaveValue('3');
     await expect(temp).toHaveAttribute('aria-invalid', 'true');
     await expect(page.locator(`#${await temp.getAttribute('aria-describedby')}`)).toBeVisible();
-    await expect.poll(() => page.evaluate(() => window.SillyTavern.getContext().chatCompletionSettings.temp_openai)).toBe(0.5);
+    await expect.poll(() => page.evaluate(async () => (await import('/scripts/st-context.js')).getContext().chatCompletionSettings.temp_openai)).toBe(0.5);
     await temp.fill('0.6');
     await expect(temp).not.toHaveAttribute('aria-invalid', 'true');
     await temp.press('ControlOrMeta+A');
@@ -179,7 +179,7 @@ test('invalid numeric draft remains visible and reports an error without changin
     await temp.blur();
     await expect(temp).toHaveAttribute('aria-invalid', 'true');
     await expect(page.locator(`#${await temp.getAttribute('aria-describedby')}`)).toBeVisible();
-    await expect.poll(() => page.evaluate(() => window.SillyTavern.getContext().chatCompletionSettings.temp_openai)).toBe(0.6);
+    await expect.poll(() => page.evaluate(async () => (await import('/scripts/st-context.js')).getContext().chatCompletionSettings.temp_openai)).toBe(0.6);
     await page.locator('#update_oai_preset').click();
     await expect(temp).toHaveAttribute('aria-invalid', 'true');
     await expect(page.locator(`#${await temp.getAttribute('aria-describedby')}`)).toBeVisible();

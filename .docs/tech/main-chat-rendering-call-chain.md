@@ -24,7 +24,7 @@ code:
     - public/scripts/external-media-policy.js
     - public/scripts/message-css-policy.js
     - public/scripts/character-lifecycle-service.js
-    - public/scripts/dom-handlers.js
+    - public/scripts/message-dom-effects.js
     - public/scripts/import-confirm-dialog.js
     - public/scripts/character-external-media-authorization.js
     - app/lib/generation/service.ts
@@ -77,7 +77,7 @@ Creator notes use the shared style decoder but are not message rows and do not u
 
 With global styles explicitly allowed, `formatCreatorNotes()` decodes with an empty selector prefix and without creator animation isolation; global selectors and keyframes can affect the page. HTML sanitization still runs. No avatar (the create path) always means restricted styles. `checkForCreatorNotesStyles()` prompts when style content exists and no preference is stored; notes-only and cancellation store `false`, global stores `true`. `openGlobalStylesPreferenceDialog()` changes that per-avatar preference and refreshes the notes; `public/scripts/import-confirm-dialog.js` sets the same preference from the import choice. The preference is distinct from message external-media authorization.
 
-Selected-character and editing paths insert formatted notes through `public/scripts/character-lifecycle-service.js` and `public/scripts/dom-handlers.js`. The create-selection sink in `public/script.js` additionally sanitizes the formatted output at insertion while preserving already-scoped `<style>` elements. Both style dialogs sanitize their localized templates at the insertion boundary. `tests/creator-notes-security.e2e.js`, `tests/creator-notes-sinks.e2e.js`, and `tests/u001-creator-styles-native.test.js` cover restricted animations and selectors, the explicitly global path, sink sanitization, and preference behavior.
+Selected-character and editing paths insert formatted notes through `public/scripts/character-lifecycle-service.js` and the authoring mirror in `public/script.js`. The create-selection sink in `public/script.js` additionally sanitizes the formatted output at insertion while preserving already-scoped `<style>` elements. Both style dialogs sanitize their localized templates at the insertion boundary. `tests/creator-notes-security.e2e.js`, `tests/creator-notes-sinks.e2e.js`, and `tests/u001-creator-styles-native.test.js` cover restricted animations and selectors, the explicitly global path, sink sanitization, and preference behavior.
 
 ## Core Implementation
 

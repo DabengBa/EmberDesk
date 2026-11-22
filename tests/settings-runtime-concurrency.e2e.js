@@ -45,15 +45,16 @@ test('overlapping runtime fields are resolved in Settings against the values sho
     await expect(recovery).toHaveCount(0);
     await expect(notice).toHaveCount(0);
     expect(await readStoredSettings(other)).toMatchObject({ openai_model: 'my-model', fallback_provider_model: 'first-fallback' });
-    expect(await other.evaluate(() => window.SillyTavern.getContext().chatCompletionSettings.fallback_provider_model)).toBe('first-fallback');
+    expect(await other.evaluate(async () => (await import('/scripts/st-context.js')).getContext().chatCompletionSettings.fallback_provider_model)).toBe('first-fallback');
     await startRuntimeSave(other, 'after-resolution');
     expect(await other.evaluate(() => window.__settingsSave)).toBe('saved');
 });
 
 function saveModels(page, model, fallback, maxResponse) {
     return page.evaluate(async ({ model, fallback, maxResponse }) => {
+        const { getContext } = await import('/scripts/st-context.js');
         const { saveSettings } = await import('/script.js');
-        const settings = window.SillyTavern.getContext().chatCompletionSettings;
+        const settings = getContext().chatCompletionSettings;
         settings.openai_model = model;
         settings.fallback_provider_model = fallback;
         if (maxResponse !== undefined) settings.openai_max_tokens = maxResponse;
@@ -69,8 +70,9 @@ test('two open workspaces save different settings without overwriting each other
     expect(await page.evaluate(() => window.__settingsSave)).toBe('saved');
 
     await other.evaluate(async () => {
+        const { getContext } = await import('/scripts/st-context.js');
         const { saveSettings } = await import('/script.js');
-        const settings = window.SillyTavern.getContext().chatCompletionSettings;
+        const settings = getContext().chatCompletionSettings;
         settings.fallback_provider_model = 'model-from-second-window';
         await saveSettings(0, { strict: true });
         // The second tab still has the old active model in memory. A later
@@ -159,8 +161,9 @@ async function holdFirstSettingsResponse(page) {
 
 async function startRuntimeSave(page, model, key = '__settingsSave') {
     await page.evaluate(async ({ model, key }) => {
+        const { getContext } = await import('/scripts/st-context.js');
         const script = await import('/script.js');
-        globalThis.SillyTavern.getContext().chatCompletionSettings.openai_model = model;
+        getContext().chatCompletionSettings.openai_model = model;
         window[key] = script.saveSettings(0, { strict: true }).then(() => 'saved', error => error.message);
     }, { model, key });
 }
@@ -179,8 +182,9 @@ test('a Settings form save preserves an already pending runtime edit', async ({ 
     const panel = page.locator('#SettingsPanel');
     const field = panel.locator('#settings-providers-fallbackProviderModel');
     await field.fill('from-form');
-    await page.evaluate(() => {
-        globalThis.SillyTavern.getContext().chatCompletionSettings.openai_model = 'pending-runtime';
+    await page.evaluate(async () => {
+        const { getContext } = await import('/scripts/st-context.js');
+        getContext().chatCompletionSettings.openai_model = 'pending-runtime';
     });
     await panel.locator('button[type="submit"]').click();
     await expect(panel.locator('.settings-status--success')).toBeVisible();
@@ -215,14 +219,15 @@ test('a delayed runtime change is not overwritten by an earlier Settings respons
     expect(await held).toBe(200);
     const changed = `late-runtime-model-${Date.now()}`;
     await page.evaluate(async value => {
-        const context = globalThis.SillyTavern.getContext();
+        const { getContext } = await import('/scripts/st-context.js');
+        const context = getContext();
         context.chatCompletionSettings.openai_model = value;
         const script = await import('/script.js');
         script.saveSettingsDebounced();
     }, changed);
     release();
     await expect(panel.locator('.settings-status--success')).toBeVisible();
-    await expect.poll(() => page.evaluate(() => globalThis.SillyTavern.getContext().chatCompletionSettings.openai_model)).toBe(changed);
+    await expect.poll(() => page.evaluate(async () => (await import('/scripts/st-context.js')).getContext().chatCompletionSettings.openai_model)).toBe(changed);
     await expect.poll(async () => page.evaluate(async () => {
         const { getRequestHeaders } = await import('/scripts/request-context.js');
         const response = await fetch('/api/settings/get', { method: 'POST', headers: getRequestHeaders(), body: '{}' });

@@ -69,6 +69,10 @@ test('the authenticated React workspace commits native hosts before starting the
         throw new Error(`Workspace failed to start; native entry requests: ${scriptLoads.length}; browser errors: ${errors.join('\n')}`, { cause: error });
     }
     expect(scriptLoads).toHaveLength(1);
+    expect(await page.evaluate(async () => {
+        const { getContext } = await import('/scripts/st-context.js');
+        return { globalsInstalled: 'SillyTavern' in window, charactersAvailable: Array.isArray(getContext().characters) };
+    })).toEqual({ globalsInstalled: false, charactersAvailable: true });
 });
 
 test('shows the workspace frame without admitting composer input while settings are held', async ({ page }, testInfo) => {

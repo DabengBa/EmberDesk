@@ -46,7 +46,7 @@ export default [
                 ...globals.node,
                 ...globals.jest,
                 globalThis: 'readonly',
-                SillyTavern: 'readonly',
+
             },
         },
         settings: {

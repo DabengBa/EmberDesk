@@ -8,8 +8,9 @@ test.describe.configure({ mode: 'default' });
 const avatar = 'dev-character-001.png';
 const name = 'Dev Character 001';
 const session = n => `${name} Session ${n}`;
-const state = page => page.evaluate(() => {
-    const c = window.SillyTavern.getContext();
+const state = page => page.evaluate(async () => {
+    const { getContext } = await import('/scripts/st-context.js');
+    const c = getContext();
     return { avatar: c.characters[c.characterId]?.avatar, target: c.characters[c.characterId]?.chat, messages: c.chat.map(m => m.mes) };
 });
 const open = (page, file) => page.evaluate(async file => {
@@ -117,8 +118,9 @@ test('refresh during an in-flight chat switch keeps the requested save destinati
             });
             if (!response.ok) throw new Error(`character update failed: ${response.status}`);
         }, { avatar, description });
-        await expect.poll(() => page.evaluate(avatar => {
-            const c = window.SillyTavern.getContext();
+        await expect.poll(() => page.evaluate(async avatar => {
+            const { getContext } = await import('/scripts/st-context.js');
+            const c = getContext();
             return c.characters.find(character => character.avatar === avatar)?.description;
         }, avatar), { timeout: 15_000 }).toBe(description);
         const targetDuringSwitch = (await state(page)).target;
@@ -159,9 +161,10 @@ for (const mode of ['automatic refresh', 'detail completion']) {
             await open(other, session('04'));
             const reads = [];
             page.on('response', r => { if (r.url().endsWith('/api/characters/all') && r.ok()) reads.push(r); });
-            await page.evaluate(() => {
+            await page.evaluate(async () => {
+                const { getContext } = await import('/scripts/st-context.js');
                 window.__chatTargetPublished = false;
-                const c = window.SillyTavern.getContext();
+                const c = getContext();
                 c.eventSource.on(c.event_types.CHARACTER_PAGE_LOADED, () => { window.__chatTargetPublished = true; });
             });
             await open(other, session('03'));

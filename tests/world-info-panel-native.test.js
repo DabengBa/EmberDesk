@@ -72,7 +72,7 @@ test('chat lorebook delegation accepts dynamic nested clicks and management acti
         expect(assign).toHaveBeenCalledTimes(1);
         longPress.mock.calls.find(([selector]) => selector === '.chat_lorebook_button')[1]();
         expect(assign).toHaveBeenLastCalledWith({ shiftKey: true, altKey: false });
-        const source = fs.readFileSync(new URL('../public/scripts/dom-handlers.js', import.meta.url), 'utf8');
+        const source = fs.readFileSync(new URL('../public/script.js', import.meta.url), 'utf8');
         const action = source.match(/case 'character_action_chat_lorebook':([\s\S]*?)\s*break;/)?.[1];
         expect(action).toBeDefined();
         new Function('document', action)(doc);
@@ -133,7 +133,7 @@ test('world button uses native click and bubbling management change', async () =
 });
 
 test('native management listener handles world action before resetting selection', async () => {
-    const source = fs.readFileSync(new URL('../public/scripts/dom-handlers.js', import.meta.url), 'utf8');
+    const source = fs.readFileSync(new URL('../public/script.js', import.meta.url), 'utf8');
     const start = source.indexOf("    document.getElementById('char-management-dropdown')?.addEventListener('change'");
     const end = source.indexOf('\n    });', start);
     expect(start).toBeGreaterThan(-1);

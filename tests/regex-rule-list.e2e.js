@@ -7,10 +7,13 @@ test.describe.configure({ mode: 'serial' });
 
 async function openRegex(page) {
     await testSetup.awaitST({ page });
-    const wiRestorePending = await page.evaluate(() => (
+    const wiRestorePending = await page.evaluate(async () => {
+        const { getContext } = await import('/scripts/st-context.js');
+        return (
         window.innerWidth > 1000
-        && window.SillyTavern?.getContext?.()?.accountStorage?.getItem('WINavOpened') === 'true'
-    ));
+        && getContext()?.accountStorage?.getItem('WINavOpened') === 'true'
+    );
+    });
     if (wiRestorePending) {
         await expect(page.locator('#WorldInfo.openDrawer')).toBeVisible({ timeout: 15_000 });
     }
@@ -90,7 +93,10 @@ test.describe('regex rule list', () => {
         const names = await globalRows(page).locator('.regex_script_name').allTextContents();
         expect(names).toEqual(['React list alpha', 'React list beta']);
         await expect(row(page, 'React list alpha')).toHaveClass(/regex-react-disabled/);
-        const stored = await page.evaluate(() => window.SillyTavern.getContext().featureSettings.regex.map(script => [script.scriptName, script.disabled]));
+        const stored = await page.evaluate(async () => {
+            const { getContext } = await import('/scripts/st-context.js');
+            return getContext().featureSettings.regex.map(script => [script.scriptName, script.disabled]);
+        });
         expect(stored).toContainEqual(['React list alpha', true]);
         // The disabled flag is persisted through the real settings save — it
         // survives a full reload, not just the in-memory store.
@@ -129,9 +135,12 @@ test.describe('regex rule list', () => {
     test('keyboard reorder saves the new live order', async ({ page }) => {
         await action(row(page, 'React list beta'), 'arrow-up').click();
         await expect(globalRows(page).first().locator('.regex_script_name')).toHaveText('React list beta');
-        await expect.poll(async () => page.evaluate(() => (
-            window.SillyTavern.getContext().featureSettings.regex.map(script => script.scriptName).filter(name => name.startsWith('React list'))
-        ))).toEqual(['React list beta', 'React list alpha']);
+        await expect.poll(async () => page.evaluate(async () => {
+            const { getContext } = await import('/scripts/st-context.js');
+            return (
+            getContext().featureSettings.regex.map(script => script.scriptName).filter(name => name.startsWith('React list'))
+        );
+        })).toEqual(['React list beta', 'React list alpha']);
         await page.reload();
         await reopenRegex(page);
         await expect(globalRows(page).first().locator('.regex_script_name')).toHaveText('React list beta');
@@ -145,7 +154,8 @@ test.describe('regex rule list', () => {
         });
         // The scoped target is only bound while a character is selected.
         const memoryEnabled = await page.evaluate(async () => {
-            const context = window.SillyTavern.getContext();
+            const { getContext } = await import('/scripts/st-context.js');
+            const context = getContext();
             // The seeded chat otherwise starts unrelated background summary
             // writes without an API key, racing this test's chat reload.
             const previous = context.chatCompletionSettings.chat_memory_enabled;
@@ -162,7 +172,8 @@ test.describe('regex rule list', () => {
             // its identity and scoped rules are unchanged. Exercise that real
             // publication boundary before invoking the visible row action.
             await page.evaluate(async () => {
-                const context = window.SillyTavern.getContext();
+                const { getContext } = await import('/scripts/st-context.js');
+                const context = getContext();
                 const next = structuredClone(context.characters);
                 next[context.characterId].description += ' [refresh fixture]';
                 const { publishCharacterLibrarySnapshot } = await import('/script.js');
@@ -178,7 +189,8 @@ test.describe('regex rule list', () => {
             // verify the enabled flag was persisted to that character's data.
             await testSetup.awaitST({ page });
             await page.evaluate(async () => {
-                const context = window.SillyTavern.getContext();
+                const { getContext } = await import('/scripts/st-context.js');
+                const context = getContext();
                 await context.selectCharacterById(context.characters.findIndex(character => character.name === 'Dev Character 001'));
             });
             await reopenRegex(page);
@@ -187,7 +199,8 @@ test.describe('regex rule list', () => {
             // Scoped authorization saves settings, so restore the original
             // value even when an assertion fails in this serial suite.
             await page.evaluate(async previous => {
-                window.SillyTavern.getContext().chatCompletionSettings.chat_memory_enabled = previous;
+                const { getContext } = await import('/scripts/st-context.js');
+                getContext().chatCompletionSettings.chat_memory_enabled = previous;
                 const { saveSettingsStrict } = await import('/scripts/preset-manager.js');
                 await saveSettingsStrict();
             }, memoryEnabled);
@@ -199,7 +212,10 @@ test.describe('regex rule list', () => {
         await row(page, 'React list beta').locator('.regex-react-select').check();
         await page.locator('#bulk_enable_regex').click();
         await expect(row(page, 'React list beta')).not.toHaveClass(/regex-react-disabled/);
-        const stored = await page.evaluate(() => window.SillyTavern.getContext().featureSettings.regex.map(script => [script.scriptName, script.disabled]));
+        const stored = await page.evaluate(async () => {
+            const { getContext } = await import('/scripts/st-context.js');
+            return getContext().featureSettings.regex.map(script => [script.scriptName, script.disabled]);
+        });
         expect(stored).toContainEqual(['React list beta', false]);
     });
 });

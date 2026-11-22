@@ -9,7 +9,7 @@ import { performance } from 'node:perf_hooks';
 import { spawn } from 'node:child_process';
 import { DatabaseSync } from 'node:sqlite';
 
-import { chromium } from '../tests/node_modules/playwright/index.mjs';
+import { chromium } from '../tests/node_modules/@playwright/test/index.mjs';
 
 import { applyCanonicalPragmas } from '../src/canonical-sqlite.ts';
 import { runCanonicalMigrations } from '../src/canonical-sqlite-migrations.ts';
@@ -573,13 +573,13 @@ function toAppUrl(harnessUrl) {
 
 async function waitForAppReady(page, targetAvatar) {
     await page.waitForFunction(
-        avatar => Array.isArray(globalThis.SillyTavern?.getContext?.()?.characters)
-            && globalThis.SillyTavern.getContext().characters.some(item => item?.avatar === avatar),
-        targetAvatar,
+        () => globalThis.__emberDeskStartup?.marks?.some(mark => mark?.name === 'app:ready'),
+        undefined,
         { timeout: 120000 },
     );
     await page.waitForFunction(
-        () => globalThis.__emberDeskStartup?.marks?.some(mark => mark?.name === 'app:ready'),
+        async avatar => (await import('/scripts/st-context.js')).getContext().characters.some(item => item?.avatar === avatar),
+        targetAvatar,
         { timeout: 120000 },
     );
 }
@@ -704,10 +704,11 @@ async function invokeCharacterLibraryScenario(page, scenarioName) {
     }
 
     return await page.evaluate(async ({ targetScenario }) => {
-        const context = globalThis.SillyTavern?.getContext?.();
+        const { getContext } = await import('/scripts/st-context.js');
+        const context = getContext();
         const perfHooks = globalThis.__emberDeskPerf;
         if (!context) {
-            throw new Error('SillyTavern context is unavailable on the app page.');
+            throw new Error('Workspace context is unavailable on the app page.');
         }
         if (!perfHooks) {
             throw new Error('EmberDesk perf hooks are unavailable on the app page.');
@@ -917,10 +918,11 @@ async function invokeCharacterLibraryFilterScenario(page) {
     const query = 'Perf Character 1';
 
     return await page.evaluate(async ({ targetQuery }) => {
-        const context = globalThis.SillyTavern?.getContext?.();
+        const { getContext } = await import('/scripts/st-context.js');
+        const context = getContext();
         const perfHooks = globalThis.__emberDeskPerf;
         if (!context) {
-            throw new Error('SillyTavern context is unavailable on the app page.');
+            throw new Error('Workspace context is unavailable on the app page.');
         }
         if (!perfHooks || typeof perfHooks.measureCharacterSearchForPerf !== 'function') {
             throw new Error('EmberDesk character-search perf hook is unavailable on the app page.');
@@ -950,9 +952,10 @@ async function invokeCharacterLibraryFilterScenario(page) {
 
 async function invokeMainChatScenario(page, scenarioName, avatar, profileName) {
     return await page.evaluate(async ({ targetScenario, targetAvatar, targetProfile }) => {
-        const context = globalThis.SillyTavern?.getContext?.();
+        const { getContext } = await import('/scripts/st-context.js');
+        const context = getContext();
         if (!context) {
-            throw new Error('SillyTavern context is unavailable on the app page.');
+            throw new Error('Workspace context is unavailable on the app page.');
         }
 
         const script = await import('/script.js');
@@ -978,7 +981,7 @@ async function invokeMainChatScenario(page, scenarioName, avatar, profileName) {
             }
             await context.selectCharacterById(characterId, { switchMenu: false });
             const selected = await waitForCondition(() => {
-                const latestContext = globalThis.SillyTavern?.getContext?.();
+                const latestContext = getContext();
                 return String(latestContext?.characterId) === String(characterId) ? latestContext : null;
             }, 5000);
             if (!selected) {
@@ -988,7 +991,7 @@ async function invokeMainChatScenario(page, scenarioName, avatar, profileName) {
             return selected.characters[characterId]?.name ?? '';
         };
         const normalizeActiveChatFields = () => {
-            const latestContext = globalThis.SillyTavern?.getContext?.() ?? context;
+            const latestContext = getContext();
             latestContext.chatMetadata.system_prompt = typeof latestContext.chatMetadata.system_prompt === 'string'
                 ? latestContext.chatMetadata.system_prompt
                 : '';
@@ -1151,7 +1154,7 @@ async function invokeMainChatScenario(page, scenarioName, avatar, profileName) {
             script.activateSendButtons();
         };
         const assertGenerationFieldsAreStrings = () => {
-            const latestContext = globalThis.SillyTavern?.getContext?.() ?? context;
+            const latestContext = getContext();
             const activeCharacter = latestContext.characters?.[latestContext.characterId];
             const types = {
                 chatMetadataSystemPrompt: typeof latestContext.chatMetadata?.system_prompt,
@@ -1331,10 +1334,11 @@ async function invokeMainChatScenario(page, scenarioName, avatar, profileName) {
 
 async function invokeDeleteRefreshScenario(page, avatar) {
     return await page.evaluate(async ({ targetAvatar }) => {
-        const context = globalThis.SillyTavern?.getContext?.();
+        const { getContext } = await import('/scripts/st-context.js');
+        const context = getContext();
         const perfHooks = globalThis.__emberDeskPerf;
         if (!context) {
-            throw new Error('SillyTavern context is unavailable on the app page.');
+            throw new Error('Workspace context is unavailable on the app page.');
         }
         if (!perfHooks) {
             throw new Error('EmberDesk perf hooks are unavailable on the app page.');

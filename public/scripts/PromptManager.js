@@ -68,6 +68,7 @@ export function installPromptManagerDomain(createDomain, substituteParams) {
         uuid: uuidv4,
         createTokenHandler: () => new TokenHandler(() => { throw new Error('Token handler not set'); }),
     });
+    registerPromptManagerMigration();
 }
 
 function requirePromptDomain() {
@@ -134,7 +135,7 @@ const promptManagerDefaultPromptOrder = [
 
 export {
     PromptManager,
-    registerPromptManagerMigration,
+
     chatCompletionDefaultPrompts,
     promptManagerDefaultPromptOrders,
     Prompt,

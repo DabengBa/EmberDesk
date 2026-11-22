@@ -1,11 +1,18 @@
 /** Per-document coordinator for runtime and form settings writes. */
 export function createSettingsWriteOwner() {
     let conflict = false;
+    let revision: number | null = null;
     let pendingWrite = Promise.resolve();
     const assertWritable = () => {
         if (conflict) throw new Error('Unresolved runtime settings conflict');
     };
     return {
+        getRevision: () => revision,
+        observeRevision(value: unknown): boolean {
+            if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 0 || (revision !== null && value < revision)) return false;
+            revision = value;
+            return true;
+        },
         // Include payload construction and publication of the committed revision.
         runWrite<T>(write: () => Promise<T>): Promise<T> {
             const operation = pendingWrite.then(write);

@@ -191,6 +191,7 @@ test('production settings exports forward payload and strict saves to the real o
         beginSettingsSaveSnapshot: () => {}, finishSettingsSaveSnapshot: () => {},
         compressRequest: async x => x, getRequestHeaders: () => ({}),
     };
+    env.runtimeSettingsConflict.observeRevision(2);
     const exports = new Function(...Object.keys(env), `${source.slice(start, end).replace('export async function', 'async function')}\nreturn { buildRuntimeSettingsPayload, saveSettings };`)(...Object.values(env));
     expect(exports.buildRuntimeSettingsPayload()).toMatchObject({ active_character: 'alice', settings_revision: 2, currentVersion: '1' });
     await expect(exports.saveSettings(0, { strict: true })).rejects.toThrow('Settings save is queued: settings not ready');

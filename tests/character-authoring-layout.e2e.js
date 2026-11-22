@@ -128,10 +128,44 @@ test('create keeps its submit action separate from the upper character tools', a
     await expect(panel.getByRole('button', { name: /^(删除|Delete|导出|Export|查找替换|Find and replace)$/ })).toHaveCount(0);
     const create = panel.getByRole('button', { name: /^(创建|Create)$/ });
     await expect(toolbar.getByRole('button', { name: /^(创建|Create)$/ })).toHaveCount(0);
+    const png = Buffer.from(await page.evaluate(() => {
+        const canvas = document.createElement('canvas');
+        canvas.width = canvas.height = 64;
+        canvas.getContext('2d').fillRect(0, 0, 64, 64);
+        return canvas.toDataURL().split(',')[1];
+    }), 'base64');
+    const fileInput = panel.locator('#authoring-avatar-file');
+    const crop = page.locator('dialog[data-react-popup]');
+    await fileInput.setInputFiles({ name: 'confirmed.png', mimeType: 'image/png', buffer: png });
+    await expect(crop.locator('.popup-button-ok')).toBeEnabled();
+    await crop.locator('.popup-button-ok').click();
+    const preview = panel.locator('label:has(#authoring-avatar-file) img');
+    await expect(preview).toHaveAttribute('src', /^data:image\//);
+    const confirmedPreview = await preview.getAttribute('src');
+    await fileInput.setInputFiles({ name: 'cancelled.png', mimeType: 'image/png', buffer: png });
+    await expect(crop.locator('.popup-button-ok')).toBeEnabled();
+    await page.keyboard.press('Escape');
+    await expect(crop).toHaveCount(0);
+    await expect(preview).toHaveAttribute('src', confirmedPreview);
+    await page.locator('[data-react-workspace-shell-chrome] nav button').filter({ hasText: '角色库' }).click();
+    await page.getByRole('button', { name: /^(新建角色|Create New Character)$/ }).click();
+    await expect(preview).toHaveAttribute('src', confirmedPreview);
+    await expect(crop).toHaveCount(0);
     const name = `Created ${crypto.randomUUID()}`;
     await panel.locator('[data-react-authoring-field="name"] input').fill(name);
+    await page.evaluate(() => {
+        const nativeFetch = window.fetch;
+        window.fetch = function (url, options) {
+            if (String(url).startsWith('/api/characters/create?') && options?.body instanceof FormData) {
+                window.createdAvatarFile = options.body.get('avatar')?.name;
+            }
+            return nativeFetch.call(this, url, options);
+        };
+    });
     const saved = page.waitForResponse(response => new URL(response.url()).pathname === '/api/characters/create' && response.ok());
     await create.click();
-    await saved;
+    const response = await saved;
+    expect(JSON.parse(new URL(response.url()).searchParams.get('crop'))).toMatchObject({ width: expect.any(Number) });
+    expect(await page.evaluate(() => window.createdAvatarFile)).toBe('confirmed.png');
     await expect(page.locator('[data-react-authoring-mode="edit"] [data-react-authoring-field="name"] input')).toHaveValue(name);
 });

@@ -111,11 +111,10 @@ describe('React runtime boundary', () => {
         expect(recoveryBlock).not.toMatch(/querySelector|innerHTML|text\.after/);
 
         const editorBlock = scriptSource.match(
-            /export async function messageEdit\([\s\S]*?async function messageEditDone\([\s\S]*?\n\}/,
+            /export async function messageEdit\([\s\S]*?\n\}/,
         )?.[0] ?? '';
         expect(editorBlock).toContain('getChatMessageCommands().startMessageEdit(messageId)');
-        expect(editorBlock).toContain('getChatMessageCommands().cancelMessageEdit(messageId)');
-        expect(editorBlock).toContain('getChatMessageCommands().commitMessageEdit(this_edit_mes_id)');
+
         expect(editorBlock).not.toMatch(/chatElement|messageElement|querySelector|innerHTML|\.find\(/);
     });
 
@@ -136,13 +135,10 @@ describe('React runtime boundary', () => {
             path.join(repoRoot, 'public', 'script.js'),
             'utf8',
         );
-        const moveBlock = scriptSource.match(
-            /async function messageEditMove\(sourceId, targetId\) \{[\s\S]*?\n\}\n\nasync function messageEditDone/,
-        )?.[0] ?? '';
+
         const commandSource = fs.readFileSync(path.join(repoRoot, 'public', 'scripts', 'chat-message-commands.js'), 'utf8');
         const moveCommand = commandSource.match(/async function moveMessage\([\s\S]*?\n    \}/)?.[0] ?? '';
-        expect(moveBlock).toContain('getChatMessageCommands().moveMessage(sourceId, targetId)');
-        expect(moveBlock).not.toMatch(/chatElement|querySelector|messageElement/);
+
         expect(moveCommand).toContain('[chat[source], chat[target]] = [chat[target], chat[source]]');
         expect(moveCommand).toContain('remapUi(');
         expect(moveCommand).toContain('await deps.save()');

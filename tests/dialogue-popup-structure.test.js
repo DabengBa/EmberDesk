@@ -15,18 +15,18 @@ function read(relativePath) {
 describe('legacy dialogue popup structure', () => {
     test('the bootstrapped typed controller is the only dialogue result owner', () => {
         const script = read('public/script.js');
-        const handlers = read('public/scripts/dom-handlers.js');
+        const handlers = read('public/script.js');
         expect(script).toContain('dialogueController = workspace.createDialogueController()');
         expect(script).not.toContain('dialogueResolve');
         expect(handlers).not.toContain('state.dialogueResolve');
-        expect(handlers).toContain('state.dialogueController');
+        expect(handlers).toContain('const controller = dialogueController');
     });
     test('bulk deletion uses the typed selection rather than a second shell index', () => {
-        const handlers = read('public/scripts/dom-handlers.js');
-        expect(handlers).toContain('controller.confirm(');
-        expect(handlers).toContain('await shell().getChatMessageCommands().deleteFrom(deletedFrom)');
-        expect(handlers).not.toContain('controller.runEffects(');
-        expect(handlers).not.toContain('state.this_del_mes');
+        const controls = read('app/components/dialogue-popups/DialoguePopups.tsx');
+        const script = read('public/script.js');
+        expect(controls).toContain('controller.confirm(deletingLabel(), deleteFrom)');
+        expect(script).toContain('deleteFrom: index => getChatMessageCommands().deleteFrom(index)');
+        expect(script).not.toContain('this_del_mes');
     });
     test('dialogue controls accept direct React command callbacks', () => {
         const source = read('app/components/dialogue-popups/DialoguePopups.tsx');
@@ -40,8 +40,8 @@ describe('legacy dialogue popup structure', () => {
 
         expect(source).toMatch(/<ContractButton[^>]*id="dialogue_popup_ok"[^>]*className="menu_button"[^>]*label="Delete"[^>]*labelClassName="dialogue-popup-btn-label"[^>]*data-result="1"[^>]*\/>/);
         expect(source).toMatch(/<ContractButton[^>]*id="dialogue_popup_cancel"[^>]*className="menu_button"[^>]*label="Cancel"[^>]*data-result="0"[^>]*\/>/);
-        expect(source).toMatch(/<ContractButton[^>]*id="dialogue_del_mes_ok"[^>]*className="menu_button"[^>]*label="Delete"[^>]*disabled[^>]*\/>/);
-        expect(source).toMatch(/<ContractButton[^>]*id="dialogue_del_mes_cancel"[^>]*className="menu_button"[^>]*label="Cancel"[^>]*\/>/);
+        expect(source).toMatch(/<ContractButton[^\n]*id="dialogue_del_mes_ok"[^\n]*className="menu_button"[^\n]*label="Delete"[^\n]*disabled=\{state.selected === null \|\| state.busy\}[^\n]*\/>/);
+        expect(source).toMatch(/<ContractButton[^>]*id="dialogue_del_mes_cancel"[^>]*className="menu_button"[^>]*label="Cancel"[^>]*disabled=\{state.busy\}[^>]*\/>/);
     });
 
     test('popup shells stay legacy markup while control containers are React mount targets', () => {
@@ -56,13 +56,13 @@ describe('legacy dialogue popup structure', () => {
         expect(index).not.toContain('id="dialogue_del_mes_ok"');
     });
 
-    test('dialogue controls mount after their controller and compatibility handlers delegate', () => {
+    test('dialogue controls mount after their controller without native click handlers', () => {
         const scriptSource = read('public/script.js');
-        const domHandlersSource = read('public/scripts/dom-handlers.js');
+        const domHandlersSource = read('public/script.js');
 
-        expect(domHandlersSource).toContain('mountDialogueDelMesControls()');
-        expect(domHandlersSource).toContain("$(document).on('click', '#dialogue_popup_ok'");
-        expect(domHandlersSource).toContain("$(document).on('click', '#dialogue_popup_cancel'");
+        expect(domHandlersSource).not.toContain('bindLegacyShellHandlers');
+        expect(domHandlersSource).not.toContain("$(document).on('click', '#dialogue_popup_ok'");
+        expect(domHandlersSource).not.toContain("$(document).on('click', '#dialogue_popup_cancel'");
         const controllerIdx = scriptSource.indexOf('dialogueController = workspace.createDialogueController()');
         const mountIdx = scriptSource.indexOf("measureStartupStage('mountDialoguePopupControls'");
         expect(controllerIdx).toBeGreaterThanOrEqual(0);

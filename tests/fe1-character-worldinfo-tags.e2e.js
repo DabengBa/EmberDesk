@@ -25,13 +25,14 @@ test.beforeEach(async ({ page }) => {
 
 async function selectCharacter(page, n) {
     await page.evaluate(async name => {
-        const context = window.SillyTavern.getContext();
+        const { getContext } = await import('/scripts/st-context.js');
+        const context = getContext();
         const id = context.characters.findIndex(character => character.name === name);
         if (id < 0) throw new Error(`Missing character: ${name}`);
         await context.selectCharacterById(String(id));
     }, cardName(n));
     await expect(page.locator(`${authoring} [data-react-authoring-field="name"] input`)).toHaveValue(cardName(n));
-    await expect.poll(() => page.evaluate(() => window.SillyTavern.getContext().chat.length)).toBeGreaterThan(0);
+    await expect.poll(() => page.evaluate(async () => (await import('/scripts/st-context.js')).getContext().chat.length)).toBeGreaterThan(0);
 }
 
 async function readCard(page, n) {
@@ -123,14 +124,20 @@ test('a primary save completed after selecting B cannot mutate B or reopen A', a
         await dialog.locator('select').selectOption('FE1 Atlas');
         await expect.poll(() => observed).toBe(true);
         await selectCharacter(page, 3);
-        const before = await page.evaluate(() => window.SillyTavern.getContext().chat.map(message => message.mes));
+        const before = await page.evaluate(async () => {
+            const { getContext } = await import('/scripts/st-context.js');
+            return getContext().chat.map(message => message.mes);
+        });
         release();
         await expect(dialog.getByRole('alert')).toContainText('Character changed');
         await dialog.getByRole('checkbox', { name: 'FE1 Archive', exact: true }).click();
         await expect(dialog.getByRole('alert')).toContainText('Character changed');
         await expect(dialog.getByRole('checkbox', { name: 'FE1 Archive', exact: true })).not.toBeChecked();
         expect((await readCard(page, 3)).data?.extensions?.world ?? '').not.toBe('FE1 Atlas');
-        expect(await page.evaluate(() => window.SillyTavern.getContext().chat.map(message => message.mes))).toEqual(before);
+        expect(await page.evaluate(async () => {
+            const { getContext } = await import('/scripts/st-context.js');
+            return getContext().chat.map(message => message.mes);
+        })).toEqual(before);
         await page.keyboard.press('Escape');
         await expect(page.locator('dialog[data-react-popup]')).toHaveCount(0);
         await expect(page.locator(`${authoring} [data-react-authoring-field="name"] input`)).toHaveValue(cardName(3));

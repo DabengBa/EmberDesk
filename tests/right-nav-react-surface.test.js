@@ -34,7 +34,7 @@ describe('right navigation panel React surface', () => {
             'result_info_text', 'result_info_total_tokens', 'result_info_permanent_tokens',
             'chartokenwarning', 'hideCharPanelAvatarButton',
             'rm_ch_create_block', 'form_create', 'character_name_pole',
-            'avatar_div', 'avatar_load_preview', 'add_avatar_button',
+            'avatar_div', 'avatar_load_preview',
             'rm_button_back', 'favorite_button', 'world_button', 'delete_button',
             'fav_checkbox', 'create_button', 'create_button_label',
             'char-management-dropdown',
@@ -73,10 +73,22 @@ describe('right navigation panel React surface', () => {
         expect(mountIdx).toBeLessThan(coreIdx);
     });
 
+    test('React navigation and toolbar use the lifecycle command without native navigation listeners', () => {
+        const toolbar = readRepoFile('app/components/character-library/CharacterLibraryToolbar.tsx');
+        const domHandlers = readRepoFile('public/script.js');
+        for (const [id, action] of [['rm_button_selected_ch', 'current'], ['rm_button_characters', 'characters'], ['rm_button_back', 'back'], ['rm_button_create', 'create']]) {
+            expect(panel).toMatch(new RegExp(`id="${id}"[^\\n]*onClick=\\{\\(\\) => onNavigate\\('${action}'\\)\\}`));
+            expect(domHandlers).not.toContain(`getElementById('${id}')?.addEventListener`);
+        }
+        expect(toolbar).toContain('onClick={bridge.onCreateCharacter}');
+        expect(script).toContain("onCreateCharacter: () => runCharacterNavigation('create')");
+        expect(script).toContain('onNavigate: runCharacterNavigation');
+    });
+
     test('RossAscends resolves mounted controls at init and uses the live drawer service', () => {
         const initIdx = rossMods.indexOf('export function initRossMods(');
         const captureIdx = rossMods.indexOf("SelectedCharacterTab = document.getElementById('rm_button_selected_ch')");
-        const bindIdx = rossMods.indexOf("$('#rm_ch_create_block').on('input'");
+        const bindIdx = rossMods.indexOf("document.getElementById('rm_ch_create_block')?.addEventListener('input'");
         expect(initIdx).toBeGreaterThan(-1);
         expect(captureIdx).toBeGreaterThan(initIdx);
         expect(bindIdx).toBeGreaterThan(initIdx);

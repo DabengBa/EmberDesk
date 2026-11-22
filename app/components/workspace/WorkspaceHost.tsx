@@ -104,32 +104,7 @@ export function WorkspaceHost() {
                 </dialog>
                 {/* templates for JS to reuse when needed */}
 
-                <div id="past_chat_template" className="template_element">
-                    <div className="select_chat_block_wrapper flex-container">
-                        <div className="select_chat_block  wide100p flex-container" {...{ file_name: '' }}>
-                            <div className="avatar"><img src="img/No-Image-Placeholder.svg" loading="lazy" decoding="async" /></div>
-                            <div className="select_chat_name_wrapper">
-                                <div className="flex-container alignItemsCenter">
-                                    <small className="select_chat_block_filename select_chat_block_filename_item"></small>
-                                    <div title="Rename chat file" className="renameChatButton hoverglow opacity50p fa-solid fa-pencil fa-sm" data-i18n="[title]Rename chat file"></div>
-                                </div>
-                                <div className="flex-container gap10px alignItemsCenter">
-                                    <div className="select_chat_info flex-container">
-                                        <small className="chat_messages_date select_chat_block_filename_item"></small>
-                                        <small className="chat_file_size select_chat_block_filename_item"></small>
-                                        <small className="chat_messages_num select_chat_block_filename_item"></small>
-                                    </div>
-                                    <div className="select_chat_actions flex-container gap10px">
-                                        <button type="button" title="Export JSONL chat file" aria-label="Export JSONL chat file" data-format="jsonl" className="exportRawChatButton chat-file-action fa-solid fa-file-export" data-i18n="[title][aria-label]Export JSONL chat file"></button>
-                                        <button type="button" title="Download chat as plain text document" aria-label="Download chat as plain text document" data-format="txt" className="exportChatButton chat-file-action fa-solid fa-file-lines" data-i18n="[title][aria-label]Download chat as plain text document"></button>
-                                        <button type="button" title="Delete chat file" aria-label="Delete chat file" {...{ file_name: '' }} className="PastChat_cross chat-file-action fa-solid fa-skull" data-i18n="[title][aria-label]Delete chat file"></button>
-                                    </div>
-                                </div>
-                            </div>
-                            <div className="select_chat_block_mes"></div>
-                        </div>
-                    </div>
-                </div>
+
                 <div id="tag_view_template" className="template_element">
                     <div className="tag_view_item">
                         <div className="drag-handle" data-i18n="[title]Drag to reorder tag">☰</div>

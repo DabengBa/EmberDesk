@@ -2,6 +2,7 @@ import { expect, jest, test } from '@jest/globals';
 import { readFileSync } from 'node:fs';
 import { runInNewContext } from 'node:vm';
 import { buildRawGenerationPrompt, createGenerationCallerService } from '../app/lib/generation/caller.ts';
+import { createGenerationRuntimeControls } from '../public/scripts/generation-shell-context.js';
 
 const source = readFileSync(new URL('../public/script.js', import.meta.url), 'utf8');
 
@@ -18,7 +19,8 @@ function shellFixture() {
         main_api: 'openai', name2: 'Alice', oai_settings: { openai_max_tokens: 200 }, amount_gen: 80,
         getCurrentChatId: () => 'chat-a', substituteParams: text => text.replaceAll('{{char}}', 'Alice'),
         sendOpenAIRequest: jest.fn(async () => ({ text: 'reply' })),
-        generationBootstrapAdmission: { stop: () => false }, streamingProcessor: null, abortController: null,
+        generationRuntimeControls: createGenerationRuntimeControls({ load: jest.fn(), readIdentity: jest.fn(), installAttempt: jest.fn() }),
+        streamingProcessor: null, abortController: null,
         mountReactMainChatMessageListPanel: jest.fn(),
     };
     const start = source.indexOf('const generationCaller = createGenerationCallerService({');

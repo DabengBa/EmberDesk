@@ -50,8 +50,9 @@ const test = base.extend({
                 await testSetup.awaitST({ page });
                 if (!temporary) await selectCharacterInFreshChat(page, characterName);
                 await enableOpenAi(page, { streamOpenAi });
-                await page.evaluate(endpoint => {
-                    Object.assign(window.SillyTavern.getContext().chatCompletionSettings, {
+                await page.evaluate(async endpoint => {
+                    const { getContext } = await import('/scripts/st-context.js');
+                    Object.assign(getContext().chatCompletionSettings, {
                         custom_url: endpoint, reply_pipeline: { enabled: false },
                     });
                 }, `http://127.0.0.1:${model.address().port}/v1`);
@@ -79,7 +80,8 @@ async function openCharacterLibrary(page) {
 async function selectCharacterInFreshChat(page, name) {
     await openCharacterLibrary(page);
     const selectedName = await page.evaluate(async (characterNameToSelect) => {
-        const context = window.SillyTavern.getContext();
+        const { getContext } = await import('/scripts/st-context.js');
+        const context = getContext();
         const characterId = context.characters.findIndex(character => character?.name === characterNameToSelect);
 
         if (characterId < 0) {
@@ -92,7 +94,8 @@ async function selectCharacterInFreshChat(page, name) {
 
     expect(selectedName).toBe(name);
     await page.evaluate(async (nextChatName) => {
-        const context = window.SillyTavern.getContext();
+        const { getContext } = await import('/scripts/st-context.js');
+        const context = getContext();
         await context.openCharacterChat(nextChatName);
     }, seededChatName);
     await page.evaluate(async () => {
@@ -103,8 +106,9 @@ async function selectCharacterInFreshChat(page, name) {
 }
 
 async function enableOpenAi(page, { streamOpenAi = false } = {}) {
-    await page.evaluate(({ streamEnabled }) => {
-        const context = window.SillyTavern.getContext();
+    await page.evaluate(async ({ streamEnabled }) => {
+        const { getContext } = await import('/scripts/st-context.js');
+        const context = getContext();
         context.powerUserSettings.stream_fade_in = false;
         context.powerUserSettings.streaming_fps = 60;
         context.chatCompletionSettings.chat_completion_source = 'openai';
@@ -348,22 +352,25 @@ test('non-stream feedback can stop attachment preparation without losing the dra
  */
 async function waitForRegenerateSettled(page) {
     await expect.poll(async () => page.evaluate(async () => {
+        const { getContext } = await import('/scripts/st-context.js');
         const script = await import('/script.js');
         return script.isGenerating() === false
-            && window.SillyTavern.getContext().streamingProcessor === null;
+            && getContext().streamingProcessor === null;
     }), { timeout: 30_000 }).toBe(true);
 }
 
 async function lastMessageText(page) {
-    return page.evaluate(() => {
-        const script = window.SillyTavern.getContext();
+    return page.evaluate(async () => {
+        const { getContext } = await import('/scripts/st-context.js');
+        const script = getContext();
         return String(script.chat.at(-1)?.mes ?? '');
     });
 }
 
 async function chatSnapshot(page) {
-    return page.evaluate(() => {
-        const context = window.SillyTavern.getContext();
+    return page.evaluate(async () => {
+        const { getContext } = await import('/scripts/st-context.js');
+        const context = getContext();
         return context.chat.map(message => ({
             is_user: Boolean(message.is_user),
             is_system: Boolean(message.is_system),
@@ -468,10 +475,11 @@ test('temporary assistant regenerates with a browser action and cancels visibly 
         { tool: 'custom', content: 'continued input' }, { tool: 'last', content: ' CONTINUED_TEMPORARY_REPLY' },
     ], { temporary: true, streamOpenAi: true });
     await page.evaluate(async () => {
+        const { getContext } = await import('/scripts/st-context.js');
         const { feature_settings } = await import('/scripts/feature-settings.js');
         feature_settings.tool_bindings = [{ name: 'custom', enabled: true,
             actionBody: 'if (args.content === "fail action") throw new Error("controlled action failure"); return "browser:" + args.content;' }];
-        window.SillyTavern.getContext().chatCompletionSettings.reply_pipeline = { enabled: true, steps: [{ tool: 'custom' }, { tool: 'last' }] };
+        getContext().chatCompletionSettings.reply_pipeline = { enabled: true, steps: [{ tool: 'custom' }, { tool: 'last' }] };
     });
     const writes = [];
     page.on('request', request => {
@@ -573,7 +581,8 @@ test.describe('chat regenerate', () => {
 
         // Persist a same-turn pipeline/tool card and second reply so regeneration reads them from the canonical chat.
         await page.evaluate(async () => {
-            const context = window.SillyTavern.getContext();
+            const { getContext } = await import('/scripts/st-context.js');
+            const context = getContext();
             const toolCard = {
                 is_user: false,
                 is_system: true,
@@ -657,8 +666,9 @@ test.describe('chat regenerate', () => {
     test('can stop while preparing a replacement without sending create', async ({ page, characterModel }) => {
         const requests = await characterModel([{ content: 'EARLY_STOP_ORIGINAL' }]);
         await sendCharacterMessage(page, 'first question', 'EARLY_STOP_ORIGINAL');
-        await page.evaluate(() => {
-            const settings = window.SillyTavern.getContext().chatCompletionSettings;
+        await page.evaluate(async () => {
+            const { getContext } = await import('/scripts/st-context.js');
+            const settings = getContext().chatCompletionSettings;
             settings.temperature = settings.temperature === 0.25 ? 0.5 : 0.25;
         });
         const gate = Promise.withResolvers();
@@ -730,7 +740,7 @@ test.describe('chat regenerate', () => {
         await characterModel([{ content: 'HANDOFF_ORIGINAL' }, { content: 'HANDOFF_REPLACEMENT', finish: finish.promise }], { streamOpenAi: true });
         await sendCharacterMessage(page, 'first question', 'HANDOFF_ORIGINAL');
         const originalSlot = await page.locator('#chat .mes').filter({ hasText: 'HANDOFF_ORIGINAL' }).getAttribute('mesid');
-        const name = await page.evaluate(() => window.SillyTavern.getContext().getCurrentChatId());
+        const name = await page.evaluate(async () => (await import('/scripts/st-context.js')).getContext().getCurrentChatId());
         const releaseReload = Promise.withResolvers();
         const reloadStarted = Promise.withResolvers();
         try {
@@ -760,7 +770,8 @@ test.describe('chat regenerate', () => {
         await page.reload();
         await testSetup.awaitST({ page });
         await page.evaluate(async ({ character, chat }) => {
-            const context = window.SillyTavern.getContext();
+            const { getContext } = await import('/scripts/st-context.js');
+            const context = getContext();
             await context.selectCharacterById(context.characters.findIndex(card => card.name === character));
             await context.openCharacterChat(chat);
         }, { character: characterName, chat: name });
@@ -809,7 +820,8 @@ test.describe('chat regenerate', () => {
             await selectCharacterInFreshChat(page, characterName);
             await enableOpenAi(page, { streamOpenAi: true });
             const chatName = await page.evaluate(async endpoint => {
-                const context = window.SillyTavern.getContext();
+                const { getContext } = await import('/scripts/st-context.js');
+                const context = getContext();
                 Object.assign(context.chatCompletionSettings, { custom_url: endpoint, reply_pipeline: { enabled: false } });
                 const script = await import('/script.js');
                 const book = await fetch('/api/worldinfo/edit', {
@@ -857,14 +869,17 @@ test.describe('chat regenerate', () => {
             expect(firstPrompt).toContain('Browser temporary lore marker');
             expect(firstPrompt).toContain('Browser scan lore marker');
             expect(firstPrompt).not.toMatch(/Original world marker|Filtered lore marker/);
-            expect(await page.evaluate(() => window.SillyTavern.getContext().chat.find(row => row.is_user)?.extra?.files))
+            expect(await page.evaluate(async () => {
+                const { getContext } = await import('/scripts/st-context.js');
+                return getContext().chat.find(row => row.is_user)?.extra?.files;
+            }))
                 .toEqual([expect.objectContaining({ name: 'read-me.txt' })]);
             await page.evaluate(async () => (await import('/script.js')).regenerateLastReply());
             await expect(page.getByText('PARTIAL_NEW_', { exact: true })).toBeVisible();
             await expect(page.locator('#chat').getByText('OLD_REPLY', { exact: true })).toHaveCount(0);
             await expect(page.locator('#mes_stop')).toBeVisible();
             await expect(page.locator('#send_but')).toBeHidden();
-            const openChat = name => page.evaluate(chat => window.SillyTavern.getContext().openCharacterChat(chat), name);
+            const openChat = name => page.evaluate(async chat => (await import('/scripts/st-context.js')).getContext().openCharacterChat(chat), name);
             await openChat(seededChatName);
             await expect(page.getByText('PARTIAL_NEW_', { exact: true })).toHaveCount(0);
             await openChat(chatName);
@@ -873,7 +888,8 @@ test.describe('chat regenerate', () => {
             await page.reload();
             await testSetup.awaitST({ page });
             await page.evaluate(async ({ name, chat }) => {
-                const context = window.SillyTavern.getContext();
+                const { getContext } = await import('/scripts/st-context.js');
+                const context = getContext();
                 await context.selectCharacterById(context.characters.findIndex(card => card.name === name));
                 await context.openCharacterChat(chat);
             }, { name: characterName, chat: chatName });
@@ -917,7 +933,7 @@ test.describe('chat regenerate', () => {
             discoveries++;
             await route.fulfill({ json: { id: 'historical-run', status: 'completed', version: 'old-chat', chatVersion: 'current-chat' } });
         });
-        const open = () => page.evaluate(async chat => window.SillyTavern.getContext().openCharacterChat(chat), seededChatName);
+        const open = () => page.evaluate(async chat => (await import('/scripts/st-context.js')).getContext().openCharacterChat(chat), seededChatName);
         await open();
         await expect(page.getByText(savedReply, { exact: true })).toBeVisible();
         await expect.poll(() => discoveries).toBe(2);
@@ -1003,7 +1019,8 @@ test.describe('chat regenerate', () => {
             await selectCharacterInFreshChat(page, characterName);
             await enableOpenAi(page, { streamOpenAi: true });
             const chatName = await page.evaluate(async endpoint => {
-                const context = window.SillyTavern.getContext();
+                const { getContext } = await import('/scripts/st-context.js');
+                const context = getContext();
                 Object.assign(context.chatCompletionSettings, { custom_url: endpoint, reply_pipeline: { enabled: true, steps: [{ tool: 'custom_step' }, { tool: 'last_step' }] } });
                 const { feature_settings } = await import('/scripts/feature-settings.js');
                 feature_settings.tool_bindings = [{ name: 'custom_step', enabled: true,
@@ -1026,7 +1043,8 @@ test.describe('chat regenerate', () => {
                 await page.reload();
                 await testSetup.awaitST({ page });
                 await page.evaluate(async ({ name, chat }) => {
-                    const context = window.SillyTavern.getContext();
+                    const { getContext } = await import('/scripts/st-context.js');
+                    const context = getContext();
                     await context.selectCharacterById(context.characters.findIndex(card => card.name === name));
                     await context.openCharacterChat(chat);
                 }, { name: characterName, chat: chatName });
@@ -1036,7 +1054,10 @@ test.describe('chat regenerate', () => {
             const summary = liveCard.locator(':scope > summary');
             await summary.click({ timeout: 5000 });
             await expect(liveCard.locator('[data-pipeline-step="custom_step"] [data-tool-invocation-name]')).toBeVisible();
-            expect(await page.evaluate(() => window.SillyTavern.getContext().chat.some(row => row.extra?.reply_pipeline_run))).toBe(false);
+            expect(await page.evaluate(async () => {
+                const { getContext } = await import('/scripts/st-context.js');
+                return getContext().chat.some(row => row.extra?.reply_pipeline_run);
+            })).toBe(false);
             await reopenChat();
             await expect(summary).toHaveText('Tool calls: custom_step');
             finishLastStep.resolve();
@@ -1086,8 +1107,9 @@ test.describe('chat regenerate', () => {
 
     test('sends the configured empty composer text through server generation', async ({ page, characterModel }) => {
         const requests = await characterModel([{ content: 'EMPTY_COMPOSER_REPLY' }]);
-        await page.evaluate(() => {
-            window.SillyTavern.getContext().chatCompletionSettings.send_if_empty = '  SENTINEL_EMPTY_TEXT  ';
+        await page.evaluate(async () => {
+            const { getContext } = await import('/scripts/st-context.js');
+            getContext().chatCompletionSettings.send_if_empty = '  SENTINEL_EMPTY_TEXT  ';
         });
         const browserRequests = [];
         page.on('request', request => {
@@ -1114,8 +1136,9 @@ test.describe('chat regenerate', () => {
 
         // A configured send_if_empty must not leak into a regenerate — the
         // composer is not part of this flow at all.
-        await page.evaluate(() => {
-            window.SillyTavern.getContext().chatCompletionSettings.send_if_empty = 'SENTINEL_EMPTY_TEXT';
+        await page.evaluate(async () => {
+            const { getContext } = await import('/scripts/st-context.js');
+            getContext().chatCompletionSettings.send_if_empty = 'SENTINEL_EMPTY_TEXT';
         });
 
         await expectRunStatus(page, await regenerateCharacter(page), 'completed');

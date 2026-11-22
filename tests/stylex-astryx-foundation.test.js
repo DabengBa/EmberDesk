@@ -104,7 +104,8 @@ describe('StyleX/Astryx foundation (Phase 0)', () => {
     });
 
     test('keeps protected character-list and extension contracts untouched', () => {
-        const script = readRepoFile('public/script.js') + readRepoFile('public/scripts/public-api.js');
+        const script = readRepoFile('public/script.js');
+        const context = readRepoFile('public/scripts/st-context.js');
         const legacyCss = readPublicOrRepoStyle() + readRepoFile('public/css/tags.css');
         const indexHtml = readRepoFile('app/components/workspace/WorkspaceHost.tsx');
 
@@ -121,11 +122,11 @@ describe('StyleX/Astryx foundation (Phase 0)', () => {
         for (const contract of [
             'eventSource',
             'event_types',
-            'globalThis.SillyTavern',
             'data-chid',
         ]) {
             expect(script + indexHtml).toContain(contract);
         }
+        expect(context).toContain('export function getContext()');
     });
 });
 

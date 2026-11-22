@@ -5,7 +5,8 @@ test.setTimeout(60_000);
 
 async function selectCharacter(page, name) {
     await page.evaluate(async name => {
-        const context = window.SillyTavern.getContext();
+        const { getContext } = await import('/scripts/st-context.js');
+        const context = getContext();
         context.chatCompletionSettings.chat_memory_enabled = false;
         const index = context.characters.findIndex(character => character.name === name);
         if (index < 0) throw new Error(`Missing seeded character ${name}`);
@@ -86,7 +87,8 @@ test('CtrlShift scrolling uses native chat geometry without duplicating edit sho
     await page.emulateMedia({ reducedMotion: 'reduce' });
     await selectCharacter(page, 'Dev Character 038');
     await page.evaluate(async () => {
-        const context = window.SillyTavern.getContext();
+        const { getContext } = await import('/scripts/st-context.js');
+        const context = getContext();
         context.chat.splice(0, context.chat.length, ...Array.from({ length: 24 }, (_, index) => ({
             name: 'Assistant', is_user: false, is_system: false, mes: `FE3 message ${index}\n\n${'A long visible chat line. '.repeat(30)}`, send_date: Date.now(),
         })));
@@ -109,14 +111,15 @@ test('CtrlShift scrolling uses native chat geometry without duplicating edit sho
     await expect(page.locator('#chat > .mes[mesid="23"] #curEditTextarea')).toHaveCount(1);
     await page.locator('#curEditTextarea').press('Escape');
     await expect(page.locator('#curEditTextarea')).toHaveCount(0);
-    expect(await page.evaluate(() => window.SillyTavern.getContext().chat.length)).toBe(24);
+    expect(await page.evaluate(async () => (await import('/scripts/st-context.js')).getContext().chat.length)).toBe(24);
 });
 
 test('reasoning reads the current chat and preserves React message identity and formatting', async ({ page }) => {
     await testSetup.awaitST({ page });
     await selectCharacter(page, 'Dev Character 039');
     await page.evaluate(async () => {
-        const context = window.SillyTavern.getContext();
+        const { getContext } = await import('/scripts/st-context.js');
+        const context = getContext();
         context.chat.splice(0, context.chat.length, { name: 'Assistant', is_user: false, is_system: false, mes: '**Before reasoning**', send_date: Date.now() });
         await context.printMessages();
     });
@@ -124,9 +127,10 @@ test('reasoning reads the current chat and preserves React message identity and 
     await expect(row.locator('.mes_text strong')).toHaveText('Before reasoning');
     await row.evaluate(element => { element.dataset.fe3Identity = 'same-dom-node'; });
     const parsed = await page.evaluate(async () => {
+        const { getContext } = await import('/scripts/st-context.js');
         const { REASONING_PREFIX, REASONING_SUFFIX } = await import('/scripts/constants.js');
         const { eventSource, event_types } = await import('/scripts/events.js');
-        const context = window.SillyTavern.getContext();
+        const context = getContext();
         const message = context.chat[0];
         message.mes = `${REASONING_PREFIX}FE3 thought${REASONING_SUFFIX}\n**After reasoning**`;
         await eventSource.emit(event_types.MESSAGE_UPDATED, 0);
@@ -143,7 +147,8 @@ test('reasoning reads the current chat and preserves React message identity and 
 test('React reasoning mounts safe fragments without losing formatting or scoped styles', async ({ page }) => {
     await testSetup.awaitST({ page });
     await page.evaluate(async () => {
-        const context = window.SillyTavern.getContext();
+        const { getContext } = await import('/scripts/st-context.js');
+        const context = getContext();
         context.chat.splice(0, context.chat.length, {
             name: 'Assistant', is_user: false, is_system: false, mes: 'Response', send_date: Date.now(),
             extra: { reasoning: '**Legacy thought**\n\n`safe code`\n\n<style>.reasoning-accent { color: red; }</style><span class="reasoning-accent">Styled thought</span><a target="_blank" href="https://example.com/">Reference</a><img src="invalid" onerror="window.__fe3ReasoningXss = true"><script>window.__fe3ReasoningXss = true</script><a href="javascript:alert(1)">Unsafe link</a>' },

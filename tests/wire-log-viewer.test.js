@@ -25,8 +25,8 @@ async function loadClientSources() {
         'app/components/settings/SettingsSurface.tsx',
         'app/components/options-menu/OptionsMenu.tsx',
         'app/workspace-panels.tsx',
+        'public/scripts/chat-history-commands.js',
         'public/script.js',
-        'public/scripts/dom-handlers.js',
         ...names
             .filter(name => name.endsWith('.ts') || name.endsWith('.tsx'))
             .map(name => `app/components/wire-log/${name}`),
@@ -132,7 +132,7 @@ describe('wire log viewer contract', () => {
     test('opens from the chat workspace bottom-left menu', async () => {
         const optionsMenu = sources['app/components/options-menu/OptionsMenu.tsx'];
         const script = sources['public/script.js'];
-        const domHandlers = sources['public/scripts/dom-handlers.js'];
+        const domHandlers = sources['public/scripts/chat-history-commands.js'];
 
         expect(optionsMenu).toContain('id="option_wire_log"');
         // The menu passes the stable source key; ContractButton translates it.

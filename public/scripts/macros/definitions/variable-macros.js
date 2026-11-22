@@ -1,11 +1,12 @@
 import { MacroRegistry, MacroCategory, MacroValueType } from '../engine/MacroRegistry.js';
+import { getContext } from '../../st-context.js';
 
 /**
  * Registers variable-related {{...}} macros that operate on local and global
  * variables (e.g. {{setvar}}, {{getvar}}, {{incvar}}, etc.).
  */
 export function registerVariableMacros() {
-    const ctx = SillyTavern.getContext();
+    const ctx = getContext();
 
     // {{setvar::name::value}} -> '' (side-effect on local variable)
     MacroRegistry.registerMacro('setvar', {

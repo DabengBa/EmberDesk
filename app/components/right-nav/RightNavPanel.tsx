@@ -1,3 +1,4 @@
+import { useLayoutEffect, useRef } from 'react';
 import { ContractButton } from '../contract/ContractButton';
 import { ContractIconButton } from '../contract/ContractIconButton';
 import { translate, useTranslated } from '@/compat/i18n.js';
@@ -12,8 +13,50 @@ import { useInlineDrawer } from '../../lib/workspace-drawer-service';
  */
 export type CharacterSortSelection = { field: string; order: string | undefined; rule: string | undefined };
 
-export function RightNavPanel({ onCharacterSortChange }: { onCharacterSortChange: (selection: CharacterSortSelection) => void }) {
+export function RightNavPanel({ onCharacterSortChange, onNavigate, onFieldInput, onToggleFavorite, openCharacterFilePicker, openExternalCharacterImport, importSelectedCharacterFiles, replaceCharacterFromFile, onExport }: {
+    onFieldInput?: (id: string, value: string) => void;
+    onToggleFavorite?: () => void;
+    onCharacterSortChange: (selection: CharacterSortSelection) => void;
+    onNavigate: (action: 'characters' | 'back' | 'create' | 'current') => void;
+    openCharacterFilePicker?: () => void;
+    openExternalCharacterImport?: () => void;
+    importSelectedCharacterFiles?: (files: File[]) => Promise<void>;
+    replaceCharacterFromFile?: (file?: File) => Promise<void>;
+    onExport?: (trigger: HTMLElement) => void;
+}) {
     const notes = useInlineDrawer();
+    const avatarPanel = useRef<HTMLDivElement>(null);
+    const avatarMotion = useRef<{ animation?: Animation; hidden: boolean; overflow: string }>({ hidden: false, overflow: '' });
+    useLayoutEffect(() => () => { avatarMotion.current.animation?.cancel(); }, []);
+
+    function toggleAvatarPanel() {
+        const panel = avatarPanel.current;
+        if (!panel) return;
+        const hidden = avatarMotion.current.animation ? avatarMotion.current.hidden : getComputedStyle(panel).display === 'none';
+        avatarMotion.current.hidden = !hidden;
+        if (avatarMotion.current.animation) {
+            avatarMotion.current.animation.cancel();
+            avatarMotion.current.animation = undefined;
+            panel.style.overflow = avatarMotion.current.overflow;
+        }
+        if (hidden) panel.style.display = '';
+        if (hidden && getComputedStyle(panel).display === 'none') panel.style.display = 'block';
+        avatarMotion.current.overflow = panel.style.overflow;
+        if (!panel.animate || globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches) {
+            panel.style.display = hidden ? panel.style.display : 'none';
+            return;
+        }
+        panel.style.overflow = 'hidden';
+        const height = `${panel.scrollHeight}px`;
+        const animation = panel.animate(hidden ? [{ height: '0px' }, { height }] : [{ height }, { height: '0px' }], { duration: 400, easing: 'ease' });
+        avatarMotion.current.animation = animation;
+        animation.finished.then(() => {
+            if (avatarMotion.current.animation !== animation) return;
+            if (!hidden) panel.style.display = 'none';
+            panel.style.overflow = avatarMotion.current.overflow;
+            avatarMotion.current.animation = undefined;
+        }).catch(() => {});
+    }
     useTranslated('');
     return (
         <>
@@ -24,7 +67,7 @@ export function RightNavPanel({ onCharacterSortChange }: { onCharacterSortChange
                     <div id="right-nav-panel-tabs" className="workspace-panel-header">
                         <div className="workspace-panel-title">
                             <span className="workspace-panel-title-label" >{translate('Characters')}</span>
-                            <div id="rm_button_selected_ch">
+                            <div id="rm_button_selected_ch" onClick={() => onNavigate('current')}>
                                 {/* Legacy fills this heading with the selected
                                     character name; stays empty until one is
                                     selected so the panel title shows "Characters". */}
@@ -45,9 +88,9 @@ export function RightNavPanel({ onCharacterSortChange }: { onCharacterSortChange
                                     </div>
                                 </div>
                                 <a id="chartokenwarning" className="right_menu_button fa-solid fa-triangle-exclamation" href="usage/core-concepts/characterdesign/#character-tokens" target="_blank" rel="noreferrer" title="About Token 'Limits'" aria-label="About Token 'Limits'" data-i18n="[title]About Token 'Limits';[aria-label]About Token 'Limits'"></a>
-                                <ContractIconButton id="hideCharPanelAvatarButton" className="right_menu_button" label="Toggle character info panel" nativeTitle title="Toggle character info panel" icon={<i className="fa-solid fa-eye" aria-hidden="true" />} />
+                                <ContractIconButton onClick={toggleAvatarPanel} id="hideCharPanelAvatarButton" className="right_menu_button" label="Toggle character info panel" nativeTitle title="Toggle character info panel" icon={<i className="fa-solid fa-eye" aria-hidden="true" />} />
                             </div>
-                            <ContractIconButton id="rm_button_characters" tabIndex={0} className="right_menu_button" label="Characters" nativeTitle title="Select/Create Characters" icon={<i className="fa-solid fa-list-ul" aria-hidden="true" />} />
+                            <ContractIconButton id="rm_button_characters" tabIndex={0} className="right_menu_button" label="Characters" nativeTitle title="Select/Create Characters" icon={<i className="fa-solid fa-list-ul" aria-hidden="true" />} onClick={() => onNavigate('characters')} />
                         </div>
                     </div>
                 </div>
@@ -63,25 +106,24 @@ export function RightNavPanel({ onCharacterSortChange }: { onCharacterSortChange
                 <div className="scrollableInner">
                     <div name="Solo Char Create/Edit Panel" id="rm_ch_create_block" className="right_menu flex-container flexFlowColumn character-detail-panel" style={{ "display": "none" }}>
                         <form id="form_create" method="post" encType="multipart/form-data" onSubmit={(event) => event.preventDefault()}>
-                            <div id="avatar-and-name-block" className="character-detail-identity">
+                            <div ref={avatarPanel} id="avatar-and-name-block" className="character-detail-identity">
                                 <div id="name_div" className="character-detail-name">
-                                    <input id="character_name_pole" name="ch_name" className="text_pole" data-i18n="[placeholder]Name this character" placeholder="Name this character" defaultValue="" autoComplete="off" />
+                                    <input id="character_name_pole" onInput={event => onFieldInput?.(event.currentTarget.id, event.currentTarget.value)} name="ch_name" className="text_pole" data-i18n="[placeholder]Name this character" placeholder="Name this character" defaultValue="" autoComplete="off" />
                                     <div className="extension_token_counter character-detail-name-meta">
                                         <span >{translate('Tokens:')}</span> <span data-token-counter="character_name_pole" data-token-permanent="true">counting...</span>
                                     </div>
                                 </div>
                                 <div className="flex-container flexFlowColumn expander flexNoGap character-detail-main">
                                     <div id="avatar_div" className="avatar_div buttons_block alignitemsflexstart justifySpaceBetween flexnowrap character-detail-hero">
-                                        <label id="avatar_div_div" className="add_avatar avatar character-detail-avatar" htmlFor="add_avatar_button" title="Click to select a new avatar for this character" data-i18n="[title]Click to select a new avatar for this character">
+                                        <div id="avatar_div_div" className="add_avatar avatar character-detail-avatar">
                                             <img id="avatar_load_preview" src="img/ai4.png" alt="avatar" />
-                                            <input hidden type="file" id="add_avatar_button" name="avatar" accept="image/*" />
-                                        </label>
+                                        </div>
                                         <div className="flex-container" id="avatar_controls">
                                             <div className="form_create_bottom_buttons_block buttons_block character-detail-primary-actions">
-                                                <ContractIconButton id="rm_button_back" className="menu_button" label="Back" icon={<i className="fa-solid fa-left-long" aria-hidden="true" />} />
+                                                <ContractIconButton id="rm_button_back" className="menu_button" label="Back" icon={<i className="fa-solid fa-left-long" aria-hidden="true" />} onClick={() => onNavigate('back')} />
                                                 {/* <ContractIconButton id="renameCharButton" className="menu_button" label="Rename Character" nativeTitle title="Rename Character" icon={<i className="fa-solid fa-user-pen" aria-hidden="true" />} /> */}
                                                 <div className="character-detail-action-icons">
-                                                    <ContractIconButton id="favorite_button" className="menu_button" label="Add to Favorites" nativeTitle title="Add to Favorites" icon={<i className="fa-solid fa-star" aria-hidden="true" />} />
+                                                    <ContractIconButton id="favorite_button" onClick={onToggleFavorite} className="menu_button" label="Add to Favorites" nativeTitle title="Add to Favorites" icon={<i className="fa-solid fa-star" aria-hidden="true" />} />
                                                     <ContractIconButton id="world_button" className="menu_button" label="Character Lore" nativeTitle title={"Character Lore\n\nClick to load\nShift/Alt-click or long-press to open 'Link to World Info' popup"} titleKey="world_button_title" icon={<i className="fa-solid fa-globe" aria-hidden="true" />} />
                                                     <button id="delete_button" type="button" className="menu_button fa-solid fa-skull red_button" title="Delete Character" aria-label="Delete Character" data-i18n="[title][aria-label]Delete Character"></button>
                                                 </div>
@@ -112,7 +154,7 @@ export function RightNavPanel({ onCharacterSortChange }: { onCharacterSortChange
                                             <div className="character-detail-hidden-actions" aria-hidden="true">
 
                                                 <ContractIconButton className="chat_lorebook_button menu_button" label="Chat Lore" nativeTitle title={"Chat Lore\n\nClick to load\nShift/Alt-click or long-press to open 'Link to Chat Lorebook' popup"} titleKey="chat_lorebook_button_title" icon={<i className="fa-solid fa-passport" aria-hidden="true" />} />
-                                                <ContractIconButton id="export_button" className="menu_button" label="Export and Download" nativeTitle title="Export and Download" icon={<i className="fa-solid fa-file-export" aria-hidden="true" />} />
+                                                <ContractIconButton id="export_button" onClick={event => onExport?.(event.currentTarget)} className="menu_button" label="Export and Download" nativeTitle title="Export and Download" icon={<i className="fa-solid fa-file-export" aria-hidden="true" />} />
                                                 <ContractIconButton id="dupe_button" className="menu_button" label="Duplicate Character" nativeTitle title="Duplicate Character" icon={<i className="fa-solid fa-clone" aria-hidden="true" />} />
                                             </div>
                                         </div>
@@ -154,7 +196,7 @@ export function RightNavPanel({ onCharacterSortChange }: { onCharacterSortChange
                                     </div>
 
                                 </div>
-                                <textarea id="description_textarea" data-macros data-i18n="[placeholder]Description" placeholder="Description" name="description"></textarea>
+                                <textarea id="description_textarea" onInput={event => onFieldInput?.(event.currentTarget.id, event.currentTarget.value)} data-macros data-i18n="[placeholder]Description" placeholder="Description" name="description"></textarea>
                                 <div className="extension_token_counter">
                                     <span >{translate('Tokens:')}</span> <span data-token-counter="description_textarea" data-token-permanent="true">counting...</span>
                                 </div>
@@ -170,7 +212,7 @@ export function RightNavPanel({ onCharacterSortChange }: { onCharacterSortChange
                                     </div>
                                     <ContractButton className="menu_button menu_button_icon open_alternate_greetings margin0" label="Alt. Greetings" ariaLabel="Alternate greetings" title="Click to set additional greeting messages" nativeTitle icon={<i className="fa-solid fa-message" aria-hidden="true" />} />
                                 </div>
-                                <textarea id="firstmessage_textarea" data-macros data-i18n="[placeholder]First message" placeholder="First message" name="first_mes"></textarea>
+                                <textarea id="firstmessage_textarea" onInput={event => onFieldInput?.(event.currentTarget.id, event.currentTarget.value)} data-macros data-i18n="[placeholder]First message" placeholder="First message" name="first_mes"></textarea>
                                 <div className="extension_token_counter">
                                     <span >{translate('Tokens:')}</span> <span data-token-counter="firstmessage_textarea">counting...</span>
                                 </div>
@@ -189,18 +231,28 @@ export function RightNavPanel({ onCharacterSortChange }: { onCharacterSortChange
                     </div>
                     <div id="rm_character_import" className="right_menu" style={{ "display": "none" }}>
                         <form id="form_import" method="post" encType="multipart/form-data" onSubmit={(event) => event.preventDefault()}>
-                            <input multiple type="file" id="character_import_file" accept=".json, image/png, .yaml, .yml, .charx, .byaf" name="avatar" />
+                            <input multiple type="file" id="character_import_file" accept=".json, image/png, .yaml, .yml, .charx, .byaf" name="avatar" onChange={event => {
+                                const input = event.currentTarget;
+                                const files = Array.from(input.files ?? []);
+                                input.value = '';
+                                if (files.length) void importSelectedCharacterFiles?.(files);
+                            }} />
                             <input id="character_import_file_type" name="file_type" className="text_pole" defaultValue="" autoComplete="off" />
                         </form>
-                        <input type="file" id="character_replace_file" accept=".json, image/png, .yaml, .yml, .charx, .byaf" name="replace_avatar" hidden />
+                        <input type="file" id="character_replace_file" accept=".json, image/png, .yaml, .yml, .charx, .byaf" name="replace_avatar" hidden onChange={event => {
+                            const input = event.currentTarget;
+                            const file = input.files?.[0];
+                            input.value = '';
+                            void replaceCharacterFromFile?.(file);
+                        }} />
                     </div>
                     <div name="Character List Panel" id="rm_characters_block" className="right_menu">
                         <div id="charListFixedTop">
                             <div id="rm_button_bar">
                                 <div className="character-list-tool-group character-list-create-group">
-                                    <ContractButton id="rm_button_create" className="menu_button character-list-action" label="New" labelKey="Character Toolbar New" labelClassName="character-list-action-label" ariaLabel="Create New Character" title="Create New Character" nativeTitle icon={<i className="fa-solid fa-user-plus" aria-hidden="true" />} />
-                                    <ContractButton id="character_import_button" className="menu_button character-list-action" label="File" labelKey="Character Toolbar File" labelClassName="character-list-action-label" ariaLabel="Import Character from File" title="Import Character from File" nativeTitle icon={<i className="fa-solid fa-file-import" aria-hidden="true" />} />
-                                    <ContractButton id="external_import_button" className="menu_button character-list-action" label="URL" labelKey="Character Toolbar URL" labelClassName="character-list-action-label" ariaLabel="Import content from external URL" title="Import content from external URL" nativeTitle icon={<i className="fa-solid fa-cloud-arrow-down" aria-hidden="true" />} />
+                                    <ContractButton id="rm_button_create" className="menu_button character-list-action" label="New" labelKey="Character Toolbar New" labelClassName="character-list-action-label" ariaLabel="Create New Character" title="Create New Character" nativeTitle icon={<i className="fa-solid fa-user-plus" aria-hidden="true" />} onClick={() => onNavigate('create')} />
+                                    <ContractButton id="character_import_button" onClick={openCharacterFilePicker} className="menu_button character-list-action" label="File" labelKey="Character Toolbar File" labelClassName="character-list-action-label" ariaLabel="Import Character from File" title="Import Character from File" nativeTitle icon={<i className="fa-solid fa-file-import" aria-hidden="true" />} />
+                                    <ContractButton id="external_import_button" onClick={openExternalCharacterImport} className="menu_button character-list-action" label="URL" labelKey="Character Toolbar URL" labelClassName="character-list-action-label" ariaLabel="Import content from external URL" title="Import content from external URL" nativeTitle icon={<i className="fa-solid fa-cloud-arrow-down" aria-hidden="true" />} />
                                     <div id="rm_buttons_container">
                                         {/* Container for additional buttons added by extensions */}
                                     </div>

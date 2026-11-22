@@ -54,8 +54,9 @@ test('character authoring opens the bound world book directly and disables the a
     // The focused book editor opened on the bound book...
     await expect(page.locator('#WorldInfo.openDrawer')).toBeVisible({ timeout: 15_000 });
     await expect(page.locator('[data-world-info-react-control="world-select"] option:checked')).toHaveText(book);
-    const editorWorldName = await page.evaluate(() => {
-        const snapshot = window.SillyTavern?.getContext?.()?.worldInfo?.facadeSnapshot;
+    const editorWorldName = await page.evaluate(async () => {
+        const { getContext } = await import('/scripts/st-context.js');
+        const snapshot = getContext()?.worldInfo?.facadeSnapshot;
         return snapshot?.editorWorldName ?? null;
     });
     if (editorWorldName !== null) {

@@ -1,4 +1,187 @@
 import { translate } from './i18n.js';
+import { getCharacterLibraryFetchErrorData, hasCharacterLibraryPayloadChanged, projectCharacterLibraryQueryAgainstDeletedAvatars } from './character-library-query-helpers.js';
+
+/** Owns membership publication, refresh order, and realtime admission for the workspace list. */
+export function createCharacterListLifecycle(deps) {
+    const pendingDeletedCharacterAvatars = new Set();
+
+    function projectCharacterLibraryCharactersAgainstPendingDeletes(queryCharacters) {
+        const projection = projectCharacterLibraryQueryAgainstDeletedAvatars(
+            queryCharacters,
+            Array.from(pendingDeletedCharacterAvatars),
+        );
+
+        pendingDeletedCharacterAvatars.clear();
+        for (const avatar of projection.pendingDeletedAvatars) {
+            pendingDeletedCharacterAvatars.add(avatar);
+        }
+
+        return projection.characters;
+    }
+
+    function markPendingDeletion(avatars) {
+        for (const avatar of avatars) {
+            if (typeof avatar === 'string' && avatar.length > 0) pendingDeletedCharacterAvatars.add(avatar);
+        }
+    }
+
+    async function publish(snapshot) {
+        const characters = deps.getCharacters();
+        const normalizedCharacters = projectCharacterLibraryCharactersAgainstPendingDeletes(snapshot);
+        normalizedCharacters.forEach(deps.preserveLoadedCharacterChat);
+        if (!hasCharacterLibraryPayloadChanged(characters, normalizedCharacters)) {
+            return;
+        }
+        // Capture the active identity at the synchronous commit boundary, not when
+        // the request began: the user may have completed another selection since.
+        const previousAvatar = deps.getActiveAvatar();
+        if (previousAvatar && !normalizedCharacters.some(character => character.avatar === previousAvatar)) {
+            try {
+                await deps.prepareChatTransition();
+            } catch {
+                return false;
+            }
+            if (deps.getActiveAvatar() !== previousAvatar) return publish(snapshot);
+            await deps.warnMissingActive();
+            if (deps.getActiveAvatar() !== previousAvatar) return publish(snapshot);
+            try {
+                await deps.prepareChatTransition();
+            } catch {
+                return false;
+            }
+            if (deps.getActiveAvatar() !== previousAvatar) return publish(snapshot);
+            return deps.reload();
+        }
+        characters.splice(0, characters.length, ...normalizedCharacters);
+
+        if (previousAvatar) {
+            const newCharacterId = characters.findIndex(x => x.avatar === previousAvatar);
+            if (newCharacterId >= 0) {
+                deps.setCharacterId(newCharacterId);
+                // Consumers that bind to character object identity must refresh
+                // before an action can target the newly published objects.
+                deps.publishSnapshotEvent();
+                await deps.selectCharacterById(newCharacterId, { switchMenu: false });
+            }
+        } else {
+            deps.publishSnapshotEvent();
+        }
+
+        // Membership changes (add/import/rename/delete fallback) reprint in
+        // place: keep the current page and scroll offset so a single edit does
+        // not yank the library back to page one. Page stays valid via the
+        // clamp in renderCharacterListPage; navigation resets only happen on
+        // the explicit select_rm_characters re-entry gesture.
+        await deps.printCharacters(false);
+    }
+
+    let characterRefreshTail = Promise.resolve();
+
+    function refresh({ reportStatus = false, required = false } = {}) {
+        const refresh = characterRefreshTail.then(async () => {
+            try {
+                if (reportStatus && deps.isRealtimeRefreshBlocked()) return null;
+                const snapshot = await deps.fetchSnapshot();
+                // The user can enter bulk mode while the request is in flight.
+                if (reportStatus && deps.isRealtimeRefreshBlocked()) return null;
+                if (await publish(snapshot) === false) return reportStatus ? false : undefined;
+                return reportStatus ? true : undefined;
+            } catch (error) {
+                console.error('Failed to fetch characters:', error);
+                const errorData = getCharacterLibraryFetchErrorData(error);
+                if (errorData?.overflow && !reportStatus) {
+                    await deps.warnOverflow();
+                }
+                if (required) throw error;
+                return reportStatus ? false : undefined;
+            }
+        });
+        characterRefreshTail = refresh.catch(() => {});
+        return refresh;
+    }
+
+    function startRealtime() {
+        let source;
+        let dirty = false;
+        let running = false;
+        let retry;
+        let reconnect;
+        let stopped = false;
+
+        async function refreshRealtime() {
+            if (running || stopped) return;
+            running = true;
+            try {
+                while (dirty && !stopped) {
+                    dirty = false;
+                    const ok = await refresh({ reportStatus: true });
+                    if (ok === null) {
+                        dirty = true;
+                        break;
+                    }
+                    if (!ok) {
+                        dirty = true;
+                        retry = setTimeout(() => { retry = undefined; void refreshRealtime(); }, 2000);
+                        break;
+                    }
+                }
+            } finally {
+                running = false;
+                if (dirty && !retry && !stopped && !deps.isRealtimeRefreshBlocked()) void refreshRealtime();
+            }
+        }
+
+        function invalidate() {
+            dirty = true;
+            if (!retry) void refreshRealtime();
+        }
+
+        window.addEventListener('character-library-bulk-idle', () => {
+            if (dirty && !retry && !deps.isRealtimeRefreshBlocked()) void refreshRealtime();
+        });
+
+        function connect() {
+            stopped = false;
+            const connection = new EventSource('/api/characters/events');
+            source = connection;
+            connection.addEventListener('ready', invalidate);
+            connection.addEventListener('invalidate', invalidate);
+            connection.addEventListener('error', () => {
+                if (stopped || source !== connection || connection.readyState !== EventSource.CLOSED || reconnect) return;
+                reconnect = setTimeout(() => {
+                    reconnect = undefined;
+                    if (!stopped) connect();
+                }, 2000);
+            });
+        }
+
+        window.addEventListener('pagehide', () => {
+            stopped = true;
+            source?.close();
+            clearTimeout(retry);
+            clearTimeout(reconnect);
+            retry = undefined;
+            reconnect = undefined;
+        });
+        window.addEventListener('pageshow', event => { if (event.persisted) connect(); });
+        connect();
+    }
+
+    async function reconcileAfterDelete({ beforeSnapshot, deletedAvatars, deleteContext }) {
+        removeCharactersFromState(deps.getCharacters(), deletedAvatars);
+        const reconcileStartedAt = performance.now();
+        const reconciled = await deps.reconcileAfterDelete({ beforeSnapshot, deletedAvatars, deleteContext });
+        deps.markMetric('characterDeleteReconcileMs', performance.now() - reconcileStartedAt);
+        if (!reconciled) {
+            const printStartedAt = performance.now();
+            // Fallback preserves the page and scroll just as incremental reconciliation does.
+            await deps.printCharacters(false, { allowDuringCharacterDelete: true });
+            deps.markMetric('characterPrintMs', performance.now() - printStartedAt);
+        }
+    }
+
+    return { publish, refresh, startRealtime, markPendingDeletion, reconcileAfterDelete };
+}
 
 /**
  * Resolves current character ids to stable avatar keys.

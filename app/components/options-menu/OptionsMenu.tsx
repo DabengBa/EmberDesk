@@ -1,30 +1,63 @@
 import { ContractButton } from '../contract/ContractButton';
 import * as stylex from '@stylexjs/stylex';
+import { useLayoutEffect, type RefObject } from 'react';
+import type { createPopper } from '@popperjs/core';
+import { cancelOpacity, transitionOpacity } from '../../../public/scripts/chat-ui-motion.js';
+import { createOptionsMenuController } from '../../lib/history-panel-service';
 
 const optionStyles = stylex.create({ item: { justifyContent: 'flex-start', textAlign: 'start' } });
 
-/**
- * Options popup markup (React-owned inside #options). The shell keeps
- * display:none and is positioned by the lazy optionsPopper; item clicks are
- * dispatched by a document-delegated handler in dom-handlers.js so jQuery
- * .trigger('click', customData) compatibility is preserved for slash commands
- * and extensions. option_close_chat is intentionally duplicated in the legacy
- * markup — both elements are preserved.
- *
- * Items are Astryx ghost buttons: real <button> semantics (implicit role,
- * native Enter/Space) while keeping ids/classes for the delegated binding.
- * `.options-content` row styling is tag-agnostic (:is(a,button)).
- *
- * `showBackToMain` projects branch-chat state (was jQuery .show()/.hide() from
- * showBranchChatButtons). The item stays mounted when hidden so delegated
- * trigger('click') paths keep working.
- *
- * `canRegenerate` projects whether "Regenerate" may run right now (synced by
- * the shell every time the menu opens). The item stays mounted when disabled
- * so delegated trigger('click') paths keep working; the delegated handler
- * re-checks eligibility before dispatching.
- */
-export function OptionsMenu({ showBackToMain = false, canRegenerate = false, canContinue = false, onCommand }: { showBackToMain?: boolean; canRegenerate?: boolean; canContinue?: boolean; onCommand?: (id: string) => void }) {
+export type OptionsMenuRuntime = {
+    button: HTMLElement;
+    menu: HTMLElement;
+    createPopper: typeof createPopper;
+    getMotion(): { duration: number; easing: string };
+    onOpen(): void;
+};
+
+export function OptionsMenu({ showBackToMain = false, canRegenerate = false, canContinue = false, onCommand, runtime, closeRef }: {
+    showBackToMain?: boolean;
+    canRegenerate?: boolean;
+    canContinue?: boolean;
+    onCommand?: (id: string) => void;
+    runtime?: OptionsMenuRuntime;
+    closeRef: RefObject<(() => void) | null>;
+}) {
+    useLayoutEffect(() => {
+        if (!runtime) return;
+        const { button, menu } = runtime;
+        let popper: ReturnType<typeof createPopper> | undefined;
+        const controller = createOptionsMenuController({
+            show() {
+                button.setAttribute('aria-expanded', 'true');
+                if (getComputedStyle(menu).display === 'none') {
+                    menu.style.opacity = '0';
+                    menu.style.display = 'block';
+                }
+                transitionOpacity(menu, { ...runtime.getMotion(), opacity: 1 });
+                popper ??= runtime.createPopper(button, menu, { placement: 'top-start' });
+                void popper.update();
+                runtime.onOpen();
+            },
+            hide() {
+                button.setAttribute('aria-expanded', 'false');
+                transitionOpacity(menu, { ...runtime.getMotion(), opacity: 0, complete: () => { menu.style.display = 'none'; } });
+                void popper?.update();
+            },
+            focus: () => button.focus(),
+        });
+        const detach = controller.attach(button, button.ownerDocument, () => menu.matches(':hover, :focus-within') || button.matches(':hover, :focus'));
+        closeRef.current = controller.close;
+        return () => {
+            closeRef.current = null;
+            detach();
+            cancelOpacity(menu);
+            popper?.destroy();
+            menu.style.display = 'none';
+            button.setAttribute('aria-expanded', 'false');
+        };
+    }, [runtime, closeRef]);
+
     return (
         <>
         <div className="options-content" onClick={event => {

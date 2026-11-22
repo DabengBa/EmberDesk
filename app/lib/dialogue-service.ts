@@ -45,86 +45,32 @@ export interface BulkDeleteState {
     ariaLabel: string;
 }
 
-export interface BulkDeleteEffectPorts {
-    chat: { length: number };
-    metadata: { tainted?: boolean };
-    prepare(): void;
-
-    getIdentity(): unknown;
-
-    truncateUi(index: number): void;
-    save(): Promise<unknown>;
-
-    emitDeleted(index: number): Promise<unknown>;
-    refreshReact(identity: unknown): Promise<unknown>;
-
-    invalidSelection(): void;
-    cleanup(): void;
-}
-
-export async function runBulkDeleteEffects(deletedFrom: number, ports: BulkDeleteEffectPorts) {
-    ports.prepare();
-    try {
-        if (!(deletedFrom >= 0)) {
-            ports.invalidSelection();
-            return;
-        }
-        const identity = ports.getIdentity();
-        ports.chat.length = deletedFrom;
-        ports.truncateUi(deletedFrom);
-        ports.metadata.tainted = true;
-        await ports.save();
-
-        await ports.emitDeleted(deletedFrom);
-        await ports.refreshReact(identity);
-    } finally {
-        ports.cleanup();
-    }
-}
-
-export function selectLegacyDeleteRange(index: number, count: number, ports: {
-    clear(): void; markClicked(): void; announce(index: number): void; select(index: number): void;
-}) {
-    ports.clear();
-    ports.markClicked();
-    ports.announce(index);
-    for (let current = index; current < count; current++) ports.select(current);
-}
-
 export function createBulkDeleteController() {
     let state: BulkDeleteState = { active: false, selected: null, busy: false, summary: '', ariaLabel: 'Delete' };
-    let selectHandler: ((selected: number) => void) | undefined;
     const listeners = new Set<() => void>();
     function update(patch: Partial<BulkDeleteState>) {
-        state = { ...state, ...patch };
+        const snapshot = state = { ...state, ...patch };
         listeners.forEach(listener => listener());
+        return snapshot;
     }
     return {
         getSnapshot: () => state,
         subscribe(listener: () => void) { listeners.add(listener); return () => { listeners.delete(listener); }; },
-        open(summary: string) { update({ active: true, selected: null, busy: false, summary, ariaLabel: 'Delete' }); },
-        setSelectionHandler(handler: (selected: number) => void) { selectHandler = handler; },
-        choose(selected: number) { if (state.active && !state.busy) selectHandler?.(selected); },
+        open(summary: string) { if (!state.active) update({ active: true, selected: null, busy: false, summary, ariaLabel: 'Delete' }); },
         select(selected: number, summary: string, ariaLabel: string) {
-            if (!state.busy) update({ selected, summary, ariaLabel });
+            if (state.active && !state.busy) update({ selected, summary, ariaLabel });
         },
-        begin(summary: string) {
-            if (state.busy || state.selected === null) return false;
-            update({ busy: true, summary });
-            return true;
-        },
-        async confirm(summary: string, operation: (selected: number) => void | Promise<void>) {
-            if (state.busy || state.selected === null) return;
+        async confirm(summary: string, operation: (selected: number) => unknown) {
+            if (!state.active || state.busy || state.selected === null) return;
             const selected = state.selected;
-            update({ busy: true, summary });
+            const confirming = update({ busy: true, summary });
             try {
                 await operation(selected);
             } finally {
-                update({ active: false, selected: null, busy: false });
+                if (state === confirming) update({ active: false, selected: null, busy: false });
             }
         },
-        runEffects: runBulkDeleteEffects,
-        selectLegacyRange: selectLegacyDeleteRange,
+
         finish() { update({ active: false, selected: null, busy: false }); },
     };
 }

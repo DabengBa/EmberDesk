@@ -91,12 +91,13 @@ async function fixture() {
         window: { dispatchEvent: jest.fn() }, Event: class {}, toastr: { warning: jest.fn(), error: jest.fn() },
         t: strings => strings[0],
     };
-    const shellApi = new Function(...Object.keys(shellEnv), `let settingsReady = true, settingsDocumentRevision = 2, settings = {};
+    owner.observeRevision(2);
+    const shellApi = new Function(...Object.keys(shellEnv), `let settingsReady = true, settings = {};
         ${saveCode.replace('export async function ', 'async function ')}
         const { settings_revision, ...initial } = buildRuntimeSettingsPayload();
         runtimeSettingsPersistence.initialize(initial, settings_revision);
         ${installCode}
-        return { setReady: value => { settingsReady = value; }, getRevision: () => settingsDocumentRevision };`)(...Object.values(shellEnv));
+        return { setReady: value => { settingsReady = value; }, getRevision: runtimeSettingsConflict.getRevision };`)(...Object.values(shellEnv));
     await manager.initPresetManager();
     return { settings, presets, names, owner, requests, events, service, manager: manager.getPresetManager(), shellApi,
         setSettingsResponse: fn => { nextSettings = fn; }, setPresetResponse: fn => { nextPreset = fn; },

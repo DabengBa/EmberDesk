@@ -31,6 +31,8 @@ export function createGenerationRuntimeBootstrap({ load, readIdentity, installLi
                 if (typeof runtime.createGenerationLifecycleService !== 'function' || typeof runtime.executeGenerationAttempts !== 'function') {
                     throw new TypeError('Workspace bundle does not export the generation runtime.');
                 }
+
+
                 installAttempt(runtime.executeGenerationAttempts);
                 installLifecycle(runtime.createGenerationLifecycleService(readIdentity));
             }).catch(error => {
@@ -39,6 +41,15 @@ export function createGenerationRuntimeBootstrap({ load, readIdentity, installLi
             });
         }
         return pending;
+    };
+}
+
+export function createGenerationRuntimeControls({ load, readIdentity, installAttempt }) {
+    const admission = createGenerationBootstrapAdmission();
+    return {
+        enterBootstrap: admission.enter,
+        stopBootstrap: admission.stop,
+        ensureRuntime: createGenerationRuntimeBootstrap({ load, readIdentity, installAttempt, installLifecycle: installGenerationLifecycleService }),
     };
 }
 

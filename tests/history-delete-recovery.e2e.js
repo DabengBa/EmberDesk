@@ -4,7 +4,8 @@ import { testSetup } from './frontend/frontent-test-utils.js';
 async function prepare(page, message = 'U004 pending deletion recovery proof') {
     await testSetup.awaitST({ page });
     return page.evaluate(async message => {
-        const context = window.SillyTavern.getContext();
+        const { getContext } = await import('/scripts/st-context.js');
+        const context = getContext();
         context.chatCompletionSettings.chat_memory_enabled = false;
         const index = context.characters.findIndex(character => character.name === 'Dev Character 048');
         await context.selectCharacterById(index);
@@ -17,13 +18,15 @@ async function prepare(page, message = 'U004 pending deletion recovery proof') {
 }
 
 async function remove(page, name) {
-    return page.evaluate(async file => {
+    const outcome = page.evaluate(async file => {
         try {
-            const { runHistoryRowCommand } = await import('/scripts/dom-handlers.js');
-            await runHistoryRowCommand('deleteChat', file, { fromSlashCommand: true });
+            const { runHistoryRowCommand } = await import('/scripts/workspace-interaction-commands.js');
+            await runHistoryRowCommand('deleteChat', file);
             return 'resolved';
         } catch { return 'rejected'; }
     }, name);
+    await page.locator('dialog[open]').getByRole('button', { name: /^(Delete chat|删除聊天)$/ }).click();
+    return outcome;
 }
 
 async function containsMessage(page, chat, message) {
@@ -44,6 +47,23 @@ async function readChat(page, chat) {
     }, chat);
 }
 
+test('confirmed active deletion clears the transcript when history lookup fails', async ({ page }) => {
+    const message = 'confirmed deletion history lookup failure';
+    const chat = await prepare(page, message);
+    await expect(page.locator('#chat .mes').first()).toBeVisible();
+    let lookups = 0;
+    await page.route('**/api/characters/chats', route => {
+        lookups++;
+        return route.fulfill({ status: 503, body: 'history unavailable' });
+    });
+    const deleted = page.waitForResponse(response => response.url().endsWith('/api/chats/delete'));
+    expect(await remove(page, chat.name)).toBe('resolved');
+    expect((await deleted).ok()).toBe(true);
+    expect(lookups).toBe(1);
+    expect(await page.evaluate(async () => (await import('/scripts/st-context.js')).getContext().chat.length)).toBe(0);
+    await expect(page.locator('#chat .mes')).toHaveCount(0);
+});
+
 test('a background edit during an ambiguous deletion is preserved without resurrecting the deleted chat', async ({ page }) => {
     const chat = await prepare(page);
     let release;
@@ -60,7 +80,8 @@ test('a background edit during an ambiguous deletion is preserved without resurr
     const deleting = remove(page, chat.name);
     await deleted;
     await page.evaluate(async () => {
-        window.SillyTavern.getContext().chat[0].mes = 'U004 late edit retained 314159';
+        const { getContext } = await import('/scripts/st-context.js');
+        getContext().chat[0].mes = 'U004 late edit retained 314159';
         (await import('/scripts/chat-ops-service.js')).saveChatDebounced();
     });
     release();
@@ -85,7 +106,7 @@ test('an unconfirmed deletion retains the unsaved edit in recovery rather than s
     expect(deletes).toBe(1);
     // A transport error cannot establish whether the server committed the delete.
     // The version owner deliberately blocks further saves rather than resurrect it.
-    expect(await page.evaluate(() => window.SillyTavern.getContext().chat[0].mes)).toBe(message);
+    expect(await page.evaluate(async () => (await import('/scripts/st-context.js')).getContext().chat[0].mes)).toBe(message);
     const drafts = await page.evaluate(async () => {
         const storage = (await import('/lib.js')).localforage.createInstance({ name: 'EmberDesk_ChatRecovery' });
         const keys = (await storage.keys()).filter(key => key.startsWith('recovery-v1:playwright-e2e:'));
@@ -100,7 +121,8 @@ test('an unconfirmed deletion retains the unsaved edit in recovery rather than s
     await page.reload();
     await testSetup.awaitST({ page });
     await page.evaluate(async () => {
-        const state = window.SillyTavern.getContext();
+        const { getContext } = await import('/scripts/st-context.js');
+        const state = getContext();
         await state.selectCharacterById(state.characters.findIndex(character => character.name === 'Dev Character 048'));
     });
     await page.locator('#options_button').click();

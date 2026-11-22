@@ -5,7 +5,8 @@ test.setTimeout(90_000);
 
 async function selectCharacter(page, name) {
     return page.evaluate(async name => {
-        const context = window.SillyTavern.getContext();
+        const { getContext } = await import('/scripts/st-context.js');
+        const context = getContext();
         context.chatCompletionSettings.chat_memory_enabled = false;
         const index = context.characters.findIndex(character => character.name === name);
         if (index < 0) throw new Error(`Missing seeded character ${name}`);
@@ -16,7 +17,8 @@ async function selectCharacter(page, name) {
 
 async function renameCurrentChat(page, name) {
     expect(await page.evaluate(async newFileName => {
-        const context = window.SillyTavern.getContext();
+        const { getContext } = await import('/scripts/st-context.js');
+        const context = getContext();
         const { renameCharacterChat } = await import('/scripts/chat-ops-service.js');
         return renameCharacterChat({ characterId: String(context.characterId), oldFileName: context.characters[context.characterId].chat, newFileName, loader: false });
     }, name)).toBe(true);
@@ -48,7 +50,8 @@ test('chat shortcuts use message commands and preserve input priority', async ({
     await testSetup.awaitST({ page });
     await selectCharacter(page, 'Dev Character 043');
     await page.evaluate(async () => {
-        const context = window.SillyTavern.getContext();
+        const { getContext } = await import('/scripts/st-context.js');
+        const context = getContext();
         context.chat.splice(0, context.chat.length,
             { name: 'You', is_user: true, is_system: false, mes: 'Earlier user message', send_date: Date.now() },
             ...Array.from({ length: 80 }, (_, index) => ({ name: 'Assistant', is_user: false, is_system: false, mes: `Assistant message ${index}`, send_date: Date.now() })));
@@ -69,7 +72,7 @@ test('chat shortcuts use message commands and preserve input priority', async ({
     await editor.press('Control+Enter');
     await expect(editor).toHaveCount(0);
     await expect(page.locator('#chat .mes').last()).toContainText('Committed through command');
-    expect(await page.evaluate(() => window.SillyTavern.getContext().chat.length)).toBe(81);
+    expect(await page.evaluate(async () => (await import('/scripts/st-context.js')).getContext().chat.length)).toBe(81);
     await composer.press('Control+ArrowUp');
     await expect(editor).toHaveValue('Earlier user message');
     await editor.fill('Cancel this edit');
@@ -83,7 +86,7 @@ test('chat shortcuts use message commands and preserve input priority', async ({
     await expect(editor).toHaveCount(1);
     await editor.press('Escape');
     await expect(editor).toHaveCount(0);
-    expect(await page.evaluate(() => window.SillyTavern.getContext().chat[0].mes)).toBe('Earlier user message');
+    expect(await page.evaluate(async () => (await import('/scripts/st-context.js')).getContext().chat[0].mes)).toBe('Earlier user message');
 });
 
 test('Popup bridge keeps async confirm, nested cancel and focus', async ({ page }) => {
@@ -190,7 +193,8 @@ test('Popup crop keeps image selection and confirmed result', async ({ page }) =
     // Character lore bindings now use React controls in the same popup runtime.
     await selectCharacter(page, 'Dev Character 044');
     await page.evaluate(async () => {
-        const context = window.SillyTavern.getContext();
+        const { getContext } = await import('/scripts/st-context.js');
+        const context = getContext();
         document.getElementById('set_character_world').dataset.chid = String(context.characterId);
         window.lorebookPopup = (await import('/scripts/character-lifecycle-service.js')).openCharacterWorldPopup();
     });
