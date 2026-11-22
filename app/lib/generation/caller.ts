@@ -215,4 +215,3 @@ export function createGenerationCallerService(ports: GenerationCallerPorts) {
     return { Generate, generateQuietPrompt, generateRawData, generateRaw, TempResponseLength, removeRegenerateTurnTail, restoreRegenerateTurnTail, canRegenerateLastReply, regenerateLastReply, stopGeneration,
         get generationEntryPending() { return generationEntryPending; }, get regenerateRequestInFlight() { return regenerateRequestInFlight; }, get pendingRegenerateRestore() { return pendingRegenerateRestore; } };
 }
-

@@ -4164,7 +4164,7 @@ export const DEFAULT_SAVE_EDIT_TIMEOUT = debounce_timeout.relaxed;
 export const DEFAULT_PRINT_TIMEOUT = debounce_timeout.quick;
 
 export const saveSettingsDebounced = debounce((loopCounter = 0) => saveSettings(loopCounter), DEFAULT_SAVE_EDIT_TIMEOUT);
-export const saveCharacterDebounced = debounce(() => document.getElementById('create_button')?.click(), DEFAULT_SAVE_EDIT_TIMEOUT);
+export const saveCharacterDebounced = debounce(() => createOrEditCharacter(), DEFAULT_SAVE_EDIT_TIMEOUT);
 
 /**
  * Prints the character list in a debounced fashion without blocking, with a delay of 100 milliseconds.
