@@ -198,6 +198,68 @@ test('reply viewport opens a long HTML reply at its start after iframe resize', 
     await expect.poll(async () => (await replyPosition()).top).toBeLessThan(80);
 });
 
+test('reply viewport stays at the new regex card when an earlier card expands', async ({ page, characterModel }) => {
+    const earlierCard = [
+        '```html', '<!DOCTYPE html><html><body>',
+        '<div id="card-start">EARLIER CARD</div><div id="grow" style="height:120px"></div><input>',
+        // Let the card report its real size even when Chromium pauses offscreen frame rendering.
+        '<script>window.requestAnimationFrame = callback => setTimeout(callback, 0);</script>',
+        '</body></html>', '```',
+    ].join('\n');
+    const newCard = [
+        '```html', '<!DOCTYPE html><html><body>',
+        '<div id="card-start">NEW CARD</div><div style="height:2000px"></div><input>',
+        '</body></html>', '```',
+    ].join('\n');
+    await characterModel([
+        { content: 'EARLIER_CARD', stream: true },
+        { content: 'NEW_CARD', stream: true },
+    ], { streamOpenAi: true });
+    await page.evaluate(async rules => {
+        const { getContext } = await import('/scripts/st-context.js');
+        getContext().featureSettings.regex = rules.map(([id, replaceString]) => ({
+            id, scriptName: id, findRegex: `/^${id}$/`, replaceString, trimStrings: [],
+            placement: [2], markdownOnly: true, promptOnly: false, disabled: false,
+            substituteRegex: 0, minDepth: null, maxDepth: null,
+        }));
+    }, [['EARLIER_CARD', earlierCard], ['NEW_CARD', newCard]]);
+
+    const chat = page.locator('#chat');
+    const reply = chat.locator(':scope > .mes.last_mes');
+    const latestFrame = reply.locator('iframe.ed-frontend-frame__iframe');
+    const earlierFrame = chat.locator('iframe.ed-frontend-frame__iframe').first();
+    const openingOffset = () => reply.evaluate(row => {
+        const viewport = row.parentElement;
+        return Math.abs(row.getBoundingClientRect().top - viewport.getBoundingClientRect().top - viewport.clientTop - 8);
+    });
+    await page.locator('#send_textarea').fill('Show earlier card');
+    await page.locator('#send_but').click();
+    await expect(latestFrame.contentFrame().locator('#card-start')).toHaveText('EARLIER CARD');
+    await waitForRegenerateSettled(page);
+    await page.locator('#send_textarea').fill('Show new card');
+    await page.locator('#send_but').click();
+    await expect(latestFrame.contentFrame().locator('#card-start')).toHaveText('NEW CARD');
+    await waitForRegenerateSettled(page);
+    await expect.poll(() => latestFrame.evaluate(el => el.offsetHeight)).toBeGreaterThan(1900);
+    await earlierFrame.contentFrame().locator('#grow').evaluate(el => { el.style.height = '2000px'; });
+    await expect.poll(() => earlierFrame.evaluate(el => el.offsetHeight)).toBeGreaterThan(1900);
+    await expect.poll(openingOffset).toBeLessThan(16);
+
+    // Deliver the two host layout changes before the browser's scroll event,
+    // reproducing the clamp caused by restoring a short historical frame.
+    const [before, clamped, newMax] = await chat.evaluate(el => {
+        const [earlier, latest] = el.querySelectorAll('iframe.ed-frontend-frame__iframe');
+        const before = el.scrollTop;
+        earlier.style.height = '60px';
+        const clamped = el.scrollTop;
+        latest.style.height = `${latest.offsetHeight + 300}px`;
+        return [before, clamped, el.scrollHeight - el.clientHeight];
+    });
+    expect(clamped).toBeLessThan(before - 2);
+    expect(clamped).toBeLessThan(newMax - 2);
+    await expect.poll(openingOffset).toBeLessThan(16);
+});
+
 test('reply viewport preserves history while pending and jumps explicitly to the new reply', async ({ page, characterModel }) => {
     const release = Promise.withResolvers();
     await characterModel([
