@@ -95,7 +95,6 @@ describe('parseArgv', () => {
 
     afterEach(() => {
         warnSpy.mockRestore();
-        delete globalThis.FORCE_GLOBAL_MODE;
     });
 
     test('default args: isGlobal=false, all value fields null', () => {
@@ -146,12 +145,6 @@ describe('parseArgv', () => {
     test('global mode + --dataRoot: warns', () => {
         parseArgv(['node', 'server.js', '--global', '--dataRoot', '/tmp/d']);
         expect(warnSpy).toHaveBeenCalled();
-    });
-
-    test('globalThis.FORCE_GLOBAL_MODE=true: isGlobal=true', () => {
-        globalThis.FORCE_GLOBAL_MODE = true;
-        const result = parseArgv(['node', 'server.js']);
-        expect(result.isGlobal).toBe(true);
     });
 });
 

@@ -122,9 +122,6 @@
         "plugins:update": "node plugins update",
         "plugins:install": "node plugins install"
     },
-    "bin": {
-        "sillytavern": "./src/server-global.ts"
-    },
     "rules": {
         "no-path-concat": "off",
         "no-var": "off"

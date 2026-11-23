@@ -102,7 +102,7 @@ For focused E2E runs, pass arguments directly: `pnpm --dir tests run test:e2e wo
 - Long-form project documentation belongs under `.docs/` or `docs/`; keep root `AGENTS.md` concise.
 - `.docs/db` is the semantic doc database. When user-visible behavior changes, update the owning page/feature/term docs or document why no semantic update is needed.
 - Run `pnpm run docs:check` or `pnpm run docs:build` after `.docs/db` changes.
-- Keep credentials, cookies, session tokens, and exported browser storage out of the repository. `.docs/tech/hostinger-sttest-deployment.md` documents the Hostinger sttest server without storing credentials.
+- Keep credentials, cookies, session tokens, and exported browser storage out of the repository. `.docs/tech/hostinger-sttest-deployment.md` covers EmberDesk `sttest`; `.docs/tech/hostinger-st-deployment.md` covers upstream SillyTavern `st`.
 
 ## Validation Checklist
 
