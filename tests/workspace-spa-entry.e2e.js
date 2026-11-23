@@ -75,6 +75,31 @@ test('the authenticated React workspace commits native hosts before starting the
     })).toEqual({ globalsInstalled: false, charactersAvailable: true });
 });
 
+for (const iosFirefox of [false, true]) {
+    test(`startup viewport workaround ${iosFirefox ? 'runs for iOS Firefox' : 'does not run for desktop Chromium'}`, async ({ page }) => {
+        await signIn(page.request);
+        await page.addInitScript(useIosFirefox => {
+            if (useIosFirefox) {
+                Object.defineProperty(navigator, 'userAgent', {
+                    value: 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) FxiOS/131.0 Mobile/15E148 Safari/605.1.15',
+                });
+            }
+            window.__usedAbsoluteBodyPosition = false;
+            new MutationObserver(records => {
+                for (const record of records) {
+                    if (record.target === document.body && record.oldValue?.includes('position: absolute')) {
+                        window.__usedAbsoluteBodyPosition = true;
+                    }
+                }
+            }).observe(document, { subtree: true, attributes: true, attributeFilter: ['style'], attributeOldValue: true });
+        }, iosFirefox);
+
+        await page.goto('/');
+        await expect.poll(() => page.evaluate(() => window.__emberDeskStartup?.appReadyAtMs)).toEqual(expect.any(Number));
+        expect(await page.evaluate(() => [window.__usedAbsoluteBodyPosition, document.body.style.position])).toEqual([iosFirefox, '']);
+    });
+}
+
 test('shows the workspace frame without admitting composer input while settings are held', async ({ page }, testInfo) => {
     await signIn(page.request);
     const held = Promise.withResolvers();
