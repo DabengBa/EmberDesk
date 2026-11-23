@@ -24,8 +24,11 @@ export function MainChatReplyViewport({
         const reply = replyId === null ? null : rowFor(replyId);
         if (!chat || !question) return;
         chat.toggleAttribute('data-reply-viewport-following', following.current);
-        let expectedTop = chat.scrollTop;
         const viewportTop = () => chat.getBoundingClientRect().top + chat.clientTop;
+        const questionOffset = () => question.getBoundingClientRect().top - viewportTop() + chat.scrollTop;
+        const maxScrollTop = () => Math.max(0, chat.scrollHeight - chat.clientHeight);
+        const readPosition = () => ({ top: chat.scrollTop, max: maxScrollTop(), question: questionOffset() });
+        let expected = readPosition();
 
         function updateJump() {
             if (!chat || !reply || !finished || seenReply.current) {
@@ -51,7 +54,7 @@ export function MainChatReplyViewport({
             } else if (end.bottom > bottom) {
                 chat.scrollTop += end.bottom - bottom;
             }
-            expectedTop = chat.scrollTop;
+            expected = readPosition();
         }
 
         function refresh() {
@@ -61,10 +64,18 @@ export function MainChatReplyViewport({
 
         function onScroll() {
             if (!chat) return;
-            // An external scroll (wheel, touch, keyboard, scrollbar) takes over.
-            // Clamping an earlier position after content shrinks is not a gesture.
-            const clamped = Math.min(expectedTop, chat.scrollHeight - chat.clientHeight);
-            if (following.current && Math.abs(chat.scrollTop - clamped) > 2) {
+            // A preceding row can shrink and clamp scrollTop before a later row
+            // grows again. The scroll event may arrive after the range grew back.
+            const clamped = Math.min(expected.top, maxScrollTop());
+            const actualTop = chat.scrollTop;
+            if (following.current && Math.abs(actualTop - clamped) > 2) {
+                const precedingShrink = expected.question - questionOffset();
+                const intermediateMax = Math.max(0, expected.max - precedingShrink);
+                if (actualTop < clamped && precedingShrink > 2 && Math.abs(actualTop - intermediateMax) <= 2) {
+                    refresh();
+                    return;
+                }
+                // An external scroll (wheel, touch, keyboard, scrollbar) takes over.
                 following.current = false;
                 chat.removeAttribute('data-reply-viewport-following');
             }
@@ -78,13 +89,17 @@ export function MainChatReplyViewport({
             chat.setAttribute('data-reply-viewport-following', '');
             // Explicit jumps go to the reply opening, including for short turns.
             chat.scrollTop += reply.getBoundingClientRect().top - viewportTop() - 8;
-            expectedTop = chat.scrollTop;
+            expected = readPosition();
             if (!reply.hasAttribute('tabindex')) reply.tabIndex = -1;
             reply.focus({ preventScroll: true });
             setShowJump(false);
         };
         const observer = new ResizeObserver(refresh);
         observer.observe(chat);
+        // Earlier rows can move this turn without resizing it or the viewport.
+        for (let row = question.previousElementSibling; row; row = row.previousElementSibling) {
+            observer.observe(row);
+        }
         observer.observe(question);
         if (reply) observer.observe(reply);
         chat.addEventListener('scroll', onScroll, { passive: true });
