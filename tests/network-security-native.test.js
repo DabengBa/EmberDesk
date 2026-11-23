@@ -10,17 +10,19 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 test('native Node executes the security modules and their real call chain', () => {
     const dataRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'emberdesk-security-native-'));
     try {
-        fs.writeFileSync(path.join(dataRoot, 'config.yaml'), [
-            'whitelist: [127.0.0.1]',
-            'whitelistDockerHosts: false',
-            'enableForwardedWhitelist: true',
-            'hostWhitelist:',
-            '  enabled: true',
-            '  hosts: [localhost]',
-            '  scan: false',
-            'privateAddressWhitelist:',
-            '  enabled: false',
-        ].join('\n'));
+        fs.writeFileSync(path.join(dataRoot, 'config.jsonc'), JSON.stringify({
+            whitelist: ['127.0.0.1'],
+            whitelistDockerHosts: false,
+            enableForwardedWhitelist: true,
+            hostWhitelist: {
+                enabled: true,
+                hosts: ['localhost'],
+                scan: false,
+            },
+            privateAddressWhitelist: {
+                enabled: false,
+            },
+        }));
         const script = `
             import assert from 'node:assert/strict';
             import http from 'node:http';
@@ -29,7 +31,7 @@ test('native Node executes the security modules and their real call chain', () =
             import express from 'express';
             globalThis.DATA_ROOT = process.env.SECURITY_TEST_ROOT;
             const { setConfigFilePath } = await import('./src/util.ts');
-            setConfigFilePath(path.join(globalThis.DATA_ROOT, 'config.yaml'));
+            setConfigFilePath(path.join(globalThis.DATA_ROOT, 'config.jsonc'));
             const { default: whitelist } = await import('./src/middleware/whitelist.ts');
             const { default: hostWhitelist } = await import('./src/middleware/hostWhitelist.ts');
             const { default: corsProxy } = await import('./src/middleware/corsProxy.ts');

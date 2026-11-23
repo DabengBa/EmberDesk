@@ -24,8 +24,8 @@ test('the settings backend retains SQLite authority across a stale file audit an
     const directories = { root, storage: path.join(root, 'storage'), backups: path.join(root, 'backups') };
     fs.mkdirSync(directories.storage);
     fs.mkdirSync(directories.backups);
-    const config = path.join(root, 'config.yaml');
-    fs.writeFileSync(config, 'port: 8000\n');
+    const config = path.join(root, 'config.jsonc');
+    fs.writeFileSync(config, JSON.stringify({ port: 8000 }));
     setConfigFilePath(config);
     const file = path.join(root, 'settings.json');
     const legacy = '{"marker":"stale-file"}';

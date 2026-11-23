@@ -24,8 +24,8 @@ import { SETTINGS_AUDIT_SCOPE } from '../src/canonical-settings-shadow-import.ts
 
 const roots = [];
 const configRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'emberdesk-canonical-backend-config-'));
-const configPath = path.join(configRoot, 'config.yaml');
-fs.writeFileSync(configPath, 'port: 8000\n', 'utf8');
+const configPath = path.join(configRoot, 'config.jsonc');
+fs.writeFileSync(configPath, '{ "port": 8000 }\n', 'utf8');
 setConfigFilePath(configPath);
 
 const envKeys = [
@@ -123,7 +123,7 @@ describe('canonical sqlite flag defaults', () => {
 
 describe('legacy canonical sqlite config migration', () => {
     test('strips the untouched all-false rollout block so defaults turn on', async () => {
-        const { addMissingConfigValues } = await import('../src/config-init.ts');
+        const { prepareConfig } = await import('../src/config-init.ts');
         const root = makeRoot();
         const target = path.join(root, 'config.yaml');
         fs.writeFileSync(target, [
@@ -146,9 +146,7 @@ describe('legacy canonical sqlite config migration', () => {
             '          strict: false',
         ].join('\n'), 'utf8');
 
-        addMissingConfigValues(target);
-
-        const migrated = (await import('yaml')).parse(fs.readFileSync(target, 'utf8'));
+        const { config: migrated } = prepareConfig(target);
         expect(migrated.features.storage.canonicalSqlite).toEqual({
             enabled: true,
             shadowImport: true,
@@ -156,7 +154,7 @@ describe('legacy canonical sqlite config migration', () => {
     });
 
     test('keeps a customized canonical block instead of overwriting user choice', async () => {
-        const { addMissingConfigValues } = await import('../src/config-init.ts');
+        const { prepareConfig } = await import('../src/config-init.ts');
         const root = makeRoot();
         const target = path.join(root, 'config.yaml');
         fs.writeFileSync(target, [
@@ -172,9 +170,7 @@ describe('legacy canonical sqlite config migration', () => {
             '      strict: false',
         ].join('\n'), 'utf8');
 
-        addMissingConfigValues(target);
-
-        const migrated = (await import('yaml')).parse(fs.readFileSync(target, 'utf8'));
+        const { config: migrated } = prepareConfig(target);
         expect(migrated.features.storage.canonicalSqlite.reads).toBe(false);
         expect(migrated.features.storage.canonicalSqlite.writes).toBe(false);
     });

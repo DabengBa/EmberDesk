@@ -1,21 +1,22 @@
 import process from 'node:process';
-import { setConfigFilePath } from './src/util.ts';
+import { defaultConfigPath } from './src/config-file.ts';
+import { initConfig } from './src/config-init.ts';
 
 const userAccount = process.argv[2];
 const userPassword = process.argv[3];
-const configPath = './config.yaml';
+
 
 if (!userAccount) {
-    console.error('A tool for recovering lost EmberDesk accounts. Uses a "dataRoot" setting from config.yaml file.');
+    console.error('A tool for recovering lost EmberDesk accounts. Uses the configured "dataRoot".');
     console.error('Usage: node recover.js [account] (password)');
     console.error('Example: node recover.js admin password');
     process.exit(1);
 }
 
 async function main() {
-    setConfigFilePath(configPath);
+    initConfig(defaultConfigPath());
     const { recoverPassword } = await import('./src/recover-password.ts');
-    await recoverPassword(configPath, userAccount, userPassword);
+    await recoverPassword(userAccount, userPassword);
 }
 
 main();

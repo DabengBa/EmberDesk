@@ -8,7 +8,7 @@ test('Node loads the real Secrets manager and synchronous TypeScript backend wit
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'emberdesk-secrets-native-'));
     try {
         const url = name => new URL(`../src/${name}`, import.meta.url).href;
-        const config = new URL('../default/config.yaml', import.meta.url).pathname;
+        const config = new URL('../default/config.jsonc', import.meta.url).pathname;
         const result = spawnSync(process.execPath, ['--input-type=module', '--eval', `
             import assert from 'node:assert/strict';
             const { setConfigFilePath } = await import(process.argv[1]);

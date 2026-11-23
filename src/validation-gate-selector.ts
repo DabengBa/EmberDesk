@@ -37,7 +37,7 @@ const RULES: Array<Omit<GateSelection, 'matchedInputs'> & { matches(input: strin
                 /^app\/workspace-panels\.tsx$/,
                 /^public\/scripts\/workspace-panel/,
                 /^public\/scripts\/workspace-panels-react-bridge\.js$/,
-                /^default\/config\.yaml$/,
+                /^default\/config\.jsonc$/,
                 /^tests\/react-workspace-panels-helpers\.test\.js$/,
                 /^tests\/workspace-react-panel-flags\.test\.js$/,
                 /^(react workspace panel|react workspace panels|workspace panel host|workspace panel bridge)$/i,
@@ -100,7 +100,7 @@ const RULES: Array<Omit<GateSelection, 'matchedInputs'> & { matches(input: strin
                 /^src\/server-startup\.[jt]s$/,
                 /^src\/server-main\.[jt]s$/,
                 /^src\/startup/,
-                /^default\/config\.yaml$/,
+                /^default\/config\.jsonc$/,
                 /^(startup|startup\/config|startup config|config resolution|command-line|server boot)$/i,
             ]);
         },

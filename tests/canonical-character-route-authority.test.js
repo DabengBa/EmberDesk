@@ -36,53 +36,64 @@ const REAL_AVATAR_PNG = fs.readFileSync(path.join(repoRoot, 'public/img/ai4.png'
 
 const roots = [];
 const configRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'emberdesk-canonical-character-route-config-'));
-const configPath = path.join(configRoot, 'config.yaml');
-fs.writeFileSync(configPath, [
-    'backups:',
-    '  chat:',
-    '    enabled: false',
-    '    maxTotalBackups: -1',
-    '    throttleInterval: 10000',
-    '    checkIntegrity: true',
-    'performance:',
-    '  lazyLoadCharacters: false',
-    '  useDiskCache: false',
-    '  memoryCacheCapacity: 100mb',
-    'features:',
-    '  storage:',
-    '    canonicalSqlite:',
-    '      enabled: true',
-    '      shadowImport: true',
-    '      reads: true',
-    '      writes: true',
-    '      strict: false',
-    '      slices:',
-    '        characters:',
-    '          enabled: true',
-    '          shadowImport: true',
-    '          reads: true',
-    '          writes: true',
-    '          chatStats: true',
-    '          projection: off',
-    '        chats:',
-    '          enabled: true',
-    '          shadowImport: true',
-    '          reads: true',
-    '          writes: true',
-    '          projection: off',
-    '        managed_media:',
-    '          enabled: true',
-    '          shadowImport: true',
-    '          reads: true',
-    '          writes: true',
-    '          projection: off',
-    '        worldInfo:',
-    '          enabled: true',
-    '          shadowImport: true',
-    '          reads: true',
-    '          writes: true',
-    '          projection: off',
-].join('\n'), 'utf8');
+const configPath = path.join(configRoot, 'config.jsonc');
+fs.writeFileSync(configPath, JSON.stringify({
+    backups: {
+        chat: {
+            enabled: false,
+            maxTotalBackups: -1,
+            throttleInterval: 10000,
+            checkIntegrity: true,
+        },
+    },
+    performance: {
+        lazyLoadCharacters: false,
+        useDiskCache: false,
+        memoryCacheCapacity: '100mb',
+    },
+    features: {
+        storage: {
+            canonicalSqlite: {
+                enabled: true,
+                shadowImport: true,
+                reads: true,
+                writes: true,
+                strict: false,
+                slices: {
+                    characters: {
+                        enabled: true,
+                        shadowImport: true,
+                        reads: true,
+                        writes: true,
+                        chatStats: true,
+                        projection: 'off',
+                    },
+                    chats: {
+                        enabled: true,
+                        shadowImport: true,
+                        reads: true,
+                        writes: true,
+                        projection: 'off',
+                    },
+                    managed_media: {
+                        enabled: true,
+                        shadowImport: true,
+                        reads: true,
+                        writes: true,
+                        projection: 'off',
+                    },
+                    worldInfo: {
+                        enabled: true,
+                        shadowImport: true,
+                        reads: true,
+                        writes: true,
+                        projection: 'off',
+                    },
+                },
+            },
+        },
+    },
+}), 'utf8');
 setConfigFilePath(configPath);
 
 const { applyAvatarCropResize, router } = await import('../src/endpoints/characters.ts');

@@ -25,8 +25,14 @@ function runNode(source, ...args) {
 test('Node loads all production chat route slices and serves the compatibility router without a loader', () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'emberdesk-chat-route-native-'));
     try {
-        const config = path.join(root, 'config.yaml');
-        fs.writeFileSync(config, 'backups:\n  chat:\n    enabled: false\n', 'utf8');
+        const config = path.join(root, 'config.jsonc');
+        fs.writeFileSync(config, JSON.stringify({
+            backups: {
+                chat: {
+                    enabled: false,
+                },
+            },
+        }), 'utf8');
         const source = `
             import assert from 'node:assert/strict';
             import express from 'express';
@@ -115,8 +121,14 @@ test('Node executes the real chat import and route helpers without a loader', ()
 test('Node imports the real chats and characters callers and canonical query TypeScript without a loader', () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'emberdesk-chat-backup-native-'));
     try {
-        const config = path.join(root, 'config.yaml');
-        fs.writeFileSync(config, 'backups:\n  chat:\n    enabled: false\n', 'utf8');
+        const config = path.join(root, 'config.jsonc');
+        fs.writeFileSync(config, JSON.stringify({
+            backups: {
+                chat: {
+                    enabled: false,
+                },
+            },
+        }), 'utf8');
         const source = `
             import assert from 'node:assert/strict';
             const { setConfigFilePath } = await import(process.argv[1]);
@@ -142,8 +154,14 @@ test('Node imports the real chats and characters callers and canonical query Typ
 test('Node executes canonical TypeScript reads and imports both production callers without a loader', () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'emberdesk-chat-read-native-'));
     try {
-        const config = path.join(root, 'config.yaml');
-        fs.writeFileSync(config, 'backups:\n  chat:\n    enabled: false\n', 'utf8');
+        const config = path.join(root, 'config.jsonc');
+        fs.writeFileSync(config, JSON.stringify({
+            backups: {
+                chat: {
+                    enabled: false,
+                },
+            },
+        }), 'utf8');
         const source = `
             import assert from 'node:assert/strict';
             import { DatabaseSync } from 'node:sqlite';

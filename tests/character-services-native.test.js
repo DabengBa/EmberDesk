@@ -39,8 +39,14 @@ test('Node executes the migrated character services without a loader', () => {
 test('Node resolves the real character router, replacement and import graphs', () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'emberdesk-character-services-native-'));
     try {
-        const config = path.join(root, 'config.yaml');
-        fs.writeFileSync(config, 'backups:\n  chat:\n    enabled: false\n');
+        const config = path.join(root, 'config.jsonc');
+        fs.writeFileSync(config, JSON.stringify({
+            backups: {
+                chat: {
+                    enabled: false,
+                },
+            },
+        }));
         const result = runNode(`
             import assert from 'node:assert/strict';
             const { setConfigFilePath } = await import(process.argv[1]);

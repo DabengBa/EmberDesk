@@ -24,8 +24,16 @@ async function post(route, body = {}, user = 'alice') {
 
 beforeAll(async () => {
     root = fs.mkdtempSync(path.join(os.tmpdir(), 'emberdesk-replace-routes-'));
-    const config = path.join(root, 'config.yaml');
-    fs.writeFileSync(config, 'features:\n  storage:\n    canonicalSqlite:\n      enabled: true\n');
+    const config = path.join(root, 'config.jsonc');
+    fs.writeFileSync(config, JSON.stringify({
+        features: {
+            storage: {
+                canonicalSqlite: {
+                    enabled: true,
+                },
+            },
+        },
+    }));
     setConfigFilePath(config);
     const { router } = await import('../src/endpoints/character-replace-coordination.ts');
     const app = express();

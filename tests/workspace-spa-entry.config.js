@@ -6,7 +6,7 @@ const repoRoot = fileURLToPath(new URL('..', import.meta.url));
 const port = process.env.PLAYWRIGHT_PORT ?? '8000';
 const baseURL = `http://127.0.0.1:${port}`;
 const dataRoot = process.env.PLAYWRIGHT_DATA_ROOT ?? '.tmp/playwright-workspace-data';
-const configPath = process.env.PLAYWRIGHT_CONFIG_PATH ?? '.tmp/playwright-workspace-config.yaml';
+const configPath = process.env.PLAYWRIGHT_CONFIG_PATH ?? '.tmp/playwright-workspace-config.jsonc';
 
 // The lane prepares artifacts separately and can exercise HTTP before the build exists.
 export default defineConfig({

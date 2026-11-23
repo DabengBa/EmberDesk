@@ -17,10 +17,27 @@ const previousCommandLineArgs = globalThis.COMMAND_LINE_ARGS;
 globalThis.COMMAND_LINE_ARGS = {};
 
 const tmpConfigRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'emberdesk-wire-log-generate-config-'));
-const tmpConfigPath = path.join(tmpConfigRoot, 'config.yaml');
+const tmpConfigPath = path.join(tmpConfigRoot, 'config.jsonc');
 fs.writeFileSync(tmpConfigPath, process.env.WIRE_FLAG_CHILD
-    ? `port: 8000\nfeatures:\n  storage:\n    canonicalSqlite:\n      enabled: true\n      reads: ${process.env.WIRE_READS}\n      writes: ${process.env.WIRE_WRITES}\n      slices:\n        settings:\n          reads: ${process.env.WIRE_READS}\n          writes: ${process.env.WIRE_WRITES}\n`
-    : 'port: 8000\n', 'utf8');
+    ? JSON.stringify({
+        port: 8000,
+        features: {
+            storage: {
+                canonicalSqlite: {
+                    enabled: true,
+                    reads: process.env.WIRE_READS === 'true',
+                    writes: process.env.WIRE_WRITES === 'true',
+                    slices: {
+                        settings: {
+                            reads: process.env.WIRE_READS === 'true',
+                            writes: process.env.WIRE_WRITES === 'true',
+                        },
+                    },
+                },
+            },
+        },
+    })
+    : JSON.stringify({ port: 8000 }), 'utf8');
 setConfigFilePath(tmpConfigPath);
 
 const { router: chatCompletionsRouter } = await import('../src/endpoints/backends/chat-completions.ts');

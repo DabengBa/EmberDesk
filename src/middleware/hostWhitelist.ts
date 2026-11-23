@@ -28,7 +28,7 @@ export default function hostWhitelistMiddleware(req: Request, res: Response, nex
     if (hostWhitelistScan && !isHostAllowed(hostValue, hostWhitelist) && !knownHosts.has(hostValue) && knownHosts.size < maxKnownHosts) {
         const isFirstWarning = knownHosts.size === 0;
         console.warn(color.red('Request from untrusted host:'), hostValue);
-        console.warn(`If you trust this host, you can add it to ${color.yellow('hostWhitelist.hosts')} in config.yaml`);
+        console.warn(`If you trust this host, you can add it to ${color.yellow('hostWhitelist.hosts')} in config.jsonc`);
         if (!hostWhitelistEnabled && isFirstWarning) {
             console.warn(`To protect against host spoofing, consider setting ${color.yellow('hostWhitelist.enabled')} to true`);
         }

@@ -68,7 +68,7 @@ async function requestThumbnailRaw(targetPath, { headers } = {}) {
 }
 
 beforeAll(async () => {
-    setConfigFilePath(path.resolve(__dirname, '../default/config.yaml'));
+    setConfigFilePath(path.resolve(__dirname, '../default/config.jsonc'));
     ({ router: thumbnailRouter } = await import('../src/endpoints/thumbnails.ts'));
 
     const directories = makeDirectories('emberdesk-thumbnail-cache-');

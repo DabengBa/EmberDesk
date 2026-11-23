@@ -442,8 +442,8 @@ describe('canonical settings route integration', () => {
         jest.resetModules();
         const { setConfigFilePath } = await import('../src/util.ts');
         const configRoot = makeRoot();
-        const configPath = path.join(configRoot, 'config.yaml');
-        fs.writeFileSync(configPath, 'port: 8000\n', 'utf8');
+        const configPath = path.join(configRoot, 'config.jsonc');
+        fs.writeFileSync(configPath, JSON.stringify({ port: 8000 }), 'utf8');
         setConfigFilePath(configPath);
         const settingsModule = await import(`../src/endpoints/settings-routes.ts?settingsCanonical=${Date.now()}-${Math.random()}`);
         return settingsModule.router;
@@ -969,8 +969,8 @@ describe('canonical settings snapshots and rollback', () => {
         jest.resetModules();
         const { setConfigFilePath } = await import('../src/util.ts');
         const configRoot = makeRoot();
-        const configPath = path.join(configRoot, 'config.yaml');
-        fs.writeFileSync(configPath, 'port: 8000\n', 'utf8');
+        const configPath = path.join(configRoot, 'config.jsonc');
+        fs.writeFileSync(configPath, JSON.stringify({ port: 8000 }), 'utf8');
         setConfigFilePath(configPath);
         const settingsModule = await import(`../src/endpoints/settings-routes.ts?settingsSnap=${Date.now()}-${Math.random()}`);
         return settingsModule.router;

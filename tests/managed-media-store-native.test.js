@@ -7,8 +7,14 @@ import { expect, test } from '@jest/globals';
 test('Node resolves the production managed media graph without a loader', () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'emberdesk-media-native-'));
     try {
-        const config = path.join(root, 'config.yaml');
-        fs.writeFileSync(config, 'backups:\n  chat:\n    enabled: false\n');
+        const config = path.join(root, 'config.jsonc');
+        fs.writeFileSync(config, JSON.stringify({
+            backups: {
+                chat: {
+                    enabled: false,
+                },
+            },
+        }));
         const url = name => new URL(`../src/${name}`, import.meta.url).href;
         const result = spawnSync(process.execPath, ['--input-type=module', '--eval', `
             import assert from 'node:assert/strict';

@@ -10,8 +10,14 @@ const moduleUrl = name => new URL(`../src/${name}`, import.meta.url).href;
 test('native Node imports the service and production callers without a loader or network', () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'emberdesk-external-content-native-'));
     try {
-        const config = path.join(root, 'config.yaml');
-        fs.writeFileSync(config, 'backups:\n  chat:\n    enabled: false\n');
+        const config = path.join(root, 'config.jsonc');
+        fs.writeFileSync(config, JSON.stringify({
+            backups: {
+                chat: {
+                    enabled: false,
+                },
+            },
+        }));
         const result = spawnSync(process.execPath, ['--input-type=module', '--eval', `
             import assert from 'node:assert/strict';
             const { setConfigFilePath } = await import(process.argv[1]);

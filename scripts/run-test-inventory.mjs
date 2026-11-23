@@ -105,7 +105,7 @@ if (!staticOnly) {
             env: {
                 ...environment,
                 PLAYWRIGHT_DATA_ROOT: dataRoot,
-                PLAYWRIGHT_CONFIG_PATH: path.join(runRoot, 'playwright-config.yaml'),
+                PLAYWRIGHT_CONFIG_PATH: path.join(runRoot, 'playwright-config.jsonc'),
                 PLAYWRIGHT_REUSE_SERVER: '0',
             },
             encoding: 'utf8',

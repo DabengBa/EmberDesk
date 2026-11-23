@@ -14,6 +14,7 @@ RUN chown node:node ${APP_HOME}
 
 # Set NODE_ENV to production
 ENV NODE_ENV=production
+ENV EMBERDESK_CONFIG_PATH=./config/config.jsonc
 
 # Bundle app source and set ownership
 COPY --chown=node:node . ./
@@ -24,13 +25,10 @@ RUN \
   echo "*** Install pnpm packages (including build tooling) ***" && \
   NODE_ENV=development pnpm install --frozen-lockfile --ignore-scripts
 
-# Create config directory and link config.yaml. Added hardcoded dirs(constants.js?)
-# that must be present for Non-Root Mode and volumeless docker runs.
+# Directories required for non-root and volumeless runs.
 RUN \
-  rm -f "config.yaml" || true && \
   mkdir -p config data plugins public/scripts/extensions/third-party backups && \
-  chown -R node:node config data plugins public/scripts/extensions/third-party backups && \
-  ln -s "./config/config.yaml" "config.yaml"
+  chown -R node:node config data plugins public/scripts/extensions/third-party backups
 
 # Pre-compile the legacy library and the shared React application.
 RUN \

@@ -3,8 +3,11 @@ import path from 'node:path';
 import yaml from 'yaml';
 import color from 'chalk';
 import _ from 'lodash';
+import { sync as writeFileAtomicSync } from 'write-file-atomic';
 import { serverDirectory } from './server-directory.ts';
 import { keyToEnv, setConfigFilePath } from './util.ts';
+import { canonicalConfigPath, parseConfig, readConfigFile, validateConfig } from './config-file.ts';
+import type { AppConfig } from './config-schema.ts';
 
 type KeyMigration = {
     oldKey: string;
@@ -168,134 +171,78 @@ function isLegacyCanonicalSqliteBlock(block: unknown): boolean {
         || _.isEqual(slices, { managedMedia: LEGACY_CANONICAL_SQLITE_MANAGED_MEDIA_BLOCK });
 }
 
-/**
- * Gets all keys from an object recursively.
- * @param {object} obj Object to get all keys from
- * @param {string} prefix Prefix to prepend to all keys
- * @returns {string[]} Array of all keys in the object
- */
-function getAllKeys(obj: unknown, prefix = ''): string[] {
-    if (typeof obj !== 'object' || Array.isArray(obj) || obj === null) {
-        return [];
+function migrateKeys(config: Record<string, unknown>) {
+    for (const { oldKey, newKey, migrate, remove } of keyMigrationMap) {
+        const oldEnvKey = keyToEnv(oldKey);
+        const newEnvKey = keyToEnv(newKey);
+        if (process.env[oldEnvKey] && !process.env[newEnvKey]) {
+            process.env[newEnvKey] = String(migrate(process.env[oldEnvKey]));
+            delete process.env[oldEnvKey];
+            console.warn(color.yellow(`Warning: Using a deprecated environment variable: ${oldEnvKey}. Please use ${newEnvKey} instead.`));
+        }
+        if (_.has(config, oldKey)) {
+            if (!remove) _.set(config, newKey, migrate(_.get(config, oldKey)));
+            _.unset(config, oldKey);
+        }
     }
 
-    const record = obj as Record<string, unknown>;
-    return _.flatMap(Object.keys(record), key => {
-        const newPrefix = prefix ? `${prefix}.${key}` : key;
-        if (typeof record[key] === 'object' && !Array.isArray(record[key])) {
-            return getAllKeys(record[key], newPrefix);
-        } else {
-            return [newPrefix];
-        }
-    });
-}
-
-/**
- * Compares the current config.yaml with the default config.yaml and adds any missing values.
- * @param {string} configPath Path to config.yaml
- */
-export function addMissingConfigValues(configPath: string): void {
-    try {
-        const defaultConfig = yaml.parse(fs.readFileSync(path.join(serverDirectory, './default/config.yaml'), 'utf8'));
-
-        if (!fs.existsSync(configPath)) {
-            console.warn(color.yellow(`Warning: config.yaml not found at ${configPath}. Creating a new one with default values.`));
-            fs.writeFileSync(configPath, yaml.stringify(defaultConfig));
-            return;
-        }
-
-        let config = yaml.parse(fs.readFileSync(configPath, 'utf8'));
-
-        // Migrate old keys to new keys
-        const migratedKeys = [];
-        for (const { oldKey, newKey, migrate, remove } of keyMigrationMap) {
-            // Migrate environment variables
-            const oldEnvKey = keyToEnv(oldKey);
-            const newEnvKey = keyToEnv(newKey);
-            if (process.env[oldEnvKey] && !process.env[newEnvKey]) {
-                const oldValue = process.env[oldEnvKey];
-                const newValue = migrate(oldValue);
-                // Node coerces non-string values on assignment; the assertion is erased.
-                process.env[newEnvKey] = newValue as string;
-                delete process.env[oldEnvKey];
-                console.warn(color.yellow(`Warning: Using a deprecated environment variable: ${oldEnvKey}. Please use ${newEnvKey} instead.`));
-                console.log(`Redirecting ${color.blue(oldEnvKey)}=${oldValue} -> ${color.blue(newEnvKey)}=${newValue}`);
-            }
-
-            if (_.has(config, oldKey)) {
-                if (remove) {
-                    _.unset(config, oldKey);
-                    migratedKeys.push({
-                        oldKey,
-                        newValue: void 0,
-                    });
-                    continue;
-                }
-
-                const oldValue = _.get(config, oldKey);
-                const newValue = migrate(oldValue);
-                _.set(config, newKey, newValue);
-                _.unset(config, oldKey);
-
-                migratedKeys.push({
-                    oldKey,
-                    newKey,
-                    oldValue,
-                    newValue,
-                });
-            }
-        }
-
-        // The canonical SQLite rollout block shipped disabled by default. An
-        // untouched copy of that template must not keep existing installs on
-        // the file-backed path now that canonical storage is the default
-        // authority; stripping it lets defaultsDeep apply the new values.
-        const canonicalSqliteBlock = _.get(config, 'features.storage.canonicalSqlite');
-        if (isLegacyCanonicalSqliteBlock(canonicalSqliteBlock)) {
-            _.unset(config, 'features.storage.canonicalSqlite');
-            migratedKeys.push({
-                oldKey: 'features.storage.canonicalSqlite',
-                newKey: 'features.storage.canonicalSqlite',
-                newValue: 'default-on template',
-            });
-        }
-
-        // Get all keys from the original config
-        const originalKeys = getAllKeys(config);
-
-        // Use lodash's defaultsDeep function to recursively apply default properties
-        config = _.defaultsDeep(config, defaultConfig);
-
-        // Get all keys from the updated config
-        const updatedKeys = getAllKeys(config);
-
-        // Find the keys that were added
-        const addedKeys = _.difference(updatedKeys, originalKeys);
-
-        if (addedKeys.length === 0 && migratedKeys.length === 0) {
-            return;
-        }
-
-        if (addedKeys.length > 0) {
-            console.log('Adding missing config values to config.yaml:', addedKeys);
-        }
-
-        if (migratedKeys.length > 0) {
-            console.log('Migrating config values in config.yaml:', migratedKeys);
-        }
-
-        fs.writeFileSync(configPath, yaml.stringify(config));
-    } catch (error) {
-        console.warn(color.yellow('Could not add missing config values to config.yaml'), error);
+    if (isLegacyCanonicalSqliteBlock(_.get(config, 'features.storage.canonicalSqlite'))) {
+        _.unset(config, 'features.storage.canonicalSqlite');
     }
 }
 
-/**
- * Performs early initialization tasks before the server starts.
- * @param {string} configPath Path to config.yaml
- */
-export function initConfig(configPath: string): void {
+function applyDefaults(config: Record<string, unknown>, defaults: AppConfig) {
+    return _.mergeWith({}, defaults, config, (_defaultValue, value) => Array.isArray(value) ? value : undefined);
+}
+
+/** Prepare the canonical config, migrating an adjacent legacy YAML file once. */
+export function prepareConfig(requestedPath: string): { configPath: string; config: AppConfig } {
+    const configPath = canonicalConfigPath(requestedPath);
+    const templatePath = path.join(serverDirectory, 'default/config.jsonc');
+    const template = fs.readFileSync(templatePath, 'utf8');
+    const defaults = parseConfig(template, templatePath);
+
+    if (fs.existsSync(configPath)) {
+        const config = readConfigFile(configPath);
+        migrateKeys(config);
+        return { configPath, config: validateConfig(applyDefaults(config, defaults), configPath) };
+    }
+
+    const legacyPaths = configPath !== requestedPath ? [requestedPath] : /\.jsonc$/i.test(configPath)
+        ? ['.yaml', '.yml'].map(extension => configPath.replace(/\.jsonc$/i, extension)) : [];
+    const legacyPath = legacyPaths.find(filename => fs.existsSync(filename));
+    if (legacyPath) {
+        const value: unknown = yaml.parse(fs.readFileSync(legacyPath, 'utf8')) ?? {};
+        if (!_.isPlainObject(value)) throw new Error(`Invalid configuration in ${legacyPath}: expected a mapping`);
+        const original = value as Record<string, unknown>;
+        const config = _.cloneDeep(original);
+        migrateKeys(config);
+        // The old YAML loader expanded arrays only when missing or migrated keys caused a rewrite.
+        if (!_.isEqual(config, original) || !_.isEqual(config, applyDefaults(config, defaults))) {
+            _.defaultsDeep(config, defaults);
+        }
+        for (const key of ['port', 'browserLaunch.port', 'heartbeatInterval', 'cors.maxAge']) {
+            const value = _.get(config, key);
+            if (typeof value === 'string' && Number.isFinite(Number.parseFloat(value))) {
+                _.set(config, key, Number.parseFloat(value));
+            }
+        }
+        const migrated = validateConfig(config, legacyPath);
+        const output = `// Migrated from ${JSON.stringify(path.basename(legacyPath))}. The original file was kept.\n${JSON.stringify(migrated, null, 2)}\n`;
+        writeFileAtomicSync(configPath, output, { mode: fs.statSync(legacyPath).mode & 0o777 });
+        console.log(`Migrated ${legacyPath} to ${configPath}.`);
+        return { configPath, config: migrated };
+    }
+
+    migrateKeys(defaults);
+    console.warn(color.yellow(`Warning: configuration not found at ${configPath}. Creating a new one with default values.`));
+    writeFileAtomicSync(configPath, template);
+    return { configPath, config: defaults };
+}
+
+export function initConfig(requestedPath: string): string {
+    const { configPath, config } = prepareConfig(requestedPath);
     console.log('Using config path:', color.green(configPath));
-    setConfigFilePath(configPath);
-    addMissingConfigValues(configPath);
+    setConfigFilePath(configPath, config);
+    return configPath;
 }

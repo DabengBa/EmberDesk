@@ -5061,7 +5061,7 @@ const characterListLifecycle = createCharacterListLifecycle({
     markMetric: markPerfInteractionMetric,
     fetchSnapshot: fetchAllCharactersDataOnly,
     isRealtimeRefreshBlocked: () => characterGroupOverlay.isRealtimeRefreshBlocked,
-    warnOverflow: () => Popup.show.text(t`Character data length limit reached`, t`To resolve this, set "performance.lazyLoadCharacters" to "true" in config.yaml and restart the server.`),
+    warnOverflow: () => Popup.show.text(t`Character data length limit reached`, t`To resolve this, set "performance.lazyLoadCharacters" to "true" in config.jsonc and restart the server.`),
 });
 
 export function publishCharacterLibrarySnapshot(snapshot) {

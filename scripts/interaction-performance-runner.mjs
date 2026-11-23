@@ -160,7 +160,7 @@ process.stdout.write(`${markdownPath}\n`);
 
 async function seedBaselineDataset({ baselineRoot, datasetProfile }) {
     const userRoot = path.join(baselineRoot, DEFAULT_USER.handle);
-    const configPath = path.join(baselineRoot, 'config.yaml');
+    const configPath = path.join(baselineRoot, 'config.jsonc');
     await fs.promises.mkdir(userRoot, { recursive: true });
     await writeConfig(configPath, baselineRoot, defaultPort);
     await seedSettings(baselineRoot);
@@ -348,7 +348,7 @@ async function runScenarioPairs({ runDir, baselineRoot, scenarioName, measuredRe
 
 async function runScenarioVariant({ scenarioName, variant, variantRoot, port, measuredRepeats, screenshotRoot }) {
     const dataRoot = variantRoot;
-    const configPath = path.join(variantRoot, 'config.yaml');
+    const configPath = path.join(variantRoot, 'config.jsonc');
     const userRoot = path.join(variantRoot, DEFAULT_USER.handle);
     const url = new URL(`http://127.0.0.1:${port}/perf-harness.html`).toString();
     const targetAvatar = chooseTargetAvatar(variantRoot);
@@ -1641,23 +1641,19 @@ function parseCliOptions(args) {
 }
 
 async function writeConfig(configPath, dataRoot, port) {
-    const config = [
-        `dataRoot: ${normalizePathForYaml(dataRoot)}`,
-        'listen: false',
-        `port: ${port}`,
-        'browserLaunch:',
-        '  enabled: false',
-        'whitelistMode: false',
-        'enableUserAccounts: false',
-        'extensions:',
-        '  enabled: false',
-        '  autoUpdate: false',
-        'skipContentCheck: true',
-        'logging:',
-        '  minLogLevel: 0',
-    ].join('\n');
+    const config = {
+        dataRoot,
+        listen: false,
+        port,
+        browserLaunch: { enabled: false },
+        whitelistMode: false,
+        enableUserAccounts: false,
+        extensions: { enabled: false, autoUpdate: false },
+        skipContentCheck: true,
+        logging: { minLogLevel: 0 },
+    };
 
-    fs.writeFileSync(configPath, `${config}\n`, 'utf8');
+    fs.writeFileSync(configPath, `${JSON.stringify(config, null, 4)}\n`, 'utf8');
 }
 
 async function seedSettings(dataRoot) {
@@ -1678,10 +1674,6 @@ async function seedSettings(dataRoot) {
     } finally {
         db.close();
     }
-}
-
-function normalizePathForYaml(targetPath) {
-    return JSON.stringify(targetPath.replace(/\\/g, '/'));
 }
 
 function startServer({ configPath, dataRoot, port, env }) {

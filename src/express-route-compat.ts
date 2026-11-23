@@ -56,6 +56,6 @@ export function oauthCallbackMiddleware(request: Request, response: Response) {
  * @returns {import('express').Response} Error response
  */
 export function disabledCorsProxyMiddleware(_request: Request, response: Response) {
-    const message = 'CORS proxy is disabled. Enable it in config.yaml or use the --corsProxy flag.';
+    const message = 'CORS proxy is disabled. Enable it in config.jsonc or use the --corsProxy flag.';
     return response.status(404).send(message);
 }

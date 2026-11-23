@@ -5,8 +5,8 @@ import fs from 'node:fs';
 import { setConfigFilePath } from '../src/util.ts';
 
 const configTmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'emberdesk-plugin-test-'));
-const tmpConfig = path.join(configTmpDir, 'config.yaml');
-fs.writeFileSync(tmpConfig, 'port: 8000\n', 'utf8');
+const tmpConfig = path.join(configTmpDir, 'config.jsonc');
+fs.writeFileSync(tmpConfig, JSON.stringify({ port: 8000 }), 'utf8');
 setConfigFilePath(tmpConfig);
 
 const { updatePlugins } = await import('../src/plugin-updater.ts');

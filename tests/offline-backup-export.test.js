@@ -73,9 +73,9 @@ test.each([[false, false, false], [true, false, false], [false, true, false], [f
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'emberdesk-zip-'));
     try {
         const data = path.join(root, 'data');
-        const config = path.join(root, 'config.yaml');
+        const config = path.join(root, 'config.jsonc');
         const zip = path.join(root, 'out.zip');
-        fs.writeFileSync(config, `allowKeysExposure: ${exposure}\n`);
+        fs.writeFileSync(config, JSON.stringify({ allowKeysExposure: exposure }));
         const child = spawnSync(process.execPath, ['--input-type=module', '--eval', `
             import fs from 'node:fs';
             import path from 'node:path';

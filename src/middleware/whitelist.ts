@@ -18,12 +18,12 @@ let whitelist: string[] = getConfigValue('whitelist', []);
 
 if (fs.existsSync(whitelistPath)) {
     console.warn(color.yellow('whitelist.txt is deprecated and will be removed in a future release.'));
-    console.warn(color.yellow('Please migrate its contents to the whitelist field in config.yaml. See the documentation for more details.'));
+    console.warn(color.yellow('Please migrate its contents to the whitelist field in config.jsonc. See the documentation for more details.'));
     try {
         let whitelistTxt = fs.readFileSync(whitelistPath, 'utf-8');
         whitelist = whitelistTxt.split('\n').filter(ip => ip).map(ip => ip.trim());
     } catch (e) {
-        // Surface errors that may occur when reading the whitelist (e.g. permissions), but keep the config.yaml entries
+        // Surface errors that may occur when reading the whitelist (e.g. permissions), but keep the config.jsonc entries
         console.warn(color.yellow(`Failed to read whitelist.txt: ${(e as Error).message}`));
     }
 }
@@ -94,7 +94,7 @@ export default async function getWhitelistMiddleware(): Promise<RequestHandler> 
             if (!noLogPaths.includes(req.path)) {
                 console.warn(
                     color.red(
-                        `Blocked connection from ${ipDetails}; User Agent: ${userAgent}\n\tTo allow this connection, add its IP address to the whitelist or disable whitelist mode by editing config.yaml in the root directory of your EmberDesk installation.\n`,
+                        `Blocked connection from ${ipDetails}; User Agent: ${userAgent}\n\tTo allow this connection, add its IP address to the whitelist or disable whitelist mode by editing config.jsonc in the root directory of your EmberDesk installation.\n`,
                     ),
                 );
             }

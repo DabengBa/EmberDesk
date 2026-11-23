@@ -17,7 +17,7 @@ import { makeAnimatedImages, makeBmp } from './helpers/animated-image-fixtures.j
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const repoRoot = path.resolve(__dirname, '..');
-setConfigFilePath(path.join(repoRoot, 'default/config.yaml'));
+setConfigFilePath(path.join(repoRoot, 'default/config.jsonc'));
 const { generateThumbnail: realGenerateThumbnail } = await import('../src/endpoints/thumbnails.ts');
 
 const tempRoots = [];

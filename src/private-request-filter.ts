@@ -228,7 +228,7 @@ export default function initPrivateRequestFilter({ listen, enabled, privateAddre
         if (listen) {
             console.warn();
             console.warn(color.yellow('Warning: listen is enabled but private request filter is disabled. This may expose your server to SSRF attacks.'));
-            console.warn(color.blue('To enable, provide trusted addresses in privateAddressWhitelist.allowedRanges and set privateAddressWhitelist.enabled to true in config.yaml and restart the server.'));
+            console.warn(color.blue('To enable, provide trusted addresses in privateAddressWhitelist.allowedRanges and set privateAddressWhitelist.enabled to true in config.jsonc and restart the server.'));
         }
         return;
     }

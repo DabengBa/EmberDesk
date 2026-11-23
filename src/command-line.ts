@@ -6,6 +6,7 @@ import { hideBin } from 'yargs/helpers';
 import envPaths from 'env-paths';
 import { color, getConfigValue, stringToBool } from './util.ts';
 import { initConfig } from './config-init.ts';
+import { defaultConfigPath } from './config-file.ts';
 
 import type { ServerStartupResult } from './server-startup.ts';
 
@@ -247,11 +248,11 @@ export function parseArgv(args: string[]): ParsedArgv {
  * @param {string} configPath Path to the config file
  * @param {boolean} isGlobal Whether global mode is active
  */
-export function prepareConfigFilesystem(configPath: string, isGlobal: boolean): void {
+export function prepareConfigFilesystem(configPath: string, isGlobal: boolean): string {
     if (isGlobal && !fs.existsSync(path.dirname(configPath))) {
         fs.mkdirSync(path.dirname(configPath), { recursive: true });
     }
-    initConfig(configPath);
+    return initConfig(configPath);
 }
 
 /**
@@ -374,7 +375,7 @@ export class CommandLineParser {
      */
     getDefaultConfig(isGlobal: boolean): CommandLineArguments {
         const appPaths = envPaths('EmberDesk', { suffix: '' });
-        const configPath = isGlobal ? path.join(appPaths.data, 'config.yaml') : './config.yaml';
+        const configPath = isGlobal ? path.join(appPaths.data, 'config.jsonc') : defaultConfigPath();
         const dataPath = isGlobal ? path.join(appPaths.data, 'data') : './data';
         return Object.freeze({
             configPath: configPath,
@@ -427,11 +428,11 @@ export class CommandLineParser {
     parse(args: string[]): CommandLineArguments {
         const argv = parseArgv(args);
         const defaultConfig = this.getDefaultConfig(argv.isGlobal);
-        prepareConfigFilesystem(argv.configPath, argv.isGlobal);
+        const configPath = prepareConfigFilesystem(argv.configPath, argv.isGlobal);
         const resolvedDataRoot = argv.isGlobal
             ? defaultConfig.dataRoot
             : (argv.dataRoot ?? getConfigValue('dataRoot', defaultConfig.dataRoot));
         prepareDataRoot(resolvedDataRoot);
-        return resolveConfig({ ...argv, dataRoot: resolvedDataRoot }, defaultConfig);
+        return resolveConfig({ ...argv, configPath, dataRoot: resolvedDataRoot }, defaultConfig);
     }
 }

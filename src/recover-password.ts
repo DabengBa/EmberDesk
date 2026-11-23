@@ -1,19 +1,16 @@
-import fs from 'node:fs';
-import yaml from 'yaml';
 import storage from 'node-persist';
 import { initUserStorage, toKey } from './user-storage.ts';
 import { getPasswordSalt, getPasswordHash } from './user-auth.ts';
+import { getConfigValue } from './util.ts';
 
 /**
  * Initializes the storage with the data root specified in the config file.
- * @param {string} configPath - The path to the config file.
  */
-async function initStorage(configPath: string) {
-    const config = yaml.parse(fs.readFileSync(configPath, 'utf8'));
-    const dataRoot = config.dataRoot;
+async function initStorage() {
+    const dataRoot = getConfigValue('dataRoot');
 
     if (!dataRoot) {
-        console.error('No "dataRoot" setting found in config.yaml file.');
+        console.error('No "dataRoot" setting found in the application configuration.');
         process.exit(1);
     }
 
@@ -22,12 +19,12 @@ async function initStorage(configPath: string) {
 
 /**
  * Recovers a user account by enabling it and optionally setting a new password.
- * @param {string} configPath - The path to the config file.
+
  * @param {string} userAccount - The username of the account to recover.
  * @param {string} [userPassword] - The new password for the account. If not provided, sets an empty password.
  */
-export async function recoverPassword(configPath: string, userAccount: string, userPassword?: string) {
-    await initStorage(configPath);
+export async function recoverPassword(userAccount: string, userPassword?: string) {
+    await initStorage();
 
     /**
      * @type {import('./users').User}

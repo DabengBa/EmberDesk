@@ -14,8 +14,31 @@ import { router as filesRouter } from '../src/endpoints/files.ts';
 import { createChatMemoryCore } from '../public/scripts/chat-memory-shared.js';
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ed-generation-http-'));
-const config = path.join(root, 'config.yaml');
-fs.writeFileSync(config, 'backups:\n  chat:\n    enabled: false\nfeatures:\n  storage:\n    canonicalSqlite:\n      enabled: true\n      reads: true\n      writes: true\n      slices:\n        chats:\n          enabled: true\n          reads: true\n          writes: true\n          projection: off\n');
+const config = path.join(root, 'config.jsonc');
+fs.writeFileSync(config, JSON.stringify({
+    backups: {
+        chat: {
+            enabled: false,
+        },
+    },
+    features: {
+        storage: {
+            canonicalSqlite: {
+                enabled: true,
+                reads: true,
+                writes: true,
+                slices: {
+                    chats: {
+                        enabled: true,
+                        reads: true,
+                        writes: true,
+                        projection: 'off',
+                    },
+                },
+            },
+        },
+    },
+}));
 setConfigFilePath(config);
 const { router } = await import('../src/endpoints/chats.ts');
 const users = new Map();

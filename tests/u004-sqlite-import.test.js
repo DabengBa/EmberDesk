@@ -21,8 +21,8 @@ test('character shadow import preserves ids, chat statistics and persisted drift
     fs.mkdirSync(path.join(directories.chats, 'alpha'));
     fs.writeFileSync(path.join(directories.chats, 'alpha', 'one.jsonl'), '{"mes":"hello"}\n');
     const buildSnapshotRow = (avatar, dirs) => buildCharacterFileSnapshotRow({ avatar, directories: dirs, readCharacterData: async filePath => fs.readFileSync(filePath, 'utf8'), getCharaCardV2: value => value });
-    const configPath = path.join(root, 'config.yaml');
-    fs.writeFileSync(configPath, 'port: 8000\n');
+    const configPath = path.join(root, 'config.jsonc');
+    fs.writeFileSync(configPath, JSON.stringify({ port: 8000 }));
     setConfigFilePath(configPath);
     try {
         // The character library can be opened before any chat request.

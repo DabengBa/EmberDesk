@@ -23,7 +23,7 @@ export async function updatePlugins(pluginsPath: string, options?: { autoUpdate?
         return;
     }
 
-    console.log(color.blue('Auto-updating server plugins... Set'), color.yellow('enableServerPluginsAutoUpdate: false'), color.blue('in config.yaml to disable this feature.'));
+    console.log(color.blue('Auto-updating server plugins... Set'), color.yellow('enableServerPluginsAutoUpdate: false'), color.blue('in config.jsonc to disable this feature.'));
 
     // If Git is present but fails to run, keep error handling per plugin.
     const { installed } = await git().version().catch(() => ({ installed: true }));

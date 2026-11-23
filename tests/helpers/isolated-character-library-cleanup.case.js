@@ -12,7 +12,7 @@ async function serverState(isolatedServer, workerIndex) {
     if (roots.length !== 1) throw new Error(`Expected one isolated root, got ${roots.length}`);
     const root = path.join(os.tmpdir(), roots[0]);
     const processes = execFileSync('ps', ['-eo', 'pid=,args='], { encoding: 'utf8' });
-    const matches = processes.split('\n').filter(line => line.includes(`server.js --configPath ${root}/config.yaml`));
+    const matches = processes.split('\n').filter(line => line.includes(`server.js --configPath ${root}/config.jsonc`));
     if (matches.length !== 1) throw new Error(`Expected one isolated server, got ${matches.length}`);
     const pid = Number(matches[0].trim().split(/\s+/)[0]);
     return { root, pid, isolatedServer, workerIndex };

@@ -10,6 +10,7 @@ import crypto from 'node:crypto';
 import readline from 'node:readline';
 
 import yaml from 'yaml';
+
 import _ from 'lodash';
 import mime from 'mime-types';
 import { simpleGit } from 'simple-git';
@@ -19,6 +20,8 @@ import { LOG_LEVELS, MEDIA_REQUEST_TYPE } from './constants.ts';
 import { serverDirectory } from './server-directory.ts';
 import { sync as writeFileAtomicSync } from 'write-file-atomic';
 import { isFirefox } from './express-common.ts';
+import { readConfigFile } from './config-file.ts';
+import type { AppConfig } from './config-schema.ts';
 export {
     extractFileFromZipBuffer,
     normalizeZipEntryPath,
@@ -29,7 +32,7 @@ export {
 /**
  * Parsed config object.
  */
-let CACHED_CONFIG: any = null;
+let CACHED_CONFIG: AppConfig | null = null;
 let CONFIG_PATH: string | null = null;
 
 /**
@@ -44,11 +47,12 @@ export const keyToEnv = (key: string) => 'EMBERDESK_' + String(key).toUpperCase(
  * Set the config file path.
  * @param {string} configFilePath Path to the config file
  */
-export function setConfigFilePath(configFilePath: string) {
+export function setConfigFilePath(configFilePath: string, config: AppConfig | null = null) {
     if (CONFIG_PATH !== null) {
         console.error(color.red('Config file path already set. Please restart the server to change the config file path.'));
     }
     CONFIG_PATH = path.resolve(configFilePath);
+    CACHED_CONFIG = config;
 }
 
 /**
@@ -61,10 +65,10 @@ export function hasConfigFilePath() {
 }
 
 /**
- * Returns the config object from the config.yaml file.
+ * Returns the prepared application config.
  * @returns {object} Config object
  */
-export function getConfig() {
+export function getConfig(): AppConfig {
     if (CONFIG_PATH === null) {
         console.trace();
         console.error(color.red('No config file path set. Please set the config file path using setConfigFilePath().'));
@@ -74,17 +78,17 @@ export function getConfig() {
         return CACHED_CONFIG;
     }
     if (!fs.existsSync(CONFIG_PATH)) {
-        console.error(color.red('No config file found. Please create a config.yaml file. The default config file can be found in the /default folder.'));
+        console.error(color.red(`No config file found at ${CONFIG_PATH}. The default config is in default/config.jsonc.`));
         console.error(color.red('The program will now exit.'));
         process.exit(1);
     }
 
     try {
-        const config = yaml.parse(fs.readFileSync(CONFIG_PATH, 'utf8'));
+        const config = readConfigFile(CONFIG_PATH);
         CACHED_CONFIG = config;
         return config;
     } catch (error) {
-        console.error(color.red('FATAL: Failed to read config.yaml. Please check the file for syntax errors.'));
+        console.error(color.red(`FATAL: Failed to read configuration at ${CONFIG_PATH}.`));
         console.error((error as Error).message);
         process.exit(1);
     }
@@ -97,7 +101,12 @@ export function getConfig() {
  * @param {'number'|'boolean'|null} typeConverter - Type to convert the value to
  * @returns {any} Value for the given key
  */
-export function getConfigValue(key: string, defaultValue: any = null, typeConverter: "number" | "boolean" | null = null) {
+export function getConfigValue(key: string, defaultValue: number, typeConverter: 'number'): number;
+export function getConfigValue(key: string, defaultValue: null, typeConverter: 'number'): number | null;
+export function getConfigValue(key: string, defaultValue: unknown, typeConverter: 'boolean'): boolean;
+export function getConfigValue<K extends keyof AppConfig & string>(key: K): AppConfig[K] | string | null;
+export function getConfigValue(key: string, defaultValue: any, typeConverter?: null): any;
+export function getConfigValue(key: string, defaultValue: any = null, typeConverter: 'number' | 'boolean' | null = null) {
     function _getValue() {
         const envKey = keyToEnv(key);
         if (envKey in process.env) {

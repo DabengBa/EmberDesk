@@ -141,7 +141,15 @@ export function getHostFromUrl(url: string | undefined) {
 }
 
 export function isHostWhitelisted(host: string | undefined, allowlist: readonly string[] = []) {
-    return isExactHost(host, allowlist);
+    const normalizedHost = normalizeHost(host);
+    return isExactHost(host, allowlist) || allowlist.some(allowedHost => {
+        const normalizedAllowedHost = normalizeHost(allowedHost);
+        if (!normalizedAllowedHost.startsWith('*.')) {
+            return false;
+        }
+        const suffix = normalizedAllowedHost.slice(1);
+        return normalizedHost.length > suffix.length && normalizedHost.endsWith(suffix);
+    });
 }
 
 export function classifyExternalContentUrl(url: string, allowlist: readonly string[] = []): UrlClassification {

@@ -10,7 +10,7 @@ let SECRET_KEYS;
 
 beforeAll(async () => {
     const { setConfigFilePath } = await import('../src/util.ts');
-    setConfigFilePath(fileURLToPath(new URL('../default/config.yaml', import.meta.url)));
+    setConfigFilePath(fileURLToPath(new URL('../default/config.jsonc', import.meta.url)));
     ({ SecretManager, SECRET_KEYS } = await import('../src/endpoints/secrets.ts'));
 });
 

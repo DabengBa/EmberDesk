@@ -6,8 +6,8 @@ import { setConfigFilePath } from '../src/util.ts';
 
 // Set up config path before any module that calls getConfigValue at the top level
 const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'emberdesk-auth-test-'));
-const tmpConfig = path.join(tmpDir, 'config.yaml');
-fs.writeFileSync(tmpConfig, 'port: 8000\n', 'utf8');
+const tmpConfig = path.join(tmpDir, 'config.jsonc');
+fs.writeFileSync(tmpConfig, JSON.stringify({ port: 8000 }), 'utf8');
 setConfigFilePath(tmpConfig);
 
 // Dynamic import after config is set

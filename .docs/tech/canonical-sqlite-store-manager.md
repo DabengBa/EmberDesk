@@ -17,7 +17,7 @@ Primary files:
 - `src/constants.ts`
 - `src/user-directories.ts`
 - `src/user-directories.ts`
-- `default/config.yaml`
+- `default/config.jsonc`
 - `tests/canonical-sqlite.test.js`
 - `tests/user-directories.test.js`
 
@@ -57,7 +57,7 @@ The separation is structural, not just naming:
 - derived helper uses `synchronous = NORMAL`
 - canonical helper uses `synchronous = FULL`
 
-Current feature flags are declared in `default/config.yaml` under:
+Current feature flags are declared in `default/config.jsonc` under:
 
 - `features.storage.canonicalSqlite.enabled`
 - `features.storage.canonicalSqlite.shadowImport`

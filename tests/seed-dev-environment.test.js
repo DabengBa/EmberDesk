@@ -28,12 +28,16 @@ describe('seed-dev-environment', () => {
         expect(source).not.toContain('deferred.getBackgrounds');
     });
 
-    test('creates the default content required for a clean first load', () => {
+    test('writes the canonical config even when passed a legacy config path', () => {
         const sandboxRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'emberdesk-seed-dev-'));
         tempRoots.push(sandboxRoot);
 
-        const dataRoot = path.join(sandboxRoot, 'data-root');
-        const configPath = path.join(sandboxRoot, 'config.dev-local.yaml');
+        const dataRoot = path.join(sandboxRoot, 'data-root "quoted"');
+        const configPath = path.join(sandboxRoot, 'config.dev-local.jsonc');
+        const legacyPath = path.join(sandboxRoot, 'config.dev-local.yaml');
+        const legacy = 'port: 8123\n';
+        fs.writeFileSync(legacyPath, legacy);
+        fs.writeFileSync(configPath, '{"dataRoot":"old-data"}');
 
         execFileSync(
             process.execPath,
@@ -44,7 +48,7 @@ describe('seed-dev-environment', () => {
                 '--data-root',
                 dataRoot,
                 '--config',
-                configPath,
+                legacyPath,
             ],
             {
                 cwd: repoRoot,
@@ -52,6 +56,17 @@ describe('seed-dev-environment', () => {
             },
         );
 
+        expect(fs.readFileSync(legacyPath, 'utf8')).toBe(legacy);
+        expect(JSON.parse(fs.readFileSync(configPath, 'utf8'))).toEqual({
+            dataRoot,
+            listen: false,
+            port: 8000,
+            browserLaunch: { enabled: false },
+            enableUserAccounts: true,
+            whitelistMode: false,
+            skipContentCheck: true,
+            logging: { minLogLevel: 1 },
+        });
         expect(fs.existsSync(path.join(dataRoot, '_css', 'user.css'))).toBe(true);
         expect(fs.existsSync(path.join(dataRoot, 'default-user', 'backgrounds', '__transparent.png'))).toBe(false);
         expect(fs.existsSync(path.join(dataRoot, 'default-user', 'backgrounds'))).toBe(true);
@@ -75,7 +90,7 @@ describe('seed-dev-environment', () => {
         tempRoots.push(sandboxRoot);
 
         const dataRoot = path.join(sandboxRoot, 'data-root');
-        const configPath = path.join(sandboxRoot, 'config.dev-local.yaml');
+        const configPath = path.join(sandboxRoot, 'config.dev-local.jsonc');
 
         execFileSync(
             process.execPath,

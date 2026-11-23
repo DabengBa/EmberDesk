@@ -10,10 +10,10 @@ const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 test('new default user receives world content on first startup', async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'emberdesk-startup-default-'));
     const data = path.join(root, 'data');
-    const config = path.join(root, 'config.yaml');
+    const config = path.join(root, 'config.jsonc');
     fs.mkdirSync(data);
-    const defaultConfig = fs.readFileSync(path.join(repo, 'default/config.yaml'), 'utf8');
-    fs.writeFileSync(config, defaultConfig.replace(/^enableUserAccounts: true$/m, 'enableUserAccounts: false'));
+    const defaultConfig = fs.readFileSync(path.join(repo, 'default/config.jsonc'), 'utf8');
+    fs.writeFileSync(config, defaultConfig.replace(/"enableUserAccounts":\s*true/, '"enableUserAccounts": false'));
     const child = spawn(process.execPath, [path.join(repo, 'server.js'), '--dataRoot', data, '--configPath', config, '--port', '0', '--listen', 'false', '--browserLaunchEnabled', 'false'], { cwd: root, env: { ...process.env }, stdio: ['ignore', 'pipe', 'pipe'] });
     let output = '';
     child.stdout.on('data', chunk => { output += chunk; });
@@ -33,9 +33,9 @@ test('new default user receives world content on first startup', async () => {
 test.each(['new', 'existing'])('isolated %s data root reaches real server listening', async kind => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'emberdesk-startup-'));
     const data = path.join(root, 'data');
-    const config = path.join(root, 'config.yaml');
+    const config = path.join(root, 'config.jsonc');
     fs.mkdirSync(data);
-    fs.copyFileSync(path.join(repo, 'default/config.yaml'), config);
+    fs.copyFileSync(path.join(repo, 'default/config.jsonc'), config);
     if (kind === 'existing') {
         fs.mkdirSync(path.join(data, 'default-user'));
         fs.writeFileSync(path.join(data, 'default-user', 'sentinel'), 'preserve');

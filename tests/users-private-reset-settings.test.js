@@ -46,8 +46,8 @@ jest.unstable_mockModule('../src/user-backup.ts', () => usersMock);
 
 const { setConfigFilePath } = await import('../src/util.ts');
 const configRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'emberdesk-reset-config-'));
-fs.writeFileSync(path.join(configRoot, 'config.yaml'), 'port: 8000\n', 'utf8');
-setConfigFilePath(path.join(configRoot, 'config.yaml'));
+fs.writeFileSync(path.join(configRoot, 'config.jsonc'), JSON.stringify({ port: 8000 }), 'utf8');
+setConfigFilePath(path.join(configRoot, 'config.jsonc'));
 
 const { router } = await import('../src/endpoints/users-private-routes.ts');
 const { canonicalSqliteManager } = await import('../src/canonical-sqlite.ts');

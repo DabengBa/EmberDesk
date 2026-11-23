@@ -26,8 +26,8 @@ const __dirname = path.dirname(__filename);
 const repoRoot = path.resolve(__dirname, '..');
 const packageJson = JSON.parse(fs.readFileSync(path.join(repoRoot, 'package.json'), 'utf8'));
 const configTmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'emberdesk-express5-config-'));
-const configPath = path.join(configTmpDir, 'config.yaml');
-fs.writeFileSync(configPath, 'whitelistMode: false\n', 'utf8');
+const configPath = path.join(configTmpDir, 'config.jsonc');
+fs.writeFileSync(configPath, JSON.stringify({ whitelistMode: false }), 'utf8');
 setConfigFilePath(configPath);
 
 const { router: userDataRouter } = await import('../src/user-files.ts');
@@ -473,8 +473,8 @@ describe('Express 5 route compatibility', () => {
             'import http from "node:http";',
             'import { setConfigFilePath } from "./src/util.ts";',
             'const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "emberdesk-express5-plugin-child-"));',
-            'fs.writeFileSync(path.join(tmp, "config.yaml"), "enableServerPlugins: true\\n", "utf8");',
-            'setConfigFilePath(path.join(tmp, "config.yaml"));',
+            'fs.writeFileSync(path.join(tmp, "config.jsonc"), JSON.stringify({ enableServerPlugins: true }), "utf8");',
+            'setConfigFilePath(path.join(tmp, "config.jsonc"));',
             'const pluginsRoot = path.join(tmp, "plugins");',
             'fs.mkdirSync(pluginsRoot, { recursive: true });',
             'fs.writeFileSync(path.join(pluginsRoot, "mounted-plugin.mjs"), "export const info = { id: \\"mounted_plugin\\", name: \\"Mounted Plugin\\", description: \\"test\\" };\\nexport async function init(router) { router.get(\\"/status\\", (_req, res) => res.json({ ok: true })); }", "utf8");',

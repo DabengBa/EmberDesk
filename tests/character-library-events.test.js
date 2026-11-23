@@ -19,8 +19,8 @@ import { createCharacterLibraryChangeObserver } from '../src/character-library-c
 import { createCharacterLibraryEventsHandler } from '../src/endpoints/character-library-events.ts';
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'library-events-'));
-fs.writeFileSync(path.join(root, 'config.yaml'), 'enableUserAccounts: true\n');
-setConfigFilePath(path.join(root, 'config.yaml'));
+fs.writeFileSync(path.join(root, 'config.jsonc'), JSON.stringify({ enableUserAccounts: true }));
+setConfigFilePath(path.join(root, 'config.jsonc'));
 globalThis.DATA_ROOT = root;
 const { setUserDataMiddleware, requireLoginMiddleware } = await import('../src/user-session.ts');
 const { getUserDirectories } = await import('../src/user-directories.ts');

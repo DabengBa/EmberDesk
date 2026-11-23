@@ -1,20 +1,10 @@
 #!/bin/sh
 
-# Function to handle startup logic (Config check + init + Start)
+# Start with the mounted config directory; the server handles defaults and migration.
 start_emberdesk() {
     local PREFIX="$1"
     shift # Remove the first argument (PREFIX) so $@ contains the rest
 
-    # Config Check
-    if [ ! -e "config/config.yaml" ]; then
-        echo "Resource not found, copying from defaults: config.yaml"
-        $PREFIX cp "default/config.yaml" "config/config.yaml"
-    fi
-
-    # Execute init script to auto-populate config.yaml with missing values
-    $PREFIX node src/server-init.ts
-
-    # Start the server
     exec $PREFIX node server.js --listen "$@"
 }
 
@@ -76,8 +66,8 @@ if [ "$(id -u)" = "0" ]; then
             fi
         done
 
-        # Fix config file specifically
-        chown node:node "config/config.yaml" 2>/dev/null
+        # Fix config file ownership even if the mounted directory already has the expected owner.
+        chown node:node config/config.yaml config/config.yml "${EMBERDESK_CONFIG_PATH:-config/config.jsonc}" 2>/dev/null
 
         # Set execution prefix to run as 'node' user
         EXEC_PREFIX="su-exec node:node"
