@@ -35,7 +35,7 @@ import { getImportLedgerEntry } from '../src/canonical-import-ledger.ts';
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const REAL_AVATAR_PNG = path.join(REPO_ROOT, 'public', 'img', 'ai4.png');
-const REAL_AVATAR_PNG_ALT = path.join(REPO_ROOT, 'public', 'img', 'apple-icon-144x144.png');
+const REAL_AVATAR_PNG_ALT = path.join(REPO_ROOT, 'public', 'img', 'apple-icon-180x180.png');
 
 const tempRoots = [];
 const managers = [];

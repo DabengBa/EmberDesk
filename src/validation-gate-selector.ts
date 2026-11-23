@@ -47,7 +47,7 @@ const RULES: Array<Omit<GateSelection, 'matchedInputs'> & { matches(input: strin
     {
         id: 'react-workspace-panel-bundle',
         required: false,
-        command: 'pnpm run build:react:workspace-panels',
+        command: 'pnpm run build:react',
         reason: 'Workspace panel bundle entry or React panel implementation changed.',
         sources: [
             '.docs/tech/pnpm-workflow.md',

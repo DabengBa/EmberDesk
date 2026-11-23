@@ -1,14 +1,8 @@
 import ipaddr from 'ipaddr.js';
 import ipMatching from 'ip-matching';
 import { RateLimiterRes } from 'rate-limiter-flexible';
-import type { Request, Response, NextFunction } from 'express';
+import type { Request, Response } from 'express';
 import { getConfigValue } from './util.ts';
-
-const noopMiddleware = (_req: Request, _res: Response, next: NextFunction) => next();
-/** @deprecated Do not use. A global middleware is provided at the application level. */
-export const jsonParser = noopMiddleware;
-/** @deprecated Do not use. A global middleware is provided at the application level. */
-export const urlencodedParser = noopMiddleware;
 
 /**
  * Gets the IP address of the client from the request object.
