@@ -10,31 +10,27 @@ import { filterValidIpPatterns, getIpFromRequest, getRealOrForwardedIp } from '.
 import type { RequestHandler } from 'express';
 import { color, getConfigValue, safeReadFileSync } from '../util.ts';
 
-const whitelistPath = path.join(process.cwd(), './whitelist.txt');
 const enableForwardedWhitelist = !!getConfigValue('enableForwardedWhitelist', false, 'boolean');
 const whitelistDockerHosts = !!getConfigValue('whitelistDockerHosts', true, 'boolean');
-/** @type {string[]} */
-let whitelist: string[] = getConfigValue('whitelist', []);
 
-if (fs.existsSync(whitelistPath)) {
-    console.warn(color.yellow('whitelist.txt is deprecated and will be removed in a future release.'));
-    console.warn(color.yellow('Please migrate its contents to the whitelist field in config.jsonc. See the documentation for more details.'));
+function hasEffectiveLegacyWhitelist(): boolean {
     try {
-        let whitelistTxt = fs.readFileSync(whitelistPath, 'utf-8');
-        whitelist = whitelistTxt.split('\n').filter(ip => ip).map(ip => ip.trim());
-    } catch (e) {
-        // Surface errors that may occur when reading the whitelist (e.g. permissions), but keep the config.jsonc entries
-        console.warn(color.yellow(`Failed to read whitelist.txt: ${(e as Error).message}`));
+        // A successful read formerly replaced the config list, even for a zero-byte file.
+        fs.readFileSync(path.join(process.cwd(), 'whitelist.txt'));
+        return true;
+    } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+            console.warn(color.yellow(`Failed to read whitelist.txt: ${(error as Error).message}`));
+        }
+        return false;
     }
 }
-
-whitelist = filterValidIpPatterns(whitelist, (entry, message) => `${color.red('Warning')}: Ignoring invalid whitelist entry ${color.yellow(entry)} - ${message}`);
 
 /**
  * Resolves the IP addresses of Docker hostnames and adds them to the whitelist.
  * @returns {Promise<void>} Promise that resolves when the Docker hostnames are resolved
  */
-async function addDockerHostsToWhitelist(): Promise<void> {
+async function addDockerHostsToWhitelist(whitelist: string[]): Promise<void> {
     if (!whitelistDockerHosts || !isDocker()) {
         return;
     }
@@ -57,6 +53,10 @@ async function addDockerHostsToWhitelist(): Promise<void> {
  * @returns {Promise<import('express').RequestHandler>} Promise that resolves to the middleware function
  */
 export default async function getWhitelistMiddleware(): Promise<RequestHandler> {
+    if (hasEffectiveLegacyWhitelist()) {
+        throw new Error('whitelist.txt has been retired. Move its effective entries into the whitelist array in config.jsonc (replacing, not merging, the old array), then archive whitelist.txt outside the server directory.');
+    }
+    const whitelist = filterValidIpPatterns(getConfigValue('whitelist', []), (entry, message) => `${color.red('Warning')}: Ignoring invalid whitelist entry ${color.yellow(entry)} - ${message}`);
     const forbiddenWebpage = Handlebars.compile(
         safeReadFileSync(path.join(globalThis.DATA_ROOT, '_errors', 'forbidden-by-whitelist.html')) ?? '',
     );
@@ -65,7 +65,7 @@ export default async function getWhitelistMiddleware(): Promise<RequestHandler> 
         '/favicon.ico',
     ];
 
-    await addDockerHostsToWhitelist();
+    await addDockerHostsToWhitelist(whitelist);
 
     return function (req, res, next) {
         const clientIp = getIpFromRequest(req);

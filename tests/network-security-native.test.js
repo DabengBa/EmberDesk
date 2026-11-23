@@ -27,6 +27,7 @@ test('native Node executes the security modules and their real call chain', () =
             import assert from 'node:assert/strict';
             import http from 'node:http';
             import https from 'node:https';
+            import fs from 'node:fs';
             import path from 'node:path';
             import express from 'express';
             globalThis.DATA_ROOT = process.env.SECURITY_TEST_ROOT;
@@ -37,6 +38,15 @@ test('native Node executes the security modules and their real call chain', () =
             const { default: corsProxy } = await import('./src/middleware/corsProxy.ts');
             const { default: filter, PrivateRequestAgent } = await import('./src/private-request-filter.ts');
             const { default: proxy } = await import('./src/request-proxy.ts');
+            process.chdir(globalThis.DATA_ROOT);
+            fs.writeFileSync('whitelist.txt', '127.0.0.2');
+            await assert.rejects(whitelist, /whitelist[.]txt/);
+            assert.equal(fs.readFileSync('whitelist.txt', 'utf8'), '127.0.0.2');
+            fs.renameSync('whitelist.txt', 'whitelist.txt.backup');
+            fs.writeFileSync('whitelist.txt', '');
+            await assert.rejects(whitelist, /whitelist[.]txt/);
+            fs.unlinkSync('whitelist.txt');
+            fs.mkdirSync('whitelist.txt');
             const app = express();
             app.use(await whitelist());
             app.use(hostWhitelist);

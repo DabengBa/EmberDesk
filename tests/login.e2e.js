@@ -19,10 +19,7 @@ test.describe('login page', () => {
         await expect(page.getByRole('heading', { name: 'EmberDesk' })).toBeVisible();
         await expectAuthInputSemantics();
 
-        await page.goto('/login.html');
-        await expect(page).toHaveURL(/\/login(?:\?|$)/);
-        await expect(page.getByRole('heading', { name: 'EmberDesk' })).toBeVisible();
-        await expectAuthInputSemantics();
+
     });
 
     test('uses Chinese auth copy and clears stale login errors after credential edits', async ({ page }) => {

@@ -35,7 +35,7 @@ const BASE_DEFAULTS = Object.freeze({
     keyPath: 'certs/privkey.pem',
     keyPassphrase: '',
     whitelistMode: true,
-    basicAuthMode: false,
+
     enableKeepAlive: false,
     requestProxyEnabled: false,
     requestProxyUrl: '',
@@ -126,14 +126,20 @@ describe('parseArgv', () => {
         expect(result.enableIPv4).toBe('auto');
     });
 
-    test('--autorun true: deprecated alias mapped to browserLaunchEnabled', () => {
+    test('--autorun true: retired flag does not enable browser launch', () => {
         const result = parseArgv(['node', 'server.js', '--autorun', 'true']);
-        expect(result.browserLaunchEnabled).toBe(true);
+        expect(result.browserLaunchEnabled).toBeNull();
     });
 
-    test('--autorunHostname foo: deprecated alias mapped', () => {
+    test('--autorunHostname foo: retired flag does not choose a hostname', () => {
         const result = parseArgv(['node', 'server.js', '--autorunHostname', 'foo']);
-        expect(result.browserLaunchHostname).toBe('foo');
+        expect(result.browserLaunchHostname).toBeNull();
+    });
+
+    test('retired browser port and localhost flags do not override defaults', () => {
+        const result = parseArgv(['node', 'server.js', '--autorunPortOverride', '8123', '--avoidLocalhost', 'true']);
+        expect(result.browserLaunchPort).toBeNull();
+        expect(result.browserLaunchAvoidLocalhost).toBeNull();
     });
 
     test('global mode + --configPath: warns and ignores configPath', () => {

@@ -13,7 +13,7 @@ async function signIn(request) {
     expect((await request.post('/api/users/login', options)).ok()).toBe(true);
 }
 
-test('Express gates the shared React document and redirects the retired workspace entry', async ({ request }) => {
+test('Express gates the shared React document and rejects the retired workspace entry', async ({ request }) => {
     const denied = await request.get('/?chat=example&tab=prompt', { maxRedirects: 0 });
     expect(denied.status()).toBe(302);
     expect(denied.headers().location).toBe('/login?chat=example&tab=prompt');
@@ -23,8 +23,8 @@ test('Express gates the shared React document and redirects the retired workspac
     expect((await request.get('/', { maxRedirects: 0 })).headers().location).toBe('/login');
 
     const retired = await request.get('/index.html?chat=example', { maxRedirects: 0 });
-    expect(retired.status()).toBe(302);
-    expect(retired.headers().location).toBe('/?chat=example');
+    expect(retired.status()).toBe(404);
+    expect(retired.headers().location).toBeUndefined();
 
     await signIn(request);
     const workspace = await request.get('/?chat=example', { maxRedirects: 0 });

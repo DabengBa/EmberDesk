@@ -173,7 +173,7 @@
   "rateLimiting": {
     "preferRealIpHeader": false,
     // Set the maximum number of allowed failed basic authentication attempts before rate limiting is applied. Set to 0 to disable rate limiting for basic auth.
-    "basicAuthMaxAttempts": 5,
+
     // Set the maximum number of allowed failed account login attempts before rate limiting is applied. Set to 0 to disable rate limiting for account logins.
     "accountsLoginMaxAttempts": 5,
     // Duration of the account lockout window in seconds after too many failed login attempts.

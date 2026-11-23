@@ -116,9 +116,10 @@ describe('default content seeding', () => {
         expect(errorPages).toEqual(expect.arrayContaining([
             'forbidden-by-whitelist.html',
             'host-not-allowed.html',
-            'unauthorized.html',
+
             'url-not-found.html',
         ]));
+        expect(errorPages).not.toContain('unauthorized.html');
     });
 
     test('pre-existing files in retired-type directories are left untouched', async () => {

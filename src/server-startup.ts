@@ -33,51 +33,6 @@ import { router as backupsRouter } from './endpoints/backups.ts';
 import { router as wireLogRouter } from './endpoints/wire-log.ts';
 import { setupHealthEndpoint } from './endpoints/health.ts';
 
-/**
- * Redirect deprecated API endpoints to their replacements.
- * @param {import('express').Express} app The Express app to use
- */
-export function redirectDeprecatedEndpoints(app: Express): void {
-    /**
-     * Redirect a deprecated API endpoint URL to its replacement. Because fetch, form submissions, and $.ajax follow
-     * redirects, this is transparent to client-side code.
-     * @param {string} src The URL to redirect from.
-     * @param {string} destination The URL to redirect to.
-     */
-    function redirect(src: string, destination: string): void {
-        app.use(src, (req, res) => {
-            console.warn(`API endpoint ${src} is deprecated; use ${destination} instead`);
-            // HTTP 301 causes the request to become a GET. 308 preserves the request method.
-            res.redirect(308, destination);
-        });
-    }
-
-    redirect('/createcharacter', '/api/characters/create');
-    redirect('/renamecharacter', '/api/characters/rename');
-    redirect('/editcharacter', '/api/characters/edit');
-    redirect('/editcharacterattribute', '/api/characters/edit-attribute');
-    redirect('/v2/editcharacterattribute', '/api/characters/merge-attributes');
-    redirect('/deletecharacter', '/api/characters/delete');
-    redirect('/getcharacters', '/api/characters/all');
-    redirect('/getonecharacter', '/api/characters/get');
-    redirect('/getallchatsofcharacter', '/api/characters/chats');
-    redirect('/importcharacter', '/api/characters/import');
-    redirect('/dupecharacter', '/api/characters/duplicate');
-    redirect('/exportcharacter', '/api/characters/export');
-    redirect('/savechat', '/api/chats/save');
-    redirect('/getchat', '/api/chats/get');
-    redirect('/renamechat', '/api/chats/rename');
-    redirect('/delchat', '/api/chats/delete');
-    redirect('/exportchat', '/api/chats/export');
-    redirect('/importchat', '/api/chats/import');
-    redirect('/getworldinfo', '/api/worldinfo/get');
-    redirect('/deleteworldinfo', '/api/worldinfo/delete');
-    redirect('/importworldinfo', '/api/worldinfo/import');
-    redirect('/editworldinfo', '/api/worldinfo/edit');
-    redirect('/uploadimage', '/api/images/upload');
-    redirect('/listimgfiles/:folder', '/api/images/list/:folder');
-    redirect('/api/content/import', '/api/content/importURL');
-}
 
 /**
  * Setup the routers for the endpoints.

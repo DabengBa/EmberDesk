@@ -100,7 +100,7 @@ async function createLoginRouteApp({ reactLoginDistRoot } = {}) {
         next();
     });
     app.get('/login', usersModule.createLoginPageMiddleware({ reactLoginDistRoot }));
-    app.get('/login.html', usersModule.createLegacyLoginHtmlRedirectMiddleware());
+
     app.use(featureModule.REACT_LOGIN_BASE_PATH, middlewareModule.getReactLoginServeMiddleware(reactLoginDistRoot));
     return { app, featureModule, usersModule };
 }
@@ -140,7 +140,7 @@ describe('login React sole owner route', () => {
             .toBe('恢复码会输出到服务端控制台，不会通过邮件或短信发送，请联系管理员获取。');
     });
 
-    test('serves React from /login and redirects /login.html while preserving supported query context', async () => {
+    test('serves React from /login with supported query context', async () => {
         const distRoot = writeReactDist('login');
         const { app } = await createLoginRouteApp({ reactLoginDistRoot: distRoot });
 
@@ -152,12 +152,6 @@ describe('login React sole owner route', () => {
             expect(loginBody).not.toContain('scripts/login.js');
             expect(loginBody).not.toContain('login-card');
 
-            const legacyResponse = await fetch(`${url}/login.html?noauto=1&utm=bookmark`, { redirect: 'manual' });
-            expect([301, 302, 307, 308]).toContain(legacyResponse.status);
-            const location = legacyResponse.headers.get('location');
-            expect(location).toMatch(/\/login\?/);
-            expect(location).toContain('noauto=1');
-            expect(location).toContain('utm=bookmark');
 
             const assetResponse = await fetch(`${url}/react/login/assets/login.js`);
             expect(assetResponse.status).toBe(200);

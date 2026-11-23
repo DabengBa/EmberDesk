@@ -22,7 +22,7 @@ Force a new or legacy passwordless deployment through a visible account-hardenin
 - The legacy single-passwordless-user path asks only for a new password and confirmation for the existing user; it must not create a duplicate account.
 - Passwordless setup completion is not allowed: validation errors appear on the setup card and the operator can correct input there.
 - After setup succeeds, the operator is authenticated and reaches [Chat Workspace](page.chat_workspace); once setup is complete, `/setup` no longer opens the setup form and redirects to login.
-- `/setup.html` redirects to `/setup` and preserves the query string; it is not a second setup runtime.
+- `/setup.html` returns 404. Use `/setup`.
 
 ## Semantic Interaction IDs
 

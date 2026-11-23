@@ -2,7 +2,7 @@ import path from 'node:path';
 import fs from 'node:fs';
 import crypto from 'node:crypto';
 import os from 'node:os';
-import { Buffer } from 'node:buffer';
+
 import storage from 'node-persist';
 import { sync as writeFileAtomicSync } from 'write-file-atomic';
 import ipMatching from 'ip-matching';
@@ -14,7 +14,7 @@ import type { Request } from 'express';
 
 const AUTHELIA_AUTH = getConfigValue('sso.autheliaAuth', false, 'boolean');
 const AUTHENTIK_AUTH = getConfigValue('sso.authentikAuth', false, 'boolean');
-const PER_USER_BASIC_AUTH = getConfigValue('perUserBasicAuth', false, 'boolean');
+
 const ANON_CSRF_SECRET = crypto.randomBytes(64).toString('base64');
 const TRUSTED_PROXIES = filterValidIpPatterns(getConfigValue('sso.trustedProxies', ['127.0.0.1', '::1']) ?? [], (entry, message) => `${color.red('Warning')}: Ignoring invalid sso.trustedProxies entry ${color.yellow(entry)} - ${message}`);
 
@@ -135,12 +135,12 @@ export function shouldRedirectToLogin(request: Request) {
 
 /**
  * Tries auto-login if there is only one user and it's not password protected.
- * or another configured method such authlia or basic
+ * or when a configured SSO provider authenticates the request.
  * @param {import('express').Request} request Request object
- * @param {boolean} basicAuthMode If Basic auth mode is enabled
+
  * @returns {Promise<boolean>} Whether auto-login was performed
  */
-export async function tryAutoLogin(request: Request, basicAuthMode: boolean) {
+export async function tryAutoLogin(request: Request) {
     if (!getEnableAccounts() || request.user || !request.session) {
         return false;
     }
@@ -158,9 +158,6 @@ export async function tryAutoLogin(request: Request, basicAuthMode: boolean) {
             return true;
         }
 
-        if (basicAuthMode && PER_USER_BASIC_AUTH && await basicUserLogin(request)) {
-            return true;
-        }
     }
 
     return false;
@@ -281,48 +278,5 @@ async function headerUserLogin(request: Request, header = 'Remote-User') {
             }
         }
     }
-    return false;
-}
-
-/**
- * Tries auto-login with basic auth username.
- * @param {import('express').Request} request Request object
- * @returns {Promise<boolean>} Whether auto-login was performed
- */
-async function basicUserLogin(request: Request) {
-    if (!request.session) {
-        return false;
-    }
-
-    const authHeader = request.headers.authorization;
-
-    if (!authHeader) {
-        return false;
-    }
-
-    const [scheme, credentials] = authHeader.split(' ');
-
-    if (scheme !== 'Basic' || !credentials) {
-        return false;
-    }
-
-    const [username, ...passwordParts] = Buffer.from(credentials, 'base64')
-        .toString('utf8')
-        .split(':');
-    const password = passwordParts.join(':');
-
-    const userHandles = await getAllUserHandles();
-    for (const userHandle of userHandles) {
-        if (username === userHandle) {
-            const user = await storage.getItem(toKey(userHandle));
-            // Verify pass again here just to be sure
-            if (user && user.enabled && user.password && user.password === getPasswordHash(password, user.salt)) {
-                request.session.handle = userHandle;
-                request.session.version = getAccountVersion(user);
-                return true;
-            }
-        }
-    }
-
     return false;
 }

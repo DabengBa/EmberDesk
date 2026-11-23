@@ -17,7 +17,7 @@ Recover visible main-chat generation failures through a bounded retry chain befo
 
 ## User-Visible Contract
 
-- The feature applies to visible main-chat send, continue, regenerate/retry, and swipe requests that produce or update an assistant row.
+- The feature applies to visible main-chat send, continue, and regenerate/retry requests that produce or update an assistant row.
 - Recovery is bounded: the original request may be followed by one primary-provider retry and, when a fallback model is configured, one fallback-model retry on the same connection.
 - Server generation uses this bound for a plain reply or for the current pipeline round only. A completed step or browser action is not run again, and deterministic upstream client errors (such as HTTP 400) are not retried.
 - Recoverable failures keep the user message and assistant row identity stable; partial assistant text from an intermediate failed attempt is cleared before the next attempt continues.

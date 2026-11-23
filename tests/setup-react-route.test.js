@@ -102,7 +102,7 @@ async function createSetupRouteApp({ reactLoginDistRoot } = {}) {
         reactLoginDistRoot,
         forceNeedsSetup: true,
     }));
-    app.get('/setup.html', usersModule.createLegacySetupHtmlRedirectMiddleware());
+
     app.use(basePathModule.REACT_LOGIN_BASE_PATH, middlewareModule.getReactLoginServeMiddleware(reactLoginDistRoot));
     return { app, usersModule };
 }
@@ -134,7 +134,7 @@ describe('setup React sole owner route', () => {
         expect(sharedSource).toContain('export function buildSetupRequestBody');
     });
 
-    test('serves React from /setup and redirects /setup.html while preserving supported query context', async () => {
+    test('serves React from /setup with supported query context', async () => {
         const distRoot = writeReactDist();
         const { app } = await createSetupRouteApp({ reactLoginDistRoot: distRoot });
 
@@ -145,11 +145,6 @@ describe('setup React sole owner route', () => {
             expect(setupBody).toContain('/react/login/assets/setup.js');
             expect(setupBody).not.toContain('scripts/setup.js');
 
-            const legacyResponse = await fetch(`${url}/setup.html?from=bookmark`, { redirect: 'manual' });
-            expect([301, 302, 307, 308]).toContain(legacyResponse.status);
-            const location = legacyResponse.headers.get('location');
-            expect(location).toMatch(/\/setup/);
-            expect(location).toContain('from=bookmark');
 
             const assetResponse = await fetch(`${url}/react/login/assets/setup.js`);
             expect(assetResponse.status).toBe(200);

@@ -30,11 +30,10 @@ import { ensurePublicDirectoriesExist, getUserDirectoriesList, cleanUploads, get
 import { migrateUserData, migratePublicOverrides } from './user-migrations.ts';
 import { requireLoginMiddleware, setUserDataMiddleware } from './user-session.ts';
 import { verifySecuritySettings } from './user-security.ts';
-import { loginPageMiddleware, setupPageMiddleware, settingsPageMiddleware, createLegacyLoginHtmlRedirectMiddleware, createLegacySetupHtmlRedirectMiddleware, createLegacyAuthHtmlRedirectMiddleware } from './user-pages.ts';
+import { loginPageMiddleware, setupPageMiddleware, settingsPageMiddleware } from './user-pages.ts';
 
 import getViteLibServeMiddleware from './middleware/vite-lib-serve.ts';
 import { getReactLoginServeMiddleware, hasReactLoginBuild, sendReactLoginIndex } from './middleware/react-login-serve.ts';
-import basicAuthMiddleware from './middleware/basicAuth.ts';
 import getWhitelistMiddleware from './middleware/whitelist.ts';
 import accessLoggerMiddleware, { getAccessLogPath, migrateAccessLog } from './middleware/accessLogWriter.ts';
 import multerMonkeyPatch from './middleware/multerMonkeyPatch.ts';
@@ -68,7 +67,7 @@ import { REACT_LOGIN_BASE_PATH } from './react-login-feature.ts';
 import { router as usersPublicRouter } from './endpoints/users-public-routes.ts';
 
 import { checkForNewContent } from './endpoints/content-manager.ts';
-import { redirectDeprecatedEndpoints, ServerStartup, setupPrivateEndpoints, setupPublicEndpoints } from './server-startup.ts';
+import { ServerStartup, setupPrivateEndpoints, setupPublicEndpoints } from './server-startup.ts';
 import type { ServerStartupResult } from './server-startup.ts';
 import type { CommandLineArguments } from './command-line.ts';
 import type { Express } from 'express';
@@ -149,12 +148,6 @@ async function registerMiddleware(app: Express, cli: CommandLineArguments): Prom
         app.use(cors(corsOptions));
     }
 
-    // Legacy: basicAuthMode is deprecated. Use enableUserAccounts instead.
-    // Retained for backward compatibility; will show a browser-native prompt before the login page.
-    if (cli.listen && cli.basicAuthMode) {
-        app.use(basicAuthMiddleware);
-    }
-
     if (cli.whitelistMode) {
         const whitelistMiddleware = await getWhitelistMiddleware();
         app.use(whitelistMiddleware);
@@ -222,6 +215,22 @@ async function registerMiddleware(app: Express, cli: CommandLineArguments): Prom
         });
     }
 
+    // Retired public paths may have stale files on disk. Do not serve them or redirect to login.
+    app.use((request, response, next) => {
+        let pathname: string;
+        try {
+            pathname = decodeURIComponent(request.path);
+        } catch {
+            return next();
+        }
+        const normalized = path.posix.normalize(pathname.replaceAll('\\', '/')).toLowerCase();
+        if (/^\/(?:index|login|setup)\.html\/?$/.test(normalized)
+            || /^\/scripts\/extensions\/third-party(?:\/|$)/.test(normalized)) {
+            return response.sendStatus(404);
+        }
+        return next();
+    });
+
     // Host the workspace through the same React entry as login and settings.
     app.get('/', cacheBuster.middleware, async (request, response) => {
         if (await needsSetup()) {
@@ -241,18 +250,15 @@ async function registerMiddleware(app: Express, cli: CommandLineArguments): Prom
         }
         return sendReactLoginIndex(response);
     });
-    app.get('/index.html', createLegacyAuthHtmlRedirectMiddleware('/'));
 
     // Callback endpoint for OAuth PKCE flows (e.g. OpenRouter)
     app.get(OAUTH_CALLBACK_ROUTE, oauthCallbackMiddleware);
 
     // Host setup page (first-time admin account creation)
     app.get('/setup', setupPageMiddleware);
-    app.get('/setup.html', createLegacySetupHtmlRedirectMiddleware());
 
     // Host login page
     app.get('/login', loginPageMiddleware);
-    app.get('/login.html', createLegacyLoginHtmlRedirectMiddleware());
 
     // Host settings route
     app.get('/settings', settingsPageMiddleware);
@@ -526,7 +532,6 @@ async function main() {
     startupProfiler.mark('bootstrap:start');
     await initDataPhase();
     await registerMiddleware(app, cliArgs);
-    redirectDeprecatedEndpoints(app);
     setupPrivateEndpoints(app);
     const resources = await collectCleanupResources();
     const exitProcess = createCleanupHandler(resources);

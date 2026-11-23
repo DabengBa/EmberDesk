@@ -91,7 +91,7 @@ If `public/characters` was moved before a later settings migration failure, the 
 | `getPasswordHash(password, salt)` | function | `crypto.scryptSync` |
 | `getCsrfSecret(request)` | function | Per-user CSRF secret |
 | `shouldRedirectToLogin(request)` | function | Guard predicate |
-| `tryAutoLogin(request, basicAuthMode)` | async | Orchestrator: single-user, Authelia, Authentik, basic |
+| `tryAutoLogin(request)` | async | Orchestrator: single-user, Authelia, Authentik |
 
 ## Related Semantic IDs And Code Binding Points
 

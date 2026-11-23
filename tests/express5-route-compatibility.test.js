@@ -33,7 +33,7 @@ setConfigFilePath(configPath);
 const { router: userDataRouter } = await import('../src/user-files.ts');
 const { requireLoginMiddleware } = await import('../src/user-session.ts');
 const { router: imagesRouter } = await import('../src/endpoints/images.ts');
-const { redirectDeprecatedEndpoints, setupPrivateEndpoints, setupPublicEndpoints } = await import('../src/server-startup.ts');
+const { setupPrivateEndpoints, setupPublicEndpoints } = await import('../src/server-startup.ts');
 
 function listen(app) {
     const server = http.createServer(app);
@@ -321,26 +321,10 @@ describe('Express 5 route compatibility', () => {
         });
     });
 
-    test('deprecated endpoint redirects preserve methods under Express 5', async () => {
-        const app = express();
-        redirectDeprecatedEndpoints(app);
-
-        await usingApp(app, async (url) => {
-            const response = await fetch(`${url}/getcharacters`, {
-                method: 'POST',
-                redirect: 'manual',
-                headers: { 'content-type': 'application/json' },
-                body: JSON.stringify({}),
-            });
-
-            expect(response.status).toBe(308);
-            expect(response.headers.get('location')).toBe('/api/characters/all');
-        });
-    });
 
     test('retired background endpoint routes are absent rather than redirected', async () => {
         const app = express();
-        redirectDeprecatedEndpoints(app);
+        setupPrivateEndpoints(app);
 
         await usingApp(app, async (url) => {
             for (const route of ['/getbackgrounds', '/delbackground', '/renamebackground', '/downloadbackground']) {
