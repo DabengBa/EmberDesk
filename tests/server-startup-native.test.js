@@ -33,6 +33,29 @@ test('native startup exits when both network protocols are disabled', () => {
     expect(child.stderr).toContain('Both IPv6 and IPv4 are disabled or not detected');
 });
 
+test.each([
+    ['network listener', { listen: true, basicAuthMode: true }],
+    ['loopback per-user auto-login', { listen: false, basicAuthMode: true, perUserBasicAuth: true, enableUserAccounts: true }],
+    ['CLI override', { listen: true }, ['--basicAuthMode', 'true']],
+])('legacy Basic Auth fails closed: %s', (_name, settings, flags = []) => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'emberdesk-legacy-auth-'));
+    const config = path.join(root, 'config.jsonc');
+    try {
+        fs.writeFileSync(config, JSON.stringify(settings));
+        const child = spawnSync(process.execPath, [path.join(repo, 'server.js'), '--configPath', config,
+            '--dataRoot', path.join(root, 'data'), '--port', '0', '--browserLaunchEnabled', 'false', ...flags], {
+            cwd: root, encoding: 'utf8', timeout: 4000,
+        });
+        expect({ status: child.status, output: child.stderr + child.stdout }).toEqual({
+            status: 1, output: expect.stringContaining('Basic Auth has been retired'),
+        });
+        expect(child.stdout).not.toContain('EmberDesk is listening on');
+    } finally {
+        fs.rmSync(root, { recursive: true, force: true });
+    }
+}, 10000);
+
+
 test('real entry starts from an isolated cwd and handles SIGTERM', async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'emberdesk-native-start-'));
     const config = path.join(root, 'config.jsonc');
@@ -91,10 +114,14 @@ test('real authenticated multipart uploads stage separately and startup clears s
     const staging = handle => path.join(data, handle, '_uploads');
     const stagedFile = 'stale-upload';
     const base = `http://127.0.0.1:${port}`;
+    const extensionDir = path.join(repo, 'public/scripts/extensions/third-party');
+    const retiredAssetDir = path.join(extensionDir, path.basename(root));
     let child;
     let closed;
     let output = '';
     try {
+        fs.mkdirSync(retiredAssetDir, { recursive: true });
+        fs.writeFileSync(path.join(retiredAssetDir, 'probe.txt'), 'retired extension file');
         fs.copyFileSync(path.join(repo, 'default/config.jsonc'), config);
         const seed = spawnSync(process.execPath, ['--input-type=module', '-e', `
             import storage from 'node-persist';
@@ -156,6 +183,30 @@ test('real authenticated multipart uploads stage separately and startup clears s
         };
         expect(await upload(await session(), 'anonymous')).toMatchObject({ status: 403 });
         const alice = await session('alice');
+        for (const route of ['/index.html?chat=old', '/login.html', '/setup.html',
+            `/scripts/extensions/third-party/${path.basename(root)}/probe.txt`,
+            `/scripts/extensions/%74hird-party/${path.basename(root)}/probe.txt`,
+        ]) {
+            const response = await fetch(`${base}${route}`, { redirect: 'manual' });
+            expect({ route, status: response.status, location: response.headers.get('location') }).toEqual({
+                route, status: 404, location: null,
+            });
+        }
+        for (const route of ['/createcharacter', '/renamecharacter', '/editcharacter', '/editcharacterattribute',
+            '/v2/editcharacterattribute', '/deletecharacter', '/getcharacters', '/getonecharacter',
+            '/getallchatsofcharacter', '/importcharacter', '/dupecharacter', '/exportcharacter',
+            '/savechat', '/getchat', '/renamechat', '/delchat', '/exportchat', '/importchat',
+            '/getworldinfo', '/deleteworldinfo', '/importworldinfo', '/editworldinfo', '/uploadimage',
+            '/listimgfiles/default', '/api/content/import',
+        ]) {
+            const response = await fetch(`${base}${route}`, { method: 'POST', headers: alice, redirect: 'manual' });
+            expect({ route, status: response.status, location: response.headers.get('location') }).toEqual({
+                route, status: 404, location: null,
+            });
+        }
+        const characters = await fetch(`${base}/api/characters/all`, { method: 'POST', headers: alice });
+        expect(characters.status).toBe(200);
+        expect((await fetch(`${base}/scripts/extensions/regex/index.js`)).status).toBe(200);
         expect(await upload({ cookie: alice.cookie }, 'missing-csrf')).toMatchObject({ status: 500 });
         const unexpected = await upload(alice, 'wrong-field', 'other');
         expect(unexpected.status).toBe(500);
@@ -176,6 +227,7 @@ test('real authenticated multipart uploads stage separately and startup clears s
     } finally {
         if (child?.exitCode === null && child.signalCode === null) child.kill('SIGTERM');
         await closed;
+        fs.rmSync(retiredAssetDir, { recursive: true, force: true });
         fs.rmSync(root, { recursive: true, force: true });
     }
 }, 30000);

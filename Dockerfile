@@ -27,8 +27,8 @@ RUN \
 
 # Directories required for non-root and volumeless runs.
 RUN \
-  mkdir -p config data plugins public/scripts/extensions/third-party backups && \
-  chown -R node:node config data plugins public/scripts/extensions/third-party backups
+  mkdir -p config data plugins backups && \
+  chown -R node:node config data plugins backups
 
 # Pre-compile the legacy library and the shared React application.
 RUN \

@@ -19,7 +19,7 @@ This page exists so a new deployment operator must create a password-protected a
 ## Runtime Owner
 
 - `/setup` is served only by the shared React auth app.
-- `/setup.html` redirects to `/setup` and preserves the query string; it is not a legacy runtime fallback.
+- `/setup.html` returns 404. Use `/setup`.
 - Missing React build returns a clear server error instead of `public/setup.html`.
 - Rollback is a previous application version deploy, not an in-process jQuery controller.
 
@@ -86,5 +86,5 @@ In `fresh` mode the submitted handle is slugified server-side (lowercased, diacr
 - The setup page is shown until the user store has a password-protected account. After setup is complete, `/setup` redirects to `/login`.
 - The display name field is optional; if left empty, the handle is used as the display name.
 - The created account is always admin and enabled.
-- `app/routes/setup.tsx` owns the setup page. `/setup.html` is served by `createLegacySetupHtmlRedirectMiddleware()` and only redirects to `/setup`.
+- `app/routes/setup.tsx` owns the setup page at `/setup`.
 - Setup completion is serialized by a server-side lock, so concurrent submits cannot create multiple admins.

@@ -46,7 +46,6 @@ describe('workspace React shell retirement', () => {
         const scripts = JSON.parse(read('package.json')).scripts;
 
         expect(scripts['build:react']).toBe('vite build --mode login');
-        expect(scripts['build:react:workspace-panels']).toBe('pnpm run build:react');
-
+        expect(scripts['build:react:workspace-panels']).toBeUndefined();
     });
 });

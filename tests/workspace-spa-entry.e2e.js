@@ -13,7 +13,7 @@ async function signIn(request) {
     expect((await request.post('/api/users/login', options)).ok()).toBe(true);
 }
 
-test('Express gates the shared React document and redirects the retired workspace entry', async ({ request }) => {
+test('Express gates the shared React document and rejects the retired workspace entry', async ({ request }) => {
     const denied = await request.get('/?chat=example&tab=prompt', { maxRedirects: 0 });
     expect(denied.status()).toBe(302);
     expect(denied.headers().location).toBe('/login?chat=example&tab=prompt');
@@ -23,8 +23,8 @@ test('Express gates the shared React document and redirects the retired workspac
     expect((await request.get('/', { maxRedirects: 0 })).headers().location).toBe('/login');
 
     const retired = await request.get('/index.html?chat=example', { maxRedirects: 0 });
-    expect(retired.status()).toBe(302);
-    expect(retired.headers().location).toBe('/?chat=example');
+    expect(retired.status()).toBe(404);
+    expect(retired.headers().location).toBeUndefined();
 
     await signIn(request);
     const workspace = await request.get('/?chat=example', { maxRedirects: 0 });
@@ -74,6 +74,31 @@ test('the authenticated React workspace commits native hosts before starting the
         return { globalsInstalled: 'SillyTavern' in window, charactersAvailable: Array.isArray(getContext().characters) };
     })).toEqual({ globalsInstalled: false, charactersAvailable: true });
 });
+
+for (const iosFirefox of [false, true]) {
+    test(`startup viewport workaround ${iosFirefox ? 'runs for iOS Firefox' : 'does not run for desktop Chromium'}`, async ({ page }) => {
+        await signIn(page.request);
+        await page.addInitScript(useIosFirefox => {
+            if (useIosFirefox) {
+                Object.defineProperty(navigator, 'userAgent', {
+                    value: 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) FxiOS/131.0 Mobile/15E148 Safari/605.1.15',
+                });
+            }
+            window.__usedAbsoluteBodyPosition = false;
+            new MutationObserver(records => {
+                for (const record of records) {
+                    if (record.target === document.body && record.oldValue?.includes('position: absolute')) {
+                        window.__usedAbsoluteBodyPosition = true;
+                    }
+                }
+            }).observe(document, { subtree: true, attributes: true, attributeFilter: ['style'], attributeOldValue: true });
+        }, iosFirefox);
+
+        await page.goto('/');
+        await expect.poll(() => page.evaluate(() => window.__emberDeskStartup?.appReadyAtMs)).toEqual(expect.any(Number));
+        expect(await page.evaluate(() => [window.__usedAbsoluteBodyPosition, document.body.style.position])).toEqual([iosFirefox, '']);
+    });
+}
 
 test('shows the workspace frame without admitting composer input while settings are held', async ({ page }, testInfo) => {
     await signIn(page.request);

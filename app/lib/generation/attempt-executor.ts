@@ -1266,13 +1266,15 @@ async function runOwnedRequest<State, Assembly extends { stages: { kind: 'termin
     prepare(): Promise<{ kind: 'ready'; state: State } | { kind: 'terminal'; value: unknown } | null>;
     assemble(state: State): Promise<Assembly>;
     dispatch(state: State, assembly: Assembly): Promise<Result>;
+    cancelled?(state: State): void;
 }): Promise<Result | unknown> {
     const prepared = await ports.prepare();
     if (!prepared) return;
     if (prepared.kind === 'terminal') return prepared.value;
-    if (!ports.ownsRun()) return;
+    if (!ports.ownsRun()) { ports.cancelled?.(prepared.state); return; }
     const assembly = await ports.assemble(prepared.state);
-    if (!assembly.stages || !ports.ownsRun()) return;
+    if (!ports.ownsRun()) { ports.cancelled?.(prepared.state); return; }
+    if (!assembly.stages) return;
     if (assembly.stages.kind === 'terminal') return assembly.stages.value;
     return ports.dispatch(prepared.state, assembly);
 }

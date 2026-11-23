@@ -314,6 +314,14 @@ async function executeOwnedGenerationRequestInShell(generationEnvelope: ShellEnv
     console.log('Generate entered');
     return getGenerationLifecycleService().runOwnedRequest({
         ownsRun: () => lease.owns(),
+        cancelled: prepared => {
+            const current = getCurrentGenerationContextIdentity();
+            const target = prepared.requestIdentity;
+            if (prepared.entry.submissionSignal?.aborted
+                && shell().state.abortController?.signal === prepared.entry.submissionSignal
+                && current.chatId === target.chatId && current.chatReference === target.chatReference
+                && current.contextRevision === target.contextRevision) unblockGeneration(type);
+        },
         prepare: async () => {
             const prepared = await getGenerationLifecycleService().prepareOwnedGeneration({
                 type, dryRun, depth, preview, regenerate: options?.regenerate === true,

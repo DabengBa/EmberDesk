@@ -27,7 +27,7 @@ Primary files:
 
 1. **Data Initialization** — `initDataPhase()`: user storage init, DNS resolution, directory creation, migrations, security verification. No Express dependency.
 2. **Middleware Registration** — `registerMiddleware(app, cli)`: Express middleware stack (helmet, CORS, CSRF, sessions, auth, static files, public routes). Async due to whitelist middleware.
-3. **Route Registration** — `redirectDeprecatedEndpoints(app)` + `setupPrivateEndpoints(app)`: deprecated URL redirects and all domain routers.
+3. **Route Registration** — `setupPrivateEndpoints(app)` mounts the domain routers.
 4. **Pre-listen Phase** — split into two sub-phases:
    - `collectCleanupResources()`: migrations, content checks, plugin loading. Returns cleanup handles.
    - Signal handler registration (SIGINT, SIGTERM, uncaughtException) via `createCleanupHandler()`.
@@ -48,14 +48,14 @@ Constraints:
 
 - `ServerStartup` owns IP auto-detection, HTTP/HTTPS server creation, and listen failure handling independently.
 - Express remains the accepted runtime owner for this host chain; narrow route-island experiments do not authorize host replacement.
-- Middleware order is preserved: helmet -> compression -> responseTime -> Express JSON and URL-encoded parsers -> CORS -> auth -> whitelist -> host whitelist -> access log -> sessions -> user data -> CSRF -> public/static routes -> auth wall -> CORS proxy -> Multer upload parsing -> deprecated redirects -> domain routes -> error handler -> 404.
+- Middleware order: helmet -> compression -> responseTime -> Express JSON and URL-encoded parsers -> CORS -> IP whitelist -> Host whitelist -> access log -> sessions -> user data -> CSRF -> retired public paths -> public/static routes -> auth wall -> CORS proxy -> Multer upload parsing -> domain routes -> error handler -> 404.
 - Both Express parsers use a `500mb` limit. The URL-encoded parser uses `extended: true`. If neither parser sets a body, downstream middleware receives an empty object.
 - Cleanup order: characterLibraryChangeObserver.dispose -> cleanupPlugins (if present) -> diskCache.dispose -> setWindowTitle -> process.exit.
 - Express 5 compatibility routes are treated as production contracts, not migration experiments:
   - OAuth callbacks use `/callback{/:source}` and preserve sourced provider callback parameters inside the nested `query` wrapper consumed by the browser OpenRouter flow.
   - The optional CORS proxy uses `/proxy/*url` so the full target URL remains available to the proxy middleware.
   - User-file wildcard routes and static asset serving are covered by tests for nested files, encoded paths, extension fallback, traversal rejection, and browser-critical MIME types.
-  - Deprecated endpoint redirects remain method-preserving `308` responses.
+  - Retired API aliases are not registered and fall through to the normal 404 after the applicable access checks. `/index.html`, `/login.html`, `/setup.html`, and the retired `/scripts/extensions/third-party/` tree return 404 before public static serving; existing files are not deleted.
 
 ## Core Implementation
 
@@ -65,7 +65,7 @@ Constraints:
 main()
   initDataPhase()
   registerMiddleware(app, cliArgs)
-  redirectDeprecatedEndpoints(app)
+
   setupPrivateEndpoints(app)
   collectCleanupResources() → resources
   createCleanupHandler(resources) → exitProcess

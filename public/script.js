@@ -4555,6 +4555,8 @@ export async function startWorkspaceRuntime(revealWorkspace) {
 }
 
 async function fixViewport() {
+    // Firefox on iOS can retain the login viewport position.
+    if (!/\bFxiOS\//.test(navigator.userAgent)) return;
     document.body.style.position = 'absolute';
     await delay(1);
     document.body.style.position = '';

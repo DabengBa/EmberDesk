@@ -25,7 +25,7 @@ export type CommandLineArguments = {
     enableIPv4: boolean | string; enableIPv6: boolean | string; dnsPreferIPv6: boolean; heartbeatInterval: number;
     browserLaunchEnabled: boolean; browserLaunchHostname: string; browserLaunchPort: number; browserLaunchAvoidLocalhost: boolean;
     enableCorsProxy: boolean; disableCsrf: boolean; ssl: boolean; certPath: string; keyPath: string; keyPassphrase: string;
-    whitelistMode: boolean; basicAuthMode: boolean; enableKeepAlive: boolean; requestProxyEnabled: boolean;
+    whitelistMode: boolean; enableKeepAlive: boolean; requestProxyEnabled: boolean;
     requestProxyUrl: string; requestProxyBypass: string[]; getIPv4ListenUrl: () => URL; getIPv6ListenUrl: () => URL;
     getBrowserLaunchHostname: (result: ServerStartupResult) => Promise<string>; getBrowserLaunchUrl: (hostname: string) => URL;
 };
@@ -147,7 +147,7 @@ export function parseArgv(args: string[]): ParsedArgv {
         .option('basicAuthMode', {
             type: 'boolean',
             default: null,
-            describe: 'Enables basic authentication',
+            hidden: true, // Detect legacy deployments; never silently drop their protection.
         })
         .option('enableKeepAlive', {
             type: 'boolean',
@@ -172,27 +172,6 @@ export function parseArgv(args: string[]): ParsedArgv {
             type: 'number',
             default: null,
             describe: 'Interval in seconds to write a heartbeat file. 0 to disable.',
-        })
-        /* DEPRECATED options */
-        .option('autorun', {
-            type: 'boolean',
-            default: null,
-            describe: 'DEPRECATED: Use "browserLaunchEnabled" instead.',
-        })
-        .option('autorunHostname', {
-            type: 'string',
-            default: null,
-            describe: 'DEPRECATED: Use "browserLaunchHostname" instead.',
-        })
-        .option('autorunPortOverride', {
-            type: 'number',
-            default: null,
-            describe: 'DEPRECATED: Use "browserLaunchPort" instead.',
-        })
-        .option('avoidLocalhost', {
-            type: 'boolean',
-            default: null,
-            describe: 'DEPRECATED: Use "browserLaunchAvoidLocalhost" instead.',
         })
         .parseSync();
 
@@ -223,10 +202,10 @@ export function parseArgv(args: string[]): ParsedArgv {
         enableIPv6: cliArguments.enableIPv6 ?? null,
         dnsPreferIPv6: cliArguments.dnsPreferIPv6 ?? null,
         heartbeatInterval: cliArguments.heartbeatInterval ?? null,
-        browserLaunchEnabled: cliArguments.browserLaunchEnabled ?? cliArguments.autorun ?? null,
-        browserLaunchHostname: cliArguments.browserLaunchHostname ?? cliArguments.autorunHostname ?? null,
-        browserLaunchPort: cliArguments.browserLaunchPort ?? cliArguments.autorunPortOverride ?? null,
-        browserLaunchAvoidLocalhost: cliArguments.browserLaunchAvoidLocalhost ?? cliArguments.avoidLocalhost ?? null,
+        browserLaunchEnabled: cliArguments.browserLaunchEnabled ?? null,
+        browserLaunchHostname: cliArguments.browserLaunchHostname ?? null,
+        browserLaunchPort: cliArguments.browserLaunchPort ?? null,
+        browserLaunchAvoidLocalhost: cliArguments.browserLaunchAvoidLocalhost ?? null,
         enableCorsProxy: cliArguments.corsProxy ?? null,
         disableCsrf: cliArguments.disableCsrf ?? null,
         ssl: cliArguments.ssl ?? null,
@@ -278,12 +257,18 @@ export function prepareDataRoot(dataRoot: string | null): void {
  */
 export function resolveConfig(argv: ParsedArgv, defaultConfig: CommandLineArguments): CommandLineArguments {
     const booleanAutoOptions = [true, false, 'auto'];
+    const listen = argv.listen ?? getConfigValue('listen', defaultConfig.listen, 'boolean');
+
+    if ((argv.basicAuthMode ?? getConfigValue('basicAuthMode', false, 'boolean'))
+        && (listen || (getConfigValue('enableUserAccounts', false, 'boolean') && getConfigValue('perUserBasicAuth', false, 'boolean')))) {
+        throw new Error('EmberDesk Basic Auth has been retired. Migrate to password-protected user accounts and, if you require a server-wide authentication layer, configure it at your reverse proxy. Then remove basicAuthMode from the configuration and startup flags.');
+    }
 
     const result: CommandLineArguments = {
         configPath: argv.configPath,
         dataRoot: argv.dataRoot ?? getConfigValue('dataRoot', defaultConfig.dataRoot),
         port: argv.port ?? getConfigValue('port', defaultConfig.port, 'number'),
-        listen: argv.listen ?? getConfigValue('listen', defaultConfig.listen, 'boolean'),
+        listen,
         listenAddressIPv6: argv.listenAddressIPv6 ?? getConfigValue('listenAddress.ipv6', defaultConfig.listenAddressIPv6),
         listenAddressIPv4: argv.listenAddressIPv4 ?? getConfigValue('listenAddress.ipv4', defaultConfig.listenAddressIPv4),
         enableIPv4: stringToBool(argv.enableIPv4) ?? stringToBool(getConfigValue('protocol.ipv4', defaultConfig.enableIPv4)) ?? defaultConfig.enableIPv4,
@@ -301,7 +286,6 @@ export function resolveConfig(argv: ParsedArgv, defaultConfig: CommandLineArgume
         keyPath: argv.keyPath ?? getConfigValue('ssl.keyPath', defaultConfig.keyPath),
         keyPassphrase: argv.keyPassphrase ?? getConfigValue('ssl.keyPassphrase', defaultConfig.keyPassphrase),
         whitelistMode: argv.whitelistMode ?? getConfigValue('whitelistMode', defaultConfig.whitelistMode, 'boolean'),
-        basicAuthMode: argv.basicAuthMode ?? getConfigValue('basicAuthMode', defaultConfig.basicAuthMode, 'boolean'),
         enableKeepAlive: argv.enableKeepAlive ?? getConfigValue('enableKeepAlive', defaultConfig.enableKeepAlive, 'boolean'),
         requestProxyEnabled: argv.requestProxyEnabled ?? getConfigValue('requestProxy.enabled', defaultConfig.requestProxyEnabled, 'boolean'),
         requestProxyUrl: argv.requestProxyUrl ?? getConfigValue('requestProxy.url', defaultConfig.requestProxyUrl),
@@ -399,7 +383,6 @@ export class CommandLineParser {
             keyPath: 'certs/privkey.pem',
             keyPassphrase: '',
             whitelistMode: true,
-            basicAuthMode: false,
             enableKeepAlive: false,
             requestProxyEnabled: false,
             requestProxyUrl: '',

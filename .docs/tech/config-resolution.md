@@ -37,7 +37,7 @@ resolveConfig(argv, defaults)         → CommandLineArguments  (pure merge)
 
 Phase boundaries:
 
-1. **`parseArgv`** — reads argv via yargs, detects global mode (`--global`), derives `configPath`. Returns nullable raw values. Does NOT call `getConfigValue`, `initConfig`, or touch the filesystem. Deprecated CLI aliases (`--autorun` → `browserLaunchEnabled`, etc.) are mapped here.
+1. **`parseArgv`** — reads argv via yargs, detects global mode (`--global`), derives `configPath`. Returns nullable raw values. Does NOT call `getConfigValue`, `initConfig`, or touch the filesystem. Retired browser-launch CLI aliases are no longer mapped.
 
 2. **`prepareConfigFilesystem` + `prepareDataRoot`** — the only side-effect seam. Creates config parent directory in global mode, calls `initConfig` to resolve and register the validated JSONC config, and creates the data root directory. `getConfigValue()` reads the prepared config after this phase.
 
@@ -53,6 +53,12 @@ Constraints:
 - Standalone config precedence is CLI value > `EMBERDESK_*` field environment override > file > defaults. Deprecated environment aliases and their coercion are preserved. `EMBERDESK_CONFIG_PATH` sets the standalone default path; Docker sets it to `./config/config.jsonc` so old `./config/config.yaml` volumes migrate in place without changing the Compose mount.
 - `node recover.js` and `pnpm run init` share the same configuration preparation. Both honor `EMBERDESK_CONFIG_PATH`.
 - For a card CDN, add the exact hostname or a `*.domain` rule to `whitelistImportDomains`; a wildcard only matches subdomains, not `domain` itself. A signed CDN URL must still be valid. Its query is forwarded unchanged.
+
+### Retired startup options
+
+- Replace `--autorun`, `--autorunHostname`, `--autorunPortOverride`, and `--avoidLocalhost` with `--browserLaunchEnabled`, `--browserLaunchHostname`, `--browserLaunchPort`, and `--browserLaunchAvoidLocalhost` respectively. Legacy keys in config files still migrate to `browserLaunch.*` on load.
+- If EmberDesk Basic Auth was active, switch to password-protected user accounts or configured SSO before removing `basicAuthMode` from the config, environment, and startup flags. If Basic Auth protected the entire server or was an extra layer in front of login, configure equivalent authentication at the reverse proxy and restrict direct access to the backend first. Startup rejects a legacy setting that would have activated Basic Auth; credentials are not imported automatically.
+- With `whitelistMode` enabled, startup rejects a readable `whitelist.txt` in the server directory, even if it is empty. Replace the `whitelist` config array (or its environment override) with the file's effective IP/CIDR entries, then move the original out of the server directory. Do not append the entries to a broader existing list: the old file replaced that list. If the file cannot be read, startup still uses the configured whitelist.
 
 ### Global-mode data root isolation
 
@@ -72,7 +78,7 @@ In standalone mode, `dataRoot` follows the standard precedence: CLI arg > `EMBER
 
 ### parseArgv
 
-- yargs definition with all CLI options (including deprecated aliases)
+- yargs definition for CLI options; retired browser-launch aliases are not mapped
 - `isGlobal` = `cliArguments.global ?? false`
 - `configPath` = global mode uses `envPaths('EmberDesk').data/config.jsonc`, standalone uses `--configPath`, `EMBERDESK_CONFIG_PATH`, or `./config.jsonc` in that order
 - Returns `ParsedArgv` with all fields nullable except `isGlobal` (boolean) and `configPath` (string)

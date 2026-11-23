@@ -453,20 +453,20 @@ export function summarizeScenarioPayload(scenarioName: string, payload: Payload 
 export function validateInteractionPath(scenarioName: string, variant: string, observedPath: string | null) {
     const expectations: Record<string, Record<string, string | null>> = {
         characters_all_first_build: {
-            sqlite_on: 'characters_all:indexed',
-            sqlite_off: 'characters_all:filesystem',
+            sqlite_on: 'characters_all:canonical',
+            sqlite_off: 'characters_all:canonical',
         },
         characters_all_warm_repeat: {
-            sqlite_on: 'characters_all:indexed',
-            sqlite_off: 'characters_all:filesystem',
+            sqlite_on: 'characters_all:canonical',
+            sqlite_off: 'characters_all:canonical',
         },
         characters_get_warm_repeat: {
-            sqlite_on: 'characters_get:indexed',
-            sqlite_off: 'characters_get:filesystem',
+            sqlite_on: 'characters_get:canonical',
+            sqlite_off: 'characters_get:canonical',
         },
         characters_all_after_chat_dirty: {
-            sqlite_on: 'characters_all:indexed',
-            sqlite_off: 'characters_all:filesystem',
+            sqlite_on: 'characters_all:canonical',
+            sqlite_off: 'characters_all:canonical',
         },
         character_delete_refresh_ui: {
             sqlite_on: null,

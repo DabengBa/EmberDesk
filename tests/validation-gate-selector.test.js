@@ -85,7 +85,7 @@ describe('validation gate selector', () => {
 
     test('maps high-risk touched paths to focused validation gates with local rule sources', () => {
         const result = selectValidationGates([
-            'public/scripts/slash-commands.js',
+            'public/scripts/extensions/regex/engine.js',
             'src/endpoints/characters.ts',
             'src/canonical-sqlite-operator.ts',
             'src/command-line.ts',
@@ -139,7 +139,7 @@ describe('validation gate selector', () => {
                 sources: expect.arrayContaining(['.docs/tech/workspace-shell-panel-dock-coordination.md']),
             }),
             expect.objectContaining({
-                command: 'pnpm run build:react:workspace-panels',
+                command: 'pnpm run build:react',
                 required: false,
                 sources: expect.arrayContaining(['.docs/tech/pnpm-workflow.md']),
             }),
@@ -150,11 +150,15 @@ describe('validation gate selector', () => {
     test('deduplicates overlapping surfaces without recommending bun test as a Jest replacement', () => {
         const commands = commandsFor([
             'public/scripts/extensions/regex/engine.js',
-            'public/scripts/slash-commands.js',
+            'regex',
         ]);
 
         expect(commands).toEqual(['pnpm run test:compat']);
         expect(commands.join('\n')).not.toContain('bun test');
+    });
+
+    test('does not recommend compatibility checks for retired browser surfaces', () => {
+        expect(commandsFor(['public/scripts/slash-commands.js', 'third-party extension', 'public/index.html'])).toEqual([]);
     });
 
     test('keeps broad surface-name matching from turning unrelated config paths into startup gates', () => {
@@ -218,7 +222,7 @@ describe('validation gate selector', () => {
     test('CLI accepts path arguments and prints advisory gates without mutating files', () => {
         const output = execFileSync('node', [
             path.join(repoRoot, 'scripts/validation-gate-selector.mjs'),
-            'public/scripts/slash-commands.js',
+            'public/scripts/extensions/regex/engine.js',
             '.docs/db/pages/chat-workspace.md',
         ], {
             cwd: repoRoot,

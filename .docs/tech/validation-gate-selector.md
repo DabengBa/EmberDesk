@@ -27,9 +27,9 @@ The first selector slice covers these high-risk surfaces:
 | Surface | Command | Requirement | Rule sources |
 |---|---|---|---|
 | Canonical SQLite repair tooling, rollout contract, rollback blockers, DB-first authority seams | `pnpm --dir tests run test:unit -- canonical-sqlite-cli.test.js canonical-sqlite-operator.test.js canonical-sqlite-rollout-contract.test.js canonical-sqlite-shadow-import.test.js character-read-service.test.js character-write-service.test.js --runInBand` | required | `canonical-sqlite-storage-roadmap.md` |
-| Frontend compatibility, regex, slash commands, extension surfaces | `pnpm run test:compat` | required | `AGENTS.md`, `third-party-extension-compatibility.md`, `pnpm-workflow.md` |
+| Frontend compatibility, first-party Regex, shared templates, protected DOM | `pnpm run test:compat` | required | `AGENTS.md`, `third-party-extension-compatibility.md`, `pnpm-workflow.md` |
 | React workspace panels | `pnpm --dir tests run test:unit -- react-workspace-panels-helpers.test.js workspace-react-panel-flags.test.js --runInBand` | required | `workspace-shell-panel-dock-coordination.md`, `pnpm-workflow.md`, `third-party-extension-compatibility.md` |
-| React workspace panel bundle | `pnpm run build:react:workspace-panels` | optional | `pnpm-workflow.md`, `package.json`, `tests/playwright.config.js` |
+| React workspace panel bundle | `pnpm run build:react` | optional | `pnpm-workflow.md`, `package.json`, `tests/playwright.config.js` |
 | Express route/order | `pnpm --dir tests run test:unit -- express5-route-compatibility.test.js --runInBand` | required | `AGENTS.md`, `server-startup-orchestration.md` |
 | Startup/config | `pnpm --dir tests run test:unit -- command-line.test.js startup-critical-path.test.js startup-loader.test.js --runInBand` | required | `AGENTS.md`, `config-resolution.md`, `server-startup-orchestration.md` |
 | User auth/storage/directories/migrations | `pnpm --dir tests run test:unit -- user-auth.test.js user-storage.test.js user-directories.test.js user-migrations.test.js --runInBand` | required | `AGENTS.md`, `user-module-split.md` |

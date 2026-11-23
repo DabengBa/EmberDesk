@@ -41,19 +41,15 @@ export default {
                 // validators, readdir-derived names, or isPathUnderParent.
                 files: [
                     'src/endpoints/assets.ts',
-                    'src/endpoints/avatars.js',
+
                     'src/endpoints/backups.ts',
                     'src/endpoints/characters.ts',
                     'src/endpoints/chats.ts',
-                    'src/endpoints/extensions.js',
+
                     'src/endpoints/files.ts',
-                    'src/endpoints/groups.js',
+
                     'src/endpoints/images.ts',
                     'src/endpoints/openai.ts',
-                    'src/endpoints/quick-replies.js',
-
-                    'src/endpoints/stable-diffusion.js',
-                    'src/endpoints/themes.js',
 
                 ],
                 rules: [
@@ -66,9 +62,7 @@ export default {
                 // normalization, secret lookup, and endpoint selection.
                 files: [
 
-                    'src/endpoints/novelai.js',
                     'src/endpoints/openai.ts',
-                    'src/endpoints/stable-diffusion.js',
                 ],
                 rules: [
                     'react-doctor/request-body-mass-assignment',

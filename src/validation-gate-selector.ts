@@ -6,7 +6,7 @@ const RULES: Array<Omit<GateSelection, 'matchedInputs'> & { matches(input: strin
         id: 'frontend-compatibility',
         required: true,
         command: 'pnpm run test:compat',
-        reason: 'Frontend compatibility, regex, slash-command, extension, or protected DOM surface changed.',
+        reason: 'First-party Regex, shared templates, or protected DOM surface changed.',
         sources: [
             'AGENTS.md',
             '.docs/tech/third-party-extension-compatibility.md',
@@ -14,11 +14,9 @@ const RULES: Array<Omit<GateSelection, 'matchedInputs'> & { matches(input: strin
         ],
         matches(input) {
             return matchesAny(input, [
-                /^public\/scripts\/slash-commands\.js$/,
-                /^public\/scripts\/extensions\//,
+                /^public\/scripts\/extensions\/regex\//,
                 /^public\/scripts\/templates\//,
-                /^public\/index\.html$/,
-                /^(frontend compatibility|regex|regex extension|slash command|slash commands|extension surface|third-party extension|tavern-helper)$/i,
+                /^(frontend compatibility|regex|regex extension|protected dom)$/i,
             ]);
         },
     },
@@ -47,7 +45,7 @@ const RULES: Array<Omit<GateSelection, 'matchedInputs'> & { matches(input: strin
     {
         id: 'react-workspace-panel-bundle',
         required: false,
-        command: 'pnpm run build:react:workspace-panels',
+        command: 'pnpm run build:react',
         reason: 'Workspace panel bundle entry or React panel implementation changed.',
         sources: [
             '.docs/tech/pnpm-workflow.md',

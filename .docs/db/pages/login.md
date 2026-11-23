@@ -19,10 +19,10 @@ This page exists so an unauthenticated user can identify themselves and reach [C
 ## Runtime Owner
 
 - `/login` is served only by the shared React auth app.
-- `/login.html` redirects to `/login` and preserves the query string; it is not a legacy runtime fallback.
+- `/login.html` returns 404. Use `/login`.
 - Missing React build returns a clear server error instead of `public/login.html`.
 - Rollback is a previous application version deploy, not an in-process jQuery controller.
-- Before serving the login app, `createLoginPageMiddleware()` runs `tryAutoLogin()`. When exactly one passwordless user exists, or when Authelia/Authentik/per-user Basic Auth identifies the visitor, the request redirects to `/` without rendering the login form. `?noauto` suppresses this so the form always renders.
+- Before serving the login app, `createLoginPageMiddleware()` runs `tryAutoLogin()`. When exactly one passwordless user exists, or when Authelia/Authentik identifies the visitor, the request redirects to `/` without rendering the login form. `?noauto` suppresses this so the form always renders.
 - `/login` does not check setup state. A deployment that still requires setup serves the login form normally; only `/` redirects to `/setup`.
 
 ## Page Structure (UI Layout)
@@ -85,17 +85,6 @@ The login page does not expose a user list. The user must know their handle to l
 | `rateLimiting.preferRealIpHeader` | `false` | Use forwarded IP headers for rate-limit tracking behind a reverse proxy. |
 | `disableCsrfProtection` | `false` | Disables CSRF token enforcement on login API. Not recommended. |
 
-### Legacy: Basic Auth (deprecated)
-
-> `basicAuthMode` is a legacy feature retained for backward compatibility. New deployments should use `enableUserAccounts` exclusively.
-
-| Key | Default | Effect |
-|---|---|---|
-| `basicAuthMode` | `false` | Enables HTTP Basic Auth (browser native prompt, no login page UI). Only active when `listen: true`. |
-| `basicAuthUser.username` / `.password` | `"user"` / `"password"` | Global Basic Auth credentials. |
-| `perUserBasicAuth` | `false` | When `true` with `basicAuthMode`, uses per-account credentials instead of the global pair. |
-
-When both `basicAuthMode` and `enableUserAccounts` are active, the user must pass Basic Auth first, then log in via the login page.
 
 ### Password Recovery
 

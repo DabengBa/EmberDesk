@@ -21,26 +21,6 @@ function sendMissingReactAuthBuild(response: Response, pageName: string) {
     );
 }
 
-/**
- * Redirect a legacy `.html` auth URL to its canonical route while preserving the query string.
- * @param {string} canonicalPath
- * @returns {import('express').RequestHandler}
- */
-export function createLegacyAuthHtmlRedirectMiddleware(canonicalPath: string) {
-    return function legacyAuthHtmlRedirectMiddleware(request: Request, response: Response) {
-        const queryIndex = request.originalUrl.indexOf('?');
-        const query = queryIndex >= 0 ? request.originalUrl.slice(queryIndex) : '';
-        return response.redirect(302, `${canonicalPath}${query}`);
-    };
-}
-
-export function createLegacyLoginHtmlRedirectMiddleware() {
-    return createLegacyAuthHtmlRedirectMiddleware('/login');
-}
-
-export function createLegacySetupHtmlRedirectMiddleware() {
-    return createLegacyAuthHtmlRedirectMiddleware('/setup');
-}
 
 export function createLoginPageMiddleware({ reactLoginDistRoot }: { reactLoginDistRoot?: string } = {}) {
     return async function loginPageMiddleware(request: Request, response: Response) {
@@ -50,8 +30,7 @@ export function createLoginPageMiddleware({ reactLoginDistRoot }: { reactLoginDi
         }
 
         try {
-            const { basicAuthMode } = globalThis.COMMAND_LINE_ARGS;
-            const autoLogin = await tryAutoLogin(request, basicAuthMode);
+            const autoLogin = await tryAutoLogin(request);
 
             if (autoLogin) {
                 return response.redirect('/');

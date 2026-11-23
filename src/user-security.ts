@@ -7,8 +7,8 @@ import { getEnableAccounts, getAllEnabledUsers } from './user-storage.ts';
  * @returns {void}
  */
 function logSecurityAlert(message: string) {
-    const { basicAuthMode, whitelistMode } = globalThis.COMMAND_LINE_ARGS;
-    if (basicAuthMode || whitelistMode || getEnableAccounts()) return; // safe!
+    const { whitelistMode } = globalThis.COMMAND_LINE_ARGS;
+    if (whitelistMode || getEnableAccounts()) return; // safe!
     console.error(color.red(message));
     if (getConfigValue('securityOverride', false, 'boolean')) {
         console.warn(color.red('Security has been overridden. If it\'s not a trusted network, change the settings.'));
@@ -22,7 +22,7 @@ function logSecurityAlert(message: string) {
  * @returns {Promise<void>}
  */
 export async function verifySecuritySettings() {
-    const { listen, basicAuthMode } = globalThis.COMMAND_LINE_ARGS;
+    const { listen } = globalThis.COMMAND_LINE_ARGS;
 
     // Skip all security checks as listen is set to false
     if (!listen) {
@@ -46,17 +46,6 @@ export async function verifySecuritySettings() {
 
         if (unprotectedAdminUsers.length > 0) {
             logSecurityAlert('Set a password for all admin users via the admin panel or recover.js.');
-        }
-    }
-
-    // Legacy: basicAuthMode is deprecated but still functional for backward compatibility
-    if (basicAuthMode) {
-        const basicAuthUserName = getConfigValue('basicAuthUser.username', '');
-        const basicAuthUserPassword = getConfigValue('basicAuthUser.password', '');
-        if (!basicAuthUserName || !basicAuthUserPassword) {
-            console.warn(color.yellow(
-                'Basic Authentication is enabled, but username or password is not set or empty!',
-            ));
         }
     }
 }
