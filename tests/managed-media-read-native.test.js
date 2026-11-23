@@ -8,8 +8,8 @@ test.each(['fallback', 'managed-first', 'clean-media-repair', 'legacy-chat', 'de
     'native managed-media integration: %s', scenario => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'emberdesk-media-read-native-'));
     try {
-        const config = path.join(root, 'config.yaml');
-        fs.writeFileSync(config, 'backups:\n  chat:\n    enabled: false\n');
+        const config = path.join(root, 'config.jsonc');
+        fs.writeFileSync(config, JSON.stringify({ backups: { chat: { enabled: false } } }));
         const url = name => new URL(`../src/${name}`, import.meta.url).href;
         const result = spawnSync(process.execPath, ['--input-type=module', '--eval', `
             import assert from 'node:assert/strict';

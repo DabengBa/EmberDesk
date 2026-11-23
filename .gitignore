@@ -21,6 +21,8 @@ public/stats.json
 *.jsonl
 /config.conf
 /config.yaml
+/config.yml
+/config.jsonc
 /config.conf.bak
 /docker/config
 /docker/user
@@ -73,6 +75,7 @@ test-results/
 *.tmp
 *.temp
 config.dev-local.yaml
+config.dev-local.jsonc
 .deploy-revision
 .docs/audit.md
 .impeccable/

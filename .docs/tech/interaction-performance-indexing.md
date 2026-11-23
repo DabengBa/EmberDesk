@@ -59,7 +59,7 @@ The thumbnail route uses a 96 × 144 cover resize for static avatars and writes 
 
 Separate from SQLite and thumbnail HTTP caching, EmberDesk now also ships a lower default JPEG thumbnail quality:
 
-- `default/config.yaml` now sets `thumbnails.quality: 85`
+- `default/config.jsonc` now sets `thumbnails.quality: 85`
 - `src/endpoints/thumbnails.js` now uses `85` as the runtime fallback when the config key is absent
 
 That quality-tuning slice is intentionally narrow:

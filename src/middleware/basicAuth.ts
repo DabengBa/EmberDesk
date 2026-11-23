@@ -3,7 +3,7 @@
  * It is retained only for backward compatibility. New deployments should use enableUserAccounts exclusively.
  * When enableUserAccounts is active, this middleware adds a redundant credential check before the app-level login page.
  *
- * To enable: set basicAuthMode: true in config.yaml (or pass --basicAuth on the CLI).
+ * To enable: set basicAuthMode: true in config.jsonc (or pass --basicAuth on the CLI).
  * When both basicAuthMode and enableUserAccounts are active, users must pass Basic Auth first, then log in via the login page.
  */
 import { Buffer } from 'node:buffer';

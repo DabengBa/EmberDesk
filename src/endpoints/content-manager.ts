@@ -466,7 +466,7 @@ export async function checkForNewContent(directoriesList: import('../user-types.
 
         if (anyContentAdded && !contentCheckSkip && forceCategories?.length === 0) {
             console.info();
-            console.info(`${color.blue('If you don\'t want to receive content updates in the future, set')} ${color.yellow('skipContentCheck')} ${color.blue('to true in the config.yaml file.')}`);
+            console.info(`${color.blue('If you don\'t want to receive content updates in the future, set')} ${color.yellow('skipContentCheck')} ${color.blue('to true in the config.jsonc file.')}`);
             console.info();
         }
     } catch (err) {

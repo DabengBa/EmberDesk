@@ -41,8 +41,8 @@ const tempRoots = [];
 const managers = [];
 
 const configRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'emberdesk-avatar-blobs-config-'));
-fs.writeFileSync(path.join(configRoot, 'config.yaml'), 'port: 8000\n', 'utf8');
-setConfigFilePath(path.join(configRoot, 'config.yaml'));
+fs.writeFileSync(path.join(configRoot, 'config.jsonc'), JSON.stringify({ port: 8000 }), 'utf8');
+setConfigFilePath(path.join(configRoot, 'config.jsonc'));
 
 function makeRoot() {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'emberdesk-canonical-avatar-blobs-'));

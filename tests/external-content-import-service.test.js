@@ -21,7 +21,7 @@ import {
 } from '../src/endpoints/external-content-import-service.ts';
 
 async function getExternalContentDownloaders() {
-    setConfigFilePath(fileURLToPath(new URL('../default/config.yaml', import.meta.url)));
+    setConfigFilePath(fileURLToPath(new URL('../default/config.jsonc', import.meta.url)));
     return (await import('../src/endpoints/content-manager.ts')).EXTERNAL_CONTENT_DOWNLOADERS;
 }
 
@@ -87,6 +87,61 @@ describe('external content import service', () => {
     test('checks generic import hosts by normalized exact hostname', () => {
         expect(isHostWhitelisted('cdn.example.test', ['cdn.example.test'])).toBe(true);
         expect(isHostWhitelisted('evilcdn.example.test', ['cdn.example.test'])).toBe(false);
+    });
+
+    test.each([
+        ['cdn.example.test', true],
+        ['a.cdn.example.test', true],
+        [' CDN.EXAMPLE.TEST. ', true],
+        ['example.test', false],
+        ['badexample.test', false],
+        ['cdn.example.test.evil.test', false],
+    ])('matches wildcard import hosts at a subdomain boundary: %s', (host, expected) => {
+        expect(isHostWhitelisted(host, [' *.Example.Test. '])).toBe(expected);
+    });
+
+    test('classifies wildcard generic imports without changing provider precedence', () => {
+        const url = 'https://a.cdn.example.test/card.png?signature=a%2Fb&expires=123';
+        expect(classifyExternalContentUrl(url, ['*.example.test'])).toEqual({
+            ok: true,
+            descriptor: { source: 'generic_png', type: 'character', id: url, url, host: 'a.cdn.example.test' },
+        });
+        const apexUrl = 'https://example.test/card.png';
+        expect(classifyExternalContentUrl(apexUrl, ['*.example.test'])).toEqual({
+            ok: false,
+            failure: { kind: 'unsupported_host', host: 'example.test', url: apexUrl },
+        });
+        const providerUrl = 'https://www.pygmalion.chat/character/123e4567-e89b-12d3-a456-426614174000';
+        expect(classifyExternalContentUrl(providerUrl, ['*.pygmalion.chat'])).toEqual({
+            ok: true,
+            descriptor: expect.objectContaining({ source: 'pygmalion_character' }),
+        });
+    });
+
+    test('downloads a wildcard asset with its original signed URL', async () => {
+        const url = 'https://CDN.example.test:443/file.png?signature=a%2Fb%3D&x=1&x=2';
+        const response = createResponse();
+        const fetchImpl = jest.fn(async () => response);
+        await expect(downloadExternalAsset({ url, allowlist: ['*.example.test'], fetchImpl })).resolves.toEqual({
+            ok: true,
+            host: 'cdn.example.test',
+            response,
+        });
+        expect(fetchImpl).toHaveBeenCalledWith(url, undefined);
+    });
+
+    test('passes a classified wildcard import signed URL unchanged to the generic downloader', async () => {
+        const url = 'https://CDN.example.test:443/card.png?signature=a%2Fb%3D&x=1&x=2';
+        const classification = classifyExternalContentUrl(url, ['*.example.test']);
+        expect(classification.ok).toBe(true);
+        const fetchImpl = jest.fn(async () => createResponse({ url }));
+        const result = await downloadExternalContentArtifact({
+            descriptor: classification.descriptor,
+            downloaders: await getExternalContentDownloaders(),
+            fetchImpl,
+        });
+        expect(result.ok).toBe(true);
+        expect(fetchImpl).toHaveBeenCalledWith(url, undefined);
     });
 
     test.each([

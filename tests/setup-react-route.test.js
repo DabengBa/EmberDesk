@@ -12,18 +12,20 @@ const __dirname = path.dirname(__filename);
 const repoRoot = path.resolve(__dirname, '..');
 
 const tmpConfigDir = fs.mkdtempSync(path.join(os.tmpdir(), 'emberdesk-setup-react-config-'));
-const configPath = path.join(tmpConfigDir, 'config.yaml');
+const configPath = path.join(tmpConfigDir, 'config.jsonc');
 const tmpRoots = [];
 
 beforeAll(() => {
-    fs.writeFileSync(configPath, [
-        'enableUserAccounts: true',
-        'features:',
-        '  react:',
-        '    pages:',
-        '      settings: false',
-        '',
-    ].join('\n'), 'utf8');
+    fs.writeFileSync(configPath, JSON.stringify({
+        enableUserAccounts: true,
+        features: {
+            react: {
+                pages: {
+                    settings: false,
+                },
+            },
+        },
+    }), 'utf8');
     setConfigFilePath(configPath);
 });
 

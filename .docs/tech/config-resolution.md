@@ -15,11 +15,12 @@ For the server boot pipeline that consumes the resolved config, see [server-star
 Primary files:
 
 - `src/command-line.ts` — three-phase pipeline: `parseArgv`, `prepareConfigFilesystem` / `prepareDataRoot`, `resolveConfig`
-- `src/config-init.ts` — config-file migration, deprecated-key rewriting, default-fill logic
+- `src/config-init.ts` — one-time YAML migration, deprecated keys, and in-memory defaults
 - `src/util.ts` — `getConfigValue`, `stringToBool`, `setConfigFilePath`, `keyToEnv`
-- `default/config.yaml` — canonical default values
+- `src/config-file.ts` and `src/config-schema.ts` — JSONC parsing and Zod validation
+- `default/config.jsonc` — commented canonical default values
 
-`src/util.ts` no longer carries EmberDesk's archive/zip helper implementations. Those live in `src/archive-utils.ts`, which `src/util.ts` imports directly. This document treats `util.js` only as the remaining config-related helper surface.
+`src/util.ts` no longer carries EmberDesk's archive/zip helper implementations. Those live in `src/archive-utils.ts`, which `src/util.ts` imports directly. This document treats `src/util.ts` only as the remaining config-related helper surface.
 
 ## Architecture And Constraints
 
@@ -28,7 +29,7 @@ Primary files:
 ```
 parseArgv(args)                       → ParsedArgv     (pure, no side effects)
     ↓
-prepareConfigFilesystem(configPath)   → void           (side-effect: mkdir, initConfig)
+prepareConfigFilesystem(configPath)   → string         (side-effect: mkdir, initConfig; returns canonical path)
 prepareDataRoot(dataRoot)             → void           (side-effect: mkdir)
     ↓
 resolveConfig(argv, defaults)         → CommandLineArguments  (pure merge)
@@ -38,16 +39,20 @@ Phase boundaries:
 
 1. **`parseArgv`** — reads argv via yargs, detects global mode (`globalThis.FORCE_GLOBAL_MODE` or `--global`), derives `configPath`. Returns nullable raw values. Does NOT call `getConfigValue`, `initConfig`, or touch the filesystem. Deprecated CLI aliases (`--autorun` → `browserLaunchEnabled`, etc.) are mapped here.
 
-2. **`prepareConfigFilesystem` + `prepareDataRoot`** — the only side-effect seam. Creates config parent directory in global mode, calls `initConfig` (which triggers `addMissingConfigValues` from `config-init.ts`), creates data root directory. After this phase, `getConfigValue()` is safe to call because `setConfigFilePath` has been invoked.
+2. **`prepareConfigFilesystem` + `prepareDataRoot`** — the only side-effect seam. Creates config parent directory in global mode, calls `initConfig` to resolve and register the validated JSONC config, and creates the data root directory. `getConfigValue()` reads the prepared config after this phase.
 
 3. **`resolveConfig`** — merges CLI overrides with config-file values via `getConfigValue`. Applies `stringToBool` to protocol fields, validates against `[true, false, 'auto']`, attaches URL helper methods (`getIPv4ListenUrl`, `getIPv6ListenUrl`, `getBrowserLaunchHostname`, `getBrowserLaunchUrl`).
 
 Constraints:
 
 - `server.js` is the sole caller of `CommandLineParser.parse()`. The return type shape is the external API contract.
-- `config-init.ts` preserves the existing initialization behavior. Its `initConfig` → `setConfigFilePath` → `addMissingConfigValues` chain remains the config-file initialization path; the TypeScript migration adds no runtime validation or configuration schema.
-- `setConfigFilePath` in `util.js` is a module-level singleton (`CONFIG_PATH`). It logs an error if called more than once but still updates the path.
-- `CACHED_CONFIG` in `util.js` is populated on first `getConfig()` call and persists for the process lifetime. `addMissingConfigValues` writes the file but does not clear this cache.
+## File format and upgrade
+
+- Edit `config.jsonc`, not `default/config.jsonc`. JSONC uses double-quoted keys and strings and accepts comments and trailing commas. Missing values are merged at load time; existing JSONC files are not rewritten. Known keys are validated by Zod and unknown legacy or custom keys are kept.
+- If JSONC is absent, startup imports an adjacent `.yaml` or `.yml` with the same basename and leaves the original intact. An explicit `--configPath ./custom.yaml` resolves to `./custom.jsonc`. Once JSONC exists, it takes precedence; syntax and type errors are reported instead of falling back to YAML. Fresh installations copy the commented defaults.
+- Standalone config precedence is CLI value > `EMBERDESK_*` field environment override > file > defaults. Deprecated environment aliases and their coercion are preserved. `EMBERDESK_CONFIG_PATH` sets the standalone default path; Docker sets it to `./config/config.jsonc` so old `./config/config.yaml` volumes migrate in place without changing the Compose mount.
+- `node recover.js` and `pnpm run init` share the same configuration preparation. Both honor `EMBERDESK_CONFIG_PATH`.
+- For a card CDN, add the exact hostname or a `*.domain` rule to `whitelistImportDomains`; a wildcard only matches subdomains, not `domain` itself. A signed CDN URL must still be valid. Its query is forwarded unchanged.
 
 ### Global-mode data root isolation
 
@@ -61,7 +66,7 @@ const resolvedDataRoot = argv.isGlobal
 
 ### dataRoot resolution in standalone mode
 
-In standalone mode, `dataRoot` follows the standard precedence: CLI arg > config file > default (`./data`). The orchestrator resolves it after `initConfig` runs, because `getConfigValue` needs the config file to be initialized first.
+In standalone mode, `dataRoot` follows the standard precedence: CLI arg > `EMBERDESK_DATAROOT` > config file > default (`./data`). The orchestrator resolves it after `initConfig` runs, because `getConfigValue` needs the config file to be initialized first.
 
 ## Core Implementation
 
@@ -69,7 +74,7 @@ In standalone mode, `dataRoot` follows the standard precedence: CLI arg > config
 
 - yargs definition with all CLI options (including deprecated aliases)
 - `isGlobal` = `globalThis.FORCE_GLOBAL_MODE ?? cliArguments.global ?? false`
-- `configPath` = global mode uses `envPaths('EmberDesk').data/config.yaml`, standalone uses `--configPath ?? './config.yaml'`
+- `configPath` = global mode uses `envPaths('EmberDesk').data/config.jsonc`, standalone uses `--configPath`, `EMBERDESK_CONFIG_PATH`, or `./config.jsonc` in that order
 - Returns `ParsedArgv` with all fields nullable except `isGlobal` (boolean) and `configPath` (string)
 
 ### resolveConfig
@@ -83,7 +88,7 @@ In standalone mode, `dataRoot` follows the standard precedence: CLI arg > config
 
 - Returns a frozen object with all default values
 - `isGlobal=true` → paths use `envPaths('EmberDesk')`
-- `isGlobal=false` → `configPath: './config.yaml'`, `dataRoot: './data'`
+- `isGlobal=false` → `configPath: './config.jsonc'` unless `EMBERDESK_CONFIG_PATH` is set, `dataRoot: './data'`
 - URL helpers are throw-stubs in defaults; real implementations are attached by `resolveConfig`
 
 ## Related Semantic IDs And Code Binding Points

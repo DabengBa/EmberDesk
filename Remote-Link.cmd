@@ -4,9 +4,9 @@ echo WARNING: Cloudflare Tunnel!
 echo ========================================================================================================================
 echo This script downloads and runs the latest cloudflared.exe from Cloudflare to set up an HTTPS tunnel to your EmberDesk!
 echo Using the randomly generated temporary tunnel URL, anyone can access your EmberDesk over the Internet while the tunnel
-echo is active. Keep the URL safe and secure your EmberDesk installation by setting a username and password in config.yaml!
+echo is active. Keep the URL safe and secure your EmberDesk installation by setting a username and password in config.jsonc!
 echo.
-echo See the EmberDesk README or config.yaml for details about how to secure your install.
+echo See the EmberDesk README or config.jsonc for details about how to secure your install.
 echo.
 echo By continuing you confirm that you're aware of the potential dangers of having a tunnel open and take all responsibility
 echo to properly use and secure it!

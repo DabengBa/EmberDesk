@@ -775,7 +775,7 @@ let chatsRouter;
 beforeAll(async () => {
     sharedDataRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'emberdesk-character-route-cache-'));
     sharedGlobal.DATA_ROOT = sharedDataRoot;
-    setConfigFilePath(fileURLToPath(new URL('../default/config.yaml', import.meta.url)));
+    setConfigFilePath(fileURLToPath(new URL('../default/config.jsonc', import.meta.url)));
     ({ diskCache, router: charactersRouter } = await import('../src/endpoints/characters.ts'));
     ({ router: chatsRouter } = await import('../src/endpoints/chats.ts'));
 });

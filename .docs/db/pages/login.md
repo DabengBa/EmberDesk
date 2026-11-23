@@ -64,7 +64,7 @@ The login page does not expose a user list. The user must know their handle to l
 - Successful authentication navigates to [Chat Workspace](page.chat_workspace).
 - The login page has no outgoing navigation links beyond the recovery flow.
 
-## Configuration (config.yaml)
+## Configuration (config.jsonc)
 
 ### Required
 

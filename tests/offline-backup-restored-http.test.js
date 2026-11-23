@@ -14,7 +14,7 @@ test('a restored offline copy supports HTTP edits that survive restart, without 
     const source = path.join(root, 'source');
     const backup = path.join(root, 'backup');
     const restored = path.join(root, 'restored');
-    const config = path.join(root, 'config.yaml');
+    const config = path.join(root, 'config.jsonc');
     let server;
     let output = '';
     const run = (args) => {
@@ -23,7 +23,9 @@ test('a restored offline copy supports HTTP edits that survive restart, without 
     };
     try {
         run(['scripts/seed-dev-environment.mjs', '--profile', 'small', '--data-root', source, '--config', config, '--user-handle', 'alice', '--user-password', 'fixture-password']);
-        fs.appendFileSync(config, 'allowKeysExposure: true\n');
+        const configData = JSON.parse(fs.readFileSync(config, 'utf8'));
+        configData.allowKeysExposure = true;
+        fs.writeFileSync(config, `${JSON.stringify(configData, null, 4)}\n`);
         const user = path.join(source, 'alice');
         const chatDir = path.join(user, 'chats');
         const avatar = fs.readdirSync(path.join(user, 'characters')).find(name => name.endsWith('.png'));

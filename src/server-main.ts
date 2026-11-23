@@ -445,7 +445,7 @@ async function postSetupTasks(result: ServerStartupResult): Promise<void> {
     console.log(logListen);
     if (cliArgs.listen) {
         console.log();
-        console.log('To limit connections to internal localhost only ([::1] or 127.0.0.1), change the setting in config.yaml to "listen: false".');
+        console.log('To limit connections to internal localhost only ([::1] or 127.0.0.1), change the setting in config.jsonc to "listen: false".');
         console.log('Check the "access.log" file in the data directory to inspect incoming connections:', color.green(getAccessLogPath()));
     }
     console.log('\n' + getSeparator(plainGoToLog.length) + '\n');

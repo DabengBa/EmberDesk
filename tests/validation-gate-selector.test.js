@@ -165,7 +165,7 @@ describe('validation gate selector', () => {
             'react-workspace-panel-bundle',
         ]);
         expect(selectValidationGates(['.docs/tech/config-resolution.md']).commands.map(command => command.id)).toEqual([]);
-        expect(selectValidationGates(['default/config.yaml']).commands.map(command => command.id)).toEqual([
+        expect(selectValidationGates(['default/config.jsonc']).commands.map(command => command.id)).toEqual([
             'react-workspace-panels',
             'startup-config',
         ]);

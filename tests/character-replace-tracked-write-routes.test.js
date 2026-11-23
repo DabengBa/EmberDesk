@@ -49,8 +49,16 @@ async function waitFor(check) {
 
 beforeAll(async () => {
     root = fs.mkdtempSync(path.join(os.tmpdir(), 'emberdesk-tracked-write-'));
-    const config = path.join(root, 'config.yaml');
-    fs.writeFileSync(config, 'features:\n  storage:\n    canonicalSqlite:\n      enabled: true\n');
+    const config = path.join(root, 'config.jsonc');
+    fs.writeFileSync(config, JSON.stringify({
+        features: {
+            storage: {
+                canonicalSqlite: {
+                    enabled: true,
+                },
+            },
+        },
+    }));
     setConfigFilePath(config);
     const directories = { root: path.join(root, 'alice'), storage: path.join(root, 'alice', 'storage') };
     db = openCanonicalDatabase({ handle: 'alice', directories, featureFlags: getCanonicalSqliteFeatureFlags() });

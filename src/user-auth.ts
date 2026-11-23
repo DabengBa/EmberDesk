@@ -43,9 +43,9 @@ export function getCookieSecret(dataRoot: string) {
         }
     }
 
-    const oldSecret = getConfigValue(STORAGE_KEYS.cookieSecret);
+    const oldSecret = getConfigValue('cookieSecret');
     if (oldSecret) {
-        console.log('Migrating cookie secret from config.yaml...');
+        console.log('Migrating cookie secret from config.jsonc...');
         writeFileAtomicSync(cookieSecretPath, oldSecret, { encoding: 'utf8' });
         return oldSecret;
     }
@@ -215,7 +215,7 @@ async function authentikUserLogin(request: Request) {
  */
 function isRequestFromTrustedProxy(ip: string) {
     if (!Array.isArray(TRUSTED_PROXIES)) {
-        console.warn(color.yellow('sso.trustedProxies is not an array. Please check your config.yaml. SSO auto-login will not work.'));
+        console.warn(color.yellow('sso.trustedProxies is not an array. Please check your config.jsonc. SSO auto-login will not work.'));
         return false;
     }
 

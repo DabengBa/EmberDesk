@@ -31,6 +31,11 @@
 /tests
 
 # --- Sensitive Info ---
+/config.yaml
+/config.yml
+/config.jsonc
+/config.dev-local.yaml
+/config.dev-local.jsonc
 **/.env*
 **/*.pem
 **/certs

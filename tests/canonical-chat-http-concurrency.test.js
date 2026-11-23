@@ -12,8 +12,34 @@ import { auditCanonicalChatShadowImport, runCanonicalChatShadowImport } from '..
 
 jest.setTimeout(20000);
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'emberdesk-chat-http-concurrency-'));
-const configPath = path.join(root, 'config.yaml');
-fs.writeFileSync(configPath, `backups:\n  chat:\n    enabled: false\nfeatures:\n  storage:\n    canonicalSqlite:\n      enabled: true\n      shadowImport: true\n      reads: true\n      writes: true\n      strict: false\n      slices:\n        chats:\n          enabled: true\n          shadowImport: true\n          reads: true\n          writes: true\n          projection: sync\n`);
+const configPath = path.join(root, 'config.jsonc');
+fs.writeFileSync(configPath, JSON.stringify({
+    backups: {
+        chat: {
+            enabled: false,
+        },
+    },
+    features: {
+        storage: {
+            canonicalSqlite: {
+                enabled: true,
+                shadowImport: true,
+                reads: true,
+                writes: true,
+                strict: false,
+                slices: {
+                    chats: {
+                        enabled: true,
+                        shadowImport: true,
+                        reads: true,
+                        writes: true,
+                        projection: 'sync',
+                    },
+                },
+            },
+        },
+    },
+}));
 setConfigFilePath(configPath);
 const { router } = await import('../src/endpoints/chats.ts');
 

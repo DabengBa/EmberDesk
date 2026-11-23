@@ -6,8 +6,8 @@ import { setConfigFilePath } from '../src/util.ts';
 
 // Set up config before any module that calls getConfigValue
 const configTmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'emberdesk-plugloader-test-'));
-const tmpConfig = path.join(configTmpDir, 'config.yaml');
-fs.writeFileSync(tmpConfig, 'enableServerPlugins: true\nport: 8000\n', 'utf8');
+const tmpConfig = path.join(configTmpDir, 'config.jsonc');
+fs.writeFileSync(tmpConfig, JSON.stringify({ enableServerPlugins: true, port: 8000 }), 'utf8');
 setConfigFilePath(tmpConfig);
 
 const { loadPlugins, clearLoadedPlugins } = await import('../src/plugin-loader.ts');
@@ -49,14 +49,14 @@ describe('loadPlugins', () => {
 
     test('disabled plugins: returns no-op cleanup', async () => {
         // Override config to disable plugins
-        fs.writeFileSync(tmpConfig, 'enableServerPlugins: false\nport: 8000\n', 'utf8');
+        fs.writeFileSync(tmpConfig, JSON.stringify({ enableServerPlugins: false, port: 8000 }), 'utf8');
         // Clear cached config
         const cleanup = await loadPlugins(mockApp, pluginsTmpDir);
         expect(typeof cleanup).toBe('function');
         // Should not throw
         await cleanup();
         // Restore config
-        fs.writeFileSync(tmpConfig, 'enableServerPlugins: true\nport: 8000\n', 'utf8');
+        fs.writeFileSync(tmpConfig, JSON.stringify({ enableServerPlugins: true, port: 8000 }), 'utf8');
     });
 
     test('empty plugins directory: returns no-op cleanup', async () => {

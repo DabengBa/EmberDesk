@@ -326,7 +326,7 @@ describe('canonical secrets store', () => {
 
         jest.resetModules();
         const { setConfigFilePath } = await import('../src/util.ts');
-        setConfigFilePath(fileURLToPath(new URL('../default/config.yaml', import.meta.url)));
+        setConfigFilePath(fileURLToPath(new URL('../default/config.jsonc', import.meta.url)));
         const { SecretManager } = await import(`../src/endpoints/secrets.ts?canonicalSecrets=${Date.now()}-${Math.random()}`);
         const { canonicalSqliteManager } = await import('../src/canonical-sqlite.ts');
         const secretManager = new SecretManager(directories);
@@ -386,7 +386,7 @@ describe('canonical secrets store', () => {
 
         jest.resetModules();
         const { setConfigFilePath } = await import('../src/util.ts');
-        setConfigFilePath(fileURLToPath(new URL('../default/config.yaml', import.meta.url)));
+        setConfigFilePath(fileURLToPath(new URL('../default/config.jsonc', import.meta.url)));
         const { SecretManager } = await import(`../src/endpoints/secrets.ts?canonicalRepair=${Date.now()}-${Math.random()}`);
         const { canonicalSqliteManager } = await import('../src/canonical-sqlite.ts');
         const secretManager = new SecretManager(directories);
@@ -457,7 +457,7 @@ describe('canonical secrets store', () => {
 
         jest.resetModules();
         const { setConfigFilePath } = await import('../src/util.ts');
-        setConfigFilePath(fileURLToPath(new URL('../default/config.yaml', import.meta.url)));
+        setConfigFilePath(fileURLToPath(new URL('../default/config.jsonc', import.meta.url)));
         const { SecretManager } = await import(`../src/endpoints/secrets.ts?canonicalOff=${Date.now()}-${Math.random()}`);
         const { canonicalSqliteManager } = await import('../src/canonical-sqlite.ts');
         const secretManager = new SecretManager(directories);

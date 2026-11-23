@@ -7,8 +7,8 @@ import { expect, test } from '@jest/globals';
 test('Node loads the native TypeScript World Info router without a loader', () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'emberdesk-worldinfo-route-native-'));
     try {
-        const config = path.join(root, 'config.yaml');
-        fs.writeFileSync(config, 'port: 8000\n');
+        const config = path.join(root, 'config.jsonc');
+        fs.writeFileSync(config, JSON.stringify({ port: 8000 }));
         const url = name => new URL(`../src/${name}`, import.meta.url).href;
         const result = spawnSync(process.execPath, ['--input-type=module', '--eval', `
             import assert from 'node:assert/strict';

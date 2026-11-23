@@ -4,7 +4,7 @@ import { serverDirectory } from './src/server-directory.ts';
 
 console.log(`Node version: ${process.version}. Running in ${process.env.NODE_ENV} environment. Server directory: ${serverDirectory}`);
 
-// config.yaml will be set when parsing command line arguments
+// config.jsonc will be set when parsing command line arguments
 const cliArgs = new CommandLineParser().parse(process.argv);
 globalThis.DATA_ROOT = cliArgs.dataRoot;
 globalThis.COMMAND_LINE_ARGS = cliArgs;

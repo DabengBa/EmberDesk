@@ -27,8 +27,8 @@ jest.unstable_mockModule('../src/util.ts', () => ({
 
 // Set up config before any module that calls getConfigValue at top level
 const configTmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'emberdesk-mig-test-'));
-const tmpConfig = path.join(configTmpDir, 'config.yaml');
-fs.writeFileSync(tmpConfig, 'port: 8000\n', 'utf8');
+const tmpConfig = path.join(configTmpDir, 'config.jsonc');
+fs.writeFileSync(tmpConfig, JSON.stringify({ port: 8000 }), 'utf8');
 setConfigFilePath(tmpConfig);
 
 const { migratePublicOverrides, migrateUserData } = await import('../src/user-migrations.ts');

@@ -100,10 +100,10 @@ afterEach(() => {
 
 describe('thumbnail jpeg quality tuning', () => {
     test('default config ships thumbnail quality 85', () => {
-        const configSource = fs.readFileSync(path.join(repoRoot, 'default/config.yaml'), 'utf8');
+        const configSource = fs.readFileSync(path.join(repoRoot, 'default/config.jsonc'), 'utf8');
 
-        expect(configSource).toMatch(/# JPG thumbnail quality \(0-100\)\s+quality:\s*85/);
-        expect(configSource).not.toMatch(/dimensions:.*['\"]bg['\"]/);
+        expect(configSource).toMatch(/"quality"\s*:\s*85/);
+        expect(configSource).not.toMatch(/"bg"\s*:/);
     });
 
     test.each(['avatar'])('jpg mode uses quality 85 for new %s thumbnails', async (type) => {

@@ -15,6 +15,7 @@ import { applyCanonicalPragmas } from '../src/canonical-sqlite.ts';
 import { runCanonicalMigrations } from '../src/canonical-sqlite-migrations.ts';
 import { write as writeCharacterCardPngData } from '../src/character-card-parser.ts';
 import { DEFAULT_USER, USER_DIRECTORY_TEMPLATE } from '../src/constants.ts';
+import { canonicalConfigPath } from '../src/config-file.ts';
 import { ensureCanonicalPreset } from '../src/endpoints/presets-store.ts';
 import { upsertCanonicalSettingsDocument } from '../src/endpoints/settings-store.ts';
 
@@ -52,7 +53,7 @@ if (!profile) {
 
 const defaultDataRoot = path.join(repoRoot, 'data', 'dev-local');
 const dataRoot = path.resolve(repoRoot, options.dataRoot ?? defaultDataRoot);
-const configPath = path.resolve(repoRoot, options.configPath ?? path.join(repoRoot, 'config.dev-local.yaml'));
+const configPath = canonicalConfigPath(path.resolve(repoRoot, options.configPath ?? 'config.dev-local.jsonc'));
 const seededUserHandle = options.userHandle ?? DEFAULT_USER.handle;
 const userRoot = path.join(dataRoot, seededUserHandle);
 const avatarPngCache = new Map();
@@ -345,20 +346,18 @@ async function seedCharacters(worldNames) {
 }
 
 async function writeDevConfig() {
-    const config = [
-        `dataRoot: ${normalizePathForYaml(dataRoot)}`,
-        'listen: false',
-        'port: 8000',
-        'browserLaunch:',
-        '  enabled: false',
-        'enableUserAccounts: true',
-        'whitelistMode: false',
-        'skipContentCheck: true',
-        'logging:',
-        '  minLogLevel: 1',
-    ].join('\n');
+    const config = {
+        dataRoot,
+        listen: false,
+        port: 8000,
+        browserLaunch: { enabled: false },
+        enableUserAccounts: true,
+        whitelistMode: false,
+        skipContentCheck: true,
+        logging: { minLogLevel: 1 },
+    };
 
-    await fs.promises.writeFile(configPath, `${config}\n`, 'utf8');
+    await fs.promises.writeFile(configPath, `${JSON.stringify(config, null, 4)}\n`, 'utf8');
 }
 
 function createUserDirectories(root) {
@@ -563,9 +562,6 @@ function sanitizeFileName(value) {
     return String(value).replace(/[<>:"/\\|?*\u0000-\u001F]/g, '_');
 }
 
-function normalizePathForYaml(targetPath) {
-    return JSON.stringify(targetPath.replace(/\\/g, '/'));
-}
 
 function pick(items, random) {
     return items[Math.floor(random() * items.length)];

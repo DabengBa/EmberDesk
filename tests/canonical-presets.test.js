@@ -17,8 +17,8 @@ const previousCommandLineArgs = globalThis.COMMAND_LINE_ARGS;
 globalThis.COMMAND_LINE_ARGS = {};
 
 const tmpConfigRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'emberdesk-presets-config-'));
-const tmpConfigPath = path.join(tmpConfigRoot, 'config.yaml');
-fs.writeFileSync(tmpConfigPath, 'port: 8000\n', 'utf8');
+const tmpConfigPath = path.join(tmpConfigRoot, 'config.jsonc');
+fs.writeFileSync(tmpConfigPath, JSON.stringify({ port: 8000 }), 'utf8');
 setConfigFilePath(tmpConfigPath);
 
 const {

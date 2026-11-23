@@ -20,10 +20,19 @@ import { setConfigFilePath } from '../src/util.ts';
  */
 
 const configRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'emberdesk-wire-log-fallback-config-'));
-const configPath = path.join(configRoot, 'config.yaml');
+const configPath = path.join(configRoot, 'config.jsonc');
 fs.writeFileSync(
     configPath,
-    'port: 8000\nfeatures:\n  storage:\n    canonicalSqlite:\n      enabled: false\n',
+    JSON.stringify({
+        port: 8000,
+        features: {
+            storage: {
+                canonicalSqlite: {
+                    enabled: false,
+                },
+            },
+        },
+    }),
     'utf8',
 );
 setConfigFilePath(configPath);

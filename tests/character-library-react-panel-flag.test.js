@@ -43,10 +43,10 @@ describe('character library React sole owner', () => {
     });
 
     test('removes retired character-library config and feature module', () => {
-        const configSource = read('default/config.yaml');
-        expect(configSource).not.toContain('react:');
-        expect(configSource).not.toContain('panels:');
-        expect(configSource).not.toContain('characterLibrary:');
+        const configSource = read('default/config.jsonc');
+        expect(configSource).not.toMatch(/"react"\s*:/);
+        expect(configSource).not.toMatch(/"panels"\s*:/);
+        expect(configSource).not.toMatch(/"characterLibrary"\s*:/);
         expect(fs.existsSync(path.join(repoRoot, 'src/react-character-library-feature.js'))).toBe(false);
     });
 });

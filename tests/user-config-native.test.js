@@ -8,8 +8,22 @@ const repo = new URL('../', import.meta.url).href;
 
 test.each([false, true])('native Node preserves config and account behavior (accounts=%s)', enabled => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'emberdesk-user-config-native-'));
-    const config = path.join(root, 'config.yaml');
-    fs.writeFileSync(config, `enableUserAccounts: ${enabled}\nport: 4321\ndisableThumbnails: true\ncookieSecret: legacy-cookie-secret\nsso:\n  autheliaAuth: true\n  trustedProxies:\n    - 127.0.0.1\nbackups:\n  chat:\n    enabled: false\n`);
+    const config = path.join(root, 'config.jsonc');
+    fs.writeFileSync(config, JSON.stringify({
+        enableUserAccounts: enabled,
+        port: 4321,
+        disableThumbnails: true,
+        cookieSecret: 'legacy-cookie-secret',
+        sso: {
+            autheliaAuth: true,
+            trustedProxies: ['127.0.0.1'],
+        },
+        backups: {
+            chat: {
+                enabled: false,
+            },
+        },
+    }));
     const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith('EMBERDESK_')));
     try {
         const result = spawnSync(process.execPath, ['--input-type=module', '--eval', `
@@ -24,7 +38,7 @@ test.each([false, true])('native Node preserves config and account behavior (acc
             const config = await import(moduleUrl('config-init.ts'));
             const cli = await import(moduleUrl('command-line.ts'));
             const { getConfig, getConfigValue } = await import(moduleUrl('util.ts'));
-            const configPath = path.join(root, 'config.yaml');
+            const configPath = path.join(root, 'config.jsonc');
             cli.prepareConfigFilesystem(configPath, false);
             assert.equal(typeof config.initConfig, 'function');
             assert.equal(getConfigValue('port'), 4321);

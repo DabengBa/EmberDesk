@@ -35,11 +35,11 @@ test('native startup exits when both network protocols are disabled', () => {
 
 test('real entry starts from an isolated cwd and handles SIGTERM', async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'emberdesk-native-start-'));
-    const config = path.join(root, 'config.yaml');
+    const config = path.join(root, 'config.jsonc');
     const data = path.join(root, 'data');
     const profile = path.join(root, 'startup-profile.json');
-    const defaultConfig = fs.readFileSync(path.join(repo, 'default/config.yaml'), 'utf8');
-    fs.writeFileSync(config, defaultConfig.replace(/^enableUserAccounts: true$/m, 'enableUserAccounts: false'));
+    const defaultConfig = fs.readFileSync(path.join(repo, 'default/config.jsonc'), 'utf8');
+    fs.writeFileSync(config, defaultConfig.replace(/"enableUserAccounts":\s*true/, '"enableUserAccounts": false'));
     const child = spawn(process.execPath, [path.join(repo, 'server.js'), '--dataRoot', data, '--configPath', config,
         '--port', '0', '--listen', 'false', '--browserLaunchEnabled', 'false'], {
         cwd: root,
@@ -85,7 +85,7 @@ test('real authenticated multipart uploads stage separately and startup clears s
     });
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'emberdesk-upload-staging-'));
     const data = path.join(root, 'data');
-    const config = path.join(root, 'config.yaml');
+    const config = path.join(root, 'config.jsonc');
     const legacy = path.join(data, '_uploads');
     const users = ['alice', 'bob'];
     const staging = handle => path.join(data, handle, '_uploads');
@@ -95,7 +95,7 @@ test('real authenticated multipart uploads stage separately and startup clears s
     let closed;
     let output = '';
     try {
-        fs.copyFileSync(path.join(repo, 'default/config.yaml'), config);
+        fs.copyFileSync(path.join(repo, 'default/config.jsonc'), config);
         const seed = spawnSync(process.execPath, ['--input-type=module', '-e', `
             import storage from 'node-persist';
             import { getPasswordHash, getPasswordSalt } from './src/user-auth.ts';

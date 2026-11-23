@@ -9,8 +9,8 @@ const repo = new URL('../', import.meta.url);
 test.each([false, true].flatMap(exposure => ['read', 'find', 'view'].map(probe => [exposure, probe])))('native HTTP account, secrets and content boundaries (exposure=%s, probe=%s)', (exposure, probe) => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'emberdesk-account-http-'));
     try {
-        const config = path.join(root, 'config.yaml');
-        fs.writeFileSync(config, `enableUserAccounts: true\nallowKeysExposure: ${exposure}\n`);
+        const config = path.join(root, 'config.jsonc');
+        fs.writeFileSync(config, JSON.stringify({ enableUserAccounts: true, allowKeysExposure: exposure }));
         const result = spawnSync(process.execPath, ['--input-type=module', '--eval', `
             import assert from 'node:assert/strict';
             import fs from 'node:fs';

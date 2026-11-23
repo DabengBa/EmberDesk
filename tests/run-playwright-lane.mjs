@@ -36,7 +36,7 @@ const runRoot = process.env.EMBERDESK_TEST_ROOT
     : await fs.mkdtemp(path.join(os.tmpdir(), `emberdesk-e2e-shard-${shard}-`));
 const dataRoot = path.join(runRoot, 'data');
 const tempRoot = path.join(runRoot, 'tmp');
-const configPath = path.join(runRoot, 'config.yaml');
+const configPath = path.join(runRoot, 'config.jsonc');
 await fs.mkdir(dataRoot, { recursive: true });
 await fs.mkdir(tempRoot, { recursive: true });
 const startedAt = performance.now();

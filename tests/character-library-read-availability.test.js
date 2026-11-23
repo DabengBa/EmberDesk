@@ -12,8 +12,8 @@ import { getPersistedCanonicalAuditStatus, persistCanonicalAuditStatus } from '.
 import { readCharacterFullPayload } from '../src/endpoints/character-read-service.ts';
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'character-read-http-'));
-fs.writeFileSync(path.join(root, 'config.yaml'), 'enableUserAccounts: true\n');
-setConfigFilePath(path.join(root, 'config.yaml'));
+fs.writeFileSync(path.join(root, 'config.jsonc'), JSON.stringify({ enableUserAccounts: true }));
+setConfigFilePath(path.join(root, 'config.jsonc'));
 globalThis.DATA_ROOT = root;
 const { getUserDirectories } = await import('../src/user-directories.ts');
 const { router } = await import('../src/endpoints/characters.ts');

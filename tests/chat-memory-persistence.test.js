@@ -16,30 +16,37 @@ import {
 
 const roots = [];
 const configRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'emberdesk-chat-memory-persistence-config-'));
-const configPath = path.join(configRoot, 'config.yaml');
-fs.writeFileSync(configPath, [
-    'backups:',
-    '  chat:',
-    '    enabled: false',
-    '    maxTotalBackups: -1',
-    '    throttleInterval: 10000',
-    '    checkIntegrity: true',
-    'features:',
-    '  storage:',
-    '    canonicalSqlite:',
-    '      enabled: true',
-    '      shadowImport: true',
-    '      reads: true',
-    '      writes: true',
-    '      strict: false',
-    '      slices:',
-    '        chats:',
-    '          enabled: true',
-    '          shadowImport: true',
-    '          reads: true',
-    '          writes: true',
-    '          projection: sync',
-].join('\n'), 'utf8');
+const configPath = path.join(configRoot, 'config.jsonc');
+fs.writeFileSync(configPath, JSON.stringify({
+    backups: {
+        chat: {
+            enabled: false,
+            maxTotalBackups: -1,
+            throttleInterval: 10000,
+            checkIntegrity: true,
+        },
+    },
+    features: {
+        storage: {
+            canonicalSqlite: {
+                enabled: true,
+                shadowImport: true,
+                reads: true,
+                writes: true,
+                strict: false,
+                slices: {
+                    chats: {
+                        enabled: true,
+                        shadowImport: true,
+                        reads: true,
+                        writes: true,
+                        projection: 'sync',
+                    },
+                },
+            },
+        },
+    },
+}), 'utf8');
 setConfigFilePath(configPath);
 
 const { router } = await import('../src/endpoints/chats.ts');

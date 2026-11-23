@@ -168,7 +168,7 @@ export class ServerStartup {
      */
     #getAddressInUseMessage(url: URL, ipVersion: number): string {
         const listenAddress = this.#getListenAddress(url, ipVersion);
-        return `Address ${listenAddress} is already in use. Another EmberDesk instance may already be running. Stop the other process or change "port" in config.yaml.`;
+        return `Address ${listenAddress} is already in use. Another EmberDesk instance may already be running. Stop the other process or change "port" in config.jsonc.`;
     }
 
     /**

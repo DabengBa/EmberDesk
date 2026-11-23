@@ -25,7 +25,7 @@ const outputRoot = path.join(repoRoot, 'artifacts', 'startup-performance');
 const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
 const runDir = path.join(outputRoot, timestamp);
 const dataRoot = path.join(runDir, 'data');
-const configPath = path.join(runDir, 'config.yaml');
+const configPath = path.join(runDir, 'config.jsonc');
 const serverProfilePath = path.join(runDir, 'server-startup-profile.json');
 const reportPath = path.join(runDir, 'report.json');
 const markdownPath = path.join(runDir, 'report.md');
@@ -100,23 +100,19 @@ try {
 }
 
 async function writeConfig(targetPath) {
-    const config = [
-        `dataRoot: ${normalizePathForYaml(dataRoot)}`,
-        'listen: false',
-        `port: ${port}`,
-        'browserLaunch:',
-        '  enabled: false',
-        'whitelistMode: false',
-        'enableUserAccounts: false',
-        'extensions:',
-        '  enabled: true',
-        '  autoUpdate: false',
-        'skipContentCheck: false',
-        'logging:',
-        '  minLogLevel: 0',
-    ].join('\n');
+    const config = {
+        dataRoot,
+        listen: false,
+        port,
+        browserLaunch: { enabled: false },
+        whitelistMode: false,
+        enableUserAccounts: false,
+        extensions: { enabled: true, autoUpdate: false },
+        skipContentCheck: false,
+        logging: { minLogLevel: 0 },
+    };
 
-    fs.writeFileSync(targetPath, `${config}\n`, 'utf8');
+    fs.writeFileSync(targetPath, `${JSON.stringify(config, null, 4)}\n`, 'utf8');
 }
 
 async function seedSettings(targetDataRoot) {
@@ -138,10 +134,6 @@ async function seedSettings(targetDataRoot) {
     } finally {
         db.close();
     }
-}
-
-function normalizePathForYaml(targetPath) {
-    return JSON.stringify(targetPath.replace(/\\/g, '/'));
 }
 
 function parseCliOptions(args) {

@@ -13,18 +13,20 @@ const repoRoot = path.resolve(__dirname, '..');
 const zhCn = JSON.parse(fs.readFileSync(path.join(repoRoot, 'public', 'locales', 'zh-cn.json'), 'utf8'));
 
 const tmpConfigDir = fs.mkdtempSync(path.join(os.tmpdir(), 'emberdesk-login-react-config-'));
-const configPath = path.join(tmpConfigDir, 'config.yaml');
+const configPath = path.join(tmpConfigDir, 'config.jsonc');
 const tmpRoots = [];
 
 beforeAll(() => {
-    fs.writeFileSync(configPath, [
-        'enableUserAccounts: true',
-        'features:',
-        '  react:',
-        '    pages:',
-        '      settings: false',
-        '',
-    ].join('\n'), 'utf8');
+    fs.writeFileSync(configPath, JSON.stringify({
+        enableUserAccounts: true,
+        features: {
+            react: {
+                pages: {
+                    settings: false,
+                },
+            },
+        },
+    }), 'utf8');
     setConfigFilePath(configPath);
 });
 

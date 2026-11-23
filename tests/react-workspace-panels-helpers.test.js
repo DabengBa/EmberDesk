@@ -314,16 +314,16 @@ describe('React workspace panels bridge helpers', () => {
     });
 
     test('ships a main-chat message-list panel contract through the shared workspace entry', () => {
-        const configSource = read('default/config.yaml');
+        const configSource = read('default/config.jsonc');
         const entrySource = read('app/compat/workspace-panels-entry.ts');
         const seedScriptSource = read('scripts/seed-dev-environment.mjs');
         const bridgeSource = read('public/scripts/workspace-panels-react-bridge.js');
         const workspacePanelSource = read('app/workspace-panels.tsx');
         const scriptSource = read('public/script.js');
 
-        expect(configSource).not.toContain('mainChatMessageList:');
-        expect(configSource).not.toContain('characterAuthoring:');
-        expect(configSource).not.toContain('groupAuthoring:');
+        expect(configSource).not.toMatch(/"mainChatMessageList"\s*:/);
+        expect(configSource).not.toMatch(/"characterAuthoring"\s*:/);
+        expect(configSource).not.toMatch(/"groupAuthoring"\s*:/);
         expect(entrySource).toContain("from '../workspace-panels'");
         expect(seedScriptSource).not.toContain('EMBERDESK_FEATURES_REACT_PANELS_MAINCHATMESSAGELIST');
         expect(seedScriptSource).not.toContain('features:');

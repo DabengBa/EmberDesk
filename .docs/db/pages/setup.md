@@ -66,7 +66,7 @@ In `fresh` mode the submitted handle is slugified server-side (lowercased, diacr
 - Successful setup navigates to [Chat Workspace](page.chat_workspace).
 - The setup page has no outgoing navigation links.
 
-## Configuration (config.yaml)
+## Configuration (config.jsonc)
 
 ### Required
 

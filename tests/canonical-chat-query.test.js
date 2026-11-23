@@ -23,29 +23,36 @@ import {
 const tempRoots = [];
 const managers = [];
 const configRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'emberdesk-canonical-chat-query-config-'));
-const configPath = path.join(configRoot, 'config.yaml');
-fs.writeFileSync(configPath, [
-    'backups:',
-    '  chat:',
-    '    enabled: false',
-    '    maxTotalBackups: -1',
-    '    throttleInterval: 10000',
-    '    checkIntegrity: true',
-    'features:',
-    '  storage:',
-    '    canonicalSqlite:',
-    '      enabled: true',
-    '      shadowImport: true',
-    '      reads: true',
-    '      writes: true',
-    '      strict: false',
-    '      slices:',
-    '        chats:',
-    '          enabled: true',
-    '          shadowImport: true',
-    '          reads: true',
-    '          writes: true',
-].join('\n'), 'utf8');
+const configPath = path.join(configRoot, 'config.jsonc');
+fs.writeFileSync(configPath, JSON.stringify({
+    backups: {
+        chat: {
+            enabled: false,
+            maxTotalBackups: -1,
+            throttleInterval: 10000,
+            checkIntegrity: true,
+        },
+    },
+    features: {
+        storage: {
+            canonicalSqlite: {
+                enabled: true,
+                shadowImport: true,
+                reads: true,
+                writes: true,
+                strict: false,
+                slices: {
+                    chats: {
+                        enabled: true,
+                        shadowImport: true,
+                        reads: true,
+                        writes: true,
+                    },
+                },
+            },
+        },
+    },
+}), 'utf8');
 setConfigFilePath(configPath);
 
 const { getChatInfo } = await import('../src/endpoints/chats.ts');

@@ -19,7 +19,7 @@ import { setConfigFilePath } from '../src/util.ts';
 const tempRoots = [];
 const managers = [];
 const tmpConfigDir = fs.mkdtempSync(path.join(os.tmpdir(), 'emberdesk-canonical-sqlite-config-'));
-const configPath = path.join(tmpConfigDir, 'config.yaml');
+const configPath = path.join(tmpConfigDir, 'config.jsonc');
 
 function makeRoot() {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'emberdesk-canonical-sqlite-'));
@@ -52,18 +52,20 @@ function createDirectories(root, overrides = {}) {
 }
 
 beforeAll(() => {
-    fs.writeFileSync(configPath, [
-        'features:',
-        '  storage:',
-        '    canonicalSqlite:',
-        '      enabled: false',
-        '      shadowImport: false',
-        '      reads: false',
-        '      writes: false',
-        '      chatStats: false',
-        '      strict: false',
-        '',
-    ].join('\n'), 'utf8');
+    fs.writeFileSync(configPath, JSON.stringify({
+        features: {
+            storage: {
+                canonicalSqlite: {
+                    enabled: false,
+                    shadowImport: false,
+                    reads: false,
+                    writes: false,
+                    chatStats: false,
+                    strict: false,
+                },
+            },
+        },
+    }), 'utf8');
     setConfigFilePath(configPath);
 });
 

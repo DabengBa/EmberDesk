@@ -21,7 +21,7 @@ export function isolatedCharacterLibraryTest({ lazy }) {
         isolatedServer: [async ({}, use) => {
             const root = await fs.mkdtemp(path.join(os.tmpdir(), 'character-library-e2e-'));
             const data = path.join(root, 'data');
-            const config = path.join(root, 'config.yaml');
+            const config = path.join(root, 'config.jsonc');
             const portServer = net.createServer();
             let child;
             const previousBase = process.env.PLAYWRIGHT_BASE_URL;

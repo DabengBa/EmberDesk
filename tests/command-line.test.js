@@ -14,7 +14,7 @@ import {
 
 /** Default config values matching getDefaultConfig(false) */
 const BASE_DEFAULTS = Object.freeze({
-    configPath: './config.yaml',
+    configPath: './config.jsonc',
     dataRoot: './data',
     port: 8000,
     listen: false,
@@ -54,7 +54,7 @@ function makeDefaults(overrides = {}) {
 function makeArgv(overrides = {}) {
     return {
         isGlobal: false,
-        configPath: './config.yaml',
+        configPath: './config.jsonc',
         dataRoot: './data',
         port: 8000,
         listen: false,
@@ -112,7 +112,7 @@ describe('parseArgv', () => {
         const result = parseArgv(['node', 'server.js', '--global']);
         expect(result.isGlobal).toBe(true);
         expect(result.configPath).toContain('EmberDesk');
-        expect(result.configPath).toMatch(/config\.yaml$/);
+        expect(result.configPath).toMatch(/config\.jsonc$/);
     });
 
     test('--port 3000 --listen: correct values', () => {
@@ -169,14 +169,14 @@ describe('prepareConfigFilesystem', () => {
     });
 
     test('global mode with missing parent dir: creates dir and writes config', () => {
-        const configPath = path.join(tmpDir, 'nested', 'deep', 'config.yaml');
+        const configPath = path.join(tmpDir, 'nested', 'deep', 'config.jsonc');
         prepareConfigFilesystem(configPath, true);
         expect(fs.existsSync(path.dirname(configPath))).toBe(true);
         expect(fs.existsSync(configPath)).toBe(true);
     });
 
     test('idempotent: calling twice does not error', () => {
-        const configPath = path.join(tmpDir, 'config.yaml');
+        const configPath = path.join(tmpDir, 'config.jsonc');
         expect(() => {
             prepareConfigFilesystem(configPath, false);
             prepareConfigFilesystem(configPath, false);
@@ -349,7 +349,7 @@ describe('CommandLineParser.parse()', () => {
         const result = parseArgv(['node', 'server.js', '--global']);
         expect(result.isGlobal).toBe(true);
         expect(result.configPath).toContain('EmberDesk');
-        expect(result.configPath).toMatch(/config\.yaml$/);
+        expect(result.configPath).toMatch(/config\.jsonc$/);
     });
 
     test('global mode: dataRoot forced to OS app-data, not config/CLI value', () => {
@@ -363,7 +363,7 @@ describe('CommandLineParser.parse()', () => {
     test('missing config file: config file created with defaults', () => {
         const parser = new CommandLineParser();
         parser.parse(['node', 'server.js']);
-        expect(fs.existsSync('./config.yaml')).toBe(true);
+        expect(fs.existsSync('./config.jsonc')).toBe(true);
     });
 
     test('dataRoot from env var: uses env var value', () => {

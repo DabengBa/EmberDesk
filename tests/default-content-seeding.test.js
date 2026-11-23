@@ -48,8 +48,8 @@ describe('default content seeding', () => {
         globalThis.DATA_ROOT = dataRoot;
 
         const { setConfigFilePath } = await import('../src/util.ts');
-        const configPath = path.join(dataRoot, 'config.yaml');
-        fs.writeFileSync(configPath, 'port: 8000\n', 'utf8');
+        const configPath = path.join(dataRoot, 'config.jsonc');
+        fs.writeFileSync(configPath, JSON.stringify({ port: 8000 }), 'utf8');
         setConfigFilePath(configPath);
 
         const contentManager = await import('../src/endpoints/content-manager.ts');
