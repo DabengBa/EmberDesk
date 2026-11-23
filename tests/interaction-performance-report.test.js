@@ -612,24 +612,32 @@ describe('interaction performance report helpers', () => {
         expect(mismatch.matches).toBe(false);
     });
 
-    test('validates expected indexed versus filesystem route paths', () => {
+    test('validates canonical route paths without accepting retired indexed paths', () => {
         expect(validateInteractionPath(
             'characters_all_warm_repeat',
             'sqlite_on',
-            'characters_all:indexed',
+            'characters_all:canonical',
         )).toEqual({
-            expectedPath: 'characters_all:indexed',
+            expectedPath: 'characters_all:canonical',
             matches: true,
         });
 
         expect(validateInteractionPath(
             'characters_get_warm_repeat',
-            'sqlite_off',
+            'sqlite_on',
             'characters_get:indexed',
         )).toEqual({
-            expectedPath: 'characters_get:filesystem',
+            expectedPath: 'characters_get:canonical',
             matches: false,
         });
+
+        for (const scenario of ['characters_all_first_build', 'characters_all_after_chat_dirty']) {
+            expect(validateInteractionPath(scenario, 'sqlite_on', 'characters_all:canonical').matches).toBe(true);
+            expect(validateInteractionPath(scenario, 'sqlite_on', 'characters_all:filesystem').matches).toBe(false);
+        }
+        expect(validateInteractionPath('characters_get_warm_repeat', 'sqlite_on', 'characters_get:canonical').matches).toBe(true);
+        expect(validateInteractionPath('characters_get_warm_repeat', 'sqlite_off', 'characters_get:canonical').matches).toBe(true);
+        expect(validateInteractionPath('characters_get_warm_repeat', 'sqlite_off', 'characters_get:filesystem').matches).toBe(false);
 
         expect(validateInteractionPath(
             'character_delete_refresh_ui',

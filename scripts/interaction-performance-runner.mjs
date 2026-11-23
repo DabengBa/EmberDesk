@@ -15,10 +15,11 @@ import { applyCanonicalPragmas } from '../src/canonical-sqlite.ts';
 import { runCanonicalMigrations } from '../src/canonical-sqlite-migrations.ts';
 import { DEFAULT_USER } from '../src/constants.ts';
 import { upsertCanonicalSettingsDocument } from '../src/endpoints/settings-store.ts';
+import { ensureCanonicalPreset } from '../src/endpoints/presets-store.ts';
+import { createCharacterCard, createChatMessages, createStreamMarker } from './interaction-performance-fixture.mjs';
 import {
     buildDerivedCacheObservabilitySummary,
     buildVariantComparison,
-    compareScenarioPayloads,
     renderDerivedCacheObservabilityMarkdown,
     summarizeScenarioPayload,
     validateInteractionPath,
@@ -43,7 +44,10 @@ const profile = cliOptions.profile ?? 'medium';
 const scenarioSelection = cliOptions.scenario ?? 'suite';
 const measuredRepeats = cliOptions.repeats ?? 4;
 const pairCount = cliOptions.pairs ?? 3;
-const variantSelection = cliOptions.variant ?? 'ab';
+const variantSelection = cliOptions.variant ?? 'sqlite_on_only';
+if (variantSelection !== 'sqlite_on_only') {
+    throw new Error('Only sqlite_on_only is supported: the legacy index on/off backend has been retired.');
+}
 const scenarios = resolveScenarios(scenarioSelection);
 const datasetProfiles = {
     small: { characters: 12, chatFilesPerCharacter: 2, chatMessagesPerFile: 8, mainChatMessagesPerFile: 50 },
@@ -56,6 +60,7 @@ const defaultAvatarBuffer = fs.readFileSync(new URL('../public/img/ai4.png', imp
 if (cliOptions.listScenarios) {
     process.stdout.write(`${JSON.stringify({
         defaultSelection: 'suite',
+        variantSelection,
         scenarioGroups: {
             characterRoute: [
                 'characters_all_first_build',
@@ -140,6 +145,7 @@ const report = {
     datasetProfile,
     measuredRepeats,
     pairCount,
+    variantSelection,
     scenarios: scenarioResults,
     derivedCache: buildDerivedCacheObservabilitySummary(scenarioResults),
     warnings: scenarioResults.flatMap(result => result.warnings ?? []),
@@ -173,29 +179,7 @@ async function seedBaselineDataset({ baselineRoot, datasetProfile }) {
     for (let index = 0; index < datasetProfile.characters; index++) {
         const baseName = `perf-character-${String(index + 1).padStart(4, '0')}`;
         const avatar = `${baseName}.png`;
-        const payload = JSON.stringify({
-            spec: 'chara_card_v2',
-            spec_version: '2.0',
-            data: {
-                name: `Perf Character ${index + 1}`,
-                description: `Description ${index + 1}`,
-                scenario: `Scenario ${index + 1}`,
-                first_mes: `First ${index + 1}`,
-                mes_example: `Example ${index + 1}`,
-                creator_notes: `Creator notes ${index + 1}`,
-                system_prompt: '',
-                post_history_instructions: '',
-                alternate_greetings: [],
-                tags: [`tag-${index % 5}`],
-                creator: 'perf-runner',
-                character_version: '2.0',
-                extensions: {
-                    talkativeness: 0.5,
-                    fav: index % 7 === 0,
-                    world: '',
-                },
-            },
-        });
+        const payload = JSON.stringify(createCharacterCard(index));
 
         fs.writeFileSync(path.join(charactersRoot, avatar), writeCharacterCardPngData(defaultAvatarBuffer, payload));
 
@@ -217,32 +201,6 @@ async function seedBaselineDataset({ baselineRoot, datasetProfile }) {
     }
 }
 
-function createChatMessages(characterIndex, chatIndex, messageCount) {
-    const startedAt = new Date(Date.UTC(2026, 4, 10, 0, 0, 0) + ((characterIndex * 100) + chatIndex) * 60000);
-    const metadata = {
-        user_name: 'User',
-        character_name: `Perf Character ${characterIndex + 1}`,
-        create_date: startedAt.toISOString(),
-        chat_metadata: {
-            scenario: 'perf-benchmark',
-            system_prompt: '',
-            mes_example: '',
-        },
-    };
-    const messages = [metadata];
-
-    for (let index = 0; index < messageCount; index++) {
-        messages.push({
-            name: index % 2 === 0 ? 'User' : `Perf Character ${characterIndex + 1}`,
-            is_user: index % 2 === 0,
-            mes: `Message ${index + 1} for character ${characterIndex + 1}, chat ${chatIndex + 1}.`,
-            send_date: new Date(startedAt.getTime() + index * 15000).toISOString(),
-        });
-    }
-
-    return messages;
-}
-
 async function runScenarioPairs({ runDir, baselineRoot, scenarioName, measuredRepeats, pairCount, screenshotRoot }) {
     const pairResults = [];
     const warnings = [];
@@ -250,20 +208,13 @@ async function runScenarioPairs({ runDir, baselineRoot, scenarioName, measuredRe
     for (let pairIndex = 0; pairIndex < pairCount; pairIndex++) {
         const pairRunRoot = path.join(runDir, scenarioName, `pair-${String(pairIndex + 1).padStart(2, '0')}`);
         const sqliteOnRoot = path.join(pairRunRoot, 'sqlite-on');
-        const sqliteOffRoot = path.join(pairRunRoot, 'sqlite-off');
         await cloneDirectory(baselineRoot, sqliteOnRoot);
-        if (variantSelection !== 'sqlite_on_only') {
-            await cloneDirectory(baselineRoot, sqliteOffRoot);
-        }
-
-        const order = variantSelection === 'sqlite_on_only'
-            ? ['sqlite_on']
-            : pairIndex % 2 === 0 ? ['sqlite_on', 'sqlite_off'] : ['sqlite_off', 'sqlite_on'];
+        const order = ['sqlite_on'];
         const pairVariantResults = [];
 
         for (const variant of order) {
-            const variantRoot = variant === 'sqlite_on' ? sqliteOnRoot : sqliteOffRoot;
-            const port = defaultPort + (pairIndex * 2) + (variant === 'sqlite_on' ? 0 : 1);
+            const variantRoot = sqliteOnRoot;
+            const port = defaultPort + (pairIndex * 2);
             const variantResult = await runScenarioVariant({
                 scenarioName,
                 variant,
@@ -276,35 +227,18 @@ async function runScenarioPairs({ runDir, baselineRoot, scenarioName, measuredRe
         }
 
         const sqliteOnResult = pairVariantResults.find(result => result.variant === 'sqlite_on');
-        const sqliteOffResult = pairVariantResults.find(result => result.variant === 'sqlite_off');
-        const comparison = compareScenarioPayloads(
-            scenarioName,
-            sqliteOnResult?.payloadReference ?? null,
-            sqliteOffResult?.payloadReference ?? null,
-        );
-
         const variantWarnings = pairVariantResults.flatMap(result => result.warnings ?? []);
         warnings.push(...variantWarnings);
-
-        const semanticValid = variantSelection === 'sqlite_on_only'
-            ? Boolean(sqliteOnResult?.valid)
-            : Boolean(sqliteOnResult?.valid && sqliteOffResult?.valid && comparison.matches);
-        if (variantSelection !== 'sqlite_on_only' && !comparison.matches) {
-            warnings.push(`[${scenarioName}] pair ${pairIndex + 1}: payload mismatch between SQLite on/off variants`);
-        }
+        const semanticValid = Boolean(sqliteOnResult?.valid);
 
         pairResults.push({
             pairIndex: pairIndex + 1,
             order,
             semanticValid,
-            comparison,
-            mismatchDetail: comparison.matches ? null : {
-                sqliteOn: comparison.normalizedOn,
-                sqliteOff: comparison.normalizedOff,
-            },
+            mismatchDetail: null,
             payloadSummary: {
                 sqliteOn: summarizeScenarioPayload(scenarioName, sqliteOnResult?.payloadReference ?? null),
-                sqliteOff: summarizeScenarioPayload(scenarioName, sqliteOffResult?.payloadReference ?? null),
+                sqliteOff: null,
             },
             variants: pairVariantResults,
         });
@@ -354,7 +288,6 @@ async function runScenarioVariant({ scenarioName, variant, variantRoot, port, me
     const targetAvatar = chooseTargetAvatar(variantRoot);
     const env = {
         ...process.env,
-        EMBERDESK_CHARACTER_INDEX_MODE: variant === 'sqlite_on' ? 'force_on' : 'force_off',
         EMBERDESK_INTERACTION_PERF_MODE: '1',
         EMBERDESK_INTERACTION_PERF_CHAT_MTIME_MS: String(Date.parse('2026-05-10T00:00:00.000Z')),
     };
@@ -436,7 +369,7 @@ async function captureScenarioMeasurements({ scenarioName, variant, url, screens
             }
         } else {
             for (let index = 0; index < measuredRepeats; index++) {
-                const sample = await invokeMainChatScenario(page, scenarioName, targetAvatar, profile);
+                const sample = await invokeMainChatScenario(page, scenarioName, targetAvatar, profile, index + 1);
                 warnings = collectMainChatWarnings(warnings, scenarioName, variant, sample);
                 payloadReference = payloadReference ?? sample.payload;
                 samples.push(normalizeSample(scenarioName, variant, sample, index + 1, measuredRepeats));
@@ -787,23 +720,12 @@ async function invokeCharacterLibraryScenario(page, scenarioName) {
             10000,
             null,
         );
-        const normalizeCharacterLibraryDrawerGeometry = (rightPanel) => {
-            const holder = rightPanel.parentElement;
-            const canonicalSettingsHolder = document.body.querySelector(':scope > #top-settings-holder');
-            if (holder instanceof HTMLElement
-                && canonicalSettingsHolder instanceof HTMLElement
-                && holder.parentElement !== canonicalSettingsHolder) {
-                canonicalSettingsHolder.append(holder);
-            }
-        };
         const showCharacterLibrary = async () => {
-            let rightPanel = document.getElementById('right-nav-panel');
+            const rightPanel = document.querySelector('#top-settings-holder > #rightNavHolder > #right-nav-panel');
             if (!rightPanel || typeof perfHooks.openCharacterLibraryForPerf !== 'function') {
                 throw new Error('Character Library perf open action is unavailable.');
             }
 
-            normalizeCharacterLibraryDrawerGeometry(rightPanel);
-            rightPanel = document.body.querySelector(':scope > #top-settings-holder > #rightNavHolder > #right-nav-panel');
             if (!(rightPanel instanceof HTMLElement)) {
                 throw new Error('Character Library canonical drawer is unavailable.');
             }
@@ -950,8 +872,8 @@ async function invokeCharacterLibraryFilterScenario(page) {
     }, { targetQuery: query });
 }
 
-async function invokeMainChatScenario(page, scenarioName, avatar, profileName) {
-    return await page.evaluate(async ({ targetScenario, targetAvatar, targetProfile }) => {
+async function invokeMainChatScenario(page, scenarioName, avatar, profileName, sampleIndex) {
+    return await page.evaluate(async ({ targetScenario, targetAvatar, targetProfile, streamMarker }) => {
         const { getContext } = await import('/scripts/st-context.js');
         const context = getContext();
         if (!context) {
@@ -1232,13 +1154,13 @@ async function invokeMainChatScenario(page, scenarioName, avatar, profileName) {
 
         if (targetScenario === 'main_chat_stream_first_token') {
             await openMainChat();
-            installStreamingStub({ chunks: ['Perf streamed ', 'final.'], delayMs: 35 });
+            installStreamingStub({ chunks: [streamMarker, 'final.'], delayMs: 35 });
             enableOpenAiStreaming();
             const startedAt = performance.now();
             const generation = startGeneration('Measure first streamed token.');
             const firstTokenElement = await waitForCondition(() => {
                 return Array.from(document.querySelectorAll('#chat > .mes[is_user="false"][is_system="false"][mesid] .mes_text'))
-                    .find(element => element.textContent.includes('Perf streamed')) ?? null;
+                    .find(element => element.textContent.includes(streamMarker)) ?? null;
             }, 10000);
             const firstTokenMs = performance.now() - startedAt;
             await generation;
@@ -1250,7 +1172,7 @@ async function invokeMainChatScenario(page, scenarioName, avatar, profileName) {
                 serverTiming: null,
                 payload: basePayload(characterName, {
                     firstTokenPresent: Boolean(firstTokenElement),
-                    finalTextPresent: document.querySelector('#chat')?.textContent?.includes('Perf streamed final.') ?? false,
+                    finalTextPresent: document.querySelector('#chat')?.textContent?.includes(`${streamMarker}final.`) ?? false,
                     metrics: { firstTokenMs },
                 }),
             };
@@ -1329,7 +1251,7 @@ async function invokeMainChatScenario(page, scenarioName, avatar, profileName) {
         }
 
         throw new Error(`Unsupported main-chat scenario: ${targetScenario}`);
-    }, { targetScenario: scenarioName, targetAvatar: avatar, targetProfile: profileName });
+    }, { targetScenario: scenarioName, targetAvatar: avatar, targetProfile: profileName, streamMarker: createStreamMarker(sampleIndex) });
 }
 
 async function invokeDeleteRefreshScenario(page, avatar) {
@@ -1671,6 +1593,8 @@ async function seedSettings(dataRoot) {
             payload: settings,
             expectedRevision: 0,
         });
+        const defaultPreset = JSON.parse(await fs.promises.readFile(path.join(repoRoot, 'default/content/presets/openai/Default.json'), 'utf8'));
+        ensureCanonicalPreset(db, { name: 'Default', payload: defaultPreset, source: 'seed' });
     } finally {
         db.close();
     }
@@ -1763,9 +1687,7 @@ async function cloneDirectory(source, target) {
 
 function renderMarkdownReport(report) {
     const scenarioLines = report.scenarios.map(scenario => {
-        const browserDelta = scenario.comparison.delta.browserMsMedian;
-        const serverDelta = scenario.comparison.delta.serverRouteMsMedian;
-        const hasOffVariant = scenario.comparison.sqliteOff.sampleCount > 0;
+
         const extraLines = scenario.scenario === 'character_delete_refresh_ui'
             ? [
                 `- Delete flow median: ${scenario.comparison.sqliteOn.deleteFlowMs.median ?? 'n/a'} ms`,
@@ -1783,12 +1705,8 @@ function renderMarkdownReport(report) {
             `## ${scenario.scenario}`,
             '',
             `- Valid pairs: ${scenario.validPairCount}/${scenario.pairCount}`,
-            `- SQLite on browser median: ${scenario.comparison.sqliteOn.browserMs.median ?? 'n/a'} ms`,
-            `- SQLite off browser median: ${hasOffVariant ? scenario.comparison.sqliteOff.browserMs.median ?? 'n/a' : 'n/a'} ms`,
-            `- Browser median delta: ${hasOffVariant ? formatDelta(browserDelta) : 'n/a'}`,
-            `- SQLite on server median: ${scenario.comparison.sqliteOn.serverRouteMs.median ?? 'n/a'} ms`,
-            `- SQLite off server median: ${hasOffVariant ? scenario.comparison.sqliteOff.serverRouteMs.median ?? 'n/a' : 'n/a'} ms`,
-            `- Server median delta: ${hasOffVariant ? formatDelta(serverDelta) : 'n/a'}`,
+            `- Canonical browser median: ${scenario.comparison.sqliteOn.browserMs.median ?? 'n/a'} ms`,
+            `- Canonical server median: ${scenario.comparison.sqliteOn.serverRouteMs.median ?? 'n/a'} ms`,
             ...extraLines,
             ...(scenario.warnings.length ? ['', 'Warnings:', ...scenario.warnings.map(warning => `- ${warning}`)] : []),
             '',
@@ -1800,6 +1718,8 @@ function renderMarkdownReport(report) {
         '',
         `- Generated at: ${report.generatedAt}`,
         `- Profile: ${report.profile}`,
+        '- Variant: canonical only (`sqlite_on_only` is a legacy label; no on/off comparison)',
+        '- Fixture: chat memory disabled; no summarization provider is configured',
         `- Pair count: ${report.pairCount}`,
         `- Measured repeats: ${report.measuredRepeats}`,
         `- JSON: ${reportPath}`,
@@ -1840,14 +1760,6 @@ function formatBooleanSummary(summary) {
     return `${summary.trueCount}/${summary.sampleCount} true`;
 }
 
-function formatDelta(delta) {
-    if (!delta) {
-        return 'n/a';
-    }
-
-    const relative = delta.relativePct === null ? 'n/a' : `${delta.relativePct}%`;
-    return `${delta.absoluteMs} ms (${relative})`;
-}
 
 function round(value) {
     if (typeof value !== 'number' || !Number.isFinite(value)) {

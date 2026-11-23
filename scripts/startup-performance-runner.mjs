@@ -10,7 +10,7 @@ import { setTimeout } from 'node:timers';
 import { spawn } from 'node:child_process';
 import { DatabaseSync } from 'node:sqlite';
 
-import { chromium } from '../tests/node_modules/playwright/index.mjs';
+import { chromium } from '../tests/node_modules/@playwright/test/index.mjs';
 
 import { applyCanonicalPragmas } from '../src/canonical-sqlite.ts';
 import { runCanonicalMigrations } from '../src/canonical-sqlite-migrations.ts';
