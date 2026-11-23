@@ -129,7 +129,7 @@ After rollback, repeat the container health, `app/dist` presence, and public HTT
 - If root needs to read Git metadata in `/opt/emberdesk`, use `git -c safe.directory=/opt/emberdesk -C /opt/emberdesk ...` to avoid Git dubious-ownership failures.
 - `.deploy-revision` is a remote-local operational marker and is ignored by Git. Do not commit it.
 - Keep Docker rebuilds rooted at `/opt/emberdesk/deploy`; the application checkout itself is one directory above the compose file.
-- Do not deploy production by copying sttest paths (`/opt/emberdesk-test`, port `8001`, `sttest.tanyaleoallen.cloud`).
+- Do not deploy production by copying sttest paths (`/opt/emberdesk-test`, port `8001`, `sttest.tanyaleoallen.online`).
 
 ## Related Semantic IDs And Code Binding Points
 

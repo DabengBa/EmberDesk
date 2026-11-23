@@ -20,7 +20,7 @@ Related docs:
 
 The sttest environment is a shared remote test target, not a source of canonical project data.
 
-- Public URL: `https://sttest.tanyaleoallen.cloud/`
+- Public URL: `https://sttest.tanyaleoallen.online/`
 - Expected route behavior: `/` redirects to `/login`; `/login` returns `HTTP/2 200`.
 - Remote app path: `/opt/emberdesk-test`
 - Remote revision marker: `/opt/emberdesk-test/.deploy-revision`
@@ -119,8 +119,8 @@ ssh vps-kl 'docker inspect --format "{{.State.Health.Status}} {{.Image}}" emberd
 Check the public HTTP surface:
 
 ```bash
-ssh vps-kl 'curl -sSI --max-time 15 https://sttest.tanyaleoallen.cloud/ | sed -n "1,12p"'
-ssh vps-kl 'curl -sSI --max-time 15 https://sttest.tanyaleoallen.cloud/login | sed -n "1,12p"'
+ssh vps-kl 'curl -sSI --max-time 15 https://sttest.tanyaleoallen.online/ | sed -n "1,12p"'
+ssh vps-kl 'curl -sSI --max-time 15 https://sttest.tanyaleoallen.online/login | sed -n "1,12p"'
 ```
 
 For feature-specific verification, inspect the container filesystem or run a focused browser check. Example grep used for the welcome-panel deployment:
