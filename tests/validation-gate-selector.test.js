@@ -139,7 +139,7 @@ describe('validation gate selector', () => {
                 sources: expect.arrayContaining(['.docs/tech/workspace-shell-panel-dock-coordination.md']),
             }),
             expect.objectContaining({
-                command: 'pnpm run build:react:workspace-panels',
+                command: 'pnpm run build:react',
                 required: false,
                 sources: expect.arrayContaining(['.docs/tech/pnpm-workflow.md']),
             }),

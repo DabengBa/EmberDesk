@@ -103,7 +103,6 @@
         "dev:all": "concurrently \"pnpm run dev:express\" \"pnpm run dev\"",
         "build:lib": "vite build --mode lib",
         "build:react": "vite build --mode login",
-        "build:react:workspace-panels": "pnpm run build:react",
         "preview": "vite preview",
         "typecheck": "tsc --noEmit && tsc -p tsconfig.server.json --noEmit",
         "docs:check": "node .docs/db/scripts/doc-compiler.js check && node scripts/docs-integrity.mjs",

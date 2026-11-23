@@ -170,7 +170,7 @@ Hidden marker attributes include:
 Focused proof:
 
 ```bash
-pnpm run build:react:workspace-panels
+pnpm run build:react
 pnpm --dir tests run test:unit -- main-chat-visible-transport-owner.test.js react-workspace-panels-helpers.test.js chat-generation-lifecycle.test.js chat-streaming-control-state.test.js --runInBand
 $env:EMBERDESK_FEATURES_REACT_PANELS_MAINCHATMESSAGELIST='true'; pnpm --dir tests run test:e2e -- chat-message-streaming.e2e.js --workers=1 --grep "quiet helper generation exposes an explicit non-visible legacy owner contract without mutating visible rows|background helper generation keeps the same non-visible contract while exposing its own request family|provider failure leaves a readable recovery path without duplicating rows|primary failure retries then fallback success reuses the same assistant row and clears partial text"
 ```
