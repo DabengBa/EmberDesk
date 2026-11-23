@@ -20,7 +20,7 @@ const backend = createHttpServer((req, res) => {
         return res.end();
     }
     if (req.url === '/index.html?workspace=denied') {
-        res.writeHead(302, { location: '/?workspace=denied' });
+        res.writeHead(404);
         return res.end();
     }
     if (req.url === '/?workspace=missing' || req.url === '/?workspace=outage') {
@@ -167,11 +167,12 @@ try {
     const workspaceOutage = await fetch(`${origin}/?workspace=outage`);
     assert.equal(workspaceOutage.status, 503);
     assert.equal(await workspaceOutage.text(), 'unavailable');
-    for (const [requestPath, redirect] of [['/?workspace=denied', '/login?workspace=denied'], ['/index.html?workspace=denied', '/?workspace=denied']]) {
-        const response = await fetch(origin + requestPath, { redirect: 'manual' });
-        assert.equal(response.status, 302);
-        assert.equal(response.headers.get('location'), redirect);
-    }
+    const deniedWorkspace = await fetch(`${origin}/?workspace=denied`, { redirect: 'manual' });
+    assert.equal(deniedWorkspace.status, 302);
+    assert.equal(deniedWorkspace.headers.get('location'), '/login?workspace=denied');
+    const retiredEntry = await fetch(`${origin}/index.html?workspace=denied`, { redirect: 'manual' });
+    assert.equal(retiredEntry.status, 404);
+    assert.equal(retiredEntry.headers.get('location'), null);
     for (const panel of ['workspace-panels', 'character-library-panel']) {
         const module = await fetch(`${origin}/app/${panel}.tsx`);
         assert.equal(module.status, 200);

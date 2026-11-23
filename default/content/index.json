@@ -27,10 +27,7 @@
         "filename": "errors/host-not-allowed.html",
         "type": "error_page"
     },
-    {
-        "filename": "errors/unauthorized.html",
-        "type": "error_page"
-    },
+
     {
         "filename": "errors/url-not-found.html",
         "type": "error_page"

@@ -117,10 +117,10 @@ test.each([false, true])('native Node preserves config and account behavior (acc
                 if (enabled) {
                     const makeRequest = ip => ({ user: undefined, session: {}, query: {}, headers: {}, socket: { remoteAddress: ip }, get: () => 'alice' });
                     const untrusted = makeRequest('192.0.2.10');
-                    assert.equal(await auth.tryAutoLogin(untrusted, false), false);
+                    assert.equal(await auth.tryAutoLogin(untrusted), false);
                     assert.equal(untrusted.session.handle, undefined);
                     const trusted = makeRequest('127.0.0.1');
-                    assert.equal(await auth.tryAutoLogin(trusted, false), true);
+                    assert.equal(await auth.tryAutoLogin(trusted), true);
                     assert.equal(trusted.session.handle, 'alice');
                     assert.equal(trusted.session.version, user.getAccountVersion(alice));
                 }

@@ -90,7 +90,7 @@ export const configSchema = z.looseObject({
     }).nullish(),
     rateLimiting: z.looseObject({
         preferRealIpHeader: z.boolean().nullish(),
-        basicAuthMaxAttempts: z.number().nullish(),
+
         accountsLoginMaxAttempts: z.number().nullish(),
         accountsLoginLockoutDuration: z.number().nullish(),
         accountsSetupMaxAttempts: z.number().nullish(),
@@ -149,12 +149,10 @@ export const configSchema = z.looseObject({
     }).nullish(),
     enableServerPlugins: z.boolean().nullish(),
     enableServerPluginsAutoUpdate: z.boolean().nullish(),
+    // Retained only to detect deployments that still need to migrate.
     basicAuthMode: z.boolean().nullish(),
     perUserBasicAuth: z.boolean().nullish(),
-    basicAuthUser: z.looseObject({
-        username: z.string().nullish(),
-        password: z.string().nullish(),
-    }).nullish(),
+
     cookieSecret: z.string().nullish(),
 });
 
