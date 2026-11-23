@@ -577,6 +577,38 @@ test('a failed settings panel request can retry without blocking chat generation
 test.describe('chat message streaming', () => {
     test.describe.configure({ mode: 'serial' });
 
+    test('stop during prompt assembly restores the composer before any provider request', async ({ page }) => {
+        await testSetup.awaitST({ page });
+        await selectCharacterInFreshChat(page, characterName);
+        await enableOpenAiStreaming(page);
+        await installStreamingFetchStub(page, { chunks: ['must not send'] });
+        await page.evaluate(async () => {
+            const { eventSource, event_types } = await import('/scripts/events.js');
+            window.__earlyStopEntered = false;
+            window.__earlyStopListener = async () => {
+                window.__earlyStopEntered = true;
+                await new Promise(resolve => { window.__earlyStopRelease = resolve; });
+            };
+            eventSource.on(event_types.GENERATE_AFTER_DATA, window.__earlyStopListener);
+        });
+        await startGeneration(page, 'Stop before provider dispatch.');
+        await expect.poll(() => page.evaluate(() => window.__earlyStopEntered)).toBe(true);
+        await expect(page.locator('body')).toHaveAttribute('data-generating', 'true');
+        await expect(page.locator('#mes_stop')).toBeVisible();
+        await triggerStopGeneration(page, { throughDom: true });
+        await page.evaluate(async () => {
+            const { eventSource, event_types } = await import('/scripts/events.js');
+            eventSource.removeListener(event_types.GENERATE_AFTER_DATA, window.__earlyStopListener);
+            window.__earlyStopRelease();
+        });
+        await waitForGeneration(page, { allowAbort: true });
+        expect(await page.evaluate(() => window.__emberdeskStreamingRequests.length)).toBe(0);
+        await expect(page.locator('#mes_stop')).toBeHidden();
+        await expect(page.locator('body')).not.toHaveAttribute('data-generating', 'true');
+        await page.locator('#send_textarea').fill('Follow-up after early stop.');
+        await expect(page.locator('#send_textarea')).toHaveValue('Follow-up after early stop.');
+    });
+
     test('stopped generation cannot consume a later World Info activation', async ({ page }) => {
         await testSetup.awaitST({ page });
         await selectCharacterInFreshChat(page, characterName);

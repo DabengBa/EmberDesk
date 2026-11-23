@@ -225,19 +225,26 @@ test('installed request owner sequences preparation, assembly and dispatch with 
     expect(calls).toEqual(['prepare', 'assemble', 'dispatch']);
 });
 
-test('installed request owner suppresses a late assembly result after ownership is lost', async () => {
+test.each([
+    ['terminal', { kind: 'terminal', value: 'stale' }],
+    ['empty', null],
+])('installed request owner cleans up a late %s assembly result after ownership is lost', async (_label, stages) => {
     const { createGenerationLifecycleService } = await loadTsModule('app/lib/generation/attempt-executor.ts');
     const lifecycle = createGenerationLifecycleService(() => ({ chatId: 'chat', contextRevision: 0 }));
     let owned = true;
+    const state = {};
     const dispatch = jest.fn();
+    const cancelled = jest.fn();
     const result = await lifecycle.runOwnedRequest({
         ownsRun: () => owned,
-        prepare: async () => ({ kind: 'ready', state: {} }),
-        assemble: async () => { owned = false; return { stages: { kind: 'terminal', value: 'stale' } }; },
+        prepare: async () => ({ kind: 'ready', state }),
+        assemble: async () => { owned = false; return { stages }; },
         dispatch,
+        cancelled,
     });
     expect(result).toBeUndefined();
     expect(dispatch).not.toHaveBeenCalled();
+    expect(cancelled).toHaveBeenCalledWith(state);
 });
 
 test('isolated prompt snapshot does not invoke a top-level accessor', async () => {
