@@ -1,5 +1,5 @@
 ---
-description: "This runbook documents the Hostinger-hosted sttest deployment for EmberDesk. It covers the local commit and push sequence, the remote Git update, Docker Compose rebuild, revision tracking, verification, rollback, and operational..."
+description: "Hostinger sttest runbook for deploying EmberDesk from dev, verifying the Compose service, and rolling back."
 kind: technical
 topic: hostinger-sttest-deployment
 ---
@@ -8,7 +8,9 @@ topic: hostinger-sttest-deployment
 
 ## Module Responsibility
 
-This runbook documents the Hostinger-hosted sttest deployment for EmberDesk. It covers the local commit and push sequence, the remote Git update, Docker Compose rebuild, revision tracking, verification, rollback, and operational cautions for the shared test server.
+`sttest` is the shared EmberDesk test deployment. The same Hostinger host
+also runs [upstream SillyTavern at `st`](hostinger-st-deployment.md), with
+separate Compose configuration and persistent mounts.
 
 Related docs:
 
@@ -21,19 +23,22 @@ Related docs:
 The sttest environment is a shared remote test target, not a source of canonical project data.
 
 - Public URL: `https://sttest.tanyaleoallen.online/`
-- Expected route behavior: `/` redirects to `/login`; `/login` returns `HTTP/2 200`.
+- GoDoxy upstream: `http://127.0.0.1:8001`
+- Expected route behavior: `/` redirects to `/login`; `/login` returns `200`.
 - Remote app path: `/opt/emberdesk-test`
+- Checkout branch: `dev`, tracking `origin/dev`
 - Remote revision marker: `/opt/emberdesk-test/.deploy-revision`
-- Docker Compose file: `/opt/emberdesk-test/deploy/docker-compose.yml`
+- Host-local Docker Compose file: `/opt/emberdesk-test/deploy/docker-compose.yml` (not tracked in this repo)
 - Compose project: `emberdesk-test`
 - Compose service and container: `emberdesk-test`
 - Image tag: `emberdesk-test:local`
-- Port mapping: `8001:8000`
+- Port mapping: `127.0.0.1:8001:8000`
 - Container healthcheck: `node src/healthcheck.ts`
+- Container startup: `node server.js --listen` via `docker/docker-entrypoint.sh`, not the package CLI bin
 
-The sttest host is now reachable via the local SSH alias `vps-kl` (`root@72.62.76.115`, key `~/.ssh/hostinger_root_ed25519`). The previous `31.97.210.149` host and `hostops`/`hostinger` aliases are retired; on the current host all operations run as root, and Git commands in `/opt/emberdesk-test` need `git -c safe.directory=/opt/emberdesk-test` because the checkout is owned by uid 1002.
-
-- `vps-kl` - `root@72.62.76.115` (Git work + Docker operations)
+Use the SSH alias `vps-kl` for Git and Docker operations. The alias connects
+as root; Git commands need `-c safe.directory=/opt/emberdesk-test` because
+the checkout is owned by uid 1002.
 
 Do not document or commit private key material, credentials, cookies, session tokens, exported browser storage, or remote config secrets.
 
@@ -50,41 +55,16 @@ Keep these mounts intact. The Git checkout and rebuilt image are replaceable; co
 
 ### Process Summary
 
-The most recent documented deploy slimmed the AI config drawer (feature toggles folded into the Advanced drawer, toggle switch and pill segmented controls), committed as:
-
-```text
-8ab9083b2 feat(ui): AI config 面板收敛——低频功能项收进高级抽屉,开关/分段控件现代化
-```
-
-The change was pushed to `origin/csp-dev-techupgrade`, fast-forwarded to `origin/sttest`, pulled on Hostinger, rebuilt with Docker Compose, recorded in `.deploy-revision`, and verified through container health plus HTTPS checks.
-
-### Local Commit And Push
-
-Start by inspecting the working tree. There may be unrelated local changes; stage only the files that belong to the deployment.
-
-```bash
-git status --short
-git add <task-file-1> <task-file-2>
-git commit -m "<scope>: <summary>"
-git push origin csp-dev-techupgrade
-```
-
-Before updating the `sttest` branch, confirm it can fast-forward from the branch being deployed:
-
-```bash
-git fetch origin sttest csp-dev-techupgrade
-git merge-base --is-ancestor origin/sttest HEAD
-git push origin HEAD:sttest
-```
-
-Task-owned new files may be staged by explicit path when they are intended to enter the repository. Never stage unrelated untracked files, and never use `git add .` or `git add -A` for deployment commits in this repo.
+Deploy a merged `origin/dev` revision. Fast-forward the host checkout,
+rebuild the Compose service, record `.deploy-revision`, and verify container
+health and public HTTPS. Deployment does not use a separate `sttest` branch.
 
 ### Remote Deploy
 
 Git work runs as root on `vps-kl`; the checkout is owned by uid 1002, so pass `-c safe.directory=/opt/emberdesk-test` (or use `git -C` with the flag) on every Git command.
 
 ```bash
-ssh vps-kl "git -c safe.directory=/opt/emberdesk-test -C /opt/emberdesk-test fetch origin csp-dev-techupgrade && git -c safe.directory=/opt/emberdesk-test -C /opt/emberdesk-test pull --ff-only origin csp-dev-techupgrade && git -c safe.directory=/opt/emberdesk-test -C /opt/emberdesk-test rev-parse HEAD"
+ssh vps-kl 'cd /opt/emberdesk-test && git -c safe.directory="$PWD" switch dev && git -c safe.directory="$PWD" pull --ff-only origin dev && git -c safe.directory="$PWD" rev-parse HEAD'
 ```
 
 Rebuild and restart the container as root. The image build runs dependency
@@ -114,29 +94,29 @@ Check the container status:
 ```bash
 ssh vps-kl 'docker ps --filter name=emberdesk-test --format "table {{.Names}}\t{{.Image}}\t{{.Status}}\t{{.Ports}}"'
 ssh vps-kl 'docker inspect --format "{{.State.Health.Status}} {{.Image}}" emberdesk-test'
+ssh vps-kl 'git -c safe.directory=/opt/emberdesk-test -C /opt/emberdesk-test rev-parse HEAD && cat /opt/emberdesk-test/.deploy-revision'
 ```
 
 Check the public HTTP surface:
 
 ```bash
-ssh vps-kl 'curl -sSI --max-time 15 https://sttest.tanyaleoallen.online/ | sed -n "1,12p"'
-ssh vps-kl 'curl -sSI --max-time 15 https://sttest.tanyaleoallen.online/login | sed -n "1,12p"'
+curl -sS -D - -o /dev/null --max-time 15 https://sttest.tanyaleoallen.online/
+curl -sS -D - -o /dev/null --max-time 15 https://sttest.tanyaleoallen.online/login
 ```
 
-For feature-specific verification, inspect the container filesystem or run a focused browser check. Example grep used for the welcome-panel deployment:
-
-```bash
-ssh vps-kl 'docker exec emberdesk-test sh -lc "grep -n \"Recent Chats\\|recentChat\\|welcomeRecent\\|Temporary Chat\" /home/node/app/public/scripts/templates/welcomePanel.html || true"'
-```
-
-The expected result for that check is no match for the removed `Recent Chats` surface.
+On 2026-11-23, the container was healthy and the deployed marker matched
+the checkout at `04aaff36fe03d8cb88637bce96b9654877f0c7ed`. Public `/`
+returned `302` to `/login`, and `/login` returned `200`. The legacy HTML
+paths `/index.html`, `/setup.html`, and `/login.html` returned `302` to
+`/`, `/setup`, and `/login`, respectively. An unauthenticated API `403`
+does not establish whether the corresponding route is registered.
 
 ### Rollback
 
 Prefer rolling back to a known-good commit and rebuilding rather than using destructive resets.
 
 ```bash
-ssh vps-kl "git -c safe.directory=/opt/emberdesk-test -C /opt/emberdesk-test fetch origin csp-dev-techupgrade && git -c safe.directory=/opt/emberdesk-test -C /opt/emberdesk-test checkout <known-good-sha>"
+ssh vps-kl 'cd /opt/emberdesk-test && git -c safe.directory="$PWD" fetch origin dev && git -c safe.directory="$PWD" switch --detach KNOWN_GOOD_SHA'
 timeout 300s ssh vps-kl "cd /opt/emberdesk-test/deploy && docker compose up -d --build"
 ssh vps-kl "git -c safe.directory=/opt/emberdesk-test -C /opt/emberdesk-test rev-parse HEAD > /opt/emberdesk-test/.deploy-revision && cat /opt/emberdesk-test/.deploy-revision"
 ```

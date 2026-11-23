@@ -37,7 +37,7 @@ resolveConfig(argv, defaults)         → CommandLineArguments  (pure merge)
 
 Phase boundaries:
 
-1. **`parseArgv`** — reads argv via yargs, detects global mode (`globalThis.FORCE_GLOBAL_MODE` or `--global`), derives `configPath`. Returns nullable raw values. Does NOT call `getConfigValue`, `initConfig`, or touch the filesystem.
+1. **`parseArgv`** — reads argv via yargs, detects global mode (`--global`), derives `configPath`. Returns nullable raw values. Does NOT call `getConfigValue`, `initConfig`, or touch the filesystem. Retired browser-launch CLI aliases are no longer mapped.
 
 2. **`prepareConfigFilesystem` + `prepareDataRoot`** — the only side-effect seam. Creates config parent directory in global mode, calls `initConfig` to resolve and register the validated JSONC config, and creates the data root directory. `getConfigValue()` reads the prepared config after this phase.
 
@@ -62,7 +62,7 @@ Constraints:
 
 ### Global-mode data root isolation
 
-In global mode (`--global` or `globalThis.FORCE_GLOBAL_MODE`), `dataRoot` is forced to `defaultConfig.dataRoot` (the OS app-data path from `envPaths('EmberDesk')`). CLI `--dataRoot` and config-file `dataRoot` are both ignored. This ensures global/bin launches always write user data to the intended OS directory, not the process cwd.
+In global mode (`node server.js --global` or `pnpm run start:global`), `dataRoot` is forced to `defaultConfig.dataRoot` (the OS app-data path from `envPaths('EmberDesk')`). CLI `--dataRoot` and config-file `dataRoot` are both ignored. Global launches write user data to the OS directory, not the process cwd.
 
 ```js
 const resolvedDataRoot = argv.isGlobal
@@ -78,8 +78,8 @@ In standalone mode, `dataRoot` follows the standard precedence: CLI arg > `EMBER
 
 ### parseArgv
 
-- yargs definition for CLI options
-- `isGlobal` = `globalThis.FORCE_GLOBAL_MODE ?? cliArguments.global ?? false`
+- yargs definition for CLI options; retired browser-launch aliases are not mapped
+- `isGlobal` = `cliArguments.global ?? false`
 - `configPath` = global mode uses `envPaths('EmberDesk').data/config.jsonc`, standalone uses `--configPath`, `EMBERDESK_CONFIG_PATH`, or `./config.jsonc` in that order
 - Returns `ParsedArgv` with all fields nullable except `isGlobal` (boolean) and `configPath` (string)
 

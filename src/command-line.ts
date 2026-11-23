@@ -175,7 +175,7 @@ export function parseArgv(args: string[]): ParsedArgv {
         })
         .parseSync();
 
-    const isGlobal = globalThis.FORCE_GLOBAL_MODE ?? cliArguments.global ?? false;
+    const isGlobal = cliArguments.global ?? false;
     const defaultConfig = CommandLineParser.prototype.getDefaultConfig(isGlobal);
 
     if (isGlobal && cliArguments.configPath) {

@@ -58,10 +58,10 @@ change to any of those contracts or to public/private authentication order.
 
 ## Direct and dynamic entry points
 
-- `package.json` starts `server.js`, exposes `src/server-global.js` as the
-  `sillytavern` bin and runs `src/server-init.js` for init. Docker's
-  `docker/docker-entrypoint.sh` also executes init;
-  `docker/docker-compose.yml` executes `src/healthcheck.js`.
+- `package.json` starts `server.js`, with `--global` for `start:global`, and
+  runs `src/server-init.ts` for init. Docker starts `server.js --listen` via
+  `docker/docker-entrypoint.sh`; `docker/docker-compose.yml` executes
+  `src/healthcheck.ts`.
 - `recover.js` dynamically imports `src/recover-password.js`.
 - When enabled, `src/plugin-loader.js` discovers external plugin entry points,
   dynamically imports their file URLs, and mounts plugin routes under
@@ -116,7 +116,6 @@ deletion.
 | `src/recover-password.js` | Account recovery implementation; dynamically imported by `recover.js`. Retain operational entry. |
 | `src/server-directory.js` | Server directory resolution; used by `server.js`, startup and healthcheck. Retain direct entry support. |
 | `src/server-events.js` | Server event emitter and names; used by `src/server-main.ts`. Retain event identity and order. |
-| `src/server-global.js` | Sets global mode and imports `server.js`; `package.json` exposes it as a bin. Retain compatibility entry. |
 | `src/server-init.js` | Initial configuration setup; run by the package init script and Docker entrypoint. Retain direct entry. |
 | `src/server-startup-profiler.js` | Startup phase profiling; used by `src/server-main.ts`. Retain measurement integration. |
 | `src/validation-gate-selector.js` | Selects validation gates from changed paths; used by `scripts/validation-gate-selector.mjs`. Retain engineering tooling. |

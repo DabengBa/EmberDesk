@@ -76,7 +76,6 @@ describe('server TypeScript compiler environment', () => {
             "import { basename } from 'node:path';",
             'export const rootName: string = basename(globalThis.DATA_ROOT);',
             'export const nodeVersion: string = process.versions.node;',
-            'export const globalMode: boolean = globalThis.FORCE_GLOBAL_MODE;',
         ].join('\n'));
 
         expect(result).toEqual({ status: 0, diagnostics: '' });
