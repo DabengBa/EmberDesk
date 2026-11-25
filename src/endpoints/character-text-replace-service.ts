@@ -2,8 +2,9 @@ import { getCanonicalStorageSlice } from '../canonical-storage-slice-registry.ts
 import { convertWorldInfoToCharacterBook } from './character-card-v2.ts';
 import { editCharacterCard } from './character-write-service.ts';
 import { listCanonicalCharactersBoundToWorld } from './character-store.ts';
+import { getCharacterBookEntryIds } from '../../public/scripts/character-book-entry-ids.js';
 import {
-    getCanonicalWorldInfoBook,
+    getCanonicalWorldInfoBookSnapshot,
     normalizeCanonicalWorldInfoName,
 } from './world-info-store.ts';
 import {
@@ -37,14 +38,15 @@ type ChatSession = { ok: boolean; reason?: string; db: DatabaseSync; locator: Ca
 // undefined; its implementation accepts the existing book for compare-and-set.
 
 type AreaResult = { status: string; matches: Match[]; occurrences: number; name?: string | null; fileName?: string | null; boundCharacterCount?: number; embedded?: boolean; projectionFailed?: boolean; repairKey?: string; snapshotRefreshed?: boolean; reason?: string };
-type ReplaceResult = { ok: boolean; status?: number; reason?: string; partial?: boolean; outcomeUnknown?: boolean; applied: { card: boolean; worldBook: boolean; chat: boolean }; areas: { card: AreaResult; worldBook: AreaResult; chats: AreaResult }; totals: { occurrences: number; changedTargets: number }; warnings: JsonObject[] };
+type PreviewVersions = { avatar: string; card: string | null; worldBook: number | null; chat: string | null; chatFile: string | null };
+type ReplaceResult = { ok: boolean; status?: number; reason?: string; partial?: boolean; outcomeUnknown?: boolean; previewVersions?: PreviewVersions; applied: { card: boolean; worldBook: boolean; chat: boolean }; areas: { card: AreaResult; worldBook: AreaResult; chats: AreaResult }; totals: { occurrences: number; changedTargets: number }; warnings: JsonObject[] };
 
 export type CharacterTextReplaceDependencies = {
     getCanonicalCharacterCardJson?: (handle: string | null, directories: UserDirectoryList, avatar: string) => Promise<string | null>;
     getCharacterWriteDependencies?: () => CharacterWriteDependencies;
     editCharacterCard?: typeof editCharacterCard;
     getWorldInfoWriteState?: typeof getCanonicalWorldInfoWriteState;
-    getCanonicalWorldInfoBook?: typeof getCanonicalWorldInfoBook;
+    getWorldBookSnapshot?: typeof getCanonicalWorldInfoBookSnapshot;
     commitWorldBookWithProjectionIntent?: typeof commitWorldBookWithProjectionIntent;
     replayWorldProjection?: typeof replayWorldProjection;
     listCanonicalCharactersBoundToWorld?: typeof listCanonicalCharactersBoundToWorld;
@@ -177,16 +179,15 @@ export function replaceInString(value: unknown, matcher: Matcher, maxSamples = M
         return { value: text, occurrences: 0, samples: [] };
     }
 
-    const singlePattern = new RegExp(matcher.pattern.source, matcher.pattern.flags.replace('g', ''));
+    // Keep the original input for lookarounds, anchors and JS replacement
+    // tokens such as $`/$'. Sticky matching limits this to the sampled hit.
+    const singlePattern = new RegExp(matcher.pattern.source, matcher.pattern.flags.replace(/[gy]/g, '') + 'y');
     const samples = matches.slice(0, maxSamples).map((match) => {
         const index = match.index ?? 0;
         const context = buildSampleContext(text, index, match[0].length);
-        let replacedSpan = match[0];
-        try {
-            replacedSpan = match[0].replace(singlePattern, matcher.replacer);
-        } catch {
-            // Keep the original span as the sample fallback.
-        }
+        singlePattern.lastIndex = index;
+        const replaced = text.replace(singlePattern, matcher.replacer);
+        const replacedSpan = replaced.slice(index, replaced.length - (text.length - index - match[0].length));
         return {
             before: `${context.leadingEllipsis}${context.prefix}${SAMPLE_MARK_OPEN}${match[0]}${SAMPLE_MARK_CLOSE}${context.suffix}${context.trailingEllipsis}`,
             after: `${context.leadingEllipsis}${context.prefix}${SAMPLE_MARK_OPEN}${replacedSpan}${SAMPLE_MARK_CLOSE}${context.suffix}${context.trailingEllipsis}`,
@@ -434,6 +435,41 @@ export function transformWorldBookEntries(entries: Record<string, JsonObject>, w
     return { changed, matches };
 }
 
+function refreshImportedWorldBook(book: WorldBook, matches: Match[], name: string, convert: typeof convertWorldInfoToCharacterBook) {
+    const entries = book.originalData?.entries;
+    if (!Array.isArray(entries)) return;
+    const ids = getCharacterBookEntryIds(entries);
+    const byUid = new Map(entries.map((entry, index) => [String(ids[index]), entry]));
+    for (const { entryUid, path } of matches) {
+        if (entryUid == null) continue;
+        const source = byUid.get(entryUid);
+        if (!source) {
+            const [converted] = convert(name, { [entryUid]: book.entries[entryUid] }).entries;
+            if (converted) {
+                const newEntry = { ...converted, id: book.entries[entryUid].uid ?? Number(entryUid) };
+                entries.push(newEntry);
+                byUid.set(entryUid, newEntry);
+            }
+            continue;
+        }
+        const fieldPath = path.slice(`entries[${entryUid}].`.length);
+        const [field, item] = fieldPath.split('[');
+        const sourceField = field === 'key' ? 'keys' : field === 'keysecondary' ? 'secondary_keys' : field;
+        const value = book.entries[entryUid][field];
+        if (item !== undefined && Array.isArray(value)) {
+            const index = Number(item.slice(0, -1));
+            const originalKeys = source[sourceField];
+            if (Array.isArray(originalKeys) && index < originalKeys.length) {
+                originalKeys[index] = value[index];
+            } else {
+                source[sourceField] = [...value];
+            }
+        } else {
+            source[sourceField] = value;
+        }
+    }
+}
+
 /**
  * Applies the matcher to an embedded `data.character_book` (entries array,
  * `keys`/`secondary_keys` field names). Mutates the book.
@@ -558,7 +594,7 @@ function errorResult(status: number, reason: string, extras: JsonObject = {}) {
  * @property {() => import('./character-write-service.ts').CharacterWriteDependencies} [getCharacterWriteDependencies]
  * @property {typeof editCharacterCard} [editCharacterCard]
  * @property {typeof getCanonicalWorldInfoWriteState} [getWorldInfoWriteState]
- * @property {typeof getCanonicalWorldInfoBook} [getCanonicalWorldInfoBook]
+ * @property {typeof getCanonicalWorldInfoBookSnapshot} [getWorldBookSnapshot]
  * @property {typeof commitWorldBookWithProjectionIntent} [commitWorldBookWithProjectionIntent]
  * @property {typeof replayWorldProjection} [replayWorldProjection]
  * @property {typeof listCanonicalCharactersBoundToWorld} [listCanonicalCharactersBoundToWorld]
@@ -589,7 +625,7 @@ export async function runCharacterTextReplace({ request, apply = false, dependen
         getCanonicalCharacterCardJson: dependencies.getCanonicalCharacterCardJson,
         getCharacterWriteDependencies: dependencies.getCharacterWriteDependencies,
         getWorldInfoWriteState: dependencies.getWorldInfoWriteState ?? getCanonicalWorldInfoWriteState,
-        getCanonicalWorldInfoBook: dependencies.getCanonicalWorldInfoBook ?? getCanonicalWorldInfoBook,
+        getWorldBookSnapshot: dependencies.getWorldBookSnapshot ?? getCanonicalWorldInfoBookSnapshot,
         commitWorldBookWithProjectionIntent: dependencies.commitWorldBookWithProjectionIntent ?? commitWorldBookWithProjectionIntent,
         replayWorldProjection: dependencies.replayWorldProjection ?? replayWorldProjection,
         listCanonicalCharactersBoundToWorld: dependencies.listCanonicalCharactersBoundToWorld ?? listCanonicalCharactersBoundToWorld,
@@ -692,12 +728,31 @@ export async function runCharacterTextReplace({ request, apply = false, dependen
 
     let currentArea: keyof ReplaceResult['areas'] = 'worldBook';
     try {
-    // ---- Area 1: bound World Info book ----
+        const worldSnapshot = worldInfoState?.ok ? deps.getWorldBookSnapshot(worldInfoState.db as DatabaseSync, normalizedWorldName) : null;
+        // Guarded applies use the exact snapshots checked here for subsequent
+        // transformations, and retain the per-write compare-and-set checks.
+        const guarded = apply && body.previewVersions !== undefined;
+        const chatSnapshot = (!apply || guarded) && chatSession?.ok
+            ? deps.readCanonicalChatVersionedPayload(chatSession.db, chatSession.locator) : null;
+        if (!apply || guarded) {
+            const versions: PreviewVersions = {
+                avatar: avatarUrl,
+                card: areas.card || areas.worldBook ? cardJson : null,
+                worldBook: worldSnapshot?.revision ?? null,
+                chat: chatSnapshot?.version ?? null,
+                chatFile: areas.chats === 'current' ? chatFileName : null,
+            };
+            if (!apply) result.previewVersions = versions;
+            if (guarded && (!body.previewVersions || Object.entries(versions).some(([key, value]) => body.previewVersions[key] !== value))) {
+                return errorResult(409, 'preview_stale');
+            }
+        }
+        // ---- Area 1: bound World Info book ----
         let refreshedCharacterBook = null;
         if (areas.worldBook && boundWorldName && worldInfoState?.ok) {
             // The JS state helper only returns ok after opening a database; its
             // inferred return type does not retain that discriminated union.
-            const book = deps.getCanonicalWorldInfoBook(worldInfoState.db as DatabaseSync, normalizedWorldName) as WorldBook | null;
+            const book = (worldSnapshot?.payload ?? null) as WorldBook | null;
             if (!book) {
                 result.areas.worldBook = { status: 'missing', name: boundWorldName, matches: [], occurrences: 0 };
             } else {
@@ -715,8 +770,9 @@ export async function runCharacterTextReplace({ request, apply = false, dependen
                     result.totals.changedTargets += 1;
                 }
                 if (apply && changed) {
-                // Authority and projection intent commit together; the shared
-                // worker then applies the file projection under its own lock.
+                    refreshImportedWorldBook(bookPayload, matches, normalizedWorldName, deps.convertWorldInfoToCharacterBook);
+                    // Authority and projection intent commit together; the shared
+                    // worker then applies the file projection under its own lock.
                     let repairKey;
                     try {
                         repairKey = deps.commitWorldBookWithProjectionIntent(worldInfoState.db as DatabaseSync, {
@@ -735,22 +791,16 @@ export async function runCharacterTextReplace({ request, apply = false, dependen
                     try {
                         deps.replayWorldProjection(worldInfoState.db as DatabaseSync, { directories, repairKey });
                     } catch {
-                    // Canonical commit already happened — a projection failure
-                    // stays a durably pending v1 intent, not an un-apply.
+                        // Canonical commit already happened — a projection failure
+                        // stays a durably pending v1 intent, not an un-apply.
                         result.areas.worldBook.projectionFailed = true;
                         result.areas.worldBook.repairKey = repairKey;
                         result.warnings.push({ code: 'world_book_projection_failed', name: normalizedWorldName });
                     }
                 }
-                // The card's embedded snapshot must reflect the post-replace book —
-                // read it back from the same db so preview and apply agree.
-                if (apply && changed) {
-                    const persisted = (deps.getCanonicalWorldInfoBook(worldInfoState.db as DatabaseSync, normalizedWorldName) as WorldBook | null) ?? bookPayload;
-                    refreshedCharacterBook = persisted.originalData
-                    ?? (persisted.entries ? deps.convertWorldInfoToCharacterBook(normalizedWorldName, persisted.entries) : null);
-                } else if (changed) {
+                if (changed) {
                     refreshedCharacterBook = bookPayload.originalData
-                    ?? (bookPayload.entries ? deps.convertWorldInfoToCharacterBook(normalizedWorldName, bookPayload.entries) : null);
+                        ?? (bookPayload.entries ? deps.convertWorldInfoToCharacterBook(normalizedWorldName, bookPayload.entries) : null);
                 }
             }
         }
@@ -856,7 +906,7 @@ export async function runCharacterTextReplace({ request, apply = false, dependen
         // ---- Area 3: the current chat session ----
         currentArea = 'chats';
         if (areas.chats === 'current' && chatSession?.ok) {
-            const snapshot = deps.readCanonicalChatVersionedPayload(chatSession.db, chatSession.locator);
+            const snapshot = !apply || guarded ? chatSnapshot : deps.readCanonicalChatVersionedPayload(chatSession.db, chatSession.locator);
             if (snapshot == null) {
                 result.areas.chats = { status: 'missing', fileName: chatFileName, matches: [], occurrences: 0 };
                 result.warnings.push({ code: 'chat_session_missing', fileName: chatFileName });

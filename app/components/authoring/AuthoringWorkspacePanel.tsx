@@ -1018,7 +1018,7 @@ export function AuthoringWorkspacePanel({
                                 const generation = saveGenerationRef.current;
                                 if (saveInFlightRef.current && !await saveInFlightRef.current) return { ok: false, reason: 'character_save_failed' };
                                 if (generation !== saveGenerationRef.current) return { ok: false, reason: 'character_save_failed' };
-                                const result = await commands?.previewTextReplace?.(withCurrentVersion(request));
+                                const result = await commands?.previewTextReplace?.(withCurrentVersion({ ...request, skipAuthoringSave: !authoringSession.dirty }));
                                 if (result && typeof result === 'object' && 'authoringSave' in result && request?.draft) {
                                     rebaseSavedDraft(request.draft, result.authoringSave, generation);
                                 }
@@ -1028,7 +1028,7 @@ export function AuthoringWorkspacePanel({
                                 const generation = saveGenerationRef.current;
                                 if (saveInFlightRef.current && !await saveInFlightRef.current) return { ok: false, reason: 'character_save_failed' };
                                 if (generation !== saveGenerationRef.current) return { ok: false, reason: 'character_save_failed' };
-                                const result = await commands?.applyTextReplace?.(withCurrentVersion(request));
+                                const result = await commands?.applyTextReplace?.(withCurrentVersion({ ...request, skipAuthoringSave: !authoringSession.dirty }));
                                 if (result && typeof result === 'object' && 'authoringSave' in result && request?.draft) {
                                     rebaseSavedDraft(request.draft, result.authoringSave, generation);
                                 }
@@ -1036,7 +1036,7 @@ export function AuthoringWorkspacePanel({
                             },
                         }}
                         payload={characterToolActionPayload}
-                        onClose={async (applied) => {
+                        onClose={async (applied, keepOpen, worldName) => {
                             if (!applied) {
                                 setTextReplaceOpen(false);
                                 return { ok: true };
@@ -1055,7 +1055,7 @@ export function AuthoringWorkspacePanel({
                                 return { ok: true };
                             }
 
-                            const result = await commands.closeTextReplace({ applied });
+                            const result = await commands.closeTextReplace({ applied, worldName });
                             if (!result || typeof result !== 'object' || !('ok' in result) || result.ok !== true) {
                                 return result && typeof result === 'object' && 'reason' in result ? result : { ok: false, reason: 'character_refresh_failed' };
                             }
@@ -1066,9 +1066,11 @@ export function AuthoringWorkspacePanel({
                             }
                             if (draft && typeof draft === 'object') {
                                 saveGenerationRef.current += 1;
-                                setAuthoringSession(createCharacterAuthoringSession(draft, { mode: authoringMode }));
+                                const refreshed = createCharacterAuthoringSession(draft, { mode: authoringMode });
+                                canonicalVersionRef.current = refreshed.draft.canonicalCardVersion;
+                                setAuthoringSession(refreshed);
                             }
-                            setTextReplaceOpen(false);
+                            if (!keepOpen) setTextReplaceOpen(false);
                             return { ok: true };
                         }}
                     />

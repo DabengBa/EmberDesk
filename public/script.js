@@ -57,6 +57,8 @@ import {
     openWorldInfoEditor,
     updateWorldInfoWorkbenchEntryFields,
     getWorldInfoReactPanelState,
+    loadWorldInfo,
+    worldInfoCache,
     backfillWorldInfoMemosFromWorkbench,
     promptApplyWorldInfoCurrentSorting,
     bulkDeleteWorldInfoEntries,
@@ -2320,7 +2322,7 @@ async function createReplaceCoordinationIntent({ avatarUrl, chatFile = '', world
             body: JSON.stringify({ sessionId, intentId }),
             cache: 'no-cache',
         });
-        if (!readyRes.ok) return null;
+        if (!readyRes.ok || (await readyRes.json())?.status !== 'ready') return null;
         return { sessionId, intentId };
     } catch {
         return null;
@@ -2328,8 +2330,8 @@ async function createReplaceCoordinationIntent({ avatarUrl, chatFile = '', world
 }
 
 /**
- * Query whether a replace intent was committed server-side after a lost
- * response. Returns 'committed' | 'unknown_partial' | 'not_committed'.
+ * Read the original intent after a lost response. An unavailable status is
+ * not evidence that the write did not happen.
  */
 async function queryReplaceIntentOutcome({ sessionId, intentId }) {
     try {
@@ -2339,18 +2341,11 @@ async function queryReplaceIntentOutcome({ sessionId, intentId }) {
             body: JSON.stringify({ sessionId, intentId }),
             cache: 'no-cache',
         });
-        if (!res.ok) return 'not_committed';
-        const data = await res.json();
-        // intent.status is 'finished' when the intent ran to completion;
-        // the actual canonical outcome is in intent.outcome:
-        //   'completed'      → server committed all areas
-        //   'unknown_partial'→ server may have partially committed
-        const outcome = data?.intent?.outcome;
-        if (outcome === 'completed') return 'committed';
-        if (outcome === 'unknown_partial') return 'unknown_partial';
-        return 'not_committed';
+        if (!res.ok) return null;
+        const { intent } = await res.json();
+        return intent?.status === 'finished' ? { outcome: intent.outcome, areas: intent.result?.areas ?? {} } : null;
     } catch {
-        return 'not_committed';
+        return null;
     }
 }
 
@@ -2371,6 +2366,7 @@ async function requestCharacterTextReplace(endpoint, payload) {
         replacement: String(payload?.replacement ?? ''),
         options: payload?.options ?? {},
         excluded: Array.isArray(payload?.excluded) ? payload.excluded : undefined,
+        previewVersions: payload?.previewVersions,
     };
     try {
         const headers = getRequestHeaders();
@@ -2393,7 +2389,7 @@ async function requestCharacterTextReplace(endpoint, payload) {
         if (!response.ok) {
             return { ok: false, status: response.status, reason: data?.reason ?? data?.error ?? `http_${response.status}`, ...(data ?? {}) };
         }
-        return data ?? { ok: false, reason: 'empty_response' };
+        return typeof data?.ok === 'boolean' ? data : { ok: false, reason: 'empty_response' };
     } catch (error) {
         console.error('Text replace request failed:', error);
         return { ok: false, reason: 'network_error' };
@@ -2621,12 +2617,15 @@ function getCharacterAuthoringReactCommands() {
             previewTextReplace: async payload => {
                 // Preview reads the saved card — persist pending edits first so the
                 // match list reflects what the user sees in the draft.
-                const saved = await persistAuthoringDraftBeforeLegacyAction(payload);
-                if (!saved) {
+                const saved = payload?.skipAuthoringSave ? null : await persistAuthoringDraftBeforeLegacyAction(payload);
+                if (!payload?.skipAuthoringSave && !saved) {
                     return { ok: false, reason: 'character_save_failed' };
                 }
+                if (payload?.areas?.chats === 'current' && !is_send_press && !await saveChatConditional()) {
+                    return { ok: false, reason: 'chat_save_failed', ...(saved ? { authoringSave: saved } : {}) };
+                }
                 const result = await requestCharacterTextReplace('/api/characters/text-replace/preview', payload);
-                return { ...result, authoringSave: saved };
+                return saved ? { ...result, authoringSave: saved } : result;
             },
             applyTextReplace: async payload => {
                 // A generation in flight would race the chat rewrite — the in-memory
@@ -2636,8 +2635,8 @@ function getCharacterAuthoringReactCommands() {
                     toastr.warning('Generation is in progress — wait for it to finish (or stop it) before applying replacements.');
                     return { ok: false, reason: 'generation_in_flight' };
                 }
-                const saved = await persistAuthoringDraftBeforeLegacyAction(payload);
-                if (!saved) {
+                const saved = payload?.skipAuthoringSave ? null : await persistAuthoringDraftBeforeLegacyAction(payload);
+                if (!payload?.skipAuthoringSave && !saved) {
                     return { ok: false, reason: 'character_save_failed' };
                 }
                 // Flush any pending chat and metadata debounce saves so that
@@ -2650,27 +2649,20 @@ function getCharacterAuthoringReactCommands() {
                 if (payload?.areas?.chats === 'current') {
                     cancelDebouncedChatSave();
                     cancelDebouncedMetadataSave();
-                    await saveChatConditional();
+                    if (!await saveChatConditional()) return { ok: false, reason: 'chat_save_failed', ...(saved ? { authoringSave: saved } : {}) };
                 }
                 // Create a coordination intent so that a lost response can be
-                // recovered: if the browser gets a network abort but the server
-                // committed, the client can poll the intent status on close.
+                // recovered by checking the original intent without resending apply.
                 const avatarUrl = String(payload?.fields?.avatar ?? payload?.draft?.avatar ?? '');
                 const chatFile = String(getCurrentChatId() ?? '');
                 const card = !!(payload?.areas?.card);
                 const chatSelected = payload?.areas?.chats === 'current';
                 const worldSelected = !!(payload?.areas?.worldBook);
-                const worldName = '';
+                const worldName = String(payload?.worldName ?? '');
                 const coordination = await createReplaceCoordinationIntent({ avatarUrl, chatFile, worldName, card, chatSelected, worldSelected });
-                const payloadWithCoord = coordination ? { ...payload, coordination } : payload;
-                const result = await requestCharacterTextReplace('/api/characters/text-replace/apply', payloadWithCoord);
-                result.authoringSave = saved;
-                // Attach coordination context to the result so the dialog can
-                // poll intent status on an unknown response.
-                if (coordination) {
-                    result._coordination = coordination;
-                }
-                return result;
+                if (!coordination) return { ok: false, reason: 'replace_intent_unavailable', ...(saved ? { authoringSave: saved } : {}) };
+                const result = await requestCharacterTextReplace('/api/characters/text-replace/apply', { ...payload, coordination });
+                return { ...result, _coordination: coordination, ...(saved ? { authoringSave: saved } : {}) };
             },
             closeTextReplace: async payload => {
                 // Only remount when apply actually wrote — a remount rebuilds the
@@ -2705,6 +2697,15 @@ function getCharacterAuthoringReactCommands() {
                     }
                 }
                 if (applied.worldBook) {
+                    const name = payload?.worldName;
+                    if (name) {
+                        worldInfoCache.delete(name);
+                        try {
+                            if (!await loadWorldInfo(name)) return { ok: false, reason: 'world_book_refresh_failed' };
+                        } catch {
+                            return { ok: false, reason: 'world_book_refresh_failed' };
+                        }
+                    }
                     queueReactWorldInfoRemount();
                 }
                 const character = applied.card ? characters[this_chid] : null;

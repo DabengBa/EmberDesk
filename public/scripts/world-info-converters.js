@@ -1,4 +1,5 @@
 import { normalizeWorldInfoEntryPosition } from './world-info-domain.js';
+import { getCharacterBookEntryIds } from './character-book-entry-ids.js';
 
 const WORLD_INFO_LOGIC_AND_ANY = 0;
 const WORLD_INFO_POSITION_BEFORE = 0;
@@ -190,24 +191,9 @@ export function convertNovelLorebook(inputObj) {
 
 export function convertCharacterBook(characterBook) {
     const result = { entries: {}, originalData: characterBook };
-    const usedEntryIds = new Set(characterBook.entries
-        .filter(entry => entry.id !== undefined)
-        .map(entry => String(entry.id)));
-    let nextGeneratedId = 0;
-
-    const getGeneratedEntryId = () => {
-        while (usedEntryIds.has(String(nextGeneratedId))) {
-            nextGeneratedId++;
-        }
-
-        const generatedId = nextGeneratedId;
-        usedEntryIds.add(String(generatedId));
-        nextGeneratedId++;
-        return generatedId;
-    };
-
+    const entryIds = getCharacterBookEntryIds(characterBook.entries);
     characterBook.entries.forEach((entry, index) => {
-        const uid = entry.id === undefined ? getGeneratedEntryId() : entry.id;
+        const uid = entryIds[index];
 
         result.entries[uid] = {
             ...createDefaultWorldInfoEntry(),
