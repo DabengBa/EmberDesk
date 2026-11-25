@@ -64,6 +64,13 @@ describe('buildTextMatcher', () => {
 });
 
 describe('replaceInString', () => {
+    test('samples use the same context and replacement tokens as the real edit', () => {
+        const matcher = buildTextMatcher('(?<=pre )(?<animal>cat)(s)?(?=fish)', "$<animal>-$2-$10-$$-$&-$`-$'", { regex: true });
+        const text = 'pre catfish';
+        const result = replaceInString(text, matcher);
+        expect(result.value).toBe(text.replace(matcher.pattern, matcher.replacer));
+        expect(result.samples).toEqual([{ before: 'pre 「cat」fish', after: 'pre 「cat--cat0-$-cat-pre -fish」fish' }]);
+    });
     test('reports occurrences and capped before/after samples', () => {
         const matcher = makeMatcher('foo', 'bar');
         const text = Array.from({ length: 6 }, (_, i) => `${i} foo ${i}`).join('. ');
@@ -363,7 +370,7 @@ describe('runCharacterTextReplace orchestration', () => {
             getCanonicalCharacterCardJson: jest.fn(async () => cardJson),
             getCharacterWriteDependencies: jest.fn(() => ({ getCardJson: () => undefined })),
             getWorldInfoWriteState: jest.fn(async () => ({ ok: true, db: { fake: true } })),
-            getCanonicalWorldInfoBook: jest.fn(() => structuredClone(worldBook)),
+            getWorldBookSnapshot: jest.fn(() => ({ payload: structuredClone(worldBook), revision: 1 })),
             commitWorldBookWithProjectionIntent: jest.fn(() => 'world-path-v1:test'),
             replayWorldProjection: jest.fn(),
             listCanonicalCharactersBoundToWorld: jest.fn(() => [{ avatar: 'Seraphina.png' }, { avatar: 'Other.png' }]),
@@ -406,6 +413,49 @@ describe('runCharacterTextReplace orchestration', () => {
         expect(deps.commitWorldBookWithProjectionIntent).not.toHaveBeenCalled();
         expect(deps.editCharacterCard).not.toHaveBeenCalled();
         expect(deps.writeChatSession).not.toHaveBeenCalled();
+    });
+
+    test('a chat changed after preview prevents every selected write', async () => {
+        const deps = makeDependencies();
+        const preview = await runCharacterTextReplace({ request: makeRequest(fullBody), dependencies: deps });
+        expect(preview.previewVersions).toBeDefined();
+        deps.readCanonicalChatVersionedPayload.mockReturnValue({ payload: structuredClone(chatPayload), version: 'new-version' });
+        const result = await runCharacterTextReplace({ request: makeRequest({ ...fullBody, previewVersions: preview.previewVersions }), apply: true, dependencies: deps });
+        expect(result).toMatchObject({ ok: false, status: 409, reason: 'preview_stale' });
+        expect(deps.commitWorldBookWithProjectionIntent).not.toHaveBeenCalled();
+        expect(deps.editCharacterCard).not.toHaveBeenCalled();
+        expect(deps.writeChatSession).not.toHaveBeenCalled();
+    });
+
+    test('updates an imported world book snapshot without changing the source entry ids or metadata', async () => {
+        const imported = {
+            entries: {
+                0: { content: 'Seraphina stashed.', comment: 'Seraphina hidden', key: ['Seraphina'], keysecondary: [] },
+                1: { content: 'Seraphina rules.', comment: '', key: [], keysecondary: ['Seraphina'] },
+                2: { uid: 2, content: 'Seraphina joins.', comment: 'New entry', key: ['Seraphina'], extensions: { newMetadata: true } },
+            },
+            originalData: { name: 'Eldoria', entries: [
+                { content: 'Seraphina rules.', keys: [], secondary_keys: ['Seraphina'], extensions: { custom: true } },
+                { id: 0, content: 'Seraphina stashed.', comment: 'Seraphina hidden', keys: ['Seraphina'] },
+            ] },
+        };
+        let persisted = imported;
+        const deps = makeDependencies({
+            getWorldBookSnapshot: jest.fn(() => ({ payload: persisted, revision: 1 })),
+            commitWorldBookWithProjectionIntent: jest.fn((_db, { payload }) => { persisted = payload; return 'world-path-v1:test'; }),
+        });
+        const body = { ...fullBody, excluded: ['entries[0].comment'] };
+        const result = await runCharacterTextReplace({ request: makeRequest(body), apply: true, dependencies: deps });
+        expect(result.ok).toBe(true);
+        expect(persisted.originalData.entries.slice(0, 2)).toEqual([
+            { content: '塞拉菲娜 rules.', keys: [], secondary_keys: ['塞拉菲娜'], extensions: { custom: true } },
+            { id: 0, content: '塞拉菲娜 stashed.', comment: 'Seraphina hidden', keys: ['塞拉菲娜'] },
+        ]);
+        expect(persisted.originalData.entries.slice(2)).toEqual([expect.objectContaining({
+            id: 2, content: '塞拉菲娜 joins.', comment: 'New entry', keys: ['塞拉菲娜'],
+            extensions: expect.objectContaining({ newMetadata: true }),
+        })]);
+        expect(JSON.parse(deps.editCharacterCard.mock.calls[0][0].characterData).data.character_book).toEqual(persisted.originalData);
     });
 
     test('apply writes world book first, then card with refreshed snapshot, then chat', async () => {

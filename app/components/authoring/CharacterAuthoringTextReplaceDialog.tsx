@@ -74,11 +74,23 @@ interface TextReplaceArea {
     fileName?: string | null;
 }
 
+type AppliedAreas = { card?: boolean; worldBook?: boolean; chat?: boolean };
+type ReplaceIntent = { sessionId: string; intentId: string };
+
+function recoveredAreaStatus(status: string | undefined): TextReplaceArea | undefined {
+    if (status === 'not_committed') return { status: 'failed' };
+    if (status === 'not_attempted') return { status: 'skipped' };
+    return undefined;
+}
+
 interface TextReplaceResult {
     ok?: boolean;
     reason?: string;
     status?: number;
-    applied?: { card?: boolean; worldBook?: boolean; chat?: boolean };
+    applied?: AppliedAreas;
+    outcomeUnknown?: boolean;
+    previewVersions?: Record<string, unknown>;
+    _coordination?: ReplaceIntent;
     areas?: { card?: TextReplaceArea; worldBook?: TextReplaceArea; chats?: TextReplaceArea };
     totals?: { occurrences?: number; changedTargets?: number };
     warnings?: { code?: string; name?: string; characters?: number; reason?: string }[];
@@ -97,6 +109,9 @@ const TEXT_REPLACE_REASON_LABELS: Record<string, string> = {
     no_areas_selected: translate('Select at least one replacement area'),
     network_error: translate('The request failed. Try again later.'),
     empty_response: translate('The server returned no result'),
+    preview_stale: translate('The data changed after preview. Preview again before applying.'),
+    replace_intent_unavailable: translate('Could not prepare the replacement. Nothing was replaced.'),
+    chat_save_failed: translate('The current chat could not be saved. Nothing was replaced.'),
 };
 
 function describeTextReplaceFailure(result: TextReplaceResult | null | undefined): string {
@@ -107,6 +122,7 @@ function describeTextReplaceFailure(result: TextReplaceResult | null | undefined
     if (reason === 'character_save_failed') return translate('The character could not be saved. Your edits are still here.');
     if (reason === 'character_refresh_failed') return translate('The character could not be reloaded. Retry before closing.');
     if (reason === 'chat_refresh_failed') return translate('The chat could not be reloaded. Retry before closing.');
+    if (reason === 'world_book_refresh_failed') return translate('The world book could not be reloaded. Retry before closing.');
     if (reason.startsWith('invalid_regex:')) {
         return `${TEXT_REPLACE_REASON_LABELS.invalid_regex}：${reason.slice('invalid_regex:'.length).trim()}`;
     }
@@ -141,10 +157,12 @@ function TextReplaceMatchRow({
     match,
     excluded,
     onToggle,
+    disabled,
 }: {
     match: TextReplaceMatch;
     excluded: boolean;
     onToggle: (path: string, excluded: boolean) => void;
+    disabled?: boolean;
 }) {
     useTranslated('');
     const path = String(match.path ?? '');
@@ -163,6 +181,7 @@ function TextReplaceMatchRow({
                 <input
                     type="checkbox"
                     checked={!excluded}
+                    disabled={disabled}
                     onChange={event => onToggle(path, !event.target.checked)}
                 />
                 <span {...stylex.props(authoringStyles.replaceMatchPath)}>
@@ -188,7 +207,7 @@ export function CharacterAuthoringTextReplaceDialog({
 }: {
     commands?: AuthoringCommands;
     payload?: Record<string, unknown>;
-    onClose: (applied: false | { card?: boolean; worldBook?: boolean; chat?: boolean }) => Promise<unknown> | unknown;
+    onClose: (applied: false | AppliedAreas, keepOpen?: boolean, worldName?: string | null) => Promise<unknown> | unknown;
 }) {
     useTranslated('');
     const [query, setQuery] = useState('');
@@ -197,7 +216,7 @@ export function CharacterAuthoringTextReplaceDialog({
     const [wholeWord, setWholeWord] = useState(false);
     const [regex, setRegex] = useState(false);
     const [cardArea, setCardArea] = useState(true);
-    const [worldArea, setWorldArea] = useState(true);
+    const [worldArea, setWorldArea] = useState(false);
     const [chatArea, setChatArea] = useState(false);
     const [cardFields, setCardFields] = useState<Set<string>>(() => new Set(TEXT_REPLACE_CARD_FIELDS.map(field => field.id)));
     const [worldFields, setWorldFields] = useState<Set<string>>(() => new Set(TEXT_REPLACE_WORLD_FIELDS.map(field => field.id)));
@@ -207,17 +226,12 @@ export function CharacterAuthoringTextReplaceDialog({
     const [preview, setPreview] = useState<TextReplaceResult | null>(null);
     const [applyResult, setApplyResult] = useState<TextReplaceResult | null>(null);
     const [excluded, setExcluded] = useState<Set<string>>(() => new Set());
-    const appliedRef = useRef<{ card?: boolean; worldBook?: boolean; chat?: boolean } | null>(null);
-    // true when the apply response was lost/aborted and the canonical outcome is unknown
-    const unknownApplyRef = useRef(false);
-    // coordination context for a pending apply: used to poll intent status on unknown result
-    const coordinationRef = useRef<{ sessionId: string; intentId: string } | null>(null);
+    const [confirmSignature, setConfirmSignature] = useState<string | null>(null);
+    const [uncertain, setUncertain] = useState<{ intent?: ReplaceIntent; applied?: AppliedAreas } | null>(null);
+    const [completed, setCompleted] = useState<AppliedAreas>({});
     const [finalizing, setFinalizing] = useState(false);
     const overlayRef = useRef<HTMLDivElement>(null);
-    // Keep a ref to commands so handleClose always reads the latest value
-    // even though commands is not in handleClose's dependency array.
-    const commandsRef = useRef(commands);
-    commandsRef.current = commands;
+
 
     useEffect(() => {
         const background = Array.from(document.body.children).filter((element): element is HTMLElement =>
@@ -261,10 +275,11 @@ export function CharacterAuthoringTextReplaceDialog({
     }), [payload, cardArea, worldArea, chatArea, cardFields, worldFields, chatFields, query, replacement, caseSensitive, wholeWord, regex, excluded]);
 
     const previewAreas = preview?.areas;
+    const worldTitle = previewAreas?.worldBook?.embedded ? translate('Embedded world book') : translate('World book');
     const matchGroups: { key: string; title: string; matches: TextReplaceMatch[] }[] = preview ? [
         { key: 'card', title: translate('Character fields'), matches: previewAreas?.card?.matches ?? [] },
-        { key: 'worldBook', title: previewAreas?.worldBook?.embedded ? translate('Embedded world book') : translate('World book'), matches: previewAreas?.worldBook?.matches ?? [] },
-        { key: 'chats', title: translate('Current chat'), matches: previewAreas?.chats?.matches ?? [] },
+        { key: 'worldBook', title: [worldTitle, previewAreas?.worldBook?.name].filter(Boolean).join(' · '), matches: previewAreas?.worldBook?.matches ?? [] },
+        { key: 'chats', title: [translate('Current chat'), previewAreas?.chats?.fileName].filter(Boolean).join(' · '), matches: previewAreas?.chats?.matches ?? [] },
     ].filter(group => group.matches.length > 0) : [];
 
     const effectiveOccurrences = preview && previewSignature === requestSignature
@@ -273,11 +288,14 @@ export function CharacterAuthoringTextReplaceDialog({
             .reduce((inner, match) => inner + (match.occurrences ?? 0), 0), 0)
         : null;
     const previewStale = preview != null && previewSignature !== requestSignature;
+    const selectionSignature = JSON.stringify([requestSignature, [...excluded].sort()]);
+    const confirming = !previewStale && confirmSignature === selectionSignature;
 
     const requestPreview = useCallback(async () => {
         setBusy('preview');
         setError('');
         setPreview(null);
+        setConfirmSignature(null);
         try {
             const result = await commands?.previewTextReplace?.(buildRequest()) as TextReplaceResult | undefined;
             if (result?.ok) {
@@ -295,44 +313,34 @@ export function CharacterAuthoringTextReplaceDialog({
 
     const requestApply = useCallback(async () => {
         const remaining = effectiveOccurrences ?? 0;
-        if (remaining <= 0) {
+        if (remaining <= 0 || !preview?.previewVersions || !confirming || busy) {
             return;
         }
-        if (!window.confirm(translate('${0} matches will be replaced and cannot be undone. Continue?').replace('${0}', String(remaining)))) {
-            return;
-        }
+        setConfirmSignature(null);
         setBusy('apply');
         setError('');
         try {
-            const result = await commands?.applyTextReplace?.(buildRequest()) as TextReplaceResult | undefined;
-            if (result?.ok) {
-                appliedRef.current = result.applied?.card || result.applied?.worldBook || result.applied?.chat
-                    ? (result.applied ?? {})
-                    : null;
+            const result = await commands?.applyTextReplace?.({
+                ...buildRequest(), previewVersions: preview.previewVersions, worldName: previewAreas?.worldBook?.name,
+            }) as TextReplaceResult | undefined;
+            if (result?.outcomeUnknown || result?._coordination && (
+                result.reason === 'network_error' || result.reason === 'empty_response' || result.reason === 'replacement_not_claimed'
+                || result.outcomeUnknown === undefined && Number(result.status) >= 500)) {
+                setUncertain({ intent: result._coordination, applied: result.applied });
+            } else if (result && (result.ok || Object.values(result.applied ?? {}).some(Boolean))) {
                 setApplyResult(result);
-            } else {
-                if (result?.reason === 'network_error' || result?.reason === 'empty_response' || (result?.status != null && result.status >= 500)) {
-                    unknownApplyRef.current = true;
-                    // Store any coordination context so handleClose can poll the server.
-                    const coord = (result as Record<string, unknown>)?._coordination;
-                    if (coord && typeof coord === 'object' && 'sessionId' in coord && 'intentId' in coord) {
-                        coordinationRef.current = coord as { sessionId: string; intentId: string };
-                    }
-                    setError(translate('The apply result is unknown. Do not close until you can verify the canonical state.'));
-                }
-                if (!unknownApplyRef.current) {
-                    setError(describeTextReplaceFailure(result));
-                }
             }
+            if (result?.reason === 'preview_stale') setPreviewSignature(null);
+            if (!result?.ok) setError(describeTextReplaceFailure(result));
         } catch {
-            unknownApplyRef.current = true;
-            setError(translate('The apply result is unknown. Do not close until you can verify the canonical state.'));
+            setUncertain({});
         } finally {
             setBusy('');
         }
-    }, [commands, buildRequest, effectiveOccurrences, worldArea, chatArea]);
+    }, [commands, buildRequest, effectiveOccurrences, preview, previewAreas, confirming, busy]);
 
     const toggleExclude = useCallback((path: string, exclude: boolean) => {
+        setConfirmSignature(null);
         setExcluded(current => {
             const next = new Set(current);
             if (exclude) {
@@ -366,70 +374,78 @@ export function CharacterAuthoringTextReplaceDialog({
         }
     }
 
-    const handleClose = useCallback(async () => {
-        if (busy || finalizing) {
-            return;
-        }
-        // When the apply result is unknown (network abort), force a canonical
-        // re-read of all areas that were targeted. This covers the case where
-        // the server committed but the browser got no response: the form will
-        // reload to the canonical value (LostAfter) rather than keeping the
-        // stale draft (LostBefore). If the server did not commit, the form
-        // reloads to whatever canonical currently holds.
-        if (unknownApplyRef.current) {
-            setFinalizing(true);
-            setError('');
-            try {
-                // Poll the coordination server to find out if the apply committed.
-                // If confirmed committed (or unknown_partial), force canonical reload.
-                // If not committed, reload anyway so the form reflects canonical state.
-                let outcome = 'not_committed';
-                const coord = coordinationRef.current;
-                if (coord && typeof commandsRef.current?.queryReplaceIntentOutcome === 'function') {
-                    outcome = await (commandsRef.current.queryReplaceIntentOutcome as (c: unknown) => Promise<string>)(coord);
-                }
-                if (outcome === 'committed' || outcome === 'unknown_partial') {
-                    // Server committed (or may have partially committed): force a
-                    // canonical re-read so the form shows the replaced content.
-                    const forceReload = { card: cardArea, worldBook: worldArea, chat: chatArea };
-                    const result = await onClose(forceReload);
-                    if (result && typeof result === 'object' && 'ok' in result && result.ok === false) {
-                        setError(describeTextReplaceFailure(result as TextReplaceResult));
-                    }
-                } else {
-                    // Server did not commit (request never reached the server or was
-                    // rejected before any write). Keep the dialog open so the user
-                    // can retry or discard the draft manually.
-                    setError(translate('The apply did not reach the server. Retry or discard the draft before closing.'));
-                }
-            } catch {
-                setError(translate('Character refresh failed. Retry before closing.'));
-            } finally {
-                setFinalizing(false);
-            }
-            return;
-        }
-        if (!appliedRef.current) {
-            onClose(false);
-            return;
-        }
+    const refreshResult = async (keepOpen = false) => {
+        if (busy || finalizing || uncertain) return;
         setFinalizing(true);
         setError('');
         try {
-            const result = await onClose(appliedRef.current);
+            const applied = applyResult?.applied ?? {};
+            const result = await onClose(Object.values(applied).some(Boolean) ? applied : false, keepOpen, previewAreas?.worldBook?.name);
             if (result && typeof result === 'object' && 'ok' in result && result.ok === false) {
                 setError(describeTextReplaceFailure(result as TextReplaceResult));
+                return;
+            }
+            if (keepOpen) {
+                setCompleted(previous => ({
+                    card: previous.card || applied.card,
+                    worldBook: previous.worldBook || applied.worldBook,
+                    chat: previous.chat || applied.chat,
+                }));
+                if (applied.card) setCardArea(false);
+                if (applied.worldBook) setWorldArea(false);
+                if (applied.chat) setChatArea(false);
+                setApplyResult(null);
+                setPreview(null);
+                setConfirmSignature(null);
             }
         } catch {
             setError(translate('Character refresh failed. Retry before closing.'));
         } finally {
             setFinalizing(false);
         }
-    }, [busy, finalizing, onClose]);
-    /* Note: handleClose also reads commands.queryReplaceIntentOutcome for intent
-       polling but commands is a stable host-injected reference — omitting it
-       here is intentional to avoid spurious rebuilds of the close handler.
-       coordinationRef captures the latest coordination context via a ref instead. */
+    };
+
+    const checkStatus = async () => {
+        if (!uncertain?.intent || finalizing) return;
+        setFinalizing(true);
+        setError('');
+        try {
+            const status = await commands?.queryReplaceIntentOutcome?.(uncertain.intent);
+            const areas = status?.areas ?? {};
+            const applied = {
+                card: uncertain.applied?.card || areas.card === 'committed',
+                worldBook: uncertain.applied?.worldBook || areas.worldBook === 'committed',
+                chat: uncertain.applied?.chat || areas.chat === 'committed',
+            };
+            if (!status || Object.values(areas).includes('unknown')
+                || (status.outcome !== 'completed' && !Object.keys(areas).length)) {
+                setUncertain({ ...uncertain, applied });
+                return;
+            }
+            setUncertain(null);
+            const anyApplied = Object.values(applied).some(Boolean);
+            if (anyApplied) {
+                const failed = Object.values(areas).includes('not_committed');
+                setApplyResult({
+                    applied,
+                    ok: status.outcome === 'completed' && !failed,
+                    areas: { card: recoveredAreaStatus(areas.card), worldBook: recoveredAreaStatus(areas.worldBook), chats: recoveredAreaStatus(areas.chat) },
+                });
+            } else {
+                setPreviewSignature(null);
+                setError(translate('Nothing was replaced. Preview again before applying.'));
+            }
+        } catch {
+            // Status could not be read; keep the original intent and draft protected.
+        } finally {
+            setFinalizing(false);
+        }
+    };
+
+    const handleClose = () => refreshResult();
+    const canRetryRemaining = applyResult?.ok === false && !!(
+        cardArea && !applyResult.applied?.card || worldArea && !applyResult.applied?.worldBook || chatArea && !applyResult.applied?.chat
+    );
 
     return createPortal(
         <div
@@ -454,28 +470,48 @@ export function CharacterAuthoringTextReplaceDialog({
             <dialog open aria-modal="true" aria-label={translate('Find and replace')} {...stylex.props(authoringStyles.modalCard, authoringStyles.replaceModalCard)}>
                 <div {...stylex.props(authoringStyles.modalHead)}>
                     <span {...stylex.props(authoringStyles.modalTitle)}>{translate('Find and replace')}</span>
-                    <span {...stylex.props(authoringStyles.fieldMeta)}>{translate('Applies to the current character card')}</span>
+
                     <button
                         type="button"
                         {...stylex.props(authoringStyles.iconAction)}
                         title={translate('Close')}
                         aria-label={translate('Close')}
-                        disabled={busy !== '' || finalizing}
+                        disabled={busy !== '' || finalizing || !!uncertain}
                         onClick={() => void handleClose()}
                     >
                         <i className="fa-solid fa-xmark" aria-hidden="true" />
                     </button>
                 </div>
-                {applyResult ? (
+                {uncertain ? (
+                    <div {...stylex.props(authoringStyles.replaceBody)}>
+                        <div role="status" {...stylex.props(authoringStyles.replaceResultBox)}>
+                            {translate('The replacement outcome is not yet known.')}
+                            {uncertain.applied?.card ? <div>✓ {translate('Character card updated')}</div> : null}
+                            {uncertain.applied?.worldBook ? <div>✓ {translate('World book updated')}</div> : null}
+                            {uncertain.applied?.chat ? <div>✓ {translate('Current chat updated')}</div> : null}
+                        </div>
+                        <div {...stylex.props(authoringStyles.replaceFooter)}>
+                            <button type="button" className="menu_button" disabled={finalizing || !uncertain.intent} onClick={() => void checkStatus()}>
+                                {finalizing ? translate('Loading…') : translate('Check replacement status')}
+                            </button>
+                        </div>
+                    </div>
+                ) : applyResult ? (
                     <div {...stylex.props(authoringStyles.replaceBody)}>
                         <div {...stylex.props(authoringStyles.replaceResultBox)}>
                             {applyResult.applied?.card ? <div>✓ {translate('Character card updated')}</div> : null}
                             {applyResult.applied?.worldBook ? <div>✓ {translate('World book updated')}{applyResult.areas?.worldBook?.boundCharacterCount && applyResult.areas.worldBook.boundCharacterCount > 1 ? translate('(also affects ${0} cards)').replace('${0}', String(applyResult.areas.worldBook.boundCharacterCount)) : ''}</div> : null}
-                            {applyResult.applied?.chat ? <div>✓ {translate('Current chat updated (${0} matches)').replace('${0}', String(applyResult.areas?.chats?.occurrences ?? 0))}</div> : null}
+                            {applyResult.applied?.chat ? <div>✓ {applyResult.areas?.chats?.occurrences == null ? translate('Current chat updated') : translate('Current chat updated (${0} matches)').replace('${0}', String(applyResult.areas.chats.occurrences))}</div> : null}
                             {applyResult.areas?.card?.status === 'failed' ? <div {...stylex.props(authoringStyles.replaceErrorText)}>✗ {translate('Character card write failed:')}{applyResult.areas.card.reason ?? ''}</div> : null}
                             {applyResult.areas?.worldBook?.status === 'failed' ? <div {...stylex.props(authoringStyles.replaceErrorText)}>✗ {translate('World book write failed:')}{applyResult.areas.worldBook.reason ?? ''}</div> : null}
                             {applyResult.areas?.chats?.status === 'failed' ? <div {...stylex.props(authoringStyles.replaceErrorText)}>✗ {translate('Chat write failed:')}{applyResult.areas.chats.reason ?? ''}</div> : null}
-                            {!error && !applyResult.applied?.card && !applyResult.applied?.worldBook && !applyResult.applied?.chat
+                            {!applyResult.ok && ([
+                                { selected: cardArea, area: 'card', label: 'Character card not attempted' },
+                                { selected: worldArea, area: 'worldBook', label: 'World book not attempted' },
+                                { selected: chatArea, area: 'chats', label: 'Current chat not attempted' },
+                            ] as const).map(({ selected, area, label }) => selected && applyResult.areas?.[area]?.status === 'skipped'
+                                ? <div key={area}>{translate(label)}</div> : null)}
+                            {applyResult.ok && !error && !applyResult.applied?.card && !applyResult.applied?.worldBook && !applyResult.applied?.chat
                                 && applyResult.areas?.card?.status !== 'failed'
                                 && applyResult.areas?.worldBook?.status !== 'failed'
                                 && applyResult.areas?.chats?.status !== 'failed' ? (
@@ -494,6 +530,11 @@ export function CharacterAuthoringTextReplaceDialog({
                         {error ? <div {...stylex.props(authoringStyles.replaceErrorText)}>{error}</div> : null}
 
                         <div {...stylex.props(authoringStyles.replaceFooter)}>
+                            {canRetryRemaining ? (
+                                <button type="button" className="menu_button" disabled={finalizing} onClick={() => void refreshResult(true)}>
+                                    {translate('Review remaining areas')}
+                                </button>
+                            ) : null}
                             <button type="button" className={`menu_button ${stylex.props(authoringStyles.saveButton).className ?? ''}`} disabled={busy !== '' || finalizing} onClick={() => void handleClose()}>
                                 {finalizing ? translate('Loading…') : translate('Done')}
                             </button>
@@ -508,6 +549,7 @@ export function CharacterAuthoringTextReplaceDialog({
                                     className="text_pole"
                                     rows={2}
                                     value={query}
+                                    disabled={busy !== ''}
                                     autoFocus
                                     placeholder={regex ? translate('Regular expression (supports capture references like $1)') : translate('Text to find')}
                                     {...stylex.props(authoringStyles.control, authoringStyles.replaceQueryInput)}
@@ -520,6 +562,7 @@ export function CharacterAuthoringTextReplaceDialog({
                                     className="text_pole"
                                     rows={2}
                                     value={replacement}
+                                    disabled={busy !== ''}
                                     placeholder={translate('Replacement text (may be empty)')}
                                     {...stylex.props(authoringStyles.control, authoringStyles.replaceQueryInput)}
                                     onChange={event => setReplacement(event.target.value)}
@@ -534,8 +577,8 @@ export function CharacterAuthoringTextReplaceDialog({
                         <div {...stylex.props(authoringStyles.replaceScopeBlock)}>
                             <TextReplaceCheckRow
                                 checked={cardArea}
-                                label={<strong>{translate('Character fields')}</strong>}
-                                disabled={busy !== ''}
+                                label={<strong>{translate('Character fields')}{completed.card ? ' ✓' : ''}</strong>}
+                                disabled={busy !== '' || !!completed.card}
                                 onChange={setCardArea}
                             />
                             {cardArea ? (
@@ -553,8 +596,8 @@ export function CharacterAuthoringTextReplaceDialog({
                             ) : null}
                             <TextReplaceCheckRow
                                 checked={worldArea}
-                                label={<strong>{translate('World book')}</strong>}
-                                disabled={busy !== ''}
+                                label={<strong>{translate('World book')}{completed.worldBook ? ' ✓' : ''}</strong>}
+                                disabled={busy !== '' || !!completed.worldBook}
                                 onChange={setWorldArea}
                             />
                             {worldArea ? (
@@ -572,8 +615,8 @@ export function CharacterAuthoringTextReplaceDialog({
                             ) : null}
                             <TextReplaceCheckRow
                                 checked={chatArea}
-                                label={<strong>{translate('Current chat')}</strong>}
-                                disabled={busy !== ''}
+                                label={<strong>{translate('Current chat')}{completed.chat ? ' ✓' : ''}</strong>}
+                                disabled={busy !== '' || !!completed.chat}
                                 onChange={setChatArea}
                             />
                             {chatArea ? (
@@ -622,6 +665,7 @@ export function CharacterAuthoringTextReplaceDialog({
                                                         key={match.path ?? matchIndex}
                                                         match={match}
                                                         excluded={excluded.has(String(match.path ?? ''))}
+                                                        disabled={busy !== ''}
                                                         onToggle={toggleExclude}
                                                     />
                                                 ))}
@@ -631,6 +675,7 @@ export function CharacterAuthoringTextReplaceDialog({
                                 ) : null}
                             </div>
                         ) : null}
+                        {confirming ? <p {...stylex.props(authoringStyles.replaceWarningText)}>{translate('${0} selected replacements cannot be undone.').replace('${0}', String(effectiveOccurrences ?? 0))}</p> : null}
                         <div {...stylex.props(authoringStyles.replaceFooter)}>
                             <button
                                 type="button"
@@ -644,12 +689,12 @@ export function CharacterAuthoringTextReplaceDialog({
                                 <button
                                     type="button"
                                     className={`menu_button ${stylex.props(authoringStyles.saveButton).className ?? ''}`}
-                                    disabled={busy !== '' || !(effectiveOccurrences && effectiveOccurrences > 0)}
-                                    onClick={() => void requestApply()}
+                                    disabled={busy !== '' || !preview.previewVersions || !(effectiveOccurrences && effectiveOccurrences > 0)}
+                                    onClick={() => confirming ? void requestApply() : setConfirmSignature(selectionSignature)}
                                 >
                                     {busy === 'apply'
-                        ? translate('Applying…')
-                        : translate('Apply ${0} replacements').replace('${0}', String(effectiveOccurrences ?? 0))}
+                                        ? translate('Applying…')
+                                        : (confirming ? translate('Confirm ${0} replacements') : translate('Apply ${0} replacements')).replace('${0}', String(effectiveOccurrences ?? 0))}
                                 </button>
                             ) : null}
                         </div>

@@ -198,8 +198,12 @@ export function upsertCanonicalWorldInfoBook(db: DatabaseSync, options: UpsertOp
 }
 
 export function getCanonicalWorldInfoBook(db: DatabaseSync, name: unknown) {
+    return getCanonicalWorldInfoBookSnapshot(db, name)?.payload ?? null;
+}
+
+export function getCanonicalWorldInfoBookSnapshot(db: DatabaseSync, name: unknown) {
     const row = db.prepare(`
-        SELECT payload_json
+        SELECT payload_json, revision
         FROM world_books
         WHERE name = ?
             AND deleted_at_ms IS NULL
@@ -209,7 +213,7 @@ export function getCanonicalWorldInfoBook(db: DatabaseSync, name: unknown) {
         return null;
     }
 
-    return parseRequiredJson(row.payload_json, 'payload_json');
+    return { payload: parseRequiredJson(row.payload_json, 'payload_json'), revision: Number(row.revision) };
 }
 
 export function listCanonicalWorldInfoBooks(db: DatabaseSync) {

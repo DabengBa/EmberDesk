@@ -114,7 +114,10 @@ export interface AuthoringCommands {
     previewTextReplace?(payload: Record<string, unknown>): CommandResult;
     applyTextReplace?(payload: Record<string, unknown>): CommandResult;
     closeTextReplace?(payload?: Record<string, unknown>): CommandResult;
-    queryReplaceIntentOutcome?(payload: { sessionId: string; intentId: string }): Promise<'committed' | 'unknown_partial' | 'not_committed'>;
+    queryReplaceIntentOutcome?(payload: { sessionId: string; intentId: string }): Promise<{
+        outcome: string;
+        areas: Partial<Record<'card' | 'worldBook' | 'chat', string>>;
+    } | null>;
 }
 
 export type WorkspacePanelCommands =
