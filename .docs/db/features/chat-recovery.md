@@ -9,7 +9,7 @@ related: [page.chat_workspace, feature.chat_message_actions]
 
 ## ID 解释
 
-`feature.chat_recovery` describes how users find and recover local chat edits when saving conflicts with a newer version or a chat deletion cannot be confirmed. It belongs to [Chat Workspace](page.chat_workspace) and is separate from recovery of a failed model response.
+`feature.chat_recovery` describes how users find and recover local chat edits when saving conflicts with a newer version or a chat deletion cannot be confirmed. It belongs to [Chat Workspace](page.chat_workspace) and is separate from recovery of a failed model response; see [Chat Generation Auto Recovery](feature.chat_generation_auto_recovery).
 
 ## Purpose
 
@@ -19,21 +19,33 @@ Keep a newer saved chat from being silently overwritten and give users a visible
 
 - When a save conflicts with a newer chat, the workspace reports the conflict and, if local recovery storage succeeds, directs the user to **Chat History → Recovery drafts**. The newer saved chat is not replaced by the stale edit.
 - Recovery drafts are local to the browser and account. Chat History shows each available draft with its chat and character; **Restore as new chat** creates a separate chat, while **Export recovery data** retains an external copy. The local draft remains available after restoration.
-- **Show unsent text** exposes captured composer, message-edit, and reasoning-edit text for selection and copying. Restoring messages does not automatically insert unsent text into the new chat.
-- If deletion is unconfirmed, Chat History can show **Unconfirmed deletions** with **Retry deletion**. Retrying the same deletion does not approve deleting a newer chat version. An available recovery draft remains separately accessible.
-- If recovery storage fails, the workspace reports the failure and can prevent leaving or deleting the current chat; users should keep the page open and retry after storage is available. A draft cannot be assumed to exist until it has been saved successfully.
-- During character creation or rename, an in-flight save or edits made while the operation is pending can prevent the workspace from switching away. The character operation may already have succeeded on the server even when the local switch is blocked; the current chat and its edits remain on the page so the user can save or recover them before leaving.
-- When an ordinary save has an unknown outcome, the workspace attempts to save the current edits as a recovery draft and reports whether it succeeded. Verify the draft in Chat History before refreshing. If local storage fails, do not refresh or leave: keep the page open, copy your work, and retry when storage is available. Edits made after the last successful checkpoint can still be lost on refresh or crash.
-- If an integrity-check warning appears, the workspace saves the current edits as a recovery draft before offering to reload, then checkpoints again before reloading. If recovery storage fails, it keeps the page open and warns the user not to refresh or leave.
+- **Show unsent text** exposes captured composer, message-edit, and reply-edit text for inspection without inserting it into the chat.
+- **Unconfirmed deletions** lists chats or characters whose deletion could not be confirmed. **Retry deletion** attempts that deletion again and never approves deletion of a newer version.
+- When local recovery storage fails, the workspace tells the user that recovery cannot be guaranteed and prevents leaving the page before the unsaved work is acknowledged.
+- While a character operation is pending, the workspace prevents a chat switch that would make the local edits unsafe to reconcile.
+- If a chat deletion's outcome is unknown, the workspace keeps a draft and does not automatically refresh away from the current chat.
+- Before an automatic reload, the workspace verifies the recovery checkpoint is available.
+- Recovery drafts are not a general backup of every chat. They exist only for conflicts or interrupted operations where local work could otherwise be lost.
 
 ## Acceptance Workflows
 
-- As a user editing a chat in two tabs, save a newer version in one tab and save the stale edits in the other. The stale tab reports a conflict and offers Chat History recovery; after reopening, inspect or export its draft and restore it as a new chat. The recovered messages are visible in the separate chat, the newer original remains intact, and captured unsent text is available for manual copying. A missing draft or replacement of the newer original is a failure.
-- As a user deleting the active chat when the result cannot be confirmed, open Chat History and inspect any unconfirmed deletion and recovery draft. Retry the deletion or export/restore the draft; a newer version must not be silently deleted, and a failed retry must leave the available local copy accessible.
-- As a user whose ordinary save cannot be confirmed, verify that the reported recovery draft appears in Chat History. After refreshing, inspect unsent text and restore messages as a separate chat. If recovery storage fails, the page warns against refreshing and retains the current edits for copying and retry.
-- As a user whose character creation or rename is waiting, continue editing the current chat before the operation finishes. If the workspace cannot safely switch, it reports the blocked transition and retains the open edits; the user can then save or recover them. A silently switched-away edit is a failure.
+- As a user whose local edits conflict with a newer saved chat, continue editing and then return to the chat; EmberDesk must show a conflict, direct the user to **Chat History → Recovery drafts** when a draft was saved, and must never overwrite the newer version with the stale local edit.
+- As a user who wants to keep conflicting local work, open **Chat History → Recovery drafts**, inspect the listed chat and character, choose **Restore as new chat**, and separately choose **Export recovery data**; EmberDesk must create a distinct chat, provide an external copy, and keep the original draft available, and failure is replacing the newer chat or losing the draft after restoration.
+- As a user with unsent composer or edit text, open the recovery draft and choose **Show unsent text**; EmberDesk must display the captured text without inserting it into the chat or sending it, and failure is the text appearing as a message or replacing the current composer draft.
+- As a user with an unconfirmed deletion, open **Unconfirmed deletions**, inspect the affected chat or character, and choose **Retry deletion**; EmberDesk must retry only that deletion and must not approve deletion of a newer version, and failure is a newer chat or character disappearing after retry.
+- As a user with a local storage failure while editing, attempt to leave the chat; EmberDesk must warn that recovery cannot be guaranteed and prevent leaving until the state is acknowledged, and failure is silent loss of the edit or a forced navigation.
+
+## Failure Signals
+
+- A newer saved chat is replaced by stale local edits after a conflict.
+- A recovery draft is not listed with its chat and character, or **Restore as new chat** replaces an existing chat instead of creating a separate one.
+- **Show unsent text** inserts captured text into the chat or composer.
+- **Retry deletion** approves deletion of a newer version or repeats a deletion that was already confirmed.
+- The workspace leaves the page or switches chats without acknowledging a recovery risk, or an automatic reload occurs before the recovery checkpoint is verified.
+- Recovery drafts are presented as a general backup of all chats.
 
 ## Boundaries
 
-- Recovery drafts are not a general backup or a guarantee for edits that were never saved locally. Storage failure, clearing browser data, and a crash before a successful checkpoint can prevent recovery.
-- Failed model response retry is described by [Chat Generation Auto Recovery](feature.chat_generation_auto_recovery); this feature covers chat data and unsent local edits.
+- Covers conflict drafts, unconfirmed deletions, and interrupted local chat work in [Chat Workspace](page.chat_workspace).
+- Does not cover retrying a failed generation; see [Chat Generation Auto Recovery](feature.chat_generation_auto_recovery).
+- Does not cover message selection, editing, or deletion controls themselves; see [Chat Message Actions](feature.chat_message_actions).

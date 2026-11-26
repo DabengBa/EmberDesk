@@ -4,38 +4,18 @@ A lightweight self-hosted LLM frontend, forked from [SillyTavern](https://github
 
 ## Goals
 
-- **Simplify** the inherited feature set to focus on core functionality
-- **Optimize** performance and reduce complexity
-- **Modernize** the technology stack incrementally
+- Simplify the inherited feature set to focus on core functionality.
+- Optimize performance and reduce complexity.
+- Modernize the technology stack incrementally.
 
 ## Quick Start
 
 ```bash
-# Install dependencies
 pnpm install
-
-# Start the server
 pnpm start
 ```
 
-The server will start on the configured port (default: 8000). Open your browser and navigate to `http://localhost:8000`.
-
-## Project Structure
-
-```
-EmberDesk/
-  server.js           # Entry point
-  src/                 # Server-side modules
-  public/              # Client-side code (HTML, CSS, JS)
-  default/             # Default configuration and scaffold files
-  data/                # User data directory
-  plugins/             # Plugin directory
-  docker/              # Docker configuration
-```
-
-## Requirements
-
-- Node.js 26.13.1 LTS (`>=26.13.1 <27`)
+Open the configured server address in a browser. Contribution, security and repository rules are in [CONTRIBUTING.md](CONTRIBUTING.md), [SECURITY.md](SECURITY.md) and [AGENTS.md](AGENTS.md). Runtime and dependency truth is in the manifest and lockfile.
 
 ## Acknowledgments
 

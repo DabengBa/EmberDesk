@@ -9,7 +9,7 @@ related: [page.login, feature.login_submit]
 
 ## ID 解释
 
-`feature.password_recovery` represents the two-step password reset flow available from the login page. It covers switching from the login card to the recovery card, requesting a recovery code, and submitting the code with a new password. It does not cover the underlying code-generation or hashing mechanisms.
+`feature.password_recovery` represents the two-step password reset flow available from the login page. It covers switching from the login card to the recovery card, requesting a recovery code, and submitting the code with a new password. It does not cover how the code is produced or how passwords are stored.
 
 ## Purpose
 
@@ -20,8 +20,8 @@ Let a user reset a forgotten password from the login surface through a recovery-
 - The Forgot password entry switches the login card to the recovery card without leaving [Login](page.login).
 - The recovery flow has two visible phases: request a recovery code for a handle, then submit the code with a new password.
 - Recovery errors appear on the recovery card. Step 1 distinguishes handles: an unknown handle returns `未找到该用户`, while a disabled account returns `此账号已被禁用`.
-- Recovery codes are single-use and expire 5 minutes after issue (in-memory cache, cleared on success). EmberDesk does not promise email, SMS, or in-app code delivery, so the user must obtain the code out of band from the server operator.
-- A successful reset returns the user to the login card. It does not start a new session; if the current session already belongs to that handle, its version is bumped and the user stays signed in.
+- Recovery codes are single-use and expire 5 minutes after issue. EmberDesk does not offer email, SMS, or in-app code delivery, so the user must obtain the code out of band from the server operator.
+- A successful reset returns the user to the login card. It does not start a new session; if the current session already belongs to that handle, it remains signed in.
 - The Back to sign in action cancels recovery and restores the normal login card without changing the password.
 - The handle input stays visible but becomes disabled once step 2 is reached.
 
@@ -38,18 +38,15 @@ Let a user reset a forgotten password from the login surface through a recovery-
 - As a user who forgot their password, from [Login](page.login) open Forgot password, request a code for the handle, obtain the code out of band, enter the code and a new password, then reset; EmberDesk must return to the login card and require a normal sign-in with the new password, refresh or reopen must not auto-authenticate the user, and failure is automatic login, missing success transition, or a reset that cannot be followed by sign-in.
 - As a user who entered invalid recovery details, from the recovery card submit an unknown handle, expired code, wrong code, or invalid new password and then retry or cancel; EmberDesk must keep the recovery card visible with a recoverable error across that correction path, and failure is navigation to a separate error page or a dead-end card.
 - As a user who changes their mind, from the recovery card choose Back to sign in before reset completes; EmberDesk must restore the login card with no password change, a refresh must show the normal login state rather than a half-completed reset, and failure is a forced password reset or recovery state that cannot be exited.
-
-## Feature-Specific Evidence
-
-- Card switching, recovery-phase fields, generic errors, cancel behavior, and return to login are primary evidence.
-- Server console delivery of the code is operational evidence; it does not make code delivery an in-app user-visible promise.
-- Rate-limit responses support recovery proof only when the card shows recoverable feedback without account disclosure.
+- As a user who is already signed in as the handle being recovered, request a code and complete the reset; EmberDesk must return to the login view for the normal sign-in step while the existing session stays signed in, and failure is signing the user out or silently replacing the active session.
 
 ## Failure Signals
 
 - Reset success authenticates the user automatically instead of returning to login.
 - The user cannot cancel back to the login card.
 - The recovery request implies email or SMS delivery that the product does not provide.
+- A recovery code remains usable after a successful reset or after 5 minutes.
+- A disabled handle in step 2 can still submit a new password.
 
 ## Boundaries
 

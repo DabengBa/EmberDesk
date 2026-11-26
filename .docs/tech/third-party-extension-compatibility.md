@@ -1,98 +1,30 @@
 ---
-description: "- Regex is a fixed product feature under public/scripts/extensions/regex/ (the directory name is retained; it is a directly imported module, not a plugin system). It initializes via initCoreFeatures() in..."
+description: "Non-inferable first-party and legacy-data compatibility rules that cannot be recovered by reading the current implementation alone."
 kind: technical
 topic: third-party-extension-compatibility
+id: INV-FIRST-PARTY-COMPATIBILITY
+paths: [public/script.js, public/scripts/**, app/**]
+enforcement: fresh-audit
 ---
 
-# First-Party Internal Compatibility Contracts
+# First-Party Compatibility Invariant
 
-> Internal contract reference for regex, macros, message-row DOM, character-list DOM, events, and module surfaces that first-party EmberDesk code still depends on. There is no third-party extension system: no extension loading, discovery, install, update, serving, or `/api/extensions/*` endpoints exist.
+## Extension boundary
 
-## Current Contracts
+WHEN a change introduces an extension API, extension system, extension discovery, or extension installation surface, IF the capability is not an internal first-party fixed feature, THEN the change MUST be rejected; EmberDesk MUST NOT expose a third-party extension API or system. Built-in Regex functionality MUST remain a fixed first-party feature, not an extension point.
 
-- **Regex** is a fixed product feature under `public/scripts/extensions/regex/` (the directory name is retained; it is a directly imported module, not a plugin system). It initializes via `initCoreFeatures()` in `public/scripts/feature-settings.js`.
-- **`feature_settings` data bag**: owns `regex`/`regex_presets`, `note`, `variables.global`, `character_allowed_regex`, `preset_allowed_regex`. New writes use `feature_settings`; legacy `extension_settings` data is preserved through lazy migration and on-disk keys are never purged.
-- **Message cards**: `public/scripts/frontend-frame.js` renders fenced complete HTML inside opaque-origin `srcdoc` iframes with `sandbox="allow-scripts"`. Each frame reports its rendered document height to fit the card into the chat scroll area. The one-way height report only sizes the sending frame; it does not expose host globals, context, events, or parent DOM access. Cards retain any scrolling they define within their own DOM. For `navigator.clipboard.writeText()` during a user gesture, a frame-local `copy` command supports plain text without granting clipboard permissions to the iframe.
-- **Character-card metadata**: `data.extensions.*` fields (`regex_scripts`, `world`, etc.) are feature data and must not be deleted.
+## Composer and retained features
 
-### Migrating older message cards
+WHEN a composer input begins with `/`, IF the runtime interprets it as a command, THEN the behavior MUST be rejected; slash commands are retired and the leading `/` MUST be treated as ordinary chat text. Macro and variable substitution (`{{...}}`) and native tool calling MUST remain supported; retired slash APIs MUST NOT be restored.
 
-Cards must be self-contained. Replace use of parent globals and `EmberDeskFrame` with local browser APIs; any dependencies must be provided by the card itself. `tests/frontend-frame-isolation.e2e.js` tests the isolation boundary in a dedicated host; `tests/chat-message-frontend-frames.e2e.js` exercises cards in the real workspace.
+## Legacy data
 
-## Internal Contracts
+WHEN legacy user data is loaded, IF the reader rejects it because it predates a rename, migration, or retirement, THEN the change MUST be rejected. Settings and presets MUST be normalized on read; legacy provider IDs MUST be read as `openai`; retired `power_user` keys MUST be stripped on load and save; `extension_settings` data MUST migrate lazily into `feature_settings` on use, and pre-existing on-disk legacy keys MUST NOT be purged.
 
-The following are internal contracts consumed by EmberDesk's own modules; breaking them is an internal refactor concern.
+WHEN a character card is processed, IF `data.extensions.*` is discarded, THEN the change MUST be rejected; character-card `data.extensions.*` is feature data and MUST be preserved.
 
-### Internal runtime surface
+WHEN a retired API surface is removed, IF a tombstone or `410` response is added in its place, THEN the change MUST be rejected; retired surfaces MUST NOT exist. New installations MUST NOT create directories belonging to retired features, and existing on-disk files from those features MUST NOT be automatically purged.
 
-- `getContext()` (`public/scripts/st-context.js`) — explicit module access for existing first-party consumers of feature settings, variables, tools, world info, and rendering helpers. See [workspace composition](./workspace-composition-root.md).
-- `eventSource` / `event_types` (`public/scripts/events.js`) — internal event emitter/table..
-- `/lib.js` (`public/lib.js`) — shared browser utility surface for first-party modules.
-- `__emberDeskReactCompatibilityBridge` — internal-only React/legacy adapter; never a public API.
+## Compatibility proof
 
-### Message row DOM contract
-
-The main chat message list is a shared surface for first-party message actions, rendering tests, and frontend frames. Keep these selectors and identity attributes stable:
-
-- `#chat > .mes`, `.mes_text`, `.mes[mesid]`, `.last_mes`, `is_user`, `is_system`
-- `.mes_reasoning_details`, `.mes_reasoning`, `.mes_media_wrapper`, `.mes_file_wrapper`
-- `.swipe_left`, `.swipe_right`
-- `.extraMesButtonsHint` before `.extraMesButtons`; the hidden `data-main-chat-message-actions-owner="react"` marker stays appended after protected controls.
-
-Generation-recovery status (`.generation_auto_recovery_status`) stays outside `.mes_text`. Frontend-frame iframe hosts (`data-frontend-slot`) are owned by the frame controller.
-
-Message-body text is additionally wrapped by `<div data-message-style-scope="message-…">` directly inside `.mes_text` (`public/scripts/message-service.js:223`). That scope is not cosmetic: `<custom-style>` rules are rewritten with a scoped prefix, `url()`/`image-set()` targets and SVG presentation resources are admitted only from the page origin, `data:`, or an authorized origin, selectors escaping the row (`+`, `~`, `>`) are dropped, and `@keyframes` names are renamed per message, so a message's own styles can no longer reach sibling rows or other messages. The images, video, and audio elements a message body renders are not filtered by that scope — only its styles are. Code that injected CSS through a message body and relied on it leaking to the page, or on fetching external CSS resources without a character authorization, now needs its own stylesheet.
-
-### Character list DOM contract
-
-Preserve these selectors and identity attributes (also mandated by `AGENTS.md`):
-
-- `#rm_characters_block`, `#rm_print_characters_block`, `.character_select`, `.bogus_folder_select`
-- `.character_select[data-chid]`, `.character_select[chid]`, `id="CharID${chid}"`
-- `.character_selected`, `.bulk_select_checkbox`, `.tags_inline`, `.ch_fav`
-
-`data-chid` is the standard row identity; the legacy `chid` attribute remains for existing selectors.
-
-### Retired Slash and retained macros
-
-Slash parsing, execution, registration, command autocomplete, and their context APIs are retired. A composer message beginning with `/` is ordinary chat text, not a command. `{{...}}` macros, macro autocomplete, local and global variables, and native tool calling remain supported; macro comment `{{//...}}` and closing-tag `/` syntax are not Slash commands. User scripts relying on retired Slash APIs are not supported. Historical `script_injects` metadata is preserved but not rehydrated or executed; a formerly conditional injection must not become unconditional. Historical chat messages and other stored data are not purged as part of retirement.
-
-### Regex data contract
-
-The regex feature is stateful across global settings, character cards, and presets:
-
-- global scripts: `feature_settings.regex`
-- character scripts: `character.data.extensions.regex_scripts`
-- preset scripts: `oai_settings.extensions.regex_scripts`
-- character allow-list: `feature_settings.character_allowed_regex`
-- preset allow-list: `feature_settings.preset_allowed_regex`
-
-Engine exports consumed internally: `getRegexedString`, `regex_placement.USER_INPUT` / `AI_OUTPUT` / `SLASH_COMMAND` / `WORLD_INFO` / `REASONING`. `SLASH_COMMAND` retains historical numeric value 3 and is still used when formatting historical narrator messages; it does not restore the command executor. Do not renumber placement values or delete stored regex data.
-
-### Event contract
-
-Stable event names consumed by first-party modules include `APP_READY`, `CHAT_CHANGED`, `CHAT_COMPLETION_SETTINGS_READY`, `CHARACTER_DELETED`, `CHARACTER_MESSAGE_RENDERED`, `CHARACTER_RENAMED`, `GENERATE_AFTER_DATA`, `MESSAGE_RECEIVED`, `OAI_PRESET_CHANGED_AFTER`, `PRESET_DELETED`, `PRESET_RENAMED_BEFORE`, `SETTINGS_UPDATED`, `USER_MESSAGE_RENDERED`. `eventSource` must keep `on`, `once`, `emit`, `emitAndWait`, `makeFirst`, `makeLast`, `removeListener`.
-
-### Composition-root ownership
-
-- `public/scripts/events.js` owns `eventSource` and `event_types`.
-- `public/scripts/request-context.js` owns CSRF loading and request headers; there is no jQuery Ajax prefilter.
-
-- `public/script.js` assembles these contracts and calls `bootstrapWorkspace()`.
-
-The first-party reverse-import gate in `tests/helpers/script-js-reverse-import-contract.js` records current legacy coupling as an exact snapshot. New first-party reverse imports are blocked; `eventSource`, `event_types`, and `getRequestHeaders` must not be imported from `script.js`.
-
-### Character route compatibility
-
-Internal read-service envelopes (`result.mode`, `latencyHint`, `interactionPath`, filter/pagination context) must not leak to browser callers. `/api/characters/all`, `/api/characters/list`, `/api/characters/get` keep legacy-shaped payloads.
-
-## Validation
-
-```bash
-pnpm run test:compat          # internal-contract gate
-pnpm --dir tests run test:unit -- chat-workspace-structure.test.js --runInBand
-pnpm --dir tests run test:e2e -- chat-message-frontend-frames.e2e.js --workers=1
-pnpm --dir tests run test:e2e -- message-resource-policy.e2e.js --workers=1
-```
-
-`tests/helpers/frontend-compatibility-contract.js` is the internal contract manifest.
+WHEN compatibility changes affect character-list behavior, DOM contracts, message rendering, Regex, slash handling, or world-info Regex, IF `pnpm run test:compat` has not passed, THEN the change MUST NOT ship; that gate MUST prove these compatibility surfaces.

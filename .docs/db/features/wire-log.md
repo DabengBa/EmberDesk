@@ -9,30 +9,28 @@ related: [page.settings, page.chat_workspace, feature.prompt_inspector, feature.
 
 ## ID 解释
 
-`feature.wire_log` is the upstream request/response trace recorder and its viewer. Every chat-completions generation can leave one JSON record on disk — the exact body sent upstream, the redacted headers, the response (full body, or the raw SSE text plus an assembled view for streams), timing, and a sanitized generation context — browsable in a `链路日志` overlay. It is a diagnostic trace of what actually left the machine, not a prompt assembler (that is [Prompt Inspector](feature.prompt_inspector)), not chat history, and not a retry/replay surface.
+`feature.wire_log` is the upstream request/response trace recorder and its `链路日志` viewer. Each chat-completions generation can leave one record of what was sent, redacted request headers, the response, timing, and a bounded generation context. It is a diagnostic trace of what actually left the machine, not a prompt assembler ([Prompt Inspector](feature.prompt_inspector)), chat history, or a retry surface.
 
 ## Purpose
 
-When a reply is wrong, the question is almost always "what did we actually send, and what came back?" Prompt-side inspection cannot answer it: prompt post-processing, provider-specific shaping, resume-after-abort partial streams, and transport failures all happen after assembly. Wire log records that exact boundary so a bad turn can be diagnosed from evidence instead of reconstruction.
-
-## Ownership Direction
-
-The chat-completions backend records each generation; the viewer accesses records and settings through `/api/wire-logs`, not the filesystem. The storage, recorder and route implementation boundaries are described in [Server TypeScript](../../tech/server-typescript.md#wire-log-and-archivecard-formats).
+When a reply is wrong, answer “what did we actually send, and what came back?” Prompt-side inspection cannot cover post-assembly shaping, resume-after-abort partial streams, or transport failures. Wire log records that boundary so a bad turn can be diagnosed from evidence.
 
 ## User-Visible Contract
 
-- Logging is **opt-out**. With nothing stored, generation writes records: `enabled` defaults to true and only an explicit `enabled: false` turns it off. The viewer's config route and the generation path read the same normalizer, so they cannot disagree about the default. An unreadable settings document resolves to "on with defaults" rather than silently muting evidence.
-- Config (`GET`/`POST /api/wire-logs/config`): `{ enabled, captureBody, maxFileBytes, retentionDays, redact }`. Body capture is **opt-in**: only `captureBody: true` stores request and response bodies. Otherwise records still include byte counts, tool/message counts and timing; usage metadata is limited to known non-negative integer token counts. Generation does not print full bodies to the terminal, even when capture is on; upstream failures are logged with a status and safe error code instead of the provider's raw error. `maxFileBytes` (default 2 MiB) replaces an oversized body with a `{__truncated, bytes, limit}` marker instead of dropping the record. `redact` always includes `authorization`, `x-api-key`, `cookie`, `set-cookie`, `proxy-authorization` and masks those values as `***redacted***`; response headers go through the same mask because a proxy can echo request headers. POST merges only the `feature_settings.wire_log` leaf — every other settings key survives byte-for-byte — and unknown keys are dropped.
-- The viewer's **正文捕获上限** (`maxFileBytes`, default 2 MiB) bounds captured body content, not the total JSON file size. Metadata and separate raw/assembled stream representations can make the saved file larger than that value. Oversized bodies are marked as truncated; an unbounded upstream stream does not cause unbounded accumulation of captured text.
-- Retention is a **rolling 48-hour window**, expressed as `retentionDays: 2`, based on each record's timestamp rather than “today + yesterday” partitions. Cleanup is triggered by the next generation with recording enabled, once per request-owned recorder; opening the viewer alone does not purge old records. Only records strictly older than the cutoff are expired: records at the cutoff or newer survive, including those sharing a date partition with expired records. Cleanup failures are reported diagnostically without changing the generation result.
-- The context stamped on a record is a fixed allow-list — `type`, `model`, `source`, `chatId`, `charName`, `pipelineRun`, `pipelineStep`, `regenerate` — so a client-supplied `_trace` can never inject arbitrary structure, and `_trace` itself is stripped before the body reaches the provider. `chatId` (the active chat file) is what lets the viewer scope to the current conversation: it comes from the client's `_trace` when present, with the endpoint's own `chatId` as the authoritative override, and is resolved once per session rather than re-read mid-stream (a chat can be renamed while a turn is in flight).
-- The list route (`GET /api/wire-logs`) returns metadata only — id, timestamp, status, error message, context, request url/bytes/truncated/tool+message counts, response status/bytes/duration/ttft/chunks. It never carries bodies or headers, so filtering and rendering a row cannot leak prompt text. Filters: `date` (`YYYY-MM-DD`), `status`, `type`, `chatId`, `limit` (default 100, clamped to 500); an empty `chatId` means "no filter", not "match nothing".
-- `GET /api/wire-logs/:id` returns the full record; `DELETE /api/wire-logs/:id` deletes one. Record ids and dates are validated before being used as path segments, so a traversal attempt is rejected as a 400 rather than reaching the filesystem.
-- A generation that fails, is aborted mid-stream, or returns a 4xx/5xx upstream status still produces exactly one record: `complete`/`fail` settle once, and an aborted stream keeps everything captured up to the abort. A logging failure (unwritable root, serialization error) is reported through `onError` and never changes the HTTP response the user receives.
-- The viewer opens scoped to the chat currently on screen, with a `查看全部` toggle to drop the scope; status and date filters are server-side, keyword and model filters run locally.
-- Open `链路日志` from the chat-options menu. The modal keeps keyboard focus inside while open; Escape or the close button returns focus to the chat-options button. On narrow screens, filters and detail actions wrap without squeezing button labels into vertical text.
-- A selected record shows its conversation, character, generation type and available pipeline association alongside request/response metadata and any opted-in captured bodies. Quiet/background work does not borrow a foreground pipeline step; closing rounds may belong to a run without claiming its previous step. Switching conversations during a response does not reassign the original request's log.
-- Copy the full JSON, request messages, or response text; download the full JSON; delete the selected record. A disabled recording switch stays disabled after another ordinary settings save and a refresh. Saving failures remain visible and do not claim success.
+- Recording is on unless explicitly turned off. A settings document that cannot be read resolves to recording on.
+- Request and response bodies are captured only when body capture is turned on. Otherwise records still include byte counts, tool/message counts, timing, and known non-negative token counts. Full bodies are never printed to the terminal; upstream failures appear with a status and safe error code rather than the provider's raw error.
+- Credential-bearing request and response headers are always masked. The recorded request body has diagnostic tracking fields removed before it is sent upstream.
+- A body-size limit applies to captured bodies, not to the total saved record. Oversized bodies are marked truncated; an unbounded upstream stream does not produce unbounded captured text.
+- Records are kept in a rolling 48-hour window based on each record's timestamp. Cleanup runs on the next generation with recording enabled, not when the viewer is opened. Only records strictly older than the cutoff expire; records at or after the cutoff remain even if they share a calendar day with expired records. Cleanup failures are reported diagnostically without changing the generation result.
+- Recorded generation context is a fixed set of diagnostic facts about the chat, character, generation type, and any pipeline association. Arbitrary client-supplied fields are neither stored nor sent upstream. The active chat is resolved once for a turn so a rename mid-generation does not reassign the record.
+- The viewer list shows metadata only — never bodies or headers — so filtering and rendering a row cannot leak prompt text. It filters by date, status, generation type, and chat, with a bounded list length. An empty chat filter means no chat filter, not an empty result.
+- One full record can be opened for detail. Delete removes one record. Record identifiers and dates are validated before use.
+- A generation that fails, is aborted mid-stream, or receives an upstream error still produces exactly one record. An aborted stream keeps everything captured up to the abort. A logging failure never changes the generation result the user receives.
+- Open `链路日志` from the chat-options menu. The viewer starts scoped to the current chat with a `查看全部` toggle to include every chat. Status and date filters apply to the stored set; keyword and model filters apply to the visible records.
+- The modal keeps keyboard focus inside while open; Escape or the close button returns focus to the chat-options button. On narrow screens, filters and detail actions wrap without squeezing button labels.
+- A selected record shows its conversation, character, generation type, pipeline association, request/response metadata, and opted-in bodies. Quiet/background generations do not claim a foreground pipeline step; closing rounds do not claim the previous step. Switching conversations during a response does not reassign the original record.
+- The viewer can copy the full record, request messages, or response text; download the full record; and delete the selected record. A disabled recording switch stays disabled after another ordinary settings save and a refresh. Saving failures remain visible and do not claim success.
+- With recording off, no trace directory is created at all.
 
 ## Semantic Interaction IDs
 
@@ -47,26 +45,26 @@ The chat-completions backend records each generation; the viewer accesses record
 
 ## Acceptance Workflows
 
-- As a user with no wire log setting ever saved, send a message and open the viewer scoped to the current chat; the turn must appear with request/response metadata and no bodies. Delete that record, then switch to "all chats"; it must be absent there too. Failure is an empty viewer, unsolicited body capture, or a deleted record remaining in either list.
-- As a user diagnosing a bad reply, enable body capture before sending the message, then open the record and read the request body; it must equal what the provider received (post-processed prompt included), with credential headers masked and no `_trace` field. Failure is a body that differs from the upstream payload or unmasked credential headers.
-- With body capture enabled, abort a streaming reply mid-flight and open the record; it must exist with status `error`, the partial SSE raw text, the partially assembled content, and its timing. With capture off, the abort still produces a metadata record. Failure is a missing record or missing opted-in partial content.
-- As a user returning after several days, send a generation with recording enabled, then refresh the viewer after cleanup; records strictly older than the rolling 48-hour cutoff disappear, while records at or after the cutoff remain. Merely opening the viewer, or generating with recording disabled, does not trigger cleanup. Failure is expired records surviving a successful cleanup or an unexpired record being deleted because it shares an older date partition.
-- As a user who turns the switch off, send a message; no wire-logs directory may be created at all. Failure is a directory created and left empty.
-- As a user browsing another conversation's logs, toggle `查看全部`; the list must expand from the current chat to every chat. Failure is a filter that ignores `chatId` or matches nothing when chatId is absent.
-- As a keyboard or mobile user, open the viewer from chat options, inspect a real record, copy/download it, and delete it. Tab and Shift+Tab remain inside the open viewer; Escape returns to chat options. Failure is unreachable controls, clipped horizontal content, or focus disappearing behind the modal.
-- As a user disabling diagnostics, turn recording off, close the viewer, save another workspace setting, and refresh. The viewer must still offer `开启追踪`, not silently turn recording back on.
-
-## Feature-Specific Evidence
-
-- One JSON file per generation under `wire-logs/<YYYY-MM-DD>/`, with no `.tmp` residue after a write, is storage evidence.
-- A record whose `request.body.messages` deep-equals the body the upstream stub received is request-parity evidence; a record surviving a write failure with an unchanged HTTP response is isolation evidence.
-- `context.chatId` present on the record matching the `_trace.chatId` the client sent is session-filter evidence.
-- An enabled generation schedules cleanup once for its request-owned recorder. Removal of records strictly older than its rolling 48-hour cutoff, with records at the cutoff and newer retained even in the same date partition, is retention evidence; no cleanup triggered solely by opening the viewer or a disabled generation is the complementary boundary.
+- As a user with no wire log setting ever saved, send a message and open the viewer scoped to the current chat; the turn must appear with request/response metadata and no bodies. Delete that record, then switch to all chats; it must be absent there too. Failure is an empty viewer, unsolicited body capture, or a deleted record remaining in either list.
+- As a user diagnosing a bad reply, enable body capture before sending, then open the record and read the request body; it must match what the provider received after final shaping, with credential headers masked and diagnostic tracking fields removed. Failure is a different body or unmasked credentials.
+- With body capture on, abort a streaming reply mid-flight and open the record; it must exist with the error state, captured partial stream and assembled content, and timing. With capture off, the abort still produces a metadata record. Failure is a missing record or missing opted-in partial content.
+- As a user returning after several days, send with recording enabled, then refresh the viewer after cleanup; records strictly older than the rolling 48-hour cutoff disappear while records at or after the cutoff remain. Merely opening the viewer, or generating with recording disabled, does not trigger cleanup. Failure is expired records surviving cleanup or an unexpired record deleted because it shares an older calendar day.
+- As a user who turns recording off, send a message; no trace directory may be created at all. Failure is an empty directory created after recording was disabled.
+- As a user browsing another conversation's logs, toggle `查看全部`; the list must expand from the current chat to every chat. Failure is a filter that ignores chat scope or matches nothing when the filter is cleared.
+- As a keyboard or mobile user, open the viewer from chat options, inspect a record, copy/download it, and delete it. Tab and Shift+Tab stay inside the viewer and Escape returns to chat options. Failure is unreachable controls, clipped content, or focus behind the modal.
+- As a user disabling diagnostics, turn recording off, save another workspace setting, and refresh; recording must stay off.
 
 ## Failure Signals
 
 - The viewer lists bodies or headers on list rows, or a stored record carries an unmasked credential.
-- `_trace` reaches the upstream payload, or arbitrary client keys appear in the stored `context`.
-- A logging error surfaces to the user as a failed generation, or a generation is delayed waiting on a purge.
-- The config route and the generation path disagree about whether logging is on.
-- `chatId` filtering returns every record regardless of scope, or returns nothing when the parameter is empty.
+- Arbitrary client fields appear in the stored context or reach the upstream request.
+- A logging error surfaces as a failed generation, or a generation is delayed waiting on cleanup.
+- Recording state differs between the viewer and generation.
+- Chat filtering returns every record regardless of scope or nothing when the filter is cleared.
+- Recording off still creates a trace directory, or a disabled switch turns itself back on.
+
+## Boundaries
+
+- Prompt assembly and pre-send preview belong to [Prompt Inspector](feature.prompt_inspector).
+- Generation-type and pipeline semantics belong to [Reply Pipeline](feature.reply_pipeline).
+- Chat workspace placement belongs to [Chat Workspace](page.chat_workspace), and settings controls belong to [Settings](page.settings).

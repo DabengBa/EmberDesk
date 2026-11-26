@@ -9,9 +9,7 @@ related: [page.chat_workspace, feature.chat_message_actions, feature.chat_genera
 
 ## ID 解释
 
-`feature.chat_message_rendering` represents the visible message body and stable message-row DOM identity in [Chat Workspace](page.chat_workspace). It covers already-loaded stored messages and finalized generated messages after they are rendered into the conversation surface.
-
-It does not define provider generation, streaming token append, composer submission, reasoning parsing/templates, or the chat JSONL storage schema.
+`feature.chat_message_rendering` represents the visible message body and stable message-row identity in [Chat Workspace](page.chat_workspace). It covers already-loaded stored messages and finalized generated messages after they appear in the conversation. It does not define response generation, composer submission, or storage details.
 
 ## Purpose
 
@@ -19,33 +17,21 @@ Let users reliably read opened chat history and finalized generated messages as 
 
 ## User-Visible Contract
 
-- First-party frontend cards render complete HTML documents after message generation finishes; while the message is arriving, its source remains visible instead of showing a partial card.
-
-- Stored and finalized user, assistant, character, or system messages render as readable message rows whose visible text matches the source message after normal browser whitespace handling.
+- First-party frontend cards appear only after message generation finishes; while the message is arriving, its source remains visible instead of showing a partial card.
+- Stored and finalized user, assistant, character, or system messages render as readable rows whose visible text matches the source message after normal browser whitespace handling.
 - Message text remains the primary content of each row; reasoning, media, files, bias, and row actions may appear around it only when valid for that message.
-- Italic emphasis in messages and reasoning uses the surrounding text’s font family, including its fallback fonts.
-- Each rendered user turn is presented as one continuous visual card: the user message, every subsequent message row (including successful or failed tools and pipeline cards), and the response remain in their original order and DOM locations but share one surface. Every message stays a direct `.mes` child of `#chat`; no body is moved or cloned, so streaming updates, message actions, and DOM identity remain attached to their source row. In a partial window, rows preceding the first rendered user message are not assigned to an inferred turn.
-- The card's rounded ends belong to its first and last *visible* rows: rows hidden by the reply pipeline paint no surface and never claim a corner, so the card does not end in a rounded edge above an invisible row. A window fragment cut off mid-turn still reads as one card whose first rendered row carries the top corner. Expanded turn-summary headers are the card's head rather than a card beside it; a collapsed summary renders as its own card until its rows appear.
-- The turn card is a background and corner treatment only: batch-selection highlighting, row hover, focus-within, message actions, and streaming row updates keep painting on their own source rows, and a selected row inside a card stays visibly selected.
-- React is the sole runtime owner of visible message rows, long-chat windowing, reading-position restore, and the message-list controller inside the existing `#chat` surface. There is no product flag that restores a dual-owner legacy list renderer.
-- Framework-neutral `chat-message-render-service` produces markdown, regex, sanitizer, reasoning, media, file, and bias HTML without inserting DOM; React rows consume those outputs and preserve the same row identity, message text shell, reasoning/media/file shells, action attachment points, and reading flow.
-- Message bodies keep loading their own images, video, and audio directly, from any origin: `src`, `poster`, `background`, SVG resource attributes, markdown media, and gallery/list attachment URLs are not filtered by any media policy, and plain `<a href>` stays a navigation link. Only declarative message CSS is bounded. A `<custom-style>` block or inline `style` attribute keeps a supported subset (gradients, color functions, `calc`/`min`/`max`/`clamp`, transforms, filters, shapes, and the other whitelisted functions) and its resource references — `url()`/`image-set()` arguments and the SVG presentation attributes `fill`, `stroke`, `filter`, `mask`, `clip-path`, `marker*`, `cursor`, `color-profile` — resolve only to the page origin, `data:`, or an origin admitted by the active character's authorization. Declarative CSS is also confined to its own row: every rule is prefixed with a per-message `[data-message-style-scope]` wrapper, selectors that would reach out of the row (`+`, `~`, `>`) are dropped, backslash escapes and `@import` are rejected, and `@keyframes` names are renamed per message so identically named animations in different rows do not collide. Inline `style` attributes drop `--*` custom properties and `-webkit-animation*`; an `animation`/`animation-name` survives only when every name it references is a keyframes rule declared in that same message. An unparsable style block is discarded without rendering `CSS ERROR: ...` text into the message.
-- Per-character authorization governs message CSS only. The `Allow external CSS resources for this character` checkbox in Character Authoring's edit mode admits external resources referenced by that character's message styles. Grants are per-user settings bound to the canonical character identity as well as its avatar; older grants without an identity must be enabled again. The historical `external_media_forbidden_overrides` list is not consulted for CSS admission. Images, video, and audio rendered directly in the message body and frontend frames do not consult this setting.
-- Stored chat history continues to open as one complete, ordered conversation. Persistence migration must preserve message order, swipes, metadata, and readable content without adding server pagination.
-- Canonical chat query, repair, and validated restore paths must preserve the same complete stored conversation, attachment/file path fields, unknown payload fields, and load-more-ready ordering that the renderer already expects; search/recent optimization and recovery work must not invent a narrower payload or a server-paginated open path.
-- The React shell may own the outer chat layout/status on the existing `#chat` container, but it must not insert a wrapper between `#chat` and `.mes[mesid]` rows or change row ordering as part of layout ownership.
-- Editing and streaming rows remain on the same React-owned `.mes[mesid]` lifecycle. Rich-body HTML is generated by the framework-neutral render service and stored in typed message records; React does not rebuild state from legacy message nodes or DOM HTML snapshots. Frontend-frame iframe hosts are owned by the frame controller, not a second visible renderer.
-- Each message carries a session-stable `uid` (held in a per-session `WeakMap` keyed by the message object, so it survives splices, reorders, and in-place `mes`/`extra` edits without touching persisted chat data) that provides render identity for React row keys, frame slot ids, and unchanged-record reuse in the snapshot projection. The positional `mesid` remains the command-addressing and compatibility selector surface; deleting an earlier message must not remount or rewrite the rich bodies of surviving rows, and surviving frames must not remount.
-- Long chats may open with only the recent visible window, but users must retain the existing load-more affordance for older messages; React owns load-earlier and restore policy. Loaded older rows stay stable without requiring a separate jump-to-newest recovery control.
-- Returning to a previously read chat in the same page session may restore the expanded history window and reading region when safe; if not safe, EmberDesk falls back to the normal open result.
+- Italic emphasis in messages and reasoning uses the surrounding text's font family, including fallback fonts.
+- Each rendered user turn reads as one continuous visual card: the user message, every subsequent message row including successful or failed tools and pipeline cards, and the response stay in their original order and keep their own identities while sharing one surface. In a partial window, rows preceding the first rendered user message are not assigned to an inferred turn.
+- The card's rounded ends belong to its first and last visible rows: rows hidden by the reply pipeline paint no surface and never claim a corner. A fragment cut off mid-turn still reads as one card whose first rendered row carries the top corner. Expanded turn-summary headers are the card's head rather than a separate card; a collapsed summary renders as its own card until its rows appear.
+- The turn card is a background and corner treatment only: batch-selection highlighting, row hover, focus, message actions, and streaming updates keep showing on their own source rows, and a selected row stays visibly selected.
+- Media in message bodies — images, video, audio, links, and gallery attachments — loads from the URL authored in the message and is not restricted by the character's CSS authorization.
+- Declarative message CSS is confined to its own row: it cannot reach into other rows, import remote stylesheets, or create animations that collide with identically named animations elsewhere. An unparsable style block is discarded without showing an error string in the message.
+- External resources referenced by declarative message CSS are admitted only from the page origin, embedded data, or an origin authorized for the active character. The per-character external CSS authorization in Character Authoring governs only those message styles; it does not gate media in the message body or frontend cards. Older grants without a stable character identity must be enabled again.
+- Stored chat history opens as one complete, ordered conversation. Older chats, saved searches, recovery, and loading earlier messages preserve message order, swipes, metadata, readable content, and attachment paths rather than replacing the opened chat with a narrower or paginated view.
+- Each message keeps an identity that is stable for the current session across message edits, reordering, and deletion of earlier rows; deleting an earlier message must not remount or rewrite the bodies of surviving rows.
+- Long chats may open with only the recent visible window, but the load-more affordance for older messages remains available and loaded rows stay stable. Returning to a previously read chat in the same page session may restore the expanded history and reading region when safe; otherwise EmberDesk falls back to the normal open result.
 - Recoverable visible generation failure must not remove the user message or duplicate assistant rows; final success or final failed state remains on one stable assistant row.
-- There is no fallback list renderer. Rollback is deployment of a previous application version.
-- Eligible finalized message code blocks containing complete HTML can render in sandboxed `srcdoc` iframes inside `.mes_text`. Scripts run inside an opaque origin, with no parent DOM or host API access. Card buttons can copy plain text on a user click. Cards grow and shrink with their content layout, so long cards can be read by scrolling the chat. Scrollable areas defined by the card itself still scroll inside the card. Streaming, editing, error, and over-depth rows do not execute cards. Disabling frames or making a row ineligible restores the original code block. Ordinary code collapse remains a separate setting.
-
-## Ownership Direction
-
-React owns the main-chat typed message store, visible row output, rich-body projection, row controls including reasoning expand/copy/edit/delete/collapse, ordering, long-chat windowing, and reading-position restore. Provider transport and reasoning parsing/templates remain compatibility-owned; the composer text value is owned by `main-chat-composer-service` with the uncontrolled `#send_textarea` as its render detail. Documented formatting exports may remain as thin delegates to the framework-neutral render service.
-
+- Eligible finalized message code blocks containing complete HTML can appear as isolated frontend cards inside the message body. Card scripts run without access to the host page or its features, card buttons can copy plain text on a click, cards grow with their content, and scrollable areas defined by the card scroll inside it. Streaming, editing, error, and over-depth rows do not run cards. Turning frontend cards off or making a row ineligible restores the original code block. Ordinary code collapse remains a separate setting.
 
 ## Semantic Interaction IDs
 
@@ -58,30 +44,22 @@ React owns the main-chat typed message store, visible row output, rich-body proj
 
 ## Acceptance Workflows
 
-- As a chat user who wants to read an existing conversation, from [Chat Workspace](page.chat_workspace) open a stored chat; EmberDesk must show readable message rows with stable user/assistant/system identity and faithful message text, refresh or reopen must not garble, duplicate, or reorder messages, and failure is missing text, wrong speaker identity, or broken row identity for actions.
-- As a user reading a long chat, from a chat longer than the visible window use the load-more affordance for older messages and continue reading; EmberDesk must keep newly loaded and previously visible rows stable, returning to the chat in the same page session may restore the earlier reading region when safe, and failure is losing the reading position, duplicating rows, or requiring a new jump-to-newest control to recover.
-- As a user receiving a finalized generated reply, from send, continue, regenerate, or retry flows wait for the row to settle; EmberDesk must finalize content in a single assistant row and after refresh/reopen show one coherent final or failed row, with failure signaled by duplicate transport rows, stale partial content, or remounted dual-owner row shells.
-- As a user with editing rows, from a chat containing those rows reopen or update the chat; EmberDesk must keep a coherent React-owned row with preserved in-flight content, and failure is lost content, missing message text, or action hooks attached to a row that no longer has stable identity.
-- As a user whose card ships custom message CSS that points at an external image, open that character's chat with the authorization off, then enable `Allow external CSS resources for this character` in Character Authoring; EmberDesk must keep that CSS resource blocked (same-origin and `data:` targets still work) until the checkbox is on, then load it immediately without a reload, keep the change on that character and off every other character, and failure is a request to the denied target before authorization, a resource that only appears after a reload, or a switch that changes another character.
-
-## Feature-Specific Evidence
-
-- Readable message text, speaker/row identity, reasoning/media/file visibility, load-more behavior, reading-position restore, single assistant row after generation, and coherent fallback rendering are primary evidence.
-- Protected selectors such as `#chat > .mes`, `.mes_text`, `.mes[mesid]`, `.last_mes`, `is_user`, `is_system`, and reasoning/media/file wrappers are compatibility evidence only when the visible row remains correct.
-- Hidden visible-transport, quiet-transport, windowing, and row-lifecycle markers are diagnostic evidence for owner decisions; they do not replace visible row proof.
-- `data-main-chat-layout-*` and `data-main-chat-local-status` markers are layout/status evidence only; they do not prove that React owns message text, row lifecycle, or provider transport.
-- Legacy formatter snapshots and React replay boundaries support proof only when they preserve the same rendered message body.
+- As a chat user who wants to read an existing conversation, from [Chat Workspace](page.chat_workspace) open a stored chat; EmberDesk must show readable message rows with stable speaker identity and faithful message text, refresh or reopen must not garble, duplicate, or reorder messages, and failure is missing text, wrong speaker identity, or broken row identity for actions.
+- As a user reading a long chat, use the load-more affordance for older messages and continue reading; EmberDesk must keep newly loaded and previously visible rows stable, returning to the chat in the same page session may restore the earlier reading region when safe, and failure is losing the reading position, duplicating rows, or requiring a new jump-to-newest control.
+- As a user receiving a finalized generated reply, from send, continue, regenerate, or retry flows wait for the row to settle; EmberDesk must finalize content in a single assistant row and after refresh/reopen show one coherent final or failed row, with failure signaled by duplicate rows, stale partial content, or remounted row shells.
+- As a user with editing rows, reopen or update the chat; EmberDesk must keep a coherent row with preserved in-flight content, and failure is lost content, missing message text, or actions attached to a row that no longer has a stable identity.
+- As a user whose card ships custom message CSS pointing at an external image, open that character's chat with authorization off, then enable `Allow external CSS resources for this character` in Character Authoring; EmberDesk must keep that CSS resource blocked (page-origin and embedded data targets still work) until the checkbox is on, then load it immediately without a reload, keep the change on that character and off every other character, and failure is a request to the denied target before authorization, a resource that only appears after a reload, or a switch that changes another character.
+- As a user viewing a finalized HTML card, confirm it grows with its content, its own scrollable areas work, and a button copies plain text; scripts in the card must not reach the host page, and turning frontend cards off or making the row ineligible must show the original code block.
 
 ## Failure Signals
 
 - Stored messages render with missing, duplicated, reordered, or wrong-speaker rows.
 - Long-chat load-more loses row identity or reading position.
 - A finalized generation creates more than one assistant row for one request.
-- Editing or streaming rows remount as dual-owner or mixed broken owner surfaces.
-- Frame slots appear on streaming/editing/over-depth rows, frame scripts execute before depth eligibility, or mounted `.ed-frontend-frame` slots survive HTML rewrites, row deletion, or `frontend_frames.enabled=false`.
-- Protected message surfaces disappear while row actions or frontend frames still depend on them.
-- Message CSS still triggers a request to a denied external target, two rows' identically named `@keyframes` animations interfere, or a character switch leaves the previous character's CSS resources admitted.
-- Message-body images, video, or audio are gated on the character authorization, silently dropped, or rendered with a placeholder instead of the URL the message authored.
+- Editing or streaming rows lose their identity or show mixed row states.
+- Frontend cards appear on streaming, editing, error, or over-depth rows, or card scripts can reach host page features.
+- Message CSS still triggers a request to a denied external target, two rows' identically named animations interfere, or a character switch leaves the previous character's CSS resources admitted.
+- Message-body images, video, or audio are gated on the character authorization, silently dropped, or replaced with a placeholder instead of the authored URL.
 - An authorization change needs a reload, applies to a different character than the one whose checkbox was toggled, or disappears after restarting EmberDesk.
 
 ## Boundaries
@@ -90,5 +68,5 @@ React owns the main-chat typed message store, visible row output, rich-body proj
 - Automatic retry timing and fallback-provider selection belong to [Chat Generation Auto Recovery](feature.chat_generation_auto_recovery).
 - The chat workspace shell and navigation context belong to [Chat Workspace](page.chat_workspace).
 - The per-character authorization control itself belongs to [Character Library Panel](feature.character_library_panel); this feature owns only what the authorization changes in a rendered row.
-- Creator's Notes styling keeps its own long-standing per-card authorization and its own, older decode path; the message-CSS policy does not extend to that spoiler, and the two preferences are granted separately.
-- Provider responses, streaming token timing, composer submission, chat-file migrations, and storage schema are outside this feature.
+- Creator's Notes styling keeps its own long-standing per-card authorization and cannot be granted through the message-CSS setting.
+- Provider responses, streaming token timing, composer submission, and chat-file migrations are outside this feature.

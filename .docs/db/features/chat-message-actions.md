@@ -9,9 +9,7 @@ related: [page.chat_workspace, feature.chat_message_rendering, feature.chat_gene
 
 ## ID 解释
 
-`feature.chat_message_actions` represents the visible controls attached to a rendered chat message in [Chat Workspace](page.chat_workspace). It covers discovering and triggering message-row actions such as copy, edit, branch, reasoning actions, and media gallery navigation.
-
-It does not define how message text is generated, streamed, formatted, or stored.
+`feature.chat_message_actions` represents the visible controls attached to a rendered chat message in [Chat Workspace](page.chat_workspace). It covers discovering and triggering message-row actions such as copy, edit, branch, reasoning actions, and media gallery navigation. It does not define how message text is generated, formatted, or stored.
 
 ## Purpose
 
@@ -23,18 +21,16 @@ Let users act on an already rendered chat message through discoverable row contr
 - High-frequency actions such as copy, edit, and opening the action menu remain quicker to reach than secondary or destructive actions.
 - Secondary actions such as branch, reasoning controls, and media-gallery navigation appear only when valid for the current message state.
 - Danger actions keep clear accessible names and must not visually outrank normal copy/edit actions.
-- The alternate-reply picker exposes copy, expand/collapse, branch, and delete through native keyboard-operable buttons. Expansion announces its state; unavailable deletion is disabled rather than merely styled as inactive.
+- The alternate-reply picker exposes copy, expand/collapse, branch, and delete through keyboard-operable buttons. Expansion announces its state; unavailable deletion is disabled rather than merely styled as inactive.
 - Delete Messages is a contiguous range operation: selecting a message selects that message and every later message through the end of the chat. The confirmation area announces the starting message and count, disables Delete until a range is selected, and blocks duplicate submission while deletion is in progress.
 - A failed generation row may expose a retry action only after [Chat Generation Auto Recovery](feature.chat_generation_auto_recovery) has exhausted automatic attempts; using it must not resubmit the already-rendered user message as a duplicate row.
-- React owns the visible message-action shell on message rows; user-facing controls, mobile reachability, and compatibility hooks remain the same while editing or live content is preserved on the same row.
-- Save, regenerate, and retry results persist as one complete chat result without changing action availability, row controls, or feature hooks. Regenerate and retry use the same generation command path as composer actions. Storage compatibility repair and rollback remain maintainer workflows rather than visible message actions.
-- The main-chat React shell may coordinate composer/action-rail placement on the existing `#send_form` and `#nonQRFormItems` containers, but row action semantics, valid-action decisions, and compatibility hooks remain governed by the message-action surface.
-- With the empty composer focused at the start of its text, ArrowUp edits the last editable message and Ctrl+ArrowUp edits the last editable user message, loading older history when needed. Editing existing messages remains available without an API connection.
+- Save, regenerate, and retry results persist as one complete chat result without changing action availability or row controls. Turn-level regeneration launched from the chat-options menu is documented by [Chat Turn Regenerate](feature.chat_regenerate).
+- With the empty composer focused at the start of its text, ArrowUp edits the last editable message and Ctrl+ArrowUp edits the last editable user message, loading older history when needed. Editing existing messages remains available without a connection.
 - Ctrl+Enter confirms the current message edit and Escape cancels it; when body and reasoning edits coexist, the body edit has priority. With no active edit, Escape stops visible generation. An open modal, input-method composition, or a nonempty composer/selection takes priority over chat edit shortcuts.
 
 ## Generation Action Boundary
 
-Visible message actions dispatch commands only. The shared generation service owns the request lifecycle and result; message rendering ownership remains a separate boundary. Turn-level regeneration launched from the chat-options menu is documented by [Chat Turn Regenerate](feature.chat_regenerate).
+Visible message actions start actions only. The visible generation lifecycle owns the request and its result; message rendering ownership remains a separate boundary. Turn-level regeneration launched from the chat-options menu is documented by [Chat Turn Regenerate](feature.chat_regenerate).
 
 ## Semantic Interaction IDs
 
@@ -53,15 +49,8 @@ Visible message actions dispatch commands only. The shared generation service ow
 - As a chat user who wants to copy or edit a message, from a rendered row in [Chat Workspace](page.chat_workspace) locate the row controls by visible icon, accessible name, or keyboard focus and trigger copy or edit; EmberDesk must perform the row action while leaving message text readable and row identity stable after refresh or re-render, and failure is hidden high-frequency controls, lost focus path, or action execution on the wrong row.
 - As a user operating secondary message state, from a row with reasoning, branch, or media controls trigger the relevant action and then re-render or revisit the row; EmberDesk must show those controls only when valid and update the visible row state without hiding the message body, with failure signaled by inactive controls shown as usable or valid controls missing from the row.
 - As a user recovering from a failed generation after automatic recovery ends, from the failed assistant row press retry and wait for the retry to settle; EmberDesk must retry from the same row context without duplicating the already-rendered user message, keep the composer usable after success or failure, and failure is a new duplicate user row or a retry action before recovery has exhausted.
-- As a mobile or keyboard user on a React-owned row, from the same row action surface use common actions; EmberDesk must preserve role/name reachability when the row enters edit or live streaming state, and failure is a dual-owner menu, unreachable action, or missing compatibility hook.
+- As a mobile or keyboard user on a message row, use common actions from the same action surface; EmberDesk must preserve role and name reachability when the row enters edit or live streaming state, and failure is unreachable actions or a broken action shell.
 - As a keyboard user with an empty composer, press ArrowUp or Ctrl+ArrowUp, edit the selected message, then confirm with Ctrl+Enter or cancel with Escape; EmberDesk must target the correct message even outside the initially loaded history and must not send a duplicate user message. Repeat while disconnected and while a modal or input-method composition is active; editing remains possible offline and the modal or input method keeps priority.
-
-## Feature-Specific Evidence
-
-- Visible row controls, action priority, accessible names, focus behavior, mobile reachability, retry CTA, and row-level result are primary evidence.
-- Protected selectors such as `#chat > .mes`, `.mes_text`, `.mes[mesid]`, and reasoning, media, and file wrappers are compatibility evidence only when visible actions remain correct.
-- Controller diagnostics support migration proof but do not change the user-visible action contract.
-- Main-chat layout/status markers support placement proof only; they do not replace visible role/name or row-action execution evidence.
 
 ## Failure Signals
 
@@ -69,11 +58,12 @@ Visible message actions dispatch commands only. The shared generation service ow
 - A danger action lacks clear accessible naming.
 - A failed-row retry duplicates the user message.
 - A row entering edit or unsafe state leaves a mixed or broken action shell.
-- Compatible message selectors disappear while actions are visible.
+- Delete Messages does not announce the starting message and count, or accepts a second submission while deletion is in progress.
+- An unavailable delete button appears active instead of disabled.
 
 ## Boundaries
 
 - Message body rendering belongs to [Chat Message Rendering](feature.chat_message_rendering).
 - Automatic generation recovery belongs to [Chat Generation Auto Recovery](feature.chat_generation_auto_recovery).
 - The chat workspace layout belongs to [Chat Workspace](page.chat_workspace).
-- Streaming token timing, composer submission, event timing, feature mount points, and message storage are outside this feature.
+- Token timing, composer submission, and message storage are outside this feature.

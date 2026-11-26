@@ -9,7 +9,7 @@ related: [page.login, page.setup, feature.login_submit, feature.first_time_setup
 
 ## ID 解释
 
-`feature.password_toggle` represents the small inline control on authentication pages that lets a user temporarily reveal or hide password text while typing. It covers the toggle button, the icon change, and the input type switch on login and setup surfaces. It does not affect password storage, authentication, setup submission, or recovery.
+`feature.password_toggle` represents the small inline control on authentication pages that lets a user temporarily reveal or hide password text while typing. It covers the toggle control and icon change on [Login](page.login) and [Setup](page.setup) surfaces. It does not affect password storage, authentication, setup submission, or recovery.
 
 ## Purpose
 
@@ -35,18 +35,13 @@ Let users briefly reveal or re-mask password text on authentication surfaces so 
 - As a login user who wants to check a typed password, from [Login](page.login) type a password and press the inline eye button twice; EmberDesk must reveal and then re-mask the same text with matching icon and pressed state, a refresh must return the field to masked presentation, and failure is changed password value, persisted reveal state, or a toggle that affects a different field.
 - As an operator setting up an account, from [Setup](page.setup) use the password and confirm-password reveal controls independently and refresh before submit; EmberDesk must reveal only the targeted field while preserving the other field state, return both fields to masked presentation after refresh, and leave validation/submission unchanged, with failure signaled by cross-field reveal, cleared input, or authentication/setup side effects from the visual toggle.
 
-## Feature-Specific Evidence
-
-- The visible input masking, icon change, and assistive pressed state are primary evidence.
-- `getPasswordVisibilityState()` in `public/scripts/login.js` and `getSetupPasswordVisibilityState()` in `public/scripts/setup.js` are helper evidence for expected state calculation.
-- DOM `input.type` changes are supporting evidence only when the user-visible text and icon state match.
-
 ## Failure Signals
 
 - Revealing a password changes its submitted value.
 - A refresh reopens the page with password text still visible.
 - The toggle lacks an exposed state for assistive technology.
 - A setup-page toggle reveals or hides both password fields at once.
+- The recovery card offers a visibility toggle.
 
 ## Boundaries
 

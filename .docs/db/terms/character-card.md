@@ -21,9 +21,9 @@ A character card is the reusable persona package a user browses, selects, edits,
 - **Avatar image**: the visual identity shown in the list and active workspace context.
 - **Summary metadata**: visible fields such as favorite state, tags, chat label, creation/added timing where surfaced, and latest chat-related summary data.
 - **Chat context role**: the card becomes the active persona when selected in the workspace.
-- **Authoring fields**: the card exposes editable identity and descriptive fields through the workspace authoring surface while persisting into per-user canonical SQLite underneath, with the PNG card kept as a compatibility projection.
+- **Authoring fields**: the card exposes editable identity and descriptive fields through the workspace authoring surface; changes are saved per user and remain available across sessions.
 - **Text maintenance**: the card's editable text fields, its bound or embedded world book, and its current chat can be batch-updated through [Character Text Replace](feature.character_text_replace); the card name and the world-book binding reference are deliberately excluded from that replacement surface.
-- **External media permission**: whether this card's message CSS may load external resources. It is a per-user authorization keyed by the card's avatar image file name and edited from the card's authoring surface, not a stored card field, so it does not change the card content itself. Denied by default; it does not gate the images, video, or audio the card's messages render directly. See [Chat Message Rendering](feature.chat_message_rendering) for what the permission actually admits.
+- **External media permission**: whether this card's message styles may load external resources. It is a per-user authorization associated with the card's avatar image file name and edited from the card's authoring surface; it does not change the card content itself. It is denied by default and does not control images, video, or audio that messages render directly. See [Chat Message Rendering](feature.chat_message_rendering) for what the permission admits.
 
 ## Lifecycle And States
 

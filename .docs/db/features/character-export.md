@@ -9,7 +9,7 @@ related: [page.chat_workspace, feature.character_library_panel, term.character_c
 
 ## ID 解释
 
-`feature.character_export` represents the user-visible workflow for exporting the active [character card](term.character_card) from the main workspace. It covers choosing an export format, starting the download, keyboard handling for the export-format popup, and visible export feedback. It does not cover character-card parsing, server export internals, or importing exported files back into the library.
+`feature.character_export` represents the user-visible workflow for exporting the active [character card](term.character_card) from the main workspace. It covers choosing an export format, starting the download, keyboard handling for the export-format popup, and visible export feedback. It does not cover importing exported files back into the library.
 
 ## Purpose
 
@@ -37,18 +37,13 @@ Let a user export the active [character card](term.character_card) from the work
 - As a keyboard user who wants to cancel safely, from the export popup use Tab or Escape after opening Export and Download; EmberDesk must keep PNG and JSON reachable, close without download on Escape, restore focus to the opener for Escape cancellation, and after reopen must not imply any export was started, with failure signaled by focus lost to the page body, an accidental download, or a popup that cannot be dismissed.
 - As a user facing an export error, from the format popup choose a format while the export attempt fails; EmberDesk must show a failure toast and keep the active character visible for retry, a refresh or reopen must not suggest a completed export, and failure is silent no-op, success copy on failure, or lost active-character context.
 
-## Feature-Specific Evidence
-
-- Visible popup focus, PNG/JSON buttons, toasts, and browser download start are primary evidence.
-- Export response status, saved-character calls, and file payload checks are supporting evidence only after the UI result is confirmed.
-- Keyboard evidence should include focus entering the popup and Escape returning focus to the opening control.
-
 ## Failure Signals
 
 - The format popup opens without a keyboard-reachable action.
 - Escape or outside click starts an export.
 - Export failure shows no toast or shows success copy.
 - The active character disappears, changes selection, or reopens as a stale editor after export.
+- The downloaded PNG or JSON does not match the chosen format or includes separate chats or auxiliary media.
 
 ## Boundaries
 

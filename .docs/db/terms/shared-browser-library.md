@@ -9,33 +9,31 @@ related: [page.chat_workspace]
 
 ## ID 解释
 
-`term.shared_browser_library` represents the product-visible idea that EmberDesk exposes a stable browser-side library surface for first-party modules. It does not describe the bundler, package-resolution internals, server middleware, or workspace composition-root implementation that produces and installs that surface.
+`term.shared_browser_library` represents the product-visible idea that EmberDesk exposes a stable browser-side library surface for first-party modules. It describes the product concept, not the internal machinery that provides it.
 
 ## Definition
 
-The shared browser library is the import surface that lets browser modules reuse common dependencies such as sanitization, fuzzy search, compression, markdown rendering, and selected compatibility helpers from one documented place.
+The shared browser library is the import surface that lets browser modules reuse common capabilities such as sanitization, fuzzy search, compression, markdown rendering, and selected compatibility helpers from one documented place.
 
-## Final Compatibility Status
+## Compatibility Commitment
 
-- `/lib.js` is a long-term supported browser-module surface for first-party code.
-- Legacy `window.*` shims are current compatibility affordances, not a growth path for adding new globals. Their supported behavior must be deliberately reimplemented before the supplying legacy runtime is removed.
-- `/lib.js` is the single shared import surface for first-party browser modules.
-- The workspace keeps its public browser contracts stable while internal owners are modernized incrementally. Detailed composition-root ownership and reverse-import rules live in [Workspace Composition Root](../../tech/workspace-composition-root.md).
+- The shared browser library is a long-term supported import surface for first-party browser code.
+- Legacy global names are compatibility affordances, not a growth path for adding new globals. Their supported behavior must be deliberately preserved before the supplying legacy runtime is removed.
+- The workspace keeps its public browser contracts stable while internal areas are modernized incrementally.
 - The product-facing promise here is only that the shared browser utility surface remains stable.
 
 ## User-Facing Lifecycle
 
 1. The workspace loads the shared library during normal startup.
-2. First-party browser modules import named utilities from the library.
-3. First-party browser modules import from `/lib.js` instead of bundling their own copies of common dependencies.
+2. First-party browser modules use named utilities from the library.
+3. First-party browser modules use the shared library instead of carrying their own copies of common capabilities.
 
 ## UI-Relevant Boundaries
 
-- A stable shared library reduces import churn when the main workspace is modernized incrementally.
-- React sole-owner panel hosts can modernize surrounding workspace UI while shared imports and globals remain stable.
+- A stable shared library keeps workspace behavior consistent as the main workspace is modernized incrementally.
 - Legacy global names are compatibility affordances, not a signal that every library should become a global.
 - The shared library supports the workspace surfaces; it is not a separate page or an end-user settings feature.
-- Modernization work must not redefine `/lib.js` import boundaries.
+- Modernization work must not redefine the shared library contract.
 
 ## Related Surfaces
 

@@ -9,53 +9,23 @@ related: [page.chat_workspace, feature.character_delete, feature.character_expor
 
 ## ID 解释
 
-`feature.character_library_panel` represents the user-visible workflow for browsing, reopening, and selecting character cards from the main workspace. It does not include editing the card schema itself or deleting the card after confirmation.
+`feature.character_library_panel` represents the library surface where a user browses, imports, authors, organizes, and selects [character cards](term.character_card). It covers browsing and edit affordances and the visible state after import or bulk actions; it does not cover the card concept itself or the separate chat workspace.
 
 ## Purpose
 
-Let users browse, search, filter, sort, bulk-select, and choose [character cards](term.character_card) from the main workspace without moving to a separate route.
+Give a user one place to find, bring in, edit, organize, and activate [character cards](term.character_card) while keeping library state understandable during bulk operations and after imports.
 
 ## User-Visible Contract
 
-- The library lists characters and folder/tag entities only; there are no group rows or group create controls.
-- The drawer shares the side-panel chrome contract with the left prompt panel: the same base `clamp(340px, half-remaining-width, 420px)` width formula, overridden by mobile drawer sizing at viewport widths up to 1000px; a `.workspace-panel-header` row carrying the `人物` title plus the selected-character tab (`#rm_button_selected_ch`) and panel actions (`#rm_button_characters`, `#result_info`); and a thin-scrollbar scrolling body. The header renders no pin or lock control; the `.pinnedOpen` class represents lock state, with `NavLockOn` storing the lock preference and `NavOpened` storing open state. Toolbar controls are tiered: create/import actions and tag-filter controls on the primary row, search/sort sharing a single row below it, and list status plus pagination above the card list. Tag filtering uses a popover picker opened from a `标签筛选` toolbar button: the popover offers tag search, per-tag include/exclude tri-state controls, a clear-all action, and a `管理标签` entry into global tag-library management; tags with an active filter stay visible as removable inline pills next to the button regardless of popover state.
-
-- Protected row selectors and identity attributes are gated by the `selectors` contract family in `tests/helpers/frontend-compatibility-contract.js` before legacy list-owner deletion.
-
-- The character-library entry point stays inside [Chat Workspace](page.chat_workspace); the guarded React panel is the normal visible owner for list/search/sort/bulk browsing state, as the sole runtime owner. Bundle-missing fails closed with a visible error; rollback is a previous application version deploy.
-- When the same-entry React shell is enabled, its Character Library entry owns the transient dock/active-panel state and reports mounted or fallback status while the character-library panel remains the owner of browsing, row identity, selection, and bulk state.
-- Opening an existing character from the library keeps the established workspace selection behavior, and Character Authoring in the right drawer is a React sole-owner surface for create/edit fields and direct API save; the legacy form stays hidden and is not a product rollback path.
-- The library toolbar keeps separate file and link import actions. Link import opens directly on a multiline link or ID field, without a source list. Each nonempty line is imported in order; the result distinguishes saved character cards, saved world books, skipped overwrites, and failures. Users can edit and retry just the failed lines, or switch to the existing character file picker. Embedded content choices and world book overwrite confirmation still apply.
-- The authoring toolbar stays at the top while the form scrolls. World Info and More are available in both modes; Delete, Export, and Find and replace are available only when editing an existing card. Create keeps its own footer action for new drafts.
-- Character Authoring opens the card's existing editing fields without a technical warning about extensions and without greeting previews. The World Info field aligns its two selectors side by side: a closed primary-binding selector (no-binding option, create-new-book entry, dangling-reference warning, and a direct open-book action), plus an `附属书（仅本机）` lane of removable chips and an add selector backed by `world_info.charLore`. The primary binding's `随卡导出` semantics are labeled in the field meta. Edit-mode autosaves stay invisible for pure content edits: the save model carries `changedFields`, and only display- or prompt-facing changes (name, avatar, favorite, tags, first message, prompt fields) trigger the favorite-strip rebuild and `CHARACTER_EDITED` fan-out. If another edit has changed the saved card, a conflicting save reports the conflict and preserves the current draft rather than silently overwriting the newer card.
-- Character tags are summarized as a count beside the character identity and open a card-scoped manager. The manager supports searching, adding, individual removal, and batch removal; all changes update only the current card draft and continue through normal authoring autosave. This is separate from global tag-library management.
-- The upper authoring toolbar’s World Info action opens one searchable association dialog with a single primary choice and independently selectable auxiliary books. Primary changes save immediately and travel with the card; auxiliary choices remain local and can be cleared together. Numeric book names are names, not positions in the list. Switching characters or leaving and reopening a create draft invalidates the old dialog's actions: it must report the changed target rather than modify the new card or draft. A previously submitted save may finish for its original card without replacing the newly selected chat or authoring values.
-
-- Global tag management supports creating, renaming, sorting, deleting or merging tags, changing their folder and display settings, and backing up or restoring the library. In bulk mode, users can assign or remove tags for the selected characters and import their card tags into the global library.
-- In edit mode, Character Authoring also exposes a `查找替换` action in the upper toolbar that opens [Character Text Replace](feature.character_text_replace) for the active card, its bound or embedded world book, and the current chat.
-- In edit mode, Character Authoring's Advanced section contains an `Allow external CSS resources for this character` checkbox. It is absent while creating a card, which has no canonical identity until saved. Toggling it applies immediately to the open chat and persists through a dedicated authorization request; a rejected write reverts the checkbox. The switch governs resources loaded by message CSS, not images, video, or audio rendered directly in the message body.
-- The selected character's creator notes can contain styles. When global styles are not allowed, those styles are limited to the notes: supported local animations can still run without sharing animation names with the surrounding page. Creating a character also uses this restricted mode. A character with embedded styles and no saved choice prompts the user to keep them in the notes or apply them across the app; closing the prompt keeps them restricted. The creator-notes styles control lets the user change the saved per-character choice and applies it immediately. Allowing global styles deliberately permits those styles and animations to affect the rest of the app; it is separate from the message CSS external-resource checkbox.
-- When the Character Management lock is enabled, the character-library panel remains open while users open supporting drawers such as World Info; when it is not locked, opening another drawer may close it to keep the workspace uncluttered.
-- The panel remains usable for large libraries by keeping pagination, virtualized visible rows for very large page sizes, lazy avatar behavior, and steady-state reopen performance focused on the current browsing task.
-- Character rows show current card metadata, avatars, tags, favorite state, last-chat summaries, and character/folder identity without changing the user's list definition during search, sort, filtering, or pagination.
-- The visible library contract stays the same during normal browsing and maintenance recovery; users should not have to rebuild or understand hidden cache/index state to browse current cards.
-- Search, sort, tag filters, page size changes, and pagination should update the visible list without unnecessary clear-and-rebuild churn when the next page is unambiguous; ambiguous states may fall back to a full refresh for correctness.
-- After changing a saved sort order, leaving or refreshing while that change is still unsaved may trigger the browser's standard confirmation; after successful saving the sort-specific warning is removed. Temporary search sorting does not itself add this warning. Browser support and wording vary, and leaving remains the user's choice.
-- Character row identity remains stable for browsing, active-card state, bulk selection, and protected row-identity selectors.
-- Character rows reserve one line each for the name, description, and tags. Empty lines keep their space and long content truncates within its line so the rows stay the same height.
-- Bulk-select mode provides visible selection hints, synchronized selected styling and checked state, selected count, select-all controls, and disabled-until-selection destructive actions. Its toolbar provides a touch-accessible tag action enabled when characters are selected.
-- Changes made elsewhere to the same library appear automatically without a manual reload, retaining the current search, filters, and sort. A temporary background read failure leaves the existing list visible and the update is retried; automatic updates wait while bulk selection or its tag operations are active, then catch up.
-- After delete flows, the panel keeps safe pagination context, prevents late snapshots from reintroducing deleted cards, and still falls back to full refresh for complex states when that is the clearer recovery path.
-- Membership changes from data refreshes — create, import, duplicate, rename, edit, and delete fallback reprints — keep the current page and scroll offset; only the explicit navigation re-entry gesture resets the library to page one and the top of the list.
-- Import can replace an existing card only in the importing user's library. If the requested replacement target no longer exists there, EmberDesk creates a newly named card instead and shows both the creation result and a warning that the replacement target was not found.
-- When a CharX card imports successfully but auxiliary media are skipped or fail to save, the character import notice shows the media outcomes separately from the card's success. Recognized expression images count as skipped; they are not installed as character sprites.
-- When a BYAF card imports successfully but an included scenario chat or background cannot be saved, the character import notices name the failed items separately from the card's success. The notices also count scenario conflicts: existing chats are not overwritten, and skipped scenarios do not become the imported card's default chat.
-
-## Ownership Notes
-
-The React library is the sole runtime owner for browsing, filters, tags, bulk, selection, and stable row identity. Protected selectors are produced by React-owned rows; previous-version deploy is the rollback path.
-
-The refresh implementation and its limits belong to the [character library realtime technical owner](../../tech/character-library-realtime.md).
+- The library lists only characters, folders, and tags. Filtering, sorting, searching, and bulk selection operate on those rows.
+- Importing a character file creates a new card; importing multiline text from a link can create multiple cards. Import results state how many cards were created, replaced, or skipped, and missing import targets are reported rather than silently dropped.
+- Authoring behaves differently in create and edit modes, with existing characters editable through the same library surface. A selected card can be exported, deleted, or text-replaced without leaving the library context.
+- Card tags can be managed from the card, and global tags remain available across cards. A character can declare primary and auxiliary World Info associations; stale targets are reported instead of silently accepted.
+- Notes-only styles affect the card's presentation, while global styles apply broadly. A per-character grant is required for external styling associated with that card.
+- Locked cards remain visible but cannot be edited.
+- Large libraries remain usable: rows have predictable height, pagination keeps a manageable set visible, and bulk selection and synchronization wait for their operations before refreshing the list. Deletion keeps pagination coherent after rows are removed.
+- After import or bulk actions, the visible list updates to the resulting state and names or counts reflect what actually changed.
+- Character-card files in CharX or BYAF formats can be recognized; notice text explains unsupported or partially imported content rather than presenting a silent failure.
 
 ## Semantic Interaction IDs
 
@@ -66,42 +36,26 @@ The refresh implementation and its limits belong to the [character library realt
 
 ## Acceptance Workflows
 
-- As a workspace user who wants to continue with a character, from [Chat Workspace](page.chat_workspace) open the character library, search or filter, sort, paginate, and select a card; EmberDesk must show the expected mixed library rows and make the chosen card active in the workspace, reopening the panel in the same session should preserve a steady-state browsing experience, and failure is a blank list, stale metadata, or selection that opens the wrong card.
-- As a workspace user who wants to edit an existing character, from the library open a card and then enter Character Authoring from the same workspace; EmberDesk must show the current character values in the React authoring surface, preserve the library row identity and active selection after save, and fail closed with a visible build error when the workspace-panels bundle is missing rather than reopening the legacy form as a dual owner.
-- As a user organizing a character's tags, open its tag summary, search the list, add a tag, and remove tags individually or in a selection; the changes must remain scoped to that card and persist through authoring autosave. The manager must remain usable on narrow screens.
-- As a user opening a character with creator-note styles, choose notes-only, then reopen the character and verify the choice persists and the notes' local styling does not change the surrounding page. Use the creator-notes styles control to allow styles across the app, verify the change takes effect, then restore notes-only. Import-time decisions are covered by [Unified Import Confirmation](feature.unified_import_confirm).
-- As a user associating lorebooks with a character, open the upper authoring toolbar’s World Info dialog, search for a numeric or text book name, select or clear the primary book, select auxiliary books, and clear auxiliaries; reopening must show the saved associations and the controls must remain usable on a narrow screen. Refreshing the same card within the same editing session must not invalidate the dialog. If the character or create session changes while the dialog or a save is pending, old actions must report the changed target and must not alter the new character's chat, authoring values or draft.
-- As a user organizing the library, create and rename a global tag, assign it to selected characters, and filter by it; merging or removing the tag must update the intended character associations and persist after reload. Global tags and the tags stored inside character cards remain separate.
-- As a user browsing a large library, from the panel choose a large page size, scroll, and change sort/search/filter state; EmberDesk must keep rows responsive with stable pagination and visible avatars/placeholders, fall back to a full refresh only for ambiguous states, and after refresh or fallback must show a coherent current list, with failure signaled by mounted-row churn that clears the list unnecessarily or leaves a stale mixed view after filter changes.
-- As a user browsing character cards, I can scan aligned name, description, and tag lines in a narrow or wide panel. Cards with long or missing details take up the same space as neighboring cards.
-- As a user selecting cards in bulk mode, from the toolbar enter bulk select, click cards and checkboxes, sort or paginate, then review selected count and delete/tag availability; EmberDesk must keep row styling, checkbox state, accessible selected/checked state, and disabled-until-selection controls synchronized across redraws and page changes, and failure is a selected card without matching checkbox/count state or a destructive action enabled with zero selection.
-- As a user returning after character deletion, from an ordinary unfiltered page delete one or more cards through [Delete Character](feature.character_delete) and return to the panel; EmberDesk must keep the original page when valid or move to the last valid page, removed rows must not return after refresh or late list snapshots, and failure is page reset, deleted-card resurrection, or active-character hooks pointing at removed rows.
-- As a user opening Character Library from the same workspace entry, EmberDesk must load the shipped React panel and keep browsing, selection, bulk affordances, and delete/export entry points available through that owner. A missing React bundle is a release failure that shows a visible build error rather than silently substituting a legacy list owner.
-- As a user comparing character details with World Info, from [Chat Workspace](page.chat_workspace) open Character Management, enable its lock, then open the World Info drawer; EmberDesk must leave Character Management visible while World Info opens, and failure is the locked character panel disappearing.
-
-## Feature-Specific Evidence
-
-- Visible rows, toolbar grouping, search/sort/filter results, pagination text, selected count, selected styling, active-card transition, avatar placeholders, and reopen behavior are primary evidence.
-- Stable selectors such as `data-chid`, legacy `chid`, `id="CharID${chid}"`, and `.bulk_select_checkbox` are compatibility evidence only when the visible row and selection state match.
-- Thumbnail caching, thumbnail quality, lazy decoding, pregeneration, and derived card summaries are performance evidence; they do not change the user-facing source-of-truth contract.
+- As a user with many characters, open the library, search by name or tag, filter and sort the rows, then select one; EmberDesk must keep the rows readable at fixed height, apply the chosen view, and preserve a coherent page and selection after the card becomes active, and failure is an unreadable row, a hidden result, or a page reset unrelated to the selection.
+- As a user importing several characters, use the import entry with multiline link text and then file import; EmberDesk must report how many cards were created or replaced, warn about missing targets, and show the resulting rows after the operation, and failure is silent skipping, duplicate rows, or a stale list that does not include imported cards.
+- As a user organizing cards, add or remove card tags from a card and use global tags; EmberDesk must keep the card's tags and the global tag set distinct and make both visible in the library.
+- As a user associating World Info, bind primary and auxiliary books to a card; EmberDesk must keep those associations separate from global World Info and warn when a bound target no longer exists, and failure is silently dropping the association or merging it with the global selection.
+- As a user running bulk actions, select several cards and synchronize or delete them; EmberDesk must keep the selection visible, wait for the operation to finish before refreshing, report the actual count, and keep pagination valid afterward, and failure is a premature refresh, a wrong count, or a page with no usable rows.
+- As a user authoring from the library, open a card in create mode and later edit an existing card; EmberDesk must present mode-appropriate fields and keep export, delete, and text-replace available from the same surface without losing library context.
 
 ## Failure Signals
 
-- The React bundle is missing or fails to mount, leaving a visible build error or empty list instead of the React-owned browsing surface.
-- Search, sort, pagination, or filtering leaves selected rows, counts, or active-card identity out of sync.
-- Card-scoped tag edits affect other cards or global tag-library management, fail to persist, or become unusable on a narrow screen.
-- Character lorebook choices resolve to the wrong book, an old dialog writes into another card or create draft, or a late save replaces the newly selected chat or authoring session.
-- Global tag edits or bulk changes affect unintended characters, are lost on reload, or leave filtering inconsistent with the saved associations.
-- Bulk delete is enabled with no selected character.
-- The external media checkbox shows a stored grant that the open chat does not honor, changes another character's rows, needs a reload, or reverts without an error while the chat keeps loading the message CSS resources it should deny.
-- Restricted creator-note styles or animations affect the surrounding page, a saved global-style choice applies to the wrong character, or changing the choice fails to update the notes.
-- Deleted cards reappear after delayed edit responses, late `/api/characters/all` snapshots, or page refresh.
-- Large page sizes render every row at once and make the panel visibly unusable.
+- The library shows non-character rows, or filtering and sorting do not act on the visible characters, folders, and tags.
+- Import reports a success count that differs from the cards shown, or missing targets disappear without a warning.
+- A locked card becomes editable, or an external style appears without a per-character grant.
+- Card tags and global tags are conflated, or primary and auxiliary World Info associations are merged with the global selection.
+- Bulk refresh occurs before the operation completes, deletion leaves an invalid page, or the reported count is wrong.
+- A CharX or BYAF import fails silently or presents unsupported content as a complete import.
 
 ## Boundaries
 
-- Destructive removal belongs to [Delete Character](feature.character_delete).
-- Exporting the active card belongs to [Character Export](feature.character_export).
-- The card concept belongs to [Character Card](term.character_card).
-- Workspace shell placement belongs to [Chat Workspace](page.chat_workspace).
-- What the external media grant changes inside a rendered message row — and which message resources it deliberately leaves ungated — belongs to [Chat Message Rendering](feature.chat_message_rendering).
+- The [character card](term.character_card) concept itself belongs to [Character Card](term.character_card).
+- Exporting a card belongs to [Character Export](feature.character_export); deletion belongs to [Delete Character](feature.character_delete); text replacement belongs to [Character Text Replace](feature.character_text_replace).
+- Message rendering behavior for cards used in chat belongs to [Chat Message Rendering](feature.chat_message_rendering).
+- Import confirmation choices belong to [Unified Import Confirm](feature.unified_import_confirm).
+- Chat workspace placement belongs to [Chat Workspace](page.chat_workspace).

@@ -9,19 +9,20 @@ related: [page.settings, feature.custom_base_url, feature.chat_completion_select
 
 ## ID 解释
 
-`feature.fallback_provider` represents the optional model field labeled "后台模型" on the Providers tab of [Settings](page.settings). It serves both eligible visible-chat recovery retries and background tasks such as [Chat Memory](feature.chat_memory) turn summarization. The field reuses the primary connection's base URL and API key; there is no separate endpoint, secret, or enable toggle. It does not cover non-OpenAI-compatible protocols.
+`feature.fallback_provider` describes the optional 后台模型 field that lets a second model answer foreground [Chat Generation](feature.chat_generation_auto_recovery) and [Chat Memory](feature.chat_memory) work when the primary model fails. It is configured in [Settings](page.settings) alongside the one endpoint and credential used by [Custom Base URL](feature.custom_base_url); it does not cover a second endpoint or credential.
 
 ## Purpose
 
-Let a user name one fallback model that eligible visible-chat recovery may retry with after the primary provider retry is exhausted, without configuring a second endpoint or credential.
+Let a failed foreground generation or memory task continue with another model without asking the user to configure a second connection or add a separate fallback toggle.
 
 ## User-Visible Contract
 
-- The fallback field lives on the Providers tab of [Settings](page.settings) next to the primary model.
-- Fallback is enabled by a non-empty fallback model and disabled by leaving the field empty; there is no separate toggle.
-- The fallback attempt always reuses the same base URL and the same `api_key_openai` secret as the primary request; the UI never offers a fallback URL, fallback key, or fallback secret controls.
-- Quiet and background helpers do not consume this fallback: they return text without a visible assistant row or automatic recovery.
-- Legacy `fallback_provider_enabled`/`fallback_provider_base_url`/`api_key_openai_fallback` settings and secrets are normalized away: the dedicated secret is deleted lazily at startup, a fallback explicitly disabled in legacy data does not resurrect, and the legacy base URL is ignored.
+- The connection section exposes one 后台模型 field in addition to the primary model field.
+- Entering a non-empty 后台模型 enables the fallback; leaving it empty disables it. No separate on/off switch is shown.
+- The fallback uses the same destination and credential as the primary model; only the model name differs.
+- No fallback-specific endpoint or credential controls are shown.
+- Quiet or background work does not consume the fallback model. Only user-visible primary work can fall back.
+- Earlier fallback-related settings are folded into this single field. A disabled legacy fallback does not reappear as a separate configuration.
 
 ## Semantic Interaction IDs
 
@@ -29,24 +30,21 @@ Let a user name one fallback model that eligible visible-chat recovery may retry
 
 ## Acceptance Workflows
 
-- As a user who wants a recovery model, from the Providers tab of [Settings](page.settings) enter a fallback model while the primary URL and key are already set; EmberDesk must keep the model value across refresh, and failure is fallback requests targeting a different endpoint or credential than the primary one.
-- As a cautious user who wants fallback configured but inactive, leave the fallback model empty; no automatic fallback attempt may run, and failure is fallback use with an empty model.
-- As a returning user with legacy two-endpoint fallback data, open the Providers tab after upgrade; EmberDesk must show only the model field with the prior model value preserved when fallback was enabled, must not expose legacy URL/key inputs, and failure is resurrecting a disabled legacy fallback or keeping a usable dedicated fallback secret.
-
-## Feature-Specific Evidence
-
-- Model persistence and the absence of fallback URL/key controls are primary evidence.
-- Request payloads prove contract: the fallback attempt carries only a different `model` over the primary `custom_url` and `api_key_openai` secret.
-- Automatic use of the fallback provider is proven under [Chat Generation Auto Recovery](feature.chat_generation_auto_recovery), not by this configuration feature alone.
+- As a user whose primary model fails during a foreground reply, provide a non-empty 后台模型 in [Settings](page.settings), then send a message; EmberDesk must retry with the fallback model on the same connection and show the fallback indicator in [Chat Workspace](page.chat_workspace), and failure is a second endpoint or credential being required.
+- As a user who does not want a fallback, clear the 后台模型 field and save; EmberDesk must make no fallback attempt on a later failed generation, and failure is a separate fallback toggle remaining active or a hidden fallback still being used.
+- As a user of quiet or background generation, configure a fallback model and start a quiet task; EmberDesk must not consume the fallback model for that task, and failure is a visible or hidden fallback attempt for work that is not user-visible.
+- As a user with an earlier fallback configuration, open [Settings](page.settings); EmberDesk must present the fallback through the single 后台模型 field and must not restore a disabled legacy fallback as a separate active setting.
 
 ## Failure Signals
 
-- A fallback request uses any URL or credential other than the primary connection's.
-- Fallback runs while the fallback model field is empty.
-- The UI offers a separate fallback endpoint, key, or enable toggle.
-- Legacy fallback secrets survive startup cleanup.
+- The fallback model is attempted while its field is empty, or is skipped while a non-empty field is present and the primary model fails.
+- A second endpoint or credential control appears for the fallback.
+- Quiet or background work emits a fallback indicator or consumes the fallback model.
+- A disabled legacy fallback reappears as an active separate setting.
+- The fallback indicator is shown for a reply that did not use the fallback model.
 
 ## Boundaries
 
-- Main provider base URL and API key handling belongs to [Custom Base URL](feature.custom_base_url).
-- Retry sequencing and fallback attempt timing belong to [Chat Generation Auto Recovery](feature.chat_generation_auto_recovery).
+- Covers only the 后台模型 field and its user-visible use on foreground work.
+- Automatic fallback indicators, retry scope, and final reply behavior belong to [Chat Generation Auto Recovery](feature.chat_generation_auto_recovery).
+- The single endpoint and credential used by both primary and fallback models belong to [Custom Base URL](feature.custom_base_url); quiet and background memory behavior belongs to [Chat Memory](feature.chat_memory).

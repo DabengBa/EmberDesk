@@ -1,19 +1,18 @@
 ---
-description: Operational boundary for complete offline data-root backups, isolated restores, and the separate user ZIP export.
+description: "Operator assertions, writer-stop requirements, configuration scope, and export limits for offline full data-root backups and isolated restores."
 kind: technical
 topic: backup-recovery
-code:
-  paths:
-    - scripts/offline-backup.mjs
-    - src/user-backup.ts
+id: QUIRK-OFFLINE-BACKUP-CONFIRM-STOPPED
+external_service: filesystem-sqlite-backup
+verified_date: 2026-11-26
 ---
 
-# Offline backup and recovery
+# Offline Backup Confirm-Stopped Quirk
 
-`scripts/offline-backup.mjs` copies the entire `DATA_ROOT`, including account and session data, each user's canonical SQLite database and any WAL/SHM files, managed media, and other files in the tree. Configuration outside that tree must be saved separately. The copy contains secrets; SQLite does not encrypt them at rest. See the [operator instructions](../../docs/offline-backup-recovery.md) for commands and the data mapping.
+## Symptom
 
-Stop EmberDesk and all other writers before backup or restore; `--confirm-stopped` is an operator assertion, not a process check. Backup additionally requires `--include-keys`. Both operations require an existing destination parent, a new destination directory, and non-overlapping source and destination paths. Internal symbolic links are redirected into the copy; unresolved or external links cause an error. On copy failure the newly created destination is removed. Restore copies into a separate directory without replacing the source or an existing destination; an isolated instance can then use it as `--dataRoot`.
+`--confirm-stopped` is an operator assertion, not a process check. A complete `DATA_ROOT` backup includes SQLite databases with their WAL/SHM files and keys, but configuration stored outside the data root is not copied automatically. A user ZIP export is not a complete site recovery copy.
 
-The user ZIP produced by `createBackupArchive` in `src/user-backup.ts` is a different export, not a complete site recovery copy. It omits the user's `storage` directory, `secrets.json`, and secret-migration backups; when a canonical database exists, it materializes non-secret character, world, settings, chat, managed-media and preset slices into the staged export. Settings and preset JSON copies are scrubbed of known credential fields; unparseable settings or preset JSON is omitted. Other staged user files and non-colliding symlinks are archived without following links. ZIP export does not change the existing `allowKeysExposure` behavior of other secret APIs.
+## Invariant Action
 
-Evidence: `tests/offline-backup-cli.test.js` exercises copying, WAL and path/link guards; `tests/offline-backup-restored-http.test.js` exercises the restored application; `tests/offline-backup-export.test.js` exercises canonical ZIP content, credential scrubbing and source preservation.
+Stop EmberDesk and every writer before backup or restore; save configuration that lives outside the data root separately, and explicitly include keys with `--include-keys` when the backup must be complete. Restore into an isolated directory and verify there before using the copy; treat user ZIP files as exports only. Commands and procedure are in [the offline backup skill](../../.agents/skills/emberdesk-offline-backup/SKILL.md).

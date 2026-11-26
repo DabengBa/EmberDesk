@@ -16,28 +16,10 @@ related: [feature.login_submit, feature.password_toggle, feature.password_recove
 
 This page exists so an unauthenticated user can identify themselves and reach [Chat Workspace](page.chat_workspace) through a single consistent handle-and-password form.
 
-## Runtime Owner
-
-- `/login` is served only by the shared React auth app.
-- `/login.html` returns 404. Use `/login`.
-- Missing React build returns a clear server error instead of `public/login.html`.
-- Rollback is a previous application version deploy, not an in-process jQuery controller.
-- Before serving the login app, `createLoginPageMiddleware()` runs `tryAutoLogin()`. When exactly one passwordless user exists, or when Authelia/Authentik identifies the visitor, the request redirects to `/` without rendering the login form. `?noauto` suppresses this so the form always renders.
-- `/login` does not check setup state. A deployment that still requires setup serves the login form normally; only `/` redirects to `/setup`.
-
-## Page Structure (UI Layout)
-
-1. **Header row**: logo and page title shared by both cards, visually separated from the form controls so the page reads as a focused entry surface rather than a generic form.
-2. **Credential field stack**: handle input and password input with inline toggle, kept as the only default decision path.
-3. **Action region**: submit button, error block, and "Forgot password?" link with consistent spacing and focus treatment.
-4. **Recovery card**: a secondary form, hidden by default, with the same header, field stack, recovery code input, new-password input, and action region. The handle input is disabled once step 2 is reached, and the new-password input has no visibility toggle (unlike the login and setup password fields).
-
-The two cards are mutually exclusive; only one is visible at a time.
-
 ## Page-Level Semantic IDs
 
 - `feature.login_submit`: submitting handle and password to authenticate.
-- `feature.password_toggle`: the inline eye-icon control that reveals or masks the password.
+- `feature.password_toggle`: the control that reveals or masks the password.
 - `feature.password_recovery`: the forgot-password flow on the recovery card.
 - `feature.account_lockout`: the lockout countdown and error state after repeated failed attempts.
 
@@ -50,42 +32,21 @@ The two cards are mutually exclusive; only one is visible at a time.
 
 ## Page States And Constraints
 
-- **Default state**: the login card is visible, the recovery card is hidden.
-- **Recovery state**: the recovery card is visible, the login card is hidden. A persistent hint above the step-1 action states that recovery codes are printed to the server console and must be relayed by an admin; focus moves to the card's first field on entry and back to the forgot-password link on cancel. In step 2 the handle input stays visible but disabled.
-- **Error state**: an error message appears on the active card without navigating away. For client-side validation failures the first invalid field is marked `aria-invalid`, linked to the error block via `aria-describedby`, and receives focus; server-side failures set only the error text and never mark or focus a field.
-- **Lockout state**: any HTTP 429 from `/api/users/login` disables the login button and shows a countdown derived from the `Retry-After` header. The copy always reads as an account lockout even when the trigger was the per-IP limiter rather than the per-account lockout. The countdown ticks client-side from receipt time and is never re-synced with the server.
+- **Default state**: the login form is visible and the recovery form is hidden. The page shows only a handle and password entry; there is no user list.
+- **Automatic entry state**: when only one passwordless user exists, or an external identity provider identifies the visitor, the login form is skipped and the user arrives at [Chat Workspace](page.chat_workspace). `?noauto` keeps the form visible.
+- **Recovery state**: the recovery form replaces the login form. A persistent hint states that recovery codes are printed to the server console and must be relayed by an administrator; focus moves to the first field on entry and back to the forgot-password link on cancel. In the second step the handle stays visible but cannot be changed, and the new-password field does not offer a visibility toggle.
+- **Error state**: an error message appears on the active form without navigating away. Client-side validation marks and focuses the first invalid field and associates it with the error text; server-side failures show only the error text.
+- **Lockout state**: after repeated failed sign-in attempts, the login button is disabled and a countdown is shown. The countdown runs from when the notice was received and is not resynchronized while the page stays open.
 - **Loading state**: the submit button is disabled while a request is in flight.
 
 The login page does not expose a user list. The user must know their handle to log in.
 
 ## Navigation
 
-- The login page is the entry point when `enableUserAccounts` is true and the visitor is not authenticated.
+- The login page is the entry point when account protection is enabled and the visitor is not authenticated.
 - Successful authentication navigates to [Chat Workspace](page.chat_workspace).
 - The login page has no outgoing navigation links beyond the recovery flow.
 
-## Configuration (config.jsonc)
+## Password Recovery
 
-### Required
-
-| Key | Default | Effect |
-|---|---|---|
-| `enableUserAccounts` | `true` in the default config; omitted keys fall back to `false` for legacy deployments | Activates the login page. Without this, EmberDesk skips authentication entirely. |
-
-### Optional
-
-| Key | Default | Effect |
-|---|---|---|
-| `enableDiscreetLogin` | `false` | `true` hides the user list; the user must type their handle manually. |
-| `sessionTimeout` | `-1` | Session lifetime in seconds. `-1` = never expires, `0` = expires on browser close. |
-| `rateLimiting.accountsLoginMaxAttempts` | `5` | Drives two limiters: a per-IP limiter with a fixed 60-second window, and a per-account limiter whose window is `accountsLoginLockoutDuration`. `0` lifts both to effectively unlimited instead of disabling the code path. |
-| `rateLimiting.accountsLoginLockoutDuration` | `300` | Lockout window in seconds (5 minutes). |
-| `rateLimiting.accountsSetupMaxAttempts` | `5` | First-time setup attempts before IP rate limiting. `0` disables. |
-| `rateLimiting.accountsRecoverMaxAttempts` | `5` | Recovery requests per IP within a 300-second window. `recover-step1` consumes on every request, not only on failure; `recover-step2` consumes only on a wrong code. `0` disables. |
-| `rateLimiting.preferRealIpHeader` | `false` | Use forwarded IP headers for rate-limit tracking behind a reverse proxy. |
-| `disableCsrfProtection` | `false` | Disables CSRF token enforcement on login API. Not recommended. |
-
-
-### Password Recovery
-
-Password recovery codes are **printed to the server console log** — there is no email or SMS delivery. The server operator must relay the code to the user out-of-band.
+Password recovery codes are printed to the server console log; there is no email or SMS delivery. An administrator must relay the code to the user out of band.

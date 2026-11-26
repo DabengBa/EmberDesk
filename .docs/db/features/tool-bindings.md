@@ -9,28 +9,47 @@ related: [page.chat_workspace]
 
 ## ID 解释
 
-`feature.tool_bindings` represents the user-level function-tool editor inside the Regex drawer of [Chat Workspace](page.chat_workspace). It covers defining named tools, enabling them, and having them travel to the chat-completion API as real `tools` entries. It does not cover preset-carried tool definitions, tool-call prompt engineering, or third-party extension tool APIs.
+`feature.tool_bindings` represents the user-level function-tool editor in [Chat Workspace](page.chat_workspace). It covers defining named tools, enabling them, and making them available to chat completions. It does not cover preset-carried tool definitions or third-party extension tool APIs.
 
 ## Purpose
 
-Let users register real OpenAI-style function tools without writing an extension. When a model emits a matching tool call, the bound action runs in the browser and the result recurses back into generation as a `tool` message.
-
-## Ownership Direction
-
-The bindings list and editor are React-owned inside the Regex drawer; a typed bindings service owns the shared binding state and registration decisions, with normalization, validation, and action compilation supplied by the bindings core. `ToolManager` remains the sole tool-call pipeline; user bindings are registered through it and tracked separately from code-registered tools.
+Let users register function tools without writing an extension. When a model produces a matching tool call, the bound action runs and its result continues the generation.
 
 ## User-Visible Contract
 
-- The Regex drawer carries two tabs: 正则 (the regex workbench; the rule list, editor, import, preset selection, debugger, and scope authorization controls are React-owned) and 工具绑定 (the bindings list and editor entry point).
-- The tool-binding settings include a keyboard-accessible `强制调用` switch. Its visible label is also exposed as the switch's accessible name, and the switch can be focused and toggled with the keyboard.
-- Each binding's enabled switch can also be reached and toggled by keyboard; its accessible name identifies the binding, and keyboard focus has a visible indicator.
-- Bindings persist globally in `feature_settings.tool_bindings` inside the user settings document — not inside preset files and not per character.
-- Each binding carries: name (API tool name, 1-64 chars of letters/digits/`_`/`-`), optional display name, model-facing description, parameters JSON Schema, action body, optional format-message body, enabled flag, and stealth flag.
-- The Reply Pipeline toggle controls tool calling: when it is off, subsequent generations send no `tools` payload even if bindings remain enabled. Enabling it again restores eligible bindings; an already-running pipeline finishes with its captured tools. At least one enabled binding and a compatible source are also required.
-- The action body executes as `async (args) => result` and receives exactly one parameter — the parsed tool-call arguments. Runtime and syntax errors are returned to the model as an `{ok:false,error}` payload rather than breaking the generation loop.
-- A non-streaming reply that contains only tool calls (no text content) is valid and must not be treated as an empty reply.
-- Stealth bindings hide the invocation from chat and skip the follow-up generation.
-- Ordinary tool invocations are stored on a system chat message (`extra.tool_invocations`) and serialized back into later prompts as `role:"tool"` messages plus the preceding assistant `tool_calls` turn. In server-generated [Reply Pipeline](feature.reply_pipeline) runs, a matching call uses the default text carrier or sends the custom action to the browser. Actual calls retain their assistant call and paired result, while text-only responses remain assistant text without a fabricated call or receipt. Completed pure-pipeline replies supply their current effective body rather than replaying those records. Eligible bodies become synthetic `submit_story` calls with short receipts in subsequent normal pipeline requests, or ordinary assistant text outside that projection. Synthetic history calls are representations, not executable bindings; mixed records retain real tool replay.
-- One response may carry several tool calls (parallel tool calls on the wire). They are executed sequentially in array order and aggregated into a single invocations message; calls in the same batch cannot see each other's results — dependent steps must use recursion rounds.
-- Recursion follows the existing `ToolManager.RECURSE_LIMIT` of 5.
-- [Reply Pipeline](feature.reply_pipeline) step names automatically acquire missing text bindings on commit, preset apply, or settings load. Generated bindings accept `content:string` and return that text directly, without another JSON string layer. Existing custom schemas/actions survive synchronization; passive loading preserves their flags, while explicit name commit or pipeline activation enables them and clears stealth. Removing a step never removes its binding.
+- The drawer has two tabs: 正则 for regex work and 工具绑定 for the tool bindings list and editor.
+- Keyboard users can switch tabs, reach each binding's enable switch, and get a visible focus indicator; each switch's accessible name identifies the binding.
+- A keyboard-accessible 强制调用 control exists with its visible label exposed as its accessible name.
+- Bindings are global user settings, not part of a preset or a specific character.
+- Each binding has a tool name, optional display name, model-facing description, parameter definition, action body, optional result-format body, enabled state, and hidden-execution state.
+- The Reply Pipeline toggle suppresses tool use: while it is off, later generations do not use bindings; turning it on restores eligible bindings, and a run already in progress completes with the tools it captured. At least one enabled binding and a compatible source are also required.
+- A tool action receives the tool-call arguments and returns text or an error; runtime and syntax errors are reported back into generation instead of breaking it.
+- A response containing only tool calls and no text is a valid reply.
+- Hidden-execution bindings do not show the invocation in chat and do not trigger a follow-up reply.
+- Actual tool invocations are retained and appear in later requests with their calls and results paired. In server-generated [Reply Pipeline](feature.reply_pipeline) runs, a matching step result uses a text carrier or sends a custom action to the browser. Text-only steps remain text without an invented call or result. Completed pipeline replies supply their current effective body rather than replaying those records. Eligible bodies become request-only representations in later pipeline requests, or ordinary assistant text outside that view. These representations are not executable bindings; mixed records keep real tool replay.
+- Multiple calls in one response run in sequence; calls in the same batch cannot see each other's results, so dependent steps require another round.
+- Recursion is bounded to five rounds.
+- [Reply Pipeline](feature.reply_pipeline) step names automatically acquire missing text bindings when a name is committed, a preset is applied, or settings load. Generated bindings take a content argument and return that text directly. Existing custom schemas and actions survive; passive loading preserves disabled and hidden flags, while explicit name commit or pipeline activation enables them and clears hidden execution. Removing a step never removes its binding.
+
+## Acceptance Workflows
+
+- As a keyboard user, open the drawer, switch between 正则 and 工具绑定, and reach the 强制调用 control and a binding's enable switch; EmberDesk must keep the tab names and switch states announced and focus visible, and failure is a control that can only be used by pointer.
+- As a user defining a tool, enter its name, description, parameters, and action, then enable it and send a message that leads to a matching call; EmberDesk must run the action and feed its result back into generation, and failure is a syntax or runtime error breaking the reply loop.
+- As a user of hidden execution, enable that state on a binding and trigger it; EmberDesk must hide the invocation and skip the follow-up reply, while ordinary bindings still show their calls and results.
+- As a user with the pipeline enabled, configure a custom step action and trigger the step; EmberDesk must run the browser action and retain the paired result, while text-only steps remain text without a fabricated call.
+- As a user whose pipeline step name matches an existing custom binding, commit the name and later remove the step; EmberDesk must keep the custom behavior and flags and must not delete the binding.
+
+## Failure Signals
+
+- Bindings are stored in a preset or tied to one character instead of the user.
+- Keyboard focus is invisible or a switch's accessible name does not identify its binding.
+- Tool calls in one batch see each other's results, or recursion exceeds five rounds.
+- Runtime errors break generation instead of being reported back to the model.
+- A hidden-execution binding shows its invocation or triggers a follow-up reply.
+- A synthetic request-only representation is executed as a real binding or written into chat history.
+- Generated bindings replace custom schemas or actions, or removing a step deletes its binding.
+
+## Boundaries
+
+- Pipeline step order, step prompts, and final reply behavior belong to [Reply Pipeline](feature.reply_pipeline).
+- Chat workspace placement belongs to [Chat Workspace](page.chat_workspace).
